@@ -104,9 +104,10 @@ This yuno is JavaScript and deploys independently of the SDK (see
   to the first open node.
 - **Command helper.** A per-node `help` cache drives Tab completion (command
   name *and* parameters), a live signature/description hint, and a **“?”
-  popover** of available commands. Up/Down recall shell-style **per-node
-  command history** (persisted in the browser); a **history popover** lists
-  recent commands. No polling — the node list refreshes on demand.
+  popover** of available commands. Up/Down recall shell-style **command
+  history**, global to all nodes (persisted in the browser); a **history
+  popover** lists recent commands. No polling — the node list refreshes on
+  demand.
 - **Answers.** Commands are sent from the shared `agent_link` service (honoring
   the inter-yuno contract), so the agent's real asynchronous answer routes back
   (not just the controlcenter dispatch ack). Table answers render on Tabulator;

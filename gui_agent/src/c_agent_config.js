@@ -36,11 +36,11 @@ SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,                        null, 
 SDATA(data_type_t.DTP_STRING,   "active_node",  sdata_flag_t.SDF_PERSIST, "",      "Active node (hostname/UUID from list-agents)"),
 SDATA(data_type_t.DTP_STRING,   "display_mode", sdata_flag_t.SDF_PERSIST, "table", "Command answer display: table | form (raw JSON)"),
 SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "[]",  "Nodes with an open Console tab: [{id, host}, ...]"),
-SDATA(data_type_t.DTP_JSON,     "cmd_history",  sdata_flag_t.SDF_PERSIST, "{}",    "Per-node console command history: {node_id: [cmd,...]} most-recent first"),
+SDATA(data_type_t.DTP_JSON,     "cmd_history",  sdata_flag_t.SDF_PERSIST, "[]",    "Global console command history: [cmd,...] most-recent first (shared by all nodes)"),
 SDATA_END()
 ];
 
-/*  Per-node history cap (defensive; the console caps its own working copy). */
+/*  Global history cap (defensive; the console caps its own working copy). */
 const HISTORY_MAX = 50;
 
 let PRIVATE_DATA = {};
@@ -202,31 +202,24 @@ function agent_config_remove_selected_node(gobj, id)
 }
 
 /***************************************************************
- *  Persisted console command history for a node (most-recent first).
- *  Returns a fresh copy so the caller can mutate it freely.
+ *  Persisted console command history (most-recent first), global
+ *  to all nodes. Returns a fresh copy so the caller can mutate it
+ *  freely.
  ***************************************************************/
-function agent_config_get_history(gobj, node)
+function agent_config_get_history(gobj)
 {
-    if(!node) {
-        return [];
-    }
-    let all = gobj_read_attr(gobj, "cmd_history") || {};
-    let list = all[node];
+    let list = gobj_read_attr(gobj, "cmd_history");
     return Array.isArray(list) ? list.slice() : [];
 }
 
 /***************************************************************
- *  Replace a node's command history and persist it. The console
+ *  Replace the global command history and persist it. The console
  *  owns dedup/cap on its working copy; we bound it defensively.
  ***************************************************************/
-function agent_config_set_history(gobj, node, list)
+function agent_config_set_history(gobj, list)
 {
-    if(!node) {
-        return;
-    }
-    let all = Object.assign({}, gobj_read_attr(gobj, "cmd_history") || {});
-    all[node] = (Array.isArray(list) ? list : []).slice(0, HISTORY_MAX);
-    gobj_write_attr(gobj, "cmd_history", all);
+    let bounded = (Array.isArray(list) ? list : []).slice(0, HISTORY_MAX);
+    gobj_write_attr(gobj, "cmd_history", bounded);
     gobj_save_persistent_attrs(gobj, "cmd_history");
 }
 

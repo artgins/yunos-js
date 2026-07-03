@@ -273,12 +273,12 @@ function build_ui(gobj)
 {
     let priv = gobj.priv;
 
-    /*  Restore this node's persisted command history (survives reload and
-     *  tab close/reopen); priv.history is the mutable working copy.  */
+    /*  Restore the global persisted command history (shared by all nodes;
+     *  survives reload and tab close/reopen); priv.history is the mutable
+     *  working copy.  */
     let config0 = gobj_read_attr(gobj, "config_svc");
-    let node0 = gobj_read_attr(gobj, "node") || "";
-    if(config0 && node0) {
-        priv.history = agent_config_get_history(config0, node0);
+    if(config0) {
+        priv.history = agent_config_get_history(config0);
     }
 
     /*  No native <datalist>: its dropdown hijacks Up/Down to browse command
@@ -421,11 +421,11 @@ function add_history(gobj, cmd)
     if(priv.history.length > HISTORY_MAX) {
         priv.history.pop();
     }
-    /*  Persist per-node so recall survives reloads / tab reopen.  */
+    /*  Persist globally so recall survives reloads / tab reopen and is
+     *  shared across all nodes.  */
     let config = gobj_read_attr(gobj, "config_svc");
-    let node = gobj_read_attr(gobj, "node") || "";
-    if(config && node) {
-        agent_config_set_history(config, node, priv.history);
+    if(config) {
+        agent_config_set_history(config, priv.history);
     }
 }
 

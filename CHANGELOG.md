@@ -33,8 +33,9 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   open node from the route subpath.
 - Command helper: per-node `help` cache → Tab completion (name + parameters),
   live signature/description hint, and a "?" popover of available commands.
-- Up/Down recall shell-style **per-node command history** (persisted in the
-  browser); a history popover lists recent commands. No polling.
+- Up/Down recall shell-style **command history**, global to all nodes
+  (persisted in the browser); a history popover lists recent commands. No
+  polling.
 - Answers sent via the shared `agent_link` service (inter-yuno contract) so the
   agent's real asynchronous answer routes back; table answers on Tabulator, a
   `display_mode` toggle (table vs raw JSON), error-only comment line.
