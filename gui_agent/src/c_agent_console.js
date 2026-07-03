@@ -343,14 +343,13 @@ function build_ui(gobj)
 
     let $input_control = createElement2(["div", {class: "CONSOLE_INPUT_CONTROL control is-expanded"}, [$input]]);
 
-    /*  "?" (available commands), shortkeys and history popovers. Clicking an
-     *  item inserts it into the input to edit — it does NOT auto-run. */
+    /*  "?" (available commands) + history popovers. Clicking an item inserts
+     *  it into the input to edit — it does NOT auto-run. Shortkeys are managed
+     *  from Preferences (kept off the input row so it stays wide on mobile). */
     let help_pop = build_popover(gobj, "HELP", "yi-question", t("help"));
-    let sk_pop = build_popover(gobj, "SK", "yi-bars", t("shortkeys"));
     let hist_pop = build_popover(gobj, "HIST", "yi-arrow-rotate-left", t("command history"));
     priv.popovers = {
         HELP: {dd: help_pop.dd, content: help_pop.content},
-        SK:   {dd: sk_pop.dd,   content: sk_pop.content},
         HIST: {dd: hist_pop.dd, content: hist_pop.content},
     };
 
@@ -391,7 +390,6 @@ function build_ui(gobj)
                 ["div", {class: "CONSOLE_INPUT_ROW field has-addons mb-0"}, [
                     $input_control,
                     help_pop.control,
-                    sk_pop.control,
                     hist_pop.control,
                     ["div", {class: "control"}, [$clear]],
                     ["div", {class: "control"}, [$exec]]
@@ -631,8 +629,6 @@ function toggle_popover(gobj, kind)
     if(open) {
         if(kind === "HELP") {
             fill_help_popover(gobj);
-        } else if(kind === "SK") {
-            fill_sk_popover(gobj);
         } else if(kind === "HIST") {
             fill_hist_popover(gobj);
         }
@@ -719,83 +715,6 @@ function fill_hist_popover(gobj)
         });
         $c.appendChild($item);
     }
-}
-
-/***************************************************************
- *  Fill the shortkeys popover: each configured shortkey as
- *  `key → template`. Clicking the row inserts the key into the
- *  input (ready to add args / run); a trailing trash button
- *  removes the shortkey (persisted). A footer row inserts an
- *  `add-shortkey` template to define a new one.
- ***************************************************************/
-function fill_sk_popover(gobj)
-{
-    let priv = gobj.priv;
-    let $c = priv.popovers.SK && priv.popovers.SK.content;
-    if(!$c) {
-        return;
-    }
-    $c.replaceChildren();
-
-    let config = gobj_read_attr(gobj, "config_svc");
-    let shortkeys = config ? agent_config_get_shortkeys(config) : {};
-    let keys = Object.keys(shortkeys).sort();
-
-    if(keys.length === 0) {
-        $c.appendChild(createElement2(
-            ["div", {class: "dropdown-item has-text-grey", i18n: "no shortkeys yet"}, t("no shortkeys yet")]));
-    }
-
-    for(let key of keys) {
-        let template = shortkeys[key];
-        /*  Row: the key + template inserts the key on click; the trash
-         *  button (its own click, stopped from bubbling) removes it.  */
-        let $row = createElement2(
-            ["a", {class: "dropdown-item is-family-monospace",
-                   style: "display:flex; align-items:center; gap:0.5rem; white-space:normal;",
-                   title: template},
-                [
-                    ["span", {class: "has-text-weight-semibold"}, key],
-                    ["span", {class: "has-text-grey", style: "flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;"},
-                        "→ " + template],
-                    ["button", {class: "SK_REMOVE button is-small is-ghost", type: "button",
-                                title: t("remove shortkey")},
-                        [["span", {class: "icon is-small"}, [["i", {class: "yi-trash"}]]]]]
-                ]
-            ]
-        );
-        $row.addEventListener("click", (ev) => {
-            ev.preventDefault();
-            insert_command(gobj, key + " ");
-        });
-        let $rm = $row.querySelector(".SK_REMOVE");
-        $rm.addEventListener("click", (ev) => {
-            ev.preventDefault();
-            ev.stopPropagation();   /*  don't insert the key while deleting  */
-            if(config) {
-                agent_config_remove_shortkey(config, key);
-            }
-            fill_sk_popover(gobj);   /*  re-render in place, popover stays open  */
-        });
-        $c.appendChild($row);
-    }
-
-    /*  Footer: insert an add-shortkey template so a new one can be defined
-     *  from the input (quote the command value if it has spaces).  */
-    $c.appendChild(createElement2(["hr", {class: "dropdown-divider"}]));
-    let $add = createElement2(
-        ["a", {class: "dropdown-item is-family-monospace has-text-link"},
-            [
-                ["span", {class: "icon"}, [["i", {class: "yi-plus"}]]],
-                ["span", {i18n: "new shortkey"}, t("new shortkey")]
-            ]
-        ]
-    );
-    $add.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        insert_command(gobj, "add-shortkey key= command=\"\"");
-    });
-    $c.appendChild($add);
 }
 
 /***************************************************************

@@ -42,6 +42,9 @@ import {
     agent_config_get_active_node,
     agent_config_get_display_mode,
     agent_config_set_display_mode,
+    agent_config_get_shortkeys,
+    agent_config_set_shortkey,
+    agent_config_remove_shortkey,
 } from "./c_agent_config.js";
 
 
@@ -273,7 +276,110 @@ function build_preference(gobj)
                         field("language", "Language", lang_seg),
                         field("display mode", "Command answers", display_seg)
                     ]
+                ],
+                build_shortkeys(gobj)
+            ]
+        ]
+    );
+}
+
+/***************************************************************
+ *  Shortkeys manager (moved here from the console input row so it
+ *  doesn't shrink the command input on mobile). The {key: template}
+ *  dict is global to all nodes — persisted on the shared
+ *  C_AGENT_CONFIG service. In a command, the first token is looked
+ *  up here; a match expands to the template with $1 $2 … replaced by
+ *  the following args (ycli parity). Returns a DOM node.
+ ***************************************************************/
+function build_shortkeys(gobj)
+{
+    let config = gobj_find_service("agent_config", false);
+    let shortkeys = config ? agent_config_get_shortkeys(config) : {};
+    let keys = Object.keys(shortkeys).sort();
+
+    /*  Existing shortkeys: one row each, key + template + a trash button
+     *  that removes it (persisted) and re-renders the page.  */
+    let list_children = [];
+    if(keys.length === 0) {
+        list_children.push(
+            ["p", {class: "has-text-grey", i18n: "no shortkeys yet"}, "No shortkeys defined"]);
+    }
+    for(let key of keys) {
+        let this_key = key;
+        list_children.push(
+            ["div", {class: "SK_ROW",
+                     style: "display:flex; align-items:center; gap:0.5rem; padding:0.35rem 0; " +
+                            "border-bottom:1px solid var(--bulma-border, #dbdbdb);"},
+                [
+                    ["span", {class: "has-text-weight-semibold is-family-monospace",
+                              style: "min-width:3.5rem;"}, this_key],
+                    ["span", {class: "has-text-grey is-family-monospace is-size-7",
+                              style: "flex:1; min-width:0; word-break:break-all;"}, shortkeys[this_key]],
+                    ["button", {class: "button is-small is-ghost", type: "button",
+                                title: t("remove shortkey")},
+                        [["span", {class: "icon is-small"}, [["span", {class: "yi-trash"}, ""]]]],
+                        {click: function() {
+                            if(config) {
+                                agent_config_remove_shortkey(config, this_key);
+                            }
+                            render(gobj);
+                        }}]
                 ]
+            ]
+        );
+    }
+
+    /*  Add form: key + command inputs. Enter in either, or the Add button,
+     *  saves and re-renders (which clears the inputs).  */
+    let $key = ce(["input", {class: "input is-small is-family-monospace", type: "text",
+                             placeholder: "key", "aria-label": "key",
+                             style: "max-width:7rem;"}]);
+    let $cmd = ce(["input", {class: "input is-small is-family-monospace", type: "text",
+                             placeholder: t("command template"), "aria-label": "command"}]);
+
+    function do_add()
+    {
+        let k = String($key.value || "").trim();
+        let c = String($cmd.value || "").trim();
+        if(config && k && c) {
+            agent_config_set_shortkey(config, k, c);
+            render(gobj);
+        }
+    }
+    let on_enter = function(ev) {
+        if(ev.key === "Enter") {
+            ev.preventDefault();
+            do_add();
+        }
+    };
+    $key.addEventListener("keydown", on_enter);
+    $cmd.addEventListener("keydown", on_enter);
+
+    let add_row = ce(
+        ["div", {class: "field has-addons", style: "margin-top:0.75rem;"},
+            [
+                ["div", {class: "control"}, [$key]],
+                ["div", {class: "control is-expanded"}, [$cmd]],
+                ["div", {class: "control"},
+                    [["button", {class: "button is-small is-primary", type: "button"},
+                        [
+                            ["span", {class: "icon is-small"}, [["span", {class: "yi-plus"}, ""]]],
+                            ["span", {i18n: "add"}, "Add"]
+                        ],
+                        {click: do_add}]]
+                ]
+            ]
+        ]
+    );
+
+    return ce(
+        ["div", {class: "box", style: "max-width:540px;"},
+            [
+                ["label", {class: "label", i18n: "shortkeys"}, "Shortkeys"],
+                ["p", {class: "help", style: "margin-bottom:0.75rem;", i18n: "shortkeys hint"},
+                    "First token of a command; expands to the template with $1 $2 … as args. Shared by all nodes."],
+                ["div", {class: "SK_LIST"}, list_children],
+                add_row
             ]
         ]
     );
