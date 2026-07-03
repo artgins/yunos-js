@@ -55,6 +55,7 @@ const en = {
         "execute":           "Execute",
         "clear":             "Clear",
         "response":          "Response",
+        "copy response":     "Copy response",
         "help":              "Help",
         "command history":   "Command history",
         "no commands":       "No commands available",

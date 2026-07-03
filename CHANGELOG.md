@@ -48,7 +48,9 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   mobile.
 - Answers sent via the shared `agent_link` service (inter-yuno contract) so the
   agent's real asynchronous answer routes back; table answers on Tabulator, a
-  `display_mode` toggle (table vs raw JSON), error-only comment line.
+  `display_mode` toggle (table vs raw JSON), error-only comment line. A copy
+  button on the status line copies the raw-text response (`CONSOLE_RESPONSE_TEXT`)
+  to the clipboard — disabled for table/empty answers, flashes a check on success.
 - Mobile & theme: clear (✕) as its own button, icon-only Execute, full-width
   popovers, a terminal (`>_`) icon for the Console nav + Execute, dark-mode
   panes. Silent session recovery after a sleep/reconnect NAK.

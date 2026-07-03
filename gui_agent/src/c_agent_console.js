@@ -110,6 +110,9 @@ function mt_create(gobj)
     priv.$comment = null;
     priv.$data = null;
     priv.$hint = null;
+    priv.$copy = null;         /*  copy-response button (right of the status line)  */
+    priv.$copy_icon = null;
+    priv.copy_flash_timer = null;
     priv.tabulator = null;    /*  Tabulator instance for table-mode answers  */
     priv.commands = {};       /*  name -> {name, params[], desc} from `help`  */
     priv.commands_loaded = false;
@@ -230,6 +233,10 @@ function mt_destroy(gobj)
 {
     destroy_table(gobj);
     let priv = gobj.priv;
+    if(priv.copy_flash_timer) {
+        clearTimeout(priv.copy_flash_timer);
+        priv.copy_flash_timer = null;
+    }
     if(priv.doc_click) {
         document.removeEventListener("click", priv.doc_click);
         priv.doc_click = null;
@@ -353,8 +360,28 @@ function build_ui(gobj)
         HIST: {dd: hist_pop.dd, content: hist_pop.content},
     };
 
-    let $status = createElement2(["p", {class: "CONSOLE_STATUS has-text-grey"}, ""]);
+    /*  Status line + a copy button on the right that copies the current
+     *  CONSOLE_RESPONSE_TEXT (raw JSON / text answers). Disabled while the
+     *  response is a table or empty.  */
+    let $status = createElement2(
+        ["p", {class: "CONSOLE_STATUS has-text-grey", style: "flex:1; min-width:0; margin:0;"}, ""]);
     priv.$status = $status;
+
+    let $copy = createElement2(
+        ["button", {class: "CONSOLE_COPY button is-small is-ghost", type: "button",
+                    title: t("copy response")},
+            [["span", {class: "icon is-small"}, [["i", {class: "yi-copy"}]]]]]
+    );
+    $copy.disabled = true;
+    $copy.addEventListener("click", () => copy_response(gobj));
+    priv.$copy = $copy;
+    priv.$copy_icon = $copy.querySelector("i");
+
+    let $status_row = createElement2(
+        ["div", {class: "CONSOLE_STATUS_ROW",
+                 style: "display:flex; align-items:center; gap:0.5rem;"},
+            [$status, $copy]]
+    );
 
     /*  Command helper: shows the matched command's signature + description
      *  as you type (from the `help` cache). Hidden when nothing matches. */
@@ -385,7 +412,7 @@ function build_ui(gobj)
     let $c = createElement2(
         ["div", {class: "C_AGENT_CONSOLE CONSOLE_CARD view-card", style: "display:flex; flex-direction:column; height:100%; gap:0.5rem;"},
             [
-                $status,
+                $status_row,
                 $data,
                 ["div", {class: "CONSOLE_INPUT_ROW field has-addons mb-0"}, [
                     $input_control,
@@ -867,6 +894,7 @@ function show_data(gobj, data, schema, raw, comment, result)
     /*  Tear down any previous table + content.  */
     destroy_table(gobj);
     priv.$data.replaceChildren();
+    set_copy_enabled(gobj, false);   /*  no CONSOLE_RESPONSE_TEXT to copy yet  */
 
     /*  Table mode: array payload + schema -> Tabulator.  */
     if(!raw && Array.isArray(data) && Array.isArray(schema) && schema.length) {
@@ -901,6 +929,105 @@ function show_data(gobj, data, schema, raw, comment, result)
                         "font-size:12px; padding:0.5rem;"},
             text]
     ));
+    set_copy_enabled(gobj, true);   /*  there is text to copy now  */
+}
+
+/***************************************************************
+ *  Enable/disable the copy button and reset its icon to the neutral
+ *  "copy" glyph (clearing any lingering "copied" flash).
+ ***************************************************************/
+function set_copy_enabled(gobj, enabled)
+{
+    let priv = gobj.priv;
+    if(!priv.$copy) {
+        return;
+    }
+    priv.$copy.disabled = !enabled;
+    if(priv.copy_flash_timer) {
+        clearTimeout(priv.copy_flash_timer);
+        priv.copy_flash_timer = null;
+    }
+    priv.$copy.classList.remove("has-text-success");
+    if(priv.$copy_icon) {
+        priv.$copy_icon.className = "yi-copy";
+    }
+}
+
+/***************************************************************
+ *  Copy the current CONSOLE_RESPONSE_TEXT to the clipboard. Uses the
+ *  async Clipboard API (HTTPS) with a legacy execCommand fallback for
+ *  non-secure contexts. Flashes a check icon on success.
+ ***************************************************************/
+function copy_response(gobj)
+{
+    let priv = gobj.priv;
+    let pre = priv.$data ? priv.$data.querySelector(".CONSOLE_RESPONSE_TEXT") : null;
+    let text = pre ? pre.textContent : "";
+    if(!text) {
+        return;
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            flash_copied(gobj);
+        }).catch(() => {
+            if(legacy_copy(text)) {
+                flash_copied(gobj);
+            }
+        });
+    } else if(legacy_copy(text)) {
+        flash_copied(gobj);
+    }
+}
+
+/***************************************************************
+ *  Clipboard fallback: a hidden textarea + execCommand("copy").
+ *  Returns true if the copy command was accepted.
+ ***************************************************************/
+function legacy_copy(text)
+{
+    let ok = false;
+    try {
+        let ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "absolute";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+    } catch(e) {
+        ok = false;
+    }
+    return ok;
+}
+
+/***************************************************************
+ *  Briefly show a check icon on the copy button after a successful
+ *  copy, then restore the neutral copy glyph.
+ ***************************************************************/
+function flash_copied(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.$copy) {
+        return;
+    }
+    priv.$copy.classList.add("has-text-success");
+    if(priv.$copy_icon) {
+        priv.$copy_icon.className = "yi-square-check";
+    }
+    if(priv.copy_flash_timer) {
+        clearTimeout(priv.copy_flash_timer);
+    }
+    priv.copy_flash_timer = setTimeout(() => {
+        priv.copy_flash_timer = null;
+        if(priv.$copy) {
+            priv.$copy.classList.remove("has-text-success");
+        }
+        if(priv.$copy_icon) {
+            priv.$copy_icon.className = "yi-copy";
+        }
+    }, 1200);
 }
 
 /***************************************************************

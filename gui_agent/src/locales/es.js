@@ -55,6 +55,7 @@ const es = {
         "execute":           "Ejecutar",
         "clear":             "Limpiar",
         "response":          "Respuesta",
+        "copy response":     "Copiar respuesta",
         "help":              "Ayuda",
         "command history":   "Historial de comandos",
         "no commands":       "No hay comandos disponibles",
