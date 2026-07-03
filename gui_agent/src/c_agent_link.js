@@ -146,8 +146,8 @@ function agent_link_is_connected(gobj)
  *  via kw.service). The answer is addressed (inter-yuno) to the
  *  NAME of `src`, so `src` MUST be a named service with the answer
  *  event public — otherwise the reply can't be routed back. Pass a
- *  service (e.g. C_TREEDB_GATE), or omit `src` to default to this
- *  link service, which re-publishes the answer to the view panels.
+ *  named service, or omit `src` to default to this link service, which
+ *  re-publishes the answer to the view panels.
  ***************************************************************/
 function agent_link_command(gobj, command, kw, src)
 {
@@ -336,8 +336,8 @@ function create_gclass(gclass_name)
      *  The re-published events are output (optional subscribers).
      *  The two answer events are ALSO public: inter-yuno replies from
      *  the agent are addressed to this named service ("agent_link"), so
-     *  the iev's on_message can only route them here if they are public
-     *  (cf. C_TREEDB_GATE). Output keeps the re-publish to the panels.
+     *  the iev's on_message can only route them here if they are public.
+     *  Output keeps the re-publish to the panels.
      *---------------------------------------------*/
     const out = event_flag_t.EVF_OUTPUT_EVENT | event_flag_t.EVF_NO_WARN_SUBS;
     const answer = out | event_flag_t.EVF_PUBLIC_EVENT;

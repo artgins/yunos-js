@@ -1,5 +1,5 @@
 {
-    "_comment": "Agent Console shell config — mobile-app style: an always-on top toolbar with a left brand + right-aligned status/actions (connection dot, language, theme, user avatar). Primary nav (Console / TreeDB / Stats / Settings) is the left rail on desktop and the bottom icon-bar on mobile; submenus render as top tabs. The toolbar user avatar shows the logged-in user's initials and navigates to /settings/auth (login form when signed out).",
+    "_comment": "Agent Console shell config — mobile-app style: an always-on top toolbar with a left brand + right-aligned status/actions (connection dot, language, theme, user avatar). Primary nav (Console / Nodes / Stats) is the left rail on desktop and the bottom icon-bar on mobile; submenus render as top tabs. The toolbar user avatar shows the logged-in user's initials and navigates to /settings/auth (login form when signed out). TreeDB lives in the separate gui_treedb SPA.",
 
     "shell": {
         "breakpoints": "bulma",
@@ -163,41 +163,6 @@
                     }
                 },
                 {
-                    "id": "treedb",
-                    "name": "treedb",
-                    "icon": "yi-hexagon-nodes",
-                    "tooltip": "Browse treedb topics as tables and graphs",
-                    "route": "/treedb",
-                    "submenu": {
-                        "render": { "top-sub": "tabs" },
-                        "items": [
-                            {
-                                "id": "graph",
-                                "name": "graph",
-                                "icon": "yi-hexagon-nodes",
-                                "route": "/treedb/graph",
-                                "target": {
-                                    "stage": "main",
-                                    "gclass": "C_GUI_AGENT_VIEW",
-                                    "kw": { "title": "TreeDB · Graph", "subtitle": "Nodes and links (Phase 3)", "color": "#1FAE6F" }
-                                }
-                            },
-                            {
-                                "id": "table",
-                                "name": "table",
-                                "icon": "yi-table",
-                                "route": "/treedb/table",
-                                "_target_comment": "WIP: C_TREEDB_PANEL + C_TREEDB_GATE are built but BLOCKED — JS C_IEVENT_CLI.mt_command routes the inter-event by kw.service, which collides with command-yuno's inner 'service' param (the agent then can't find the service). Needs a gobj-js fix to decouple routing-service from command params. Until then keep the placeholder.",
-                                "target": {
-                                    "stage": "main",
-                                    "gclass": "C_GUI_AGENT_VIEW",
-                                    "kw": { "title": "TreeDB · Table", "subtitle": "Topic rows (Phase 3, WIP — blocked on a gobj-js routing fix)", "color": "#1F8A5F" }
-                                }
-                            }
-                        ]
-                    }
-                },
-                {
                     "id": "stats",
                     "name": "stats",
                     "icon": "yi-eye",
@@ -213,8 +178,9 @@
                                 "route": "/stats/live",
                                 "target": {
                                     "stage": "main",
-                                    "gclass": "C_GUI_AGENT_VIEW",
-                                    "kw": { "title": "Stats · Live", "subtitle": "Time-series charts (Phase 3)", "color": "#F5A623" }
+                                    "gclass": "C_AGENT_STATS",
+                                    "kw": { "title": "stats" },
+                                    "lifecycle": "keep_alive"
                                 }
                             }
                         ]

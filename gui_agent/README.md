@@ -5,8 +5,9 @@ built on the **v2 declarative shell** of `@yuneta/gobj-ui`
 (`C_YUI_SHELL` + `C_YUI_NAV`).
 
 It is the modern successor of the old webix "Yuneta CLI"
-(`yuno_gui/v2/.../ui_yuneta_cli.js`): the control-plane **CLI to the agent**
-is the first panel; treedb (table + graph) and live stats follow.
+(`yuno_gui/v2/.../ui_yuneta_cli.js`). Three panels: the control-plane **CLI
+to the agent** (multi-node tabs), the **Nodes** list, and **live Stats** of a
+yuno. TreeDB browsing lives in the separate **`gui_treedb`** SPA, not here.
 
 **Canonical URL:** the SPA is served at `https://agents.yunetacontrol.com`
 (new apex — needs its own DNS zone + TLS cert at deploy time). This is the
@@ -80,14 +81,15 @@ npm run build      # production bundle into dist/
 | **0** | Scaffold: shell + nav, placeholder views, green build *(this commit)* |
 | **1** | `C_AGENT_CONSOLE` (CLI panel) + `C_SETTINGS` (agents form, persistent attrs); MVP target `app.wattyzer.com` over `wss`+OAuth2 |
 | **2** | Authentication: configurable OIDC/Keycloak `auth_url` → JWT → `wss:1993` |
-| **3** | TreeDB (table + graph, reusing `C_YUI_TREEDB_*`) and live stats (`gobj_stats` + `C_YUI_UPLOT`) |
+| **3** | Live **Stats** (`C_AGENT_STATS`): a yuno's `SDF_RSTATS` counters as a table. TreeDB moved out to the `gui_treedb` SPA. |
 
 ## Status
 
-**Phases 1–2 shipped.** The multi-agent Console (`C_AGENT_CONSOLE`) and the
-Nodes list are live against the controlcenter over `wss`+OAuth2. TreeDB (table
-+ graph) and live stats (phase 3) are the remaining work. See **Changes**
-below.
+**Phases 1–3 shipped.** The multi-agent Console (`C_AGENT_CONSOLE`), the Nodes
+list, and live Stats (`C_AGENT_STATS`) are live against the controlcenter over
+`wss`+OAuth2. TreeDB is **not** part of this app — it is the separate
+`gui_treedb` SPA. Time-series charts (`C_YUI_UPLOT`) over the live counters are
+a possible follow-up. See **Changes** below.
 
 ## Changes
 
@@ -97,6 +99,19 @@ This yuno is JavaScript and deploys independently of the SDK (see
 
 ### 7.6.8 cycle
 
+- **Live Stats (`C_AGENT_STATS`).** A new primary panel (`/stats/live`): pick a
+  node (all connected agents) and one of its running yunos, and see that yuno's
+  `SDF_RSTATS` counters as a searchable/sortable table. All three steps ride the
+  shared `agent_link` over `command-agent` — `list-agents` (nodes),
+  `list-yunos` (yunos), `stats-yuno id=<yuno>` (counters, a flat `{stat: value}`
+  object). The view's own fetches are tagged `console_purpose="stats"` (echoed
+  back in `__md_iev__`, [[md_iev round-trip]]) so the Console ignores them and
+  vice-versa. No polling — the table refreshes on selection change and the
+  Refresh button. Number formatting stays Intl-free (the `navigator.language`
+  crash landmine), so `C_YUI_UPLOT` charts are deferred.
+- **TreeDB removed.** TreeDB browsing now lives in the dedicated `gui_treedb`
+  SPA; the placeholder menu and the blocked `C_TREEDB_GATE`/`C_TREEDB_PANEL`
+  adapters (plus the `C_YUI_TREEDB_*` registrations) were dropped from this app.
 - **Multi-agent Console.** One top-sub tab per selected node (built on
   gobj-ui's runtime nav API); each tab is a `C_AGENT_CONSOLE` pinned to that
   node — red when disconnected, closable. On F5 (or landing on the console

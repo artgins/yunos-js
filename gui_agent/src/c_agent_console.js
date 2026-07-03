@@ -1445,6 +1445,15 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return 0;
     }
 
+    /*  Answers tagged with a non-console purpose (e.g. the Stats view's
+     *  own list-yunos / stats-yuno fetches) are not ours — the console's
+     *  own commands carry no purpose, and its help-cache fetch uses
+     *  "cache" (handled below). The marker round-trips in __md_iev__.  */
+    let purpose = msg_iev_read_key(kw, "console_purpose");
+    if(purpose && purpose !== "cache") {
+        return 0;
+    }
+
     /*  Multi-agent: each command echoes its origin node in __md_iev__;
      *  render only answers for THIS panel's node.  */
     let my_node = gobj_read_attr(gobj, "node") || "";

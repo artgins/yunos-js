@@ -44,10 +44,6 @@ import {
 import {register_c_yui_shell}  from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {register_c_yui_nav}    from "@yuneta/gobj-ui/src/c_yui_nav.js";
 import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
-import {register_c_yui_treedb_topics}
-    from "@yuneta/gobj-ui/src/c_yui_treedb_topics.js";
-import {register_c_yui_treedb_topic_with_form}
-    from "@yuneta/gobj-ui/src/c_yui_treedb_topic_with_form.js";
 
 import {register_c_app} from "./c_app.js";
 import {register_c_gui_agent_view} from "./c_gui_agent_view.js";
@@ -57,8 +53,7 @@ import {register_c_agent_login} from "./c_agent_login.js";
 import {register_c_agent_link} from "./c_agent_link.js";
 import {register_c_nodes} from "./c_nodes.js";
 import {register_c_agent_console} from "./c_agent_console.js";
-import {register_c_treedb_gate} from "./c_treedb_gate.js";
-import {register_c_treedb_panel} from "./c_treedb_panel.js";
+import {register_c_agent_stats} from "./c_agent_stats.js";
 
 import {setup_locale} from "./locales/locales.js";
 import {apply_theme, current_theme} from "./theme.js";
@@ -66,7 +61,6 @@ import {apply_theme, current_theme} from "./theme.js";
 import "bulma/css/bulma.css";
 import "@yuneta/gobj-ui/src/c_yui_shell.css";
 import "@yuneta/gobj-ui/src/yui_icons.css";
-import "@yuneta/gobj-ui/src/ytable.css";
 import "tabulator-tables/dist/css/tabulator.min.css";
 import "tabulator-tables/dist/css/tabulator_bulma.css";
 import "./app.css";
@@ -117,12 +111,7 @@ function main()
     register_c_gui_agent_view();
     register_c_nodes();
     register_c_agent_console();
-
-    /*  TreeDB table stack (reused gobj-ui components + agent-gate adapter)  */
-    register_c_yui_treedb_topic_with_form();
-    register_c_yui_treedb_topics();
-    register_c_treedb_gate();
-    register_c_treedb_panel();
+    register_c_agent_stats();
 
     /*------------------------------------------------*
      *          Start yuneta
