@@ -47,6 +47,7 @@ import {
     agent_config_get_display_mode,
     agent_config_get_history,
     agent_config_set_history,
+    agent_config_get_shortkeys,
 } from "./c_agent_config.js";
 
 
@@ -1001,6 +1002,57 @@ function destroy_table(gobj)
 }
 
 /***************************************************************
+ *  Split a command line into tokens, respecting single/double
+ *  quotes (quotes are stripped, like a shell). Used to pick the
+ *  shortkey (first token) and its positional args.
+ ***************************************************************/
+function split_args(s)
+{
+    let tokens = [];
+    let re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+    let m;
+    while((m = re.exec(s)) !== null) {
+        if(m[1] !== undefined) {
+            tokens.push(m[1]);
+        } else if(m[2] !== undefined) {
+            tokens.push(m[2]);
+        } else {
+            tokens.push(m[3]);
+        }
+    }
+    return tokens;
+}
+
+/***************************************************************
+ *  Expand a shortkey (ycli parity). If the first token matches a
+ *  configured shortkey, return its template with $1 $2 … replaced
+ *  by the following positional args; otherwise return cmd unchanged.
+ ***************************************************************/
+function expand_shortkey(gobj, cmd)
+{
+    let config = gobj_read_attr(gobj, "config_svc");
+    let shortkeys = config ? agent_config_get_shortkeys(config) : null;
+    if(!shortkeys) {
+        return cmd;
+    }
+    let tokens = split_args(cmd);
+    if(tokens.length === 0) {
+        return cmd;
+    }
+    let key = tokens[0];
+    if(!Object.prototype.hasOwnProperty.call(shortkeys, key)) {
+        return cmd;
+    }
+    let out = shortkeys[key];
+    let args = tokens.slice(1);
+    /*  Replace $N high-to-low so $1 never clobbers $10, $11, …  */
+    for(let i = args.length; i >= 1; i--) {
+        out = out.split("$" + i).join(args[i - 1]);
+    }
+    return out;
+}
+
+/***************************************************************
  *  Send the typed command to the ACTIVE NODE's agent, routed by
  *  the control center: command-agent agent_id=<node> cmd2agent=<cmd>.
  ***************************************************************/
@@ -1038,8 +1090,13 @@ function send_command(gobj)
         return;
     }
 
-    add_history(gobj, cmd);
+    add_history(gobj, cmd);   /*  recall shows what was typed (the shortkey)  */
     priv.hist_idx = -1;   /*  a sent command resets history-recall  */
+
+    /*  Shortkey expansion (ycli parity): a leading token matching a
+     *  configured shortkey expands to its template ($1 $2 … = args).  */
+    cmd = expand_shortkey(gobj, cmd);
+
     show_comment(gobj, "…", 0);
     show_data(gobj, null);
 

@@ -108,6 +108,12 @@ This yuno is JavaScript and deploys independently of the SDK (see
   history**, global to all nodes (persisted in the browser); a **history
   popover** lists recent commands. No polling — the node list refreshes on
   demand.
+- **Shortkeys.** Like ycli, the first token of a command is looked up in a
+  persistent `{key: template}` dict; a match expands to the template with
+  `$1 $2 …` replaced by the following positional args (quote-aware). Seeded
+  with ycli's defaults (`s` → `stats-yuno yuno_role=logcenter`, `ss`, `r`,
+  `tt`, `error "text"` → a `logcenter` search). Global to all nodes; the
+  history recalls the shortkey you typed, not the expansion.
 - **Answers.** Commands are sent from the shared `agent_link` service (honoring
   the inter-yuno contract), so the agent's real asynchronous answer routes back
   (not just the controlcenter dispatch ack). Table answers render on Tabulator;

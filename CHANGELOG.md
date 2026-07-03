@@ -36,6 +36,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 - Up/Down recall shell-style **command history**, global to all nodes
   (persisted in the browser); a history popover lists recent commands. No
   polling.
+- **Command shortkeys** (ycli parity): the first token of a console command is
+  looked up in a persistent `{key: template}` dict; a match expands to the
+  template with `$1 $2 …` replaced by the following positional args (quote-
+  aware). Seeded with ycli's default set (`s`, `ss`, `r`, `tt`, `error`);
+  global to all nodes. History recalls what was typed (the shortkey).
 - Answers sent via the shared `agent_link` service (inter-yuno contract) so the
   agent's real asynchronous answer routes back; table answers on Tabulator, a
   `display_mode` toggle (table vs raw JSON), error-only comment line.

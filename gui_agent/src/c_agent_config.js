@@ -27,6 +27,17 @@ import {
  ***************************************************************/
 const GCLASS_NAME = "C_AGENT_CONFIG";
 
+/*  Console command shortkeys, seeded like ycli's default set. The first
+ *  token typed in the console is looked up here; a match expands to the
+ *  template, with $1 $2 … replaced by the following positional args.  */
+const DEFAULT_SHORTKEYS = {
+    "s":     "stats-yuno yuno_role=logcenter",
+    "ss":    "command-yuno yuno_role=logcenter command=display-summary",
+    "r":     "command-yuno yuno_role=logcenter command=reset-counters",
+    "tt":    "t yuno_running=1",
+    "error": "command-yuno yuno_role=logcenter command=search text=\"$1\"",
+};
+
 
 /***************************************************************
  *              Attrs
@@ -37,6 +48,7 @@ SDATA(data_type_t.DTP_STRING,   "active_node",  sdata_flag_t.SDF_PERSIST, "",   
 SDATA(data_type_t.DTP_STRING,   "display_mode", sdata_flag_t.SDF_PERSIST, "table", "Command answer display: table | form (raw JSON)"),
 SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "[]",  "Nodes with an open Console tab: [{id, host}, ...]"),
 SDATA(data_type_t.DTP_JSON,     "cmd_history",  sdata_flag_t.SDF_PERSIST, "[]",    "Global console command history: [cmd,...] most-recent first (shared by all nodes)"),
+SDATA(data_type_t.DTP_JSON,     "shortkeys",    sdata_flag_t.SDF_PERSIST, JSON.stringify(DEFAULT_SHORTKEYS), "Console command shortkeys {key: template}; $1 $2 … are positional args (ycli parity)"),
 SDATA_END()
 ];
 
@@ -223,6 +235,16 @@ function agent_config_set_history(gobj, list)
     gobj_save_persistent_attrs(gobj, "cmd_history");
 }
 
+/***************************************************************
+ *  Console command shortkeys {key: template}, global to all nodes
+ *  (ycli parity). Returns the live dict, or {} if unset.
+ ***************************************************************/
+function agent_config_get_shortkeys(gobj)
+{
+    let dict = gobj_read_attr(gobj, "shortkeys");
+    return (dict && typeof dict === "object" && !Array.isArray(dict)) ? dict : {};
+}
+
 
 
 
@@ -310,4 +332,5 @@ export {
     agent_config_remove_selected_node,
     agent_config_get_history,
     agent_config_set_history,
+    agent_config_get_shortkeys,
 };
