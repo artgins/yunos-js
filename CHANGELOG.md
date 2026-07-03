@@ -41,6 +41,10 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   template with `$1 $2 …` replaced by the following positional args (quote-
   aware). Seeded with ycli's default set (`s`, `ss`, `r`, `tt`, `error`);
   global to all nodes. History recalls what was typed (the shortkey).
+  Managed from the UI: local (client-side) `shortkeys` / `add-shortkey` /
+  `remove-shortkey` commands (never sent to the agent), plus a shortkeys
+  popover next to `?`/history that lists them, inserts a key on click, deletes
+  one with a trash button, and seeds an `add-shortkey` template for new ones.
 - Answers sent via the shared `agent_link` service (inter-yuno contract) so the
   agent's real asynchronous answer routes back; table answers on Tabulator, a
   `display_mode` toggle (table vs raw JSON), error-only comment line.

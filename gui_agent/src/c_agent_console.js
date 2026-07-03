@@ -48,6 +48,8 @@ import {
     agent_config_get_history,
     agent_config_set_history,
     agent_config_get_shortkeys,
+    agent_config_set_shortkey,
+    agent_config_remove_shortkey,
 } from "./c_agent_config.js";
 
 
@@ -58,8 +60,13 @@ const GCLASS_NAME = "C_AGENT_CONSOLE";
 
 const HISTORY_MAX = 30;
 
-/*  A few common agent commands seeded into the command completions. */
-const SEED_COMMANDS = ["help", "list-yunos", "stats", "list-binaries", "view-config"];
+/*  A few common agent commands seeded into the command completions, plus the
+ *  local (client-side) shortkey-management commands so Tab-completion and the
+ *  "?" popover surface them too.  */
+const SEED_COMMANDS = [
+    "help", "list-yunos", "stats", "list-binaries", "view-config",
+    "shortkeys", "add-shortkey", "remove-shortkey"
+];
 
 
 /***************************************************************
@@ -112,10 +119,7 @@ function mt_create(gobj)
      *  in-progress text so Down past the newest restores it.  */
     priv.hist_idx = -1;
     priv.hist_draft = "";
-    priv.$help_dd = null;      /*  "?" available-commands popover  */
-    priv.$help_content = null;
-    priv.$hist_dd = null;      /*  history popover  */
-    priv.$hist_content = null;
+    priv.popovers = {};        /*  {HELP|HIST|SK: {dd, content}} input-row popovers  */
     priv.doc_click = null;     /*  outside-click closer for the popovers  */
 
     /*
@@ -339,14 +343,16 @@ function build_ui(gobj)
 
     let $input_control = createElement2(["div", {class: "CONSOLE_INPUT_CONTROL control is-expanded"}, [$input]]);
 
-    /*  "?" (available commands) + history popovers. Clicking an item inserts
-     *  it into the input to edit — it does NOT auto-run. */
+    /*  "?" (available commands), shortkeys and history popovers. Clicking an
+     *  item inserts it into the input to edit — it does NOT auto-run. */
     let help_pop = build_popover(gobj, "HELP", "yi-question", t("help"));
+    let sk_pop = build_popover(gobj, "SK", "yi-bars", t("shortkeys"));
     let hist_pop = build_popover(gobj, "HIST", "yi-arrow-rotate-left", t("command history"));
-    priv.$help_dd = help_pop.dd;
-    priv.$help_content = help_pop.content;
-    priv.$hist_dd = hist_pop.dd;
-    priv.$hist_content = hist_pop.content;
+    priv.popovers = {
+        HELP: {dd: help_pop.dd, content: help_pop.content},
+        SK:   {dd: sk_pop.dd,   content: sk_pop.content},
+        HIST: {dd: hist_pop.dd, content: hist_pop.content},
+    };
 
     let $status = createElement2(["p", {class: "CONSOLE_STATUS has-text-grey"}, ""]);
     priv.$status = $status;
@@ -385,6 +391,7 @@ function build_ui(gobj)
                 ["div", {class: "CONSOLE_INPUT_ROW field has-addons mb-0"}, [
                     $input_control,
                     help_pop.control,
+                    sk_pop.control,
                     hist_pop.control,
                     ["div", {class: "control"}, [$clear]],
                     ["div", {class: "control"}, [$exec]]
@@ -396,11 +403,16 @@ function build_ui(gobj)
     );
     gobj_write_attr(gobj, "$container", $c);
 
-    /*  Outside-click closes either popover.  */
+    /*  Outside-click closes any open popover.  */
     priv.doc_click = (ev) => {
-        let in_help = priv.$help_dd && priv.$help_dd.contains(ev.target);
-        let in_hist = priv.$hist_dd && priv.$hist_dd.contains(ev.target);
-        if(!in_help && !in_hist) {
+        let inside = false;
+        for(let k in priv.popovers) {
+            if(priv.popovers[k].dd && priv.popovers[k].dd.contains(ev.target)) {
+                inside = true;
+                break;
+            }
+        }
+        if(!inside) {
             close_popovers(gobj);
         }
     };
@@ -604,41 +616,39 @@ function build_popover(gobj, kind, icon, title)
 }
 
 /***************************************************************
- *  Open one popover (filling it), closing the other.
+ *  Open one popover (filling it), closing the others.
  ***************************************************************/
 function toggle_popover(gobj, kind)
 {
     let priv = gobj.priv;
-    let dd = (kind === "HELP") ? priv.$help_dd : priv.$hist_dd;
-    let other = (kind === "HELP") ? priv.$hist_dd : priv.$help_dd;
-    if(!dd) {
+    let target = priv.popovers[kind];
+    if(!target || !target.dd) {
         return;
     }
-    if(other) {
-        other.classList.remove("is-active");
-    }
-    let open = !dd.classList.contains("is-active");
-    dd.classList.toggle("is-active", open);
+    let open = !target.dd.classList.contains("is-active");
+    close_popovers(gobj);
+    target.dd.classList.toggle("is-active", open);
     if(open) {
         if(kind === "HELP") {
             fill_help_popover(gobj);
-        } else {
+        } else if(kind === "SK") {
+            fill_sk_popover(gobj);
+        } else if(kind === "HIST") {
             fill_hist_popover(gobj);
         }
     }
 }
 
 /***************************************************************
- *  Close both popovers.
+ *  Close all popovers.
  ***************************************************************/
 function close_popovers(gobj)
 {
     let priv = gobj.priv;
-    if(priv.$help_dd) {
-        priv.$help_dd.classList.remove("is-active");
-    }
-    if(priv.$hist_dd) {
-        priv.$hist_dd.classList.remove("is-active");
+    for(let k in priv.popovers) {
+        if(priv.popovers[k].dd) {
+            priv.popovers[k].dd.classList.remove("is-active");
+        }
     }
 }
 
@@ -650,7 +660,7 @@ function close_popovers(gobj)
 function fill_help_popover(gobj)
 {
     let priv = gobj.priv;
-    let $c = priv.$help_content;
+    let $c = priv.popovers.HELP && priv.popovers.HELP.content;
     if(!$c) {
         return;
     }
@@ -689,7 +699,7 @@ function fill_help_popover(gobj)
 function fill_hist_popover(gobj)
 {
     let priv = gobj.priv;
-    let $c = priv.$hist_content;
+    let $c = priv.popovers.HIST && priv.popovers.HIST.content;
     if(!$c) {
         return;
     }
@@ -709,6 +719,83 @@ function fill_hist_popover(gobj)
         });
         $c.appendChild($item);
     }
+}
+
+/***************************************************************
+ *  Fill the shortkeys popover: each configured shortkey as
+ *  `key → template`. Clicking the row inserts the key into the
+ *  input (ready to add args / run); a trailing trash button
+ *  removes the shortkey (persisted). A footer row inserts an
+ *  `add-shortkey` template to define a new one.
+ ***************************************************************/
+function fill_sk_popover(gobj)
+{
+    let priv = gobj.priv;
+    let $c = priv.popovers.SK && priv.popovers.SK.content;
+    if(!$c) {
+        return;
+    }
+    $c.replaceChildren();
+
+    let config = gobj_read_attr(gobj, "config_svc");
+    let shortkeys = config ? agent_config_get_shortkeys(config) : {};
+    let keys = Object.keys(shortkeys).sort();
+
+    if(keys.length === 0) {
+        $c.appendChild(createElement2(
+            ["div", {class: "dropdown-item has-text-grey", i18n: "no shortkeys yet"}, t("no shortkeys yet")]));
+    }
+
+    for(let key of keys) {
+        let template = shortkeys[key];
+        /*  Row: the key + template inserts the key on click; the trash
+         *  button (its own click, stopped from bubbling) removes it.  */
+        let $row = createElement2(
+            ["a", {class: "dropdown-item is-family-monospace",
+                   style: "display:flex; align-items:center; gap:0.5rem; white-space:normal;",
+                   title: template},
+                [
+                    ["span", {class: "has-text-weight-semibold"}, key],
+                    ["span", {class: "has-text-grey", style: "flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;"},
+                        "→ " + template],
+                    ["button", {class: "SK_REMOVE button is-small is-ghost", type: "button",
+                                title: t("remove shortkey")},
+                        [["span", {class: "icon is-small"}, [["i", {class: "yi-trash"}]]]]]
+                ]
+            ]
+        );
+        $row.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            insert_command(gobj, key + " ");
+        });
+        let $rm = $row.querySelector(".SK_REMOVE");
+        $rm.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();   /*  don't insert the key while deleting  */
+            if(config) {
+                agent_config_remove_shortkey(config, key);
+            }
+            fill_sk_popover(gobj);   /*  re-render in place, popover stays open  */
+        });
+        $c.appendChild($row);
+    }
+
+    /*  Footer: insert an add-shortkey template so a new one can be defined
+     *  from the input (quote the command value if it has spaces).  */
+    $c.appendChild(createElement2(["hr", {class: "dropdown-divider"}]));
+    let $add = createElement2(
+        ["a", {class: "dropdown-item is-family-monospace has-text-link"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-plus"}]]],
+                ["span", {i18n: "new shortkey"}, t("new shortkey")]
+            ]
+        ]
+    );
+    $add.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        insert_command(gobj, "add-shortkey key= command=\"\"");
+    });
+    $c.appendChild($add);
 }
 
 /***************************************************************
@@ -1002,25 +1089,124 @@ function destroy_table(gobj)
 }
 
 /***************************************************************
- *  Split a command line into tokens, respecting single/double
- *  quotes (quotes are stripped, like a shell). Used to pick the
- *  shortkey (first token) and its positional args.
+ *  Split a command line into tokens, shell-style: whitespace
+ *  separates, single/double quotes are removable delimiters that
+ *  may appear anywhere in a token (so `command="a b"` is ONE token
+ *  `command=a b`). Used to pick the shortkey / its positional args
+ *  and to parse the local shortkey-management commands.
  ***************************************************************/
 function split_args(s)
 {
     let tokens = [];
-    let re = /"([^"]*)"|'([^']*)'|(\S+)/g;
-    let m;
-    while((m = re.exec(s)) !== null) {
-        if(m[1] !== undefined) {
-            tokens.push(m[1]);
-        } else if(m[2] !== undefined) {
-            tokens.push(m[2]);
+    let cur = "";
+    let has = false;      /*  saw a char (even in empty quotes) → emit a token  */
+    let quote = null;
+    for(let i = 0; i < s.length; i++) {
+        let ch = s[i];
+        if(quote) {
+            if(ch === quote) {
+                quote = null;
+            } else {
+                cur += ch;
+            }
+            has = true;
+        } else if(ch === "\"" || ch === "'") {
+            quote = ch;
+            has = true;
+        } else if(ch === " " || ch === "\t") {
+            if(has) {
+                tokens.push(cur);
+                cur = "";
+                has = false;
+            }
         } else {
-            tokens.push(m[3]);
+            cur += ch;
+            has = true;
         }
     }
+    if(has) {
+        tokens.push(cur);
+    }
     return tokens;
+}
+
+/***************************************************************
+ *  Parse `k=v` tokens (already quote-resolved by split_args) into a
+ *  plain object. Tokens without '=' are ignored. First token (the
+ *  command name) is expected to be sliced off by the caller.
+ ***************************************************************/
+function parse_kv(tokens)
+{
+    let params = {};
+    for(let tok of tokens) {
+        let eq = tok.indexOf("=");
+        if(eq > 0) {
+            params[tok.slice(0, eq)] = tok.slice(eq + 1);
+        }
+    }
+    return params;
+}
+
+/***************************************************************
+ *  Client-side shortkey management, mirroring ycli's local
+ *  commands. These manage the browser-persistent {key: template}
+ *  dict and never travel to the agent. Returns true if the line
+ *  was a local command (and was handled), false otherwise.
+ *
+ *      shortkeys
+ *      add-shortkey key=<k> command="<template>"
+ *      remove-shortkey key=<k>
+ ***************************************************************/
+function handle_local_command(gobj, cmd)
+{
+    let tokens = split_args(cmd);
+    if(tokens.length === 0) {
+        return false;
+    }
+    let name = tokens[0];
+    let config = gobj_read_attr(gobj, "config_svc");
+
+    if(name === "shortkeys") {
+        show_comment(gobj, "", 0);
+        show_data(gobj, config ? agent_config_get_shortkeys(config) : {});
+        return true;
+    }
+
+    if(name === "add-shortkey") {
+        let params = parse_kv(tokens.slice(1));
+        if(!params.key) {
+            show_comment(gobj, t("missing key"), -1);
+            return true;
+        }
+        if(!params.command) {
+            show_comment(gobj, t("missing command"), -1);
+            return true;
+        }
+        if(config) {
+            agent_config_set_shortkey(config, params.key, params.command);
+            show_data(gobj, agent_config_get_shortkeys(config));
+            show_comment(gobj, "", 0);
+        }
+        return true;
+    }
+
+    if(name === "remove-shortkey") {
+        let params = parse_kv(tokens.slice(1));
+        if(!params.key) {
+            show_comment(gobj, t("missing key"), -1);
+            return true;
+        }
+        let removed = config ? agent_config_remove_shortkey(config, params.key) : false;
+        if(removed) {
+            show_data(gobj, agent_config_get_shortkeys(config));
+            show_comment(gobj, "", 0);
+        } else {
+            show_comment(gobj, t("shortkey not found"), -1);
+        }
+        return true;
+    }
+
+    return false;
 }
 
 /***************************************************************
@@ -1076,6 +1262,14 @@ function send_command(gobj)
         if(!cmd) {
             return;
         }
+    }
+
+    /*  Local shortkey-management commands (ycli parity) are handled here and
+     *  never sent to the agent — they don't need a connected node.  */
+    if(handle_local_command(gobj, cmd)) {
+        add_history(gobj, cmd);
+        priv.hist_idx = -1;
+        return;
     }
 
     let link = gobj_read_attr(gobj, "link_svc");

@@ -113,7 +113,12 @@ This yuno is JavaScript and deploys independently of the SDK (see
   `$1 $2 …` replaced by the following positional args (quote-aware). Seeded
   with ycli's defaults (`s` → `stats-yuno yuno_role=logcenter`, `ss`, `r`,
   `tt`, `error "text"` → a `logcenter` search). Global to all nodes; the
-  history recalls the shortkey you typed, not the expansion.
+  history recalls the shortkey you typed, not the expansion. Manage them from
+  the console: the local commands `shortkeys` (list), `add-shortkey key=<k>
+  command="<template>"` and `remove-shortkey key=<k>` are handled client-side
+  (never sent to the agent), and a **shortkeys popover** (next to `?`/history)
+  lists the current set — click a row to insert its key, the trash button to
+  delete it, or **New shortkey…** to seed an `add-shortkey` template.
 - **Answers.** Commands are sent from the shared `agent_link` service (honoring
   the inter-yuno contract), so the agent's real asynchronous answer routes back
   (not just the controlcenter dispatch ack). Table answers render on Tabulator;

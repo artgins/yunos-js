@@ -245,6 +245,36 @@ function agent_config_get_shortkeys(gobj)
     return (dict && typeof dict === "object" && !Array.isArray(dict)) ? dict : {};
 }
 
+/***************************************************************
+ *  Add or replace a shortkey (ycli's add-shortkey), then persist.
+ ***************************************************************/
+function agent_config_set_shortkey(gobj, key, command)
+{
+    if(!key || !command) {
+        return;
+    }
+    let dict = Object.assign({}, agent_config_get_shortkeys(gobj));
+    dict[key] = command;
+    gobj_write_attr(gobj, "shortkeys", dict);
+    gobj_save_persistent_attrs(gobj, "shortkeys");
+}
+
+/***************************************************************
+ *  Remove a shortkey (ycli's remove-shortkey), then persist.
+ *  Returns true if the key existed and was removed.
+ ***************************************************************/
+function agent_config_remove_shortkey(gobj, key)
+{
+    let dict = Object.assign({}, agent_config_get_shortkeys(gobj));
+    if(!Object.prototype.hasOwnProperty.call(dict, key)) {
+        return false;
+    }
+    delete dict[key];
+    gobj_write_attr(gobj, "shortkeys", dict);
+    gobj_save_persistent_attrs(gobj, "shortkeys");
+    return true;
+}
+
 
 
 
@@ -333,4 +363,6 @@ export {
     agent_config_get_history,
     agent_config_set_history,
     agent_config_get_shortkeys,
+    agent_config_set_shortkey,
+    agent_config_remove_shortkey,
 };
