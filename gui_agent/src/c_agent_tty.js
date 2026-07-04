@@ -43,6 +43,7 @@ import {
     createElement2,
     refresh_language,
     msg_iev_write_key,
+    msg_iev_read_key,
 } from "@yuneta/gobj-js";
 
 import {t} from "i18next";
@@ -116,6 +117,9 @@ function mt_create(gobj)
         gobj_subscribe_event(link, "EV_TTY_OPEN", {}, gobj);
         gobj_subscribe_event(link, "EV_TTY_DATA", {}, gobj);
         gobj_subscribe_event(link, "EV_TTY_CLOSE", {}, gobj);
+        /*  Surface open-console / write-tty command FAILURES (e.g. the user
+         *  lacks the open-console authz) instead of hanging on "Connecting…". */
+        gobj_subscribe_event(link, "EV_MT_COMMAND_ANSWER", {}, gobj);
     }
 
     let $c = createElement2(
@@ -353,6 +357,7 @@ function open_console(gobj)
 
     let kw = {agent_id: node, cmd2agent: `open-console name=${name} cx=${cols} cy=${rows}`};
     msg_iev_write_key(kw, "console_purpose", "tty");
+    msg_iev_write_key(kw, "console_node", node);
     agent_link_command(link, "command-agent", kw);
     set_status(gobj, "connecting", "Connecting…");
 }
@@ -489,6 +494,36 @@ function ac_tty_close(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  Command answer for our own tty commands (open-console /
+ *  write-tty / close-console, all tagged console_purpose="tty").
+ *  Success is signalled by EV_TTY_OPEN, so here we only surface
+ *  FAILURES — otherwise a failed open-console (e.g. the logged-in
+ *  user lacks the privileged open-console authz) would leave the
+ *  tab hanging on "Connecting…" forever. Filter by node so only the
+ *  pinned tab reacts.
+ ***************************************************************/
+function ac_mt_command_answer(gobj, event, kw, src)
+{
+    if(msg_iev_read_key(kw, "console_purpose") !== "tty") {
+        return 0;
+    }
+    let my_node = gobj_read_attr(gobj, "node") || "";
+    let ans_node = msg_iev_read_key(kw, "console_node");
+    if(my_node && ans_node && ans_node !== my_node) {
+        return 0;
+    }
+    if(typeof kw.result === "number" && kw.result < 0) {
+        gobj_write_str_attr(gobj, "console_name", "");
+        set_status(gobj, "failed", "Failed");
+        if(gobj.priv.term) {
+            let comment = (kw.comment && String(kw.comment)) || t("open console failed");
+            gobj.priv.term.writeln("\r\n\x1b[31m" + comment + "\x1b[0m");
+        }
+    }
+    return 0;
+}
+
 
 
 
@@ -528,7 +563,8 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",  ac_on_close,  null],
             ["EV_TTY_OPEN",  ac_tty_open,  null],
             ["EV_TTY_DATA",  ac_tty_data,  null],
-            ["EV_TTY_CLOSE", ac_tty_close, null]
+            ["EV_TTY_CLOSE", ac_tty_close, null],
+            ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null]
         ]]
     ];
 
@@ -540,7 +576,8 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",  0],
         ["EV_TTY_OPEN",  0],
         ["EV_TTY_DATA",  0],
-        ["EV_TTY_CLOSE", 0]
+        ["EV_TTY_CLOSE", 0],
+        ["EV_MT_COMMAND_ANSWER", 0]
     ];
 
     __gclass__ = gclass_create(

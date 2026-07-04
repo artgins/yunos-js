@@ -54,6 +54,8 @@ const es = {
         "terminal":          "Terminal",
         "reconnect":         "Reconectar",
         "closed":            "Cerrado",
+        "failed":            "Fallo",
+        "open console failed": "No se pudo abrir la consola",
 
         /* dominio consola */
         "console":           "Consola",
