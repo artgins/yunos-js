@@ -374,8 +374,17 @@ function close_console(gobj)
 }
 
 /***************************************************************
- *  Send keystrokes to the node's PTY (base64) via write-tty. The
- *  control center routes by agent_id; the node's agent by name.
+ *  Send keystrokes to the node's PTY (base64).
+ *
+ *  Routed through command-agent (NOT the control center's own
+ *  write-tty command): command-agent matches the node by UUID OR
+ *  hostname and forwards the whole kw to the agent's write-tty
+ *  (which reads name + content64). The control center's direct
+ *  write-tty matches only the UUID and, on no match, DROPS the
+ *  requester's socket — so sending write-tty with a hostname
+ *  agent_id would kill the link on every keystroke. Same path as
+ *  open-console/close-console. Tagged console_purpose="tty" so the
+ *  Commands console ignores the dispatch ack.
  ***************************************************************/
 function send_keys(gobj, data)
 {
@@ -385,8 +394,9 @@ function send_keys(gobj, data)
     if(!data || !node || !name || !link || !agent_link_is_connected(link)) {
         return;
     }
-    agent_link_command(link, "write-tty",
-        {agent_id: node, name: name, content64: utf8_to_base64(data)});
+    let kw = {agent_id: node, cmd2agent: "write-tty", name: name, content64: utf8_to_base64(data)};
+    msg_iev_write_key(kw, "console_purpose", "tty");
+    agent_link_command(link, "command-agent", kw);
 }
 
 /***************************************************************

@@ -44,9 +44,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
     `console_purpose="stats"` + `console_node`, so several stats tabs and the
     Console coexist on the one link.
   - **Terminal** (new, `C_AGENT_TTY`): an interactive **xterm.js** console to a
-    node over the shared `agent_link` — `open-console`/`close-console` via
-    `command-agent`, `write-tty` for keystrokes, `EV_TTY_DATA` (re-published by
-    `C_AGENT_LINK`) for output. Each tab owns a globally-unique console name and
+    node over the shared `agent_link` — `open-console`/`close-console` AND
+    keystrokes all via `command-agent` (`cmd2agent="write-tty"`), which matches
+    the node by UUID *or* hostname; `EV_TTY_DATA` (re-published by
+    `C_AGENT_LINK`) for output. The control center's direct `write-tty` matches
+    only the UUID and drops the socket on a miss, so it is avoided. Each tab owns a globally-unique console name and
     filters `EV_TTY_*` by it. Served by both `yuno_agent` and `yuno_agent22`, so
     every agent version is listed (no version gate). PTY geometry is fixed at
     open (no runtime resize on the agent side); **Reconnect** opens a fresh
