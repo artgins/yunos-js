@@ -5,9 +5,13 @@ built on the **v2 declarative shell** of `@yuneta/gobj-ui`
 (`C_YUI_SHELL` + `C_YUI_NAV`).
 
 It is the modern successor of the old webix "Yuneta CLI"
-(`yuno_gui/v2/.../ui_yuneta_cli.js`). Three panels: the control-plane **CLI
-to the agent** (multi-node tabs), the **Nodes** list, and **live Stats** of a
-yuno. TreeDB browsing lives in the separate **`gui_treedb`** SPA, not here.
+(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Four workspaces** in the primary rail:
+**Commands** (control-plane CLI to a node's yunos), **Statistics** (live
+`SDF_RSTATS` counters), **Terminal** (an interactive xterm.js PTY console), and
+**Settings**. The three per-node workspaces share one pattern — a fixed
+node-picker tab plus one closable tab per selected node. Commands/Statistics
+list only agents **≥ 7.7.0**; Terminal works on any version. TreeDB browsing
+lives in the separate **`gui_treedb`** SPA, not here.
 
 **Canonical URL:** the SPA is served at `https://agents.yunetacontrol.com`
 (new apex — needs its own DNS zone + TLS cert at deploy time). This is the
@@ -85,11 +89,16 @@ npm run build      # production bundle into dist/
 
 ## Status
 
-**Phases 1–3 shipped.** The multi-agent Console (`C_AGENT_CONSOLE`), the Nodes
-list, and live Stats (`C_AGENT_STATS`) are live against the controlcenter over
-`wss`+OAuth2. TreeDB is **not** part of this app — it is the separate
-`gui_treedb` SPA. Time-series charts (`C_YUI_UPLOT`) over the live counters are
-a possible follow-up. See **Changes** below.
+**Live**, restructured into **four primary workspaces** — **Commands**
+(`C_AGENT_CONSOLE`), **Statistics** (`C_AGENT_STATS`), **Terminal**
+(`C_AGENT_TTY`, xterm.js over the agent PTY), **Settings**. The three per-node
+workspaces share one pattern: a fixed node-picker tab (`C_NODES`) plus one
+closable tab per selected node. Commands/Statistics require agent **≥ 7.7.0**;
+Terminal works on any version (needs the `open-console` authz — an admin role).
+TreeDB is **not** part of this app — it is the separate `gui_treedb` SPA.
+Time-series charts (`C_YUI_UPLOT`) over the live counters are a possible
+follow-up. The phased build history below is kept for context; see **Changes**
+for the per-cycle detail.
 
 ## Changes
 

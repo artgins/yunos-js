@@ -52,7 +52,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
     filters `EV_TTY_*` by it. Served by both `yuno_agent` and `yuno_agent22`, so
     every agent version is listed (no version gate). PTY geometry is fixed at
     open (no runtime resize on the agent side); **Reconnect** opens a fresh
-    console at the current size.
+    console at the current size. A failed `open-console` (e.g. the user lacks
+    the privileged `open-console` authz) is shown in the terminal instead of
+    hanging on "Connecting…", and a shell `exit` closes the tab (deselects the
+    node). (Terminal access is role-gated: it needs an admin role; a plain
+    "User" role gets "No permission".)
   - **Settings** promoted to a primary item (Preferences + About); the avatar
     menu trimmed to Settings / Developer / Sign out.
 - Multi-agent Console: one top-sub tab per selected node; F5 restores the exact
