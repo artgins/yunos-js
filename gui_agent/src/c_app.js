@@ -47,6 +47,9 @@ import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
     agent_config_get_selected_nodes,
     agent_config_remove_selected_node,
+    agent_config_is_node_selected,
+    agent_config_get_active_tab,
+    agent_config_set_active_tab,
 } from "./c_agent_config.js";
 
 import {
@@ -355,6 +358,24 @@ function node_id_from_item(item_id)
     return s.startsWith("node-") ? s.slice(5) : "";
 }
 
+/*  Parse a RESOLVED node-tab route "/<ws>/node/<id>" -> {ws, id}, or null.
+ *  The node home "/<ws>/node" and the picker "/<ws>/nodes" don't match, so
+ *  only a real, open node tab is recognised.  */
+function parse_node_route(route)
+{
+    let m = /^\/([^/]+)\/node\/(.+)$/.exec(String(route || ""));
+    if(!m || !WORKSPACES[m[1]]) {
+        return null;
+    }
+    let id = m[2];
+    try {
+        id = decodeURIComponent(id);
+    } catch(e) {
+        /*  malformed % escape: use the raw tail  */
+    }
+    return {ws: m[1], id: id};
+}
+
 /*  Parse a list-agents result into a set of live node ids (host||uuid). */
 function parse_live_hosts(data)
 {
@@ -438,12 +459,22 @@ function rebuild_all_workspaces(gobj)
     }
 }
 
-/*  Route of a workspace's first open node tab, else its picker. */
+/*  Route to land on for a workspace: its last-active tab when that node is
+ *  still open, else the first open node tab, else the picker. Persisting the
+ *  active tab is what makes returning to a workspace (or a fresh load / login)
+ *  restore the tab the operator was on. */
 function workspace_first_route(gobj, ws)
 {
     let config = gobj_find_service("agent_config", false);
     let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
-    return nodes.length ? node_tab_route(ws, nodes[0].id) : picker_route(ws);
+    if(!nodes.length) {
+        return picker_route(ws);
+    }
+    let active = config ? agent_config_get_active_tab(config, ws) : "";
+    if(active && nodes.some((n) => n && n.id === active)) {
+        return node_tab_route(ws, active);
+    }
+    return node_tab_route(ws, nodes[0].id);
 }
 
 /*
@@ -750,6 +781,20 @@ function ac_nav_item_close(gobj, event, kw, src)
 function ac_route_changed(gobj, event, kw, src)
 {
     let base = (kw && kw.base) || "";
+
+    /*  On a real, resolved node tab (/<ws>/node/<id>) → remember it as this
+     *  workspace's active tab (only if still selected), so a later return to
+     *  the workspace or a fresh load restores it (workspace_first_route). No
+     *  redirect here — this IS the destination. */
+    let hit = parse_node_route(base);
+    if(hit) {
+        let config = gobj_find_service("agent_config", false);
+        if(config && agent_config_is_node_selected(config, hit.ws, hit.id)) {
+            agent_config_set_active_tab(config, hit.ws, hit.id);
+        }
+        return 0;
+    }
+
     let ws = "";
     for(let w in WORKSPACES) {
         if(base === node_home_route(w)) {

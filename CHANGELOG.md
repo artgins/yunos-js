@@ -84,6 +84,13 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 - Mobile & theme: clear (✕) as its own button, icon-only Execute, full-width
   popovers, a terminal (`>_`) icon for the Console nav + Execute, dark-mode
   panes. Silent session recovery after a sleep/reconnect NAK.
+- **Remember the active tab per workspace.** The node tab you are on is now
+  persisted per workspace (`C_AGENT_CONFIG.active_tabs`), so switching away and
+  back — or a fresh load / login — restores that tab instead of dropping you on
+  the nodes picker. Each workspace's rail item now lands on its node home
+  (`submenu.default = /<ws>/node`) and `workspace_first_route` prefers the
+  saved tab (falling back to the first open node, then the picker). The picker
+  stays one click away as tab 0.
 - **Per-node connection status on the tabs.** The single global toolbar
   connection dot made no sense once the console went multi-node, so it is
   removed (`app_config` no longer declares a `connection` item). Instead each

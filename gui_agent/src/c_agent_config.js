@@ -47,6 +47,7 @@ SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,                        null, 
 SDATA(data_type_t.DTP_STRING,   "active_node",  sdata_flag_t.SDF_PERSIST, "",      "Active node (hostname/UUID from list-agents)"),
 SDATA(data_type_t.DTP_STRING,   "display_mode", sdata_flag_t.SDF_PERSIST, "table", "Command answer display: table | form (raw JSON)"),
 SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "{}",  "Selected nodes per workspace: {workspace: [{id, host}, ...]}"),
+SDATA(data_type_t.DTP_JSON,     "active_tabs",  sdata_flag_t.SDF_PERSIST, "{}",    "Last-active node tab per workspace: {workspace: node_id}"),
 SDATA(data_type_t.DTP_JSON,     "cmd_history",  sdata_flag_t.SDF_PERSIST, "[]",    "Global console command history: [cmd,...] most-recent first (shared by all nodes)"),
 SDATA(data_type_t.DTP_JSON,     "shortkeys",    sdata_flag_t.SDF_PERSIST, JSON.stringify(DEFAULT_SHORTKEYS), "Console command shortkeys {key: template}; $1 $2 … are positional args (ycli parity)"),
 SDATA_END()
@@ -244,6 +245,41 @@ function agent_config_remove_selected_node(gobj, workspace, id)
 }
 
 /***************************************************************
+ *  Last-active node tab of a workspace (the tab the operator was on),
+ *  "" when none. Persisted so returning to the workspace — or a fresh
+ *  load / login — restores that tab instead of always the first.
+ ***************************************************************/
+function agent_config_get_active_tab(gobj, workspace)
+{
+    let map = gobj_read_attr(gobj, "active_tabs");
+    if(map && typeof map === "object" && !Array.isArray(map)) {
+        let id = map[workspace];
+        return (typeof id === "string") ? id : "";
+    }
+    return "";
+}
+
+/***************************************************************
+ *  Record a workspace's active node tab and persist it. No-op (no
+ *  write) when it is unchanged, so navigating between tabs doesn't
+ *  churn localStorage.
+ ***************************************************************/
+function agent_config_set_active_tab(gobj, workspace, id)
+{
+    if(!workspace) {
+        return;
+    }
+    let cur = gobj_read_attr(gobj, "active_tabs");
+    let map = (cur && typeof cur === "object" && !Array.isArray(cur)) ? Object.assign({}, cur) : {};
+    if(map[workspace] === (id || "")) {
+        return;
+    }
+    map[workspace] = id || "";
+    gobj_write_attr(gobj, "active_tabs", map);
+    gobj_save_persistent_attrs(gobj, "active_tabs");
+}
+
+/***************************************************************
  *  Persisted console command history (most-recent first), global
  *  to all nodes. Returns a fresh copy so the caller can mutate it
  *  freely.
@@ -390,6 +426,8 @@ export {
     agent_config_is_node_selected,
     agent_config_toggle_selected_node,
     agent_config_remove_selected_node,
+    agent_config_get_active_tab,
+    agent_config_set_active_tab,
     agent_config_get_history,
     agent_config_set_history,
     agent_config_get_shortkeys,

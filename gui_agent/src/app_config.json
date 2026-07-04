@@ -13,7 +13,7 @@
         },
 
         "stages": {
-            "main": { "zone": "center", "default_route": "/commands/nodes" }
+            "main": { "zone": "center", "default_route": "/commands/node" }
         },
 
         "_routes_comment": "Resolution-ancestor + empty-state routes for the per-node workspaces (a node tab /<ws>/node/<id> resolves here on F5 before the controller rebuilds it). Settings pages are declared as submenu targets under the Settings primary item, not here.",
@@ -118,6 +118,7 @@
                     "route": "/commands",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
+                        "default": "/commands/node",
                         "items": [
                             {
                                 "id": "picker",
@@ -142,6 +143,7 @@
                     "route": "/statistics",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
+                        "default": "/statistics/node",
                         "items": [
                             {
                                 "id": "picker",
@@ -166,6 +168,7 @@
                     "route": "/terminal",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
+                        "default": "/terminal/node",
                         "items": [
                             {
                                 "id": "picker",
