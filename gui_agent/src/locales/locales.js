@@ -45,6 +45,7 @@ function setup_locale()
 
     i18next.init({
         lng: locale,
+        fallbackLng: "en",      // a key missing in `es` shows English, not the raw key
         debug: gobj_read_attr(gobj_yuno(), "trace_i18n"),
         resources: locales,
         initImmediate: false,

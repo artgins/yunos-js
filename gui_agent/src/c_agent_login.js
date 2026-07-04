@@ -208,6 +208,7 @@ function do_bff_refresh(gobj)
         }
     })
     .catch(err => {
+        log_error(`${gobj_short_name(gobj)}: BFF refresh failed: ${err.message}`);
         gobj_send_event(gobj, "EV_LOGIN_DENIED",
             {error_code: "network_error", error: err.message}, gobj);
     });
@@ -224,7 +225,12 @@ function do_bff_logout(gobj)
     })
     .then(resp => resp.json().catch(() => ({})))
     .then(() => gobj_send_event(gobj, "EV_LOGOUT_DONE", {}, gobj))
-    .catch(() => gobj_send_event(gobj, "EV_LOGOUT_DONE", {}, gobj));
+    .catch(err => {
+        /*  Logout is best-effort: clear the local session even if the
+         *  server revoke call failed, but don't swallow it silently.  */
+        log_error(`${gobj_short_name(gobj)}: BFF logout failed: ${err.message}`);
+        gobj_send_event(gobj, "EV_LOGOUT_DONE", {}, gobj);
+    });
 }
 
 /***************************************************************

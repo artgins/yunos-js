@@ -354,6 +354,11 @@ function open_console(gobj)
         rows = priv.term.rows || rows;
     }
 
+    /*  Best-effort close of any console still open under the old name
+     *  (e.g. the Reconnect button re-opens while the previous PTY is
+     *  live) so we don't orphan a bash process on the node.  */
+    close_console(gobj);
+
     let name = new_console_name(node);
     gobj_write_str_attr(gobj, "console_name", name);
 
@@ -375,8 +380,13 @@ function close_console(gobj)
     if(!node || !name || !link || !agent_link_is_connected(link)) {
         return;
     }
+    /*  Best-effort: tag with a purpose OTHER than "tty" so its ack (which
+     *  may fail with result<0 when the PTY is already gone) is ignored by
+     *  ac_mt_command_answer — otherwise a close done as part of a reconnect
+     *  would clear the freshly-opened console_name and flash "Failed". The
+     *  Commands console ignores any non-empty, non-"cache" purpose too.  */
     let kw = {agent_id: node, cmd2agent: `close-console name=${name}`};
-    msg_iev_write_key(kw, "console_purpose", "tty");
+    msg_iev_write_key(kw, "console_purpose", "tty_close");
     agent_link_command(link, "command-agent", kw);
 }
 
@@ -403,6 +413,7 @@ function send_keys(gobj, data)
     }
     let kw = {agent_id: node, cmd2agent: "write-tty", name: name, content64: utf8_to_base64(data)};
     msg_iev_write_key(kw, "console_purpose", "tty");
+    msg_iev_write_key(kw, "console_node", node);
     agent_link_command(link, "command-agent", kw);
 }
 

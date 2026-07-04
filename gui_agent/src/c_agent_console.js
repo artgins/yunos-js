@@ -1462,6 +1462,18 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return 0;
     }
 
+    /*  Command-cache fetch (a `help` sent by ensure_commands_cache):
+     *  swallow the controlcenter dispatch ack (command === "command-agent")
+     *  and parse the agent's real answer into the completion cache — never
+     *  render either into the panel, not even a failed dispatch ack, since
+     *  the user never issued this command.  */
+    if(purpose === "cache") {
+        if(command !== "command-agent") {
+            load_commands_cache(gobj, kw.comment);
+        }
+        return 0;
+    }
+
     /*  command-agent forwards cmd2agent to the agent and returns TWO
      *  answers: (1) the controlcenter's synchronous dispatch ack
      *  ("Command sent to N nodes"), and (2) the agent's asynchronous
@@ -1473,13 +1485,6 @@ function ac_mt_command_answer(gobj, event, kw, src)
             show_comment(gobj, kw.comment, kw.result);
             show_data(gobj, kw.data, kw.schema, answer_is_raw(gobj, kw), kw.comment, kw.result);
         }
-        return 0;
-    }
-
-    /*  Command-cache fetch (a `help` sent by ensure_commands_cache):
-     *  parse it into the completion cache instead of rendering it. */
-    if(msg_iev_read_key(kw, "console_purpose") === "cache") {
-        load_commands_cache(gobj, kw.comment);
         return 0;
     }
 

@@ -84,6 +84,25 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 - Mobile & theme: clear (✕) as its own button, icon-only Execute, full-width
   popovers, a terminal (`>_`) icon for the Console nav + Execute, dark-mode
   panes. Silent session recovery after a sleep/reconnect NAK.
+- **Fixes (review pass).**
+  - **Terminal — no more orphaned PTYs.** Reconnect now closes the previous
+    console before opening a fresh one, so a node no longer accumulates a live
+    `bash` per reconnect. The best-effort `close-console` is tagged
+    `console_purpose="tty_close"` so its (possibly failing) ack never disturbs
+    the newly-opened tab.
+  - **Terminal — no cross-tab false failures.** `write-tty` now carries
+    `console_node`, so a failed keystroke on one node's tab no longer clears
+    every open Terminal tab and flashes "Failed".
+  - **Commands — a background `help`-cache fetch no longer leaks into the
+    panel.** A failed dispatch ack for the completion-cache `help` (which the
+    user never typed) is swallowed instead of rendered as an error.
+  - **Statistics — no stale counters.** Stats answers are disambiguated by
+    `console_yuno`, so a quick yuno-selector switch can't let a late answer for
+    the previous yuno overwrite the current table.
+  - **Login — no silent error paths.** The `/auth/refresh` and `/auth/logout`
+    network-failure catches now `log_error` (matching `/auth/login`).
+  - **i18n — `fallbackLng: "en"`.** A key missing in `es` now renders the
+    English string instead of the raw key.
 
 _(Full per-yuno detail lives in `gui_agent/README.md`.)_
 

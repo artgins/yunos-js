@@ -407,6 +407,7 @@ function request_stats(gobj)
     let kw_send = {agent_id: node, cmd2agent: `stats-yuno id="${yuno_id}"`};
     msg_iev_write_key(kw_send, "console_purpose", "stats");
     msg_iev_write_key(kw_send, "console_node", node);
+    msg_iev_write_key(kw_send, "console_yuno", yuno_id);
     agent_link_command(link, "command-agent", kw_send);
 }
 
@@ -551,6 +552,14 @@ function ac_mt_stats_answer(gobj, event, kw, src)
     let my_node = gobj_read_attr(gobj, "node") || "";
     let ans_node = msg_iev_read_key(kw, "console_node");
     if(my_node && ans_node && ans_node !== my_node) {
+        return 0;
+    }
+    /*  Drop a late answer for a yuno the user has already switched away
+     *  from — otherwise it would overwrite the currently-selected yuno's
+     *  table (both requests ride the one shared link).  */
+    let my_yuno = gobj_read_attr(gobj, "yuno_id") || "";
+    let ans_yuno = msg_iev_read_key(kw, "console_yuno");
+    if(my_yuno && ans_yuno && ans_yuno !== my_yuno) {
         return 0;
     }
     set_stats(gobj, kw.data);
