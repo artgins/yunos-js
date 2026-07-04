@@ -85,6 +85,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   popovers, a terminal (`>_`) icon for the Console nav + Execute, dark-mode
   panes. Silent session recovery after a sleep/reconnect NAK.
 - **Fixes (review pass).**
+  - **Commands — visible "running…" feedback.** Sending a command now paints
+    a `running…` placeholder in the response pane until the answer arrives,
+    instead of blanking it with no indication (the old `…` was written to the
+    error-only comment line and immediately hidden). Cleared when the answer
+    renders, and on a link drop / NAK so it can't hang after a disconnect; a
+    valid last answer is left in place across an idle disconnect.
   - **Commands — no rapid-command race.** Each console command now carries a
     per-panel monotonic `console_seq` in `__md_iev__`; on answer, a reply whose
     seq is not the latest is dropped, so typing a slow command then a fast one

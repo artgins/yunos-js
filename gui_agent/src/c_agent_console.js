@@ -116,6 +116,9 @@ function mt_create(gobj)
     priv.tabulator = null;    /*  Tabulator instance for table-mode answers  */
     priv.commands = {};       /*  name -> {name, params[], desc} from `help`  */
     priv.commands_loaded = false;
+    priv.pending = false;     /*  a command is in flight → CONSOLE_RESPONSE shows
+                                  the "running…" placeholder; cleared when the
+                                  answer renders or the link drops.  */
     priv.req_seq = 0;         /*  monotonic id of the latest user command; a
                                   command-agent answer echoes its seq in
                                   __md_iev__ so a late answer for a superseded
@@ -895,6 +898,7 @@ function show_data(gobj, data, schema, raw, comment, result)
     if(!priv.$data) {
         return;
     }
+    priv.pending = false;   /*  a real render supersedes the "running…" state  */
 
     /*  Tear down any previous table + content.  */
     destroy_table(gobj);
@@ -935,6 +939,49 @@ function show_data(gobj, data, schema, raw, comment, result)
             text]
     ));
     set_copy_enabled(gobj, true);   /*  there is text to copy now  */
+}
+
+/***************************************************************
+ *  Paint a visible "running…" placeholder into CONSOLE_RESPONSE while a
+ *  command is in flight, so a sent command gives immediate feedback
+ *  instead of a blank pane. The answer replaces it (show_data does
+ *  replaceChildren), as does a disconnect/error repaint. No timeout —
+ *  matching the no-polling model; the placeholder simply stays until an
+ *  answer (or a link drop) arrives.
+ ***************************************************************/
+function show_pending(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.$data) {
+        return;
+    }
+    priv.pending = true;
+    destroy_table(gobj);
+    set_copy_enabled(gobj, false);   /*  nothing to copy while pending  */
+    priv.$data.replaceChildren(createElement2(
+        ["p", {class: "CONSOLE_PENDING is-size-7 has-text-grey",
+               style: "margin:0; padding:0.5rem;"},
+            `${t("running")} …`]
+    ));
+}
+
+/***************************************************************
+ *  Clear the "running…" placeholder when a pending command can no
+ *  longer complete (the link dropped, or the identity was refused).
+ *  Only touches CONSOLE_RESPONSE when a command was actually pending,
+ *  so a valid last answer stays put across an idle disconnect.
+ ***************************************************************/
+function clear_pending(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.pending) {
+        return;
+    }
+    priv.pending = false;
+    if(priv.$data) {
+        priv.$data.replaceChildren();
+    }
+    set_copy_enabled(gobj, false);
 }
 
 /***************************************************************
@@ -1345,8 +1392,8 @@ function send_command(gobj)
      *  configured shortkey expands to its template ($1 $2 … = args).  */
     cmd = expand_shortkey(gobj, cmd);
 
-    show_comment(gobj, "…", 0);
-    show_data(gobj, null);
+    show_comment(gobj, "", 0);   /*  clear any prior error comment  */
+    show_pending(gobj);          /*  visible "running…" until the answer arrives  */
 
     /*  Bump the request id so any answer still in flight for a PREVIOUS
      *  command becomes stale and is dropped on arrival (see
@@ -1394,6 +1441,7 @@ function ac_on_open(gobj, event, kw, src)
 function ac_on_close(gobj, event, kw, src)
 {
     set_status(gobj, false, t("disconnected"));
+    clear_pending(gobj);   /*  a command in flight will never answer now  */
     return 0;
 }
 
@@ -1414,6 +1462,7 @@ function ac_on_open_error(gobj, event, kw, src)
         return 0;
     }
     set_status(gobj, false, t("disconnected"));
+    clear_pending(gobj);
     show_comment(gobj,
         `${t("cannot connect")}: ${kw.url || ""} (${kw.reason || kw.code || ""})`, -1);
     return 0;
@@ -1426,6 +1475,7 @@ function ac_on_id_nak(gobj, event, kw, src)
 {
     gobj.priv.got_nak = true;
     set_status(gobj, false, t("authentication required"));
+    clear_pending(gobj);
     show_comment(gobj, kw.comment || t("identity card refused"), -1);
     return 0;
 }

@@ -108,6 +108,7 @@ const en = {
         "connected":         "Connected",
         "disconnected":      "Disconnected",
         "connecting":        "Connecting",
+        "running":           "Running",
         "no active agent":   "No active agent — add one in Settings",
         "not connected to an agent": "Not connected to an agent",
         "cannot connect":    "Cannot connect",

@@ -108,6 +108,7 @@ const es = {
         "connected":         "Conectado",
         "disconnected":      "Desconectado",
         "connecting":        "Conectando",
+        "running":           "Ejecutando",
         "no active agent":   "Sin agente activo — añade uno en Configuración",
         "not connected to an agent": "Sin conexión con un agente",
         "cannot connect":    "No se puede conectar",
