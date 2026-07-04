@@ -53,6 +53,7 @@ import {FitAddon} from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
+import {agent_config_remove_selected_node} from "./c_agent_config.js";
 import {current_theme} from "./theme.js";
 
 
@@ -75,6 +76,7 @@ const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,  null,       "Subscriber of output events"),
 
 SDATA(data_type_t.DTP_STRING,   "title",        0,  "terminal", "View title (i18n key)"),
+SDATA(data_type_t.DTP_STRING,   "workspace",    0,  "terminal", "Owning workspace (for self-close deselection)"),
 SDATA(data_type_t.DTP_STRING,   "node",         0,  "",         "Pinned node id (host/uuid); '' = empty state"),
 SDATA(data_type_t.DTP_STRING,   "console_name", 0,  "",         "Current unique PTY console name (session key)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",   0,  null,       "Root HTMLElement"),
@@ -491,6 +493,20 @@ function ac_tty_close(gobj, event, kw, src)
     if(gobj.priv.term) {
         gobj.priv.term.writeln("\r\n\x1b[90m[console closed]\x1b[0m");
     }
+    /*
+     *  A deliberate exit (the shell ended) closes the whole tab: deselect this
+     *  node from its workspace, same as clicking the tab ✕. Deferred with a
+     *  timer — deselecting now rebuilds the workspace tabs and would destroy
+     *  THIS view from inside its own published-event callback.
+     */
+    let ws = gobj_read_attr(gobj, "workspace") || "terminal";
+    let node = gobj_read_attr(gobj, "node") || "";
+    setTimeout(() => {
+        let config = gobj_find_service("agent_config", false);
+        if(config && node) {
+            agent_config_remove_selected_node(config, ws, node);
+        }
+    }, 0);
     return 0;
 }
 

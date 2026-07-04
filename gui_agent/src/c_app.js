@@ -656,8 +656,31 @@ function ac_open_devtools(gobj, event, kw, src)
 function ac_selected_nodes_changed(gobj, event, kw, src)
 {
     let ws = (kw && kw.workspace) || "";
-    if(WORKSPACES[ws]) {
-        rebuild_workspace_tabs(gobj, ws);
+    if(!WORKSPACES[ws]) {
+        return 0;
+    }
+    rebuild_workspace_tabs(gobj, ws);
+
+    /*
+     *  If we are currently on a node tab in this workspace whose node was just
+     *  deselected — the tab ✕, or a terminal that closed itself on `exit` —
+     *  move to a remaining tab (or the picker) so we don't sit on a dead route.
+     */
+    let shell = gobj.priv.shell;
+    let cur = shell ? gobj_read_attr(shell, "current_route") : "";
+    let prefix = node_home_route(ws) + "/";
+    if(shell && cur && cur.indexOf(prefix) === 0) {
+        let id = cur.slice(prefix.length);
+        try {
+            id = decodeURIComponent(id);
+        } catch(e) {
+            /*  malformed % escape: use the raw tail  */
+        }
+        let config = gobj_find_service("agent_config", false);
+        let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
+        if(!nodes.some((n) => n && n.id === id)) {
+            yui_shell_navigate(shell, workspace_first_route(gobj, ws));
+        }
     }
     return 0;
 }
@@ -673,21 +696,16 @@ function ac_nav_item_close(gobj, event, kw, src)
     if(!id) {
         return 0;
     }
-    let closed_route = (kw && kw.route) || "";
-    let ws = ws_from_route(closed_route);
+    let ws = ws_from_route((kw && kw.route) || "");
     if(!ws) {
         return 0;
     }
-    let shell = gobj.priv.shell;
-    let was_active = !!(shell && gobj_read_attr(shell, "current_route") === closed_route);
-
+    /*  Deselect the node → EV_SELECTED_NODES_CHANGED rebuilds this workspace's
+     *  tabs AND (in ac_selected_nodes_changed) navigates away if it was the
+     *  visible tab. Same path a self-closing terminal takes on `exit`. */
     let config = gobj_find_service("agent_config", false);
     if(config) {
-        /*  -> EV_SELECTED_NODES_CHANGED -> ac_selected_nodes_changed -> rebuild */
         agent_config_remove_selected_node(config, ws, id);
-    }
-    if(was_active && shell) {
-        yui_shell_navigate(shell, workspace_first_route(gobj, ws));
     }
     return 0;
 }
