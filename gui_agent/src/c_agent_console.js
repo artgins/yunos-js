@@ -10,8 +10,9 @@
  *      single C_IEVENT_CLI to the active agent. The console subscribes
  *      to the link's re-published events (EV_ON_OPEN/CLOSE/OPEN_ERROR/
  *      ID_NAK/MT_COMMAND_ANSWER) and sends commands with
- *      agent_link_command(). Connection state drives the shell's
- *      toolbar dot via yui_shell_set_connection_state().
+ *      agent_link_command(). Connection state drives this panel's own
+ *      status line; per-node liveness shows as a coloured glyph on the
+ *      workspace tabs (C_APP), not a global toolbar dot.
  *
  *      Auth (jwt for OAuth2 agents) lands in the login service; until a
  *      user signs in, an OAuth2 agent answers the identity card with a
@@ -39,8 +40,6 @@ import {
 import {t} from "i18next";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
-
-import {yui_shell_set_connection_state} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
@@ -272,11 +271,6 @@ function mt_destroy(gobj)
 function set_status(gobj, connected, text)
 {
     gobj_write_attr(gobj, "connected", !!connected);
-
-    let shell = gobj_parent(gobj);
-    if(shell) {
-        yui_shell_set_connection_state(shell, !!connected);
-    }
 
     let priv = gobj.priv;
     if(priv.$status) {
@@ -1452,13 +1446,9 @@ function ac_on_open_error(gobj, event, kw, src)
 {
     /*  A NAK (auth rejection) already set an informative status + the
      *  agent's reason, and is followed by this generic close. Don't
-     *  clobber it — just make sure the connection dot is off. */
+     *  clobber it — just consume the NAK and leave the status as-is. */
     if(gobj.priv.got_nak) {
         gobj.priv.got_nak = false;
-        let shell = gobj_parent(gobj);
-        if(shell) {
-            yui_shell_set_connection_state(shell, false);
-        }
         return 0;
     }
     set_status(gobj, false, t("disconnected"));

@@ -22,6 +22,28 @@
 }
 
 /* ====================================================================
+ *  Per-node connection status on the workspace tabs.
+ *  Each node tab carries a "yi-hexagon-nodes" glyph whose colour reflects
+ *  the node's liveness — this replaces the single global toolbar dot,
+ *  which had no meaning once the console went multi-node.
+ *
+ *  Connected: green the GLYPH ONLY (the label stays neutral, so a wall of
+ *  connected tabs isn't loud). Disconnected: redden the whole tab (label +
+ *  glyph, via the icon's currentColor mask) so a dropped node stands out.
+ *
+ *  The selector deliberately omits the `.tabs` hop: the nav container is a
+ *  single element carrying BOTH `yui-nav-tabs` and `tabs`, so a
+ *  `.yui-nav-tabs .tabs` descendant match never resolves — the <li> is
+ *  matched directly under `.yui-nav-tabs`.
+ * ==================================================================== */
+.yui-nav-tabs li.yui-nav-connected a .icon {
+    color: var(--bulma-success, #48c78e);
+}
+.yui-nav-tabs li.yui-nav-disconnected a {
+    color: var(--bulma-danger, #f14668);
+}
+
+/* ====================================================================
  *  Nodes view: the active node row inside the Tabulator table.
  *  Green wash + left accent, theme-aware, with enough specificity
  *  (three classes) to beat the striped row !important backgrounds.

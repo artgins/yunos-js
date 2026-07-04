@@ -84,6 +84,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 - Mobile & theme: clear (✕) as its own button, icon-only Execute, full-width
   popovers, a terminal (`>_`) icon for the Console nav + Execute, dark-mode
   panes. Silent session recovery after a sleep/reconnect NAK.
+- **Per-node connection status on the tabs.** The single global toolbar
+  connection dot made no sense once the console went multi-node, so it is
+  removed (`app_config` no longer declares a `connection` item). Instead each
+  node tab carries a `yi-hexagon-nodes` glyph — green when the node is in the
+  live `list-agents` set, red (whole tab) when it dropped — across all three
+  per-node workspaces. The console panel keeps its own per-panel status line.
 - **Fixes (review pass).**
   - **Commands — visible "running…" feedback.** Sending a command now paints
     a `running…` placeholder in the response pane until the answer arrives,
