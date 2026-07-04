@@ -85,6 +85,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   popovers, a terminal (`>_`) icon for the Console nav + Execute, dark-mode
   panes. Silent session recovery after a sleep/reconnect NAK.
 - **Fixes (review pass).**
+  - **Tab liveness on link drop.** `C_APP` now subscribes to the shared
+    link's `EV_ON_CLOSE`: when the control-center socket drops (a plain close,
+    not an identity NAK), the live-node set is blanked and the workspace tabs
+    repaint red (disconnected) instead of showing a stale "connected" state
+    until the link returns. `ac_on_open` re-seeds the set on reconnect, so
+    tabs recover automatically (matches what `C_NODES` already showed).
   - **Terminal — no more orphaned PTYs.** Reconnect now closes the previous
     console before opening a fresh one, so a node no longer accumulates a live
     `bash` per reconnect. The best-effort `close-console` is tagged

@@ -128,12 +128,16 @@ function mt_create(gobj)
      *  gobj_start_tree(self) does NOT start it. Started only after login
      *  so it never retries against the CC without a cookie.
      *  Subscribe ONLY to the events we act on (not the subscriber=ALL
-     *  attr, which would deliver EV_ON_CLOSE/MT_* and trip "event NOT
-     *  defined in state"). */
+     *  attr, which would also deliver events we don't declare — e.g.
+     *  EV_MT_STATS_ANSWER / EV_TTY_* — and trip "event NOT defined in
+     *  state"). */
     let link = gobj_create_service("agent_link", "C_AGENT_LINK", {}, gobj_yuno());
     gobj.priv.link = link;
     gobj_subscribe_event(link, "EV_ON_OPEN", {}, gobj);
     gobj_subscribe_event(link, "EV_ON_ID_NAK", {}, gobj);
+    /*  EV_ON_CLOSE (a plain socket drop, not a NAK): blank the live-node set
+     *  so every node tab goes red instead of showing a stale "connected". */
+    gobj_subscribe_event(link, "EV_ON_CLOSE", {}, gobj);
     /*  list-agents answers keep the live-node set fresh (tab red state). */
     gobj_subscribe_event(link, "EV_MT_COMMAND_ANSWER", {}, gobj);
 }
@@ -508,6 +512,21 @@ function ac_on_open(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Control-center link dropped (a plain socket close, NOT a NAK — a NAK
+ *  arrives as EV_ON_ID_NAK and is recovered separately). Nothing is
+ *  reachable through the link anymore, so blank the live-node set and
+ *  repaint: every workspace's node tabs go red (disconnected) instead of
+ *  showing a stale "connected" state until the link returns. The shell
+ *  stays up; ac_on_open re-seeds the live set + recolors on reconnect.
+ ***************************************************************/
+function ac_on_close(gobj, event, kw, src)
+{
+    gobj.priv.live_hosts = {};
+    rebuild_all_workspaces(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  Login refused / refresh failed. If a shell is up, the session
  *  expired mid-use → tear down + back to login; else paint the error.
  ***************************************************************/
@@ -820,6 +839,7 @@ function create_gclass(gclass_name)
             ["EV_RESTORE_FAILED",   ac_restore_failed,  null],
             ["EV_LOGOUT_DONE",      ac_logout_done,     null],
             ["EV_ON_OPEN",          ac_on_open,         null],
+            ["EV_ON_CLOSE",         ac_on_close,        null],
             ["EV_ON_ID_NAK",        ac_on_id_nak,       null],
             /*  shell chrome  */
             ["EV_LOGOUT",           ac_logout,          null],
@@ -844,6 +864,7 @@ function create_gclass(gclass_name)
         ["EV_RESTORE_FAILED",   0],
         ["EV_LOGOUT_DONE",      0],
         ["EV_ON_OPEN",          0],
+        ["EV_ON_CLOSE",         0],
         ["EV_ON_ID_NAK",        0],
         ["EV_LOGOUT",           0],
         ["EV_TOGGLE_THEME",     0],
