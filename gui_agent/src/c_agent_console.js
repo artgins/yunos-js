@@ -116,6 +116,11 @@ function mt_create(gobj)
     priv.tabulator = null;    /*  Tabulator instance for table-mode answers  */
     priv.commands = {};       /*  name -> {name, params[], desc} from `help`  */
     priv.commands_loaded = false;
+    priv.req_seq = 0;         /*  monotonic id of the latest user command; a
+                                  command-agent answer echoes its seq in
+                                  __md_iev__ so a late answer for a superseded
+                                  command is dropped instead of overwriting the
+                                  panel (rapid-command race).  */
 
     /*  Shell-style history recall (Up/Down): hist_idx walks priv.history
      *  (0 = most recent); -1 = editing the live line. hist_draft keeps the
@@ -1311,10 +1316,13 @@ function send_command(gobj)
     }
 
     /*  Local shortkey-management commands (ycli parity) are handled here and
-     *  never sent to the agent — they don't need a connected node.  */
+     *  never sent to the agent — they don't need a connected node. Bump the
+     *  request id too, so a remote answer still in flight can't later clobber
+     *  the local command's output.  */
     if(handle_local_command(gobj, cmd)) {
         add_history(gobj, cmd);
         priv.hist_idx = -1;
+        priv.req_seq += 1;
         return;
     }
 
@@ -1340,14 +1348,21 @@ function send_command(gobj)
     show_comment(gobj, "…", 0);
     show_data(gobj, null);
 
+    /*  Bump the request id so any answer still in flight for a PREVIOUS
+     *  command becomes stale and is dropped on arrival (see
+     *  ac_mt_command_answer). Otherwise, typing a slow command then a fast
+     *  one lets the slow one's late answer overwrite the fast one's.  */
+    priv.req_seq += 1;
+
     /*  src defaults to the link service; the answer routes back there
-     *  and is re-published to EVERY console panel.  Both the display
-     *  mode and this panel's node id travel in __md_iev__ and are
-     *  echoed back, so each panel renders only its own node's answer
-     *  ([[__md_iev__ round-trip]] / ycommand parity).  */
+     *  and is re-published to EVERY console panel.  The display mode, this
+     *  panel's node id, and the request seq travel in __md_iev__ and are
+     *  echoed back, so each panel renders only its own node's answer to its
+     *  own latest command ([[__md_iev__ round-trip]] / ycommand parity).  */
     let kw_send = {agent_id: node, cmd2agent: cmd};
     msg_iev_write_key(kw_send, "display_mode", mode);
     msg_iev_write_key(kw_send, "console_node", node);
+    msg_iev_write_key(kw_send, "console_seq", String(priv.req_seq));
     agent_link_command(link, "command-agent", kw_send);
 }
 
@@ -1459,6 +1474,16 @@ function ac_mt_command_answer(gobj, event, kw, src)
     let my_node = gobj_read_attr(gobj, "node") || "";
     let ans_node = msg_iev_read_key(kw, "console_node");
     if(my_node && ans_node && ans_node !== my_node) {
+        return 0;
+    }
+
+    /*  Rapid-command race: a user command echoes its seq (send_command).
+     *  Both the dispatch ack and the real answer of a superseded command
+     *  carry an older seq — drop them so they can't overwrite the panel with
+     *  a stale result. Answers without a seq (e.g. the help-cache fetch,
+     *  handled next) are unaffected.  */
+    let ans_seq = msg_iev_read_key(kw, "console_seq");
+    if(ans_seq && ans_seq !== String(gobj.priv.req_seq)) {
         return 0;
     }
 

@@ -85,6 +85,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   popovers, a terminal (`>_`) icon for the Console nav + Execute, dark-mode
   panes. Silent session recovery after a sleep/reconnect NAK.
 - **Fixes (review pass).**
+  - **Commands — no rapid-command race.** Each console command now carries a
+    per-panel monotonic `console_seq` in `__md_iev__`; on answer, a reply whose
+    seq is not the latest is dropped, so typing a slow command then a fast one
+    no longer lets the slow one's late answer overwrite the fast one's result.
+    A local command (`shortkeys`, …) bumps the seq too, so an in-flight remote
+    answer can't clobber its output.
   - **Tab liveness on link drop.** `C_APP` now subscribes to the shared
     link's `EV_ON_CLOSE`: when the control-center socket drops (a plain close,
     not an identity NAK), the live-node set is blanked and the workspace tabs
