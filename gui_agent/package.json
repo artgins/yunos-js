@@ -12,6 +12,8 @@
         "prebuild": "npm run validate-locales"
     },
     "dependencies": {
+        "@xterm/addon-fit": "^0.11.0",
+        "@xterm/xterm": "^6.0.0",
         "@yuneta/gobj-js": "file:../../../kernel/js/gobj-js",
         "@yuneta/gobj-ui": "file:../../../kernel/js/gobj-ui",
         "bulma": "^1.0.4",

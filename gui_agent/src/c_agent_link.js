@@ -278,6 +278,28 @@ function ac_mt_stats_answer(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  PTY mirror (Terminal workspace). The control center's tty_mirror
+ *  forwards a node's console open/data/close to this named service;
+ *  re-publish so each C_AGENT_TTY tab (filtering by console name)
+ *  renders its own stream. Keystrokes go the other way via the
+ *  write-tty command (agent_link_command), not through here.
+ ***************************************************************/
+function ac_tty_open(gobj, event, kw, src)
+{
+    return bubble(gobj, "EV_TTY_OPEN", kw);
+}
+
+function ac_tty_close(gobj, event, kw, src)
+{
+    return bubble(gobj, "EV_TTY_CLOSE", kw);
+}
+
+function ac_tty_data(gobj, event, kw, src)
+{
+    return bubble(gobj, "EV_TTY_DATA", kw);
+}
+
+/***************************************************************
  *  Active agent or login changed: re-open the link.
  ***************************************************************/
 function ac_reopen(gobj, event, kw, src)
@@ -327,6 +349,9 @@ function create_gclass(gclass_name)
             ["EV_ON_ID_NAK",         ac_on_id_nak,         null],
             ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
             ["EV_MT_STATS_ANSWER",   ac_mt_stats_answer,   null],
+            ["EV_TTY_OPEN",          ac_tty_open,          null],
+            ["EV_TTY_CLOSE",         ac_tty_close,         null],
+            ["EV_TTY_DATA",          ac_tty_data,          null],
             ["EV_REOPEN",            ac_reopen,            null]
         ]]
     ];
@@ -348,6 +373,9 @@ function create_gclass(gclass_name)
         ["EV_ON_ID_NAK",         out],
         ["EV_MT_COMMAND_ANSWER", answer],
         ["EV_MT_STATS_ANSWER",   answer],
+        ["EV_TTY_OPEN",          answer],
+        ["EV_TTY_CLOSE",         answer],
+        ["EV_TTY_DATA",          answer],
         ["EV_REOPEN",            0]
     ];
 

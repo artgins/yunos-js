@@ -48,6 +48,13 @@ const en = {
         "email":             "Email",
         "password":          "Password",
 
+        /* workspaces (primary rail) */
+        "commands":          "Commands",
+        "statistics":        "Statistics",
+        "terminal":          "Terminal",
+        "reconnect":         "Reconnect",
+        "closed":            "Closed",
+
         /* console domain */
         "console":           "Console",
         "agent cli":         "Agent CLI",

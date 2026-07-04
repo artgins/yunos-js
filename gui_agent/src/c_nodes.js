@@ -58,6 +58,8 @@ const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",  0,  null,     "Subscriber of output events"),
 
 SDATA(data_type_t.DTP_STRING,   "title",       0,  "nodes",  "View title (i18n key)"),
+SDATA(data_type_t.DTP_STRING,   "workspace",   0,  "commands", "Owning workspace: selection bucket + tab routing"),
+SDATA(data_type_t.DTP_STRING,   "min_version", 0,  "",       "Only list nodes with version >= this (empty = all)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,     "Root HTMLElement"),
 SDATA(data_type_t.DTP_POINTER,  "tabulator",   0,  null,     "Tabulator instance"),
 SDATA(data_type_t.DTP_POINTER,  "link_svc",    0,  null,     "C_AGENT_LINK service"),
@@ -238,12 +240,52 @@ function node_id(n)
 }
 
 /***************************************************************
- *  Is this node currently selected (has an open Console tab)?
+ *  Dotted-version compare: is a >= b? ("7.7.0" >= "7.7.0" -> true).
+ *  Missing components count as 0; a missing/empty `b` accepts all.
+ ***************************************************************/
+function version_tuple(v)
+{
+    return String(v || "").split(".").map((x) => parseInt(x, 10) || 0);
+}
+
+function version_gte(a, b)
+{
+    if(!b) {
+        return true;
+    }
+    let A = version_tuple(a);
+    let B = version_tuple(b);
+    let n = Math.max(A.length, B.length);
+    for(let i = 0; i < n; i++) {
+        let d = (A[i] || 0) - (B[i] || 0);
+        if(d !== 0) {
+            return d > 0;
+        }
+    }
+    return true;
+}
+
+/***************************************************************
+ *  Does this node meet the workspace's minimum version? Commands
+ *  and Statistics need agent >= 7.7.0 (the capability marker that
+ *  gates controlcenter command/stats forwarding); Terminal (PTY
+ *  backdoor) accepts every version (empty min_version).
+ ***************************************************************/
+function node_meets_min_version(gobj, n)
+{
+    let min = gobj_read_attr(gobj, "min_version") || "";
+    return version_gte(n && n.version, min);
+}
+
+/***************************************************************
+ *  Is this node currently selected in THIS workspace (has an open
+ *  tab here)?
  ***************************************************************/
 function is_selected_node(gobj, n)
 {
     let config = gobj_read_attr(gobj, "config_svc");
-    return !!(config && agent_config_is_node_selected(config, node_id(n)));
+    let ws = gobj_read_attr(gobj, "workspace");
+    return !!(config && agent_config_is_node_selected(config, ws, node_id(n)));
 }
 
 /***************************************************************
@@ -353,8 +395,9 @@ function make_columns(gobj)
     {
         let n = cell.getData();
         let config = gobj_read_attr(gobj, "config_svc");
+        let ws = gobj_read_attr(gobj, "workspace");
         if(config) {
-            agent_config_toggle_selected_node(config, {id: node_id(n), host: n.host || node_id(n)});
+            agent_config_toggle_selected_node(config, ws, {id: node_id(n), host: n.host || node_id(n)});
         }
     }
 
@@ -363,8 +406,9 @@ function make_columns(gobj)
     function selall_formatter()
     {
         let config = gobj_read_attr(gobj, "config_svc");
+        let ws = gobj_read_attr(gobj, "workspace");
         let nodes = gobj_read_attr(gobj, "nodes") || [];
-        let sel = config ? agent_config_get_selected_nodes(config).length : 0;
+        let sel = config ? agent_config_get_selected_nodes(config, ws).length : 0;
         let checked = (nodes.length > 0 && sel >= nodes.length) ? " checked" : "";
         return `<input type="checkbox" class="node-sel-all"${checked} aria-label="select all nodes">`;
     }
@@ -372,15 +416,16 @@ function make_columns(gobj)
     function selall_click(e, column)
     {
         let config = gobj_read_attr(gobj, "config_svc");
+        let ws = gobj_read_attr(gobj, "workspace");
         if(!config) {
             return;
         }
         let nodes = gobj_read_attr(gobj, "nodes") || [];
-        let cur = agent_config_get_selected_nodes(config).length;
+        let cur = agent_config_get_selected_nodes(config, ws).length;
         if(nodes.length > 0 && cur >= nodes.length) {
-            agent_config_set_selected_nodes(config, []);
+            agent_config_set_selected_nodes(config, ws, []);
         } else {
-            agent_config_set_selected_nodes(config, nodes.map((n) => {
+            agent_config_set_selected_nodes(config, ws, nodes.map((n) => {
                 let id = node_id(n);
                 return {id: id, host: n.host || id};
             }));
@@ -548,6 +593,12 @@ function apply_filter(gobj)
  ***************************************************************/
 function ac_selected_nodes_changed(gobj, event, kw, src)
 {
+    /*  Only react to our own workspace's selection (the config service
+     *  is shared by every workspace's picker).  */
+    let ws = gobj_read_attr(gobj, "workspace");
+    if(kw && kw.workspace && kw.workspace !== ws) {
+        return 0;
+    }
     refresh_active(gobj);
     return 0;
 }
@@ -582,7 +633,13 @@ function ac_mt_command_answer(gobj, event, kw, src)
     let nodes = [];
     if(Array.isArray(data)) {
         for(let line of data) {
-            nodes.push(parse_agent_line(line));
+            let n = parse_agent_line(line);
+            /*  Drop nodes that can't serve this workspace (e.g. agents
+             *  below 7.7.0 for Commands/Statistics): they wouldn't answer,
+             *  so they must not appear as selectable here.  */
+            if(node_meets_min_version(gobj, n)) {
+                nodes.push(n);
+            }
         }
     }
     gobj_write_attr(gobj, "nodes", nodes);

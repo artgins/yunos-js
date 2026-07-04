@@ -13,22 +13,28 @@
         },
 
         "stages": {
-            "main": { "zone": "center", "default_route": "/nodes/list" }
+            "main": { "zone": "center", "default_route": "/commands/nodes" }
         },
 
-        "_routes_comment": "Routes reached from the account-menu dropdown (not primary-menu items).",
+        "_routes_comment": "Resolution-ancestor + empty-state routes for the per-node workspaces (a node tab /<ws>/node/<id> resolves here on F5 before the controller rebuilds it). Settings pages are declared as submenu targets under the Settings primary item, not here.",
         "routes": {
-            "/account/preference": {
+            "/commands/node": {
                 "stage": "main",
-                "gclass": "C_ACCOUNT_VIEW",
-                "kw": { "view": "preference" },
-                "lifecycle": "lazy_destroy"
+                "gclass": "C_AGENT_CONSOLE",
+                "kw": { "title": "commands", "node": "" },
+                "lifecycle": "keep_alive"
             },
-            "/account/about": {
+            "/statistics/node": {
                 "stage": "main",
-                "gclass": "C_ACCOUNT_VIEW",
-                "kw": { "view": "about" },
-                "lifecycle": "lazy_destroy"
+                "gclass": "C_AGENT_STATS",
+                "kw": { "title": "statistics", "node": "" },
+                "lifecycle": "keep_alive"
+            },
+            "/terminal/node": {
+                "stage": "main",
+                "gclass": "C_AGENT_TTY",
+                "kw": { "title": "terminal", "node": "" },
+                "lifecycle": "keep_alive"
             }
         }
     },
@@ -44,7 +50,7 @@
                 "wordmark": "Agent Console",
                 "alt": "Agent Console",
                 "aria_label": "Agent Console home",
-                "action": { "type": "navigate", "route": "/console/agent" }
+                "action": { "type": "navigate", "route": "/commands/nodes" }
             },
             {
                 "id": "conn",
@@ -75,24 +81,19 @@
                 "aria_label": "Account menu",
                 "action": {
                     "type": "dropdown",
+                    "_items_comment": "Account menu is trimmed: Preferences + About are now the Settings primary item (rail). Only the developer-window toggle and Sign out remain here.",
                     "items": [
                         {
-                            "id": "preference",
-                            "name": "preferences",
+                            "id": "settings",
+                            "name": "settings",
                             "icon": "yi-gear",
-                            "action": { "type": "navigate", "route": "/account/preference" }
+                            "action": { "type": "navigate", "route": "/settings/preference" }
                         },
                         {
                             "id": "developer",
                             "name": "developer",
                             "icon": "yi-square-js",
                             "action": { "type": "event", "event": "EV_OPEN_DEVTOOLS" }
-                        },
-                        {
-                            "id": "about",
-                            "name": "about",
-                            "icon": "yi-question",
-                            "action": { "type": "navigate", "route": "/account/about" }
                         },
                         { "type": "divider" },
                         {
@@ -113,49 +114,26 @@
                 "left":   { "layout": "vertical", "icon_pos": "left", "show_label": true },
                 "bottom": { "layout": "icon-bar", "icon_pos": "top",  "show_label": true }
             },
+            "_items_comment": "Four primary options. The three per-node workspaces (Commands, Statistics, Terminal) each declare ONLY their fixed node-picker tab here; the C_APP workspaces controller replaces the submenu at runtime, keeping this picker as tab 0 and appending one closable tab per selected node. Commands/Statistics list only agents >= 7.7.0 (min_version); Terminal (PTY backdoor) lists every version.",
             "items": [
                 {
-                    "id": "console",
-                    "name": "console",
+                    "id": "commands",
+                    "name": "commands",
                     "icon": "yi-terminal",
-                    "tooltip": "Control-plane CLI to a yuneta agent",
-                    "route": "/console",
+                    "tooltip": "Run control-plane commands on a node's yunos (agent >= 7.7.0)",
+                    "route": "/commands",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
                         "items": [
                             {
-                                "id": "agent",
-                                "name": "agent cli",
-                                "icon": "yi-terminal",
-                                "route": "/console/agent",
-                                "target": {
-                                    "stage": "main",
-                                    "gclass": "C_AGENT_CONSOLE",
-                                    "kw": { "title": "console", "node": "" },
-                                    "lifecycle": "keep_alive"
-                                }
-                            }
-                        ]
-                    }
-                },
-                {
-                    "id": "nodes",
-                    "name": "nodes",
-                    "icon": "yi-cloudversify",
-                    "tooltip": "Nodes connected to the control center",
-                    "route": "/nodes",
-                    "submenu": {
-                        "render": { "top-sub": "tabs" },
-                        "items": [
-                            {
-                                "id": "list",
+                                "id": "picker",
                                 "name": "nodes",
                                 "icon": "yi-cloudversify",
-                                "route": "/nodes/list",
+                                "route": "/commands/nodes",
                                 "target": {
                                     "stage": "main",
                                     "gclass": "C_NODES",
-                                    "kw": { "title": "nodes" },
+                                    "kw": { "title": "nodes", "workspace": "commands", "min_version": "7.7.0" },
                                     "lifecycle": "keep_alive"
                                 }
                             }
@@ -163,24 +141,84 @@
                     }
                 },
                 {
-                    "id": "stats",
-                    "name": "stats",
+                    "id": "statistics",
+                    "name": "statistics",
                     "icon": "yi-eye",
-                    "tooltip": "Live stats from a yuno",
-                    "route": "/stats",
+                    "tooltip": "Live stats from a node's yunos (agent >= 7.7.0)",
+                    "route": "/statistics",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
                         "items": [
                             {
-                                "id": "live",
-                                "name": "live",
-                                "icon": "yi-eye",
-                                "route": "/stats/live",
+                                "id": "picker",
+                                "name": "nodes",
+                                "icon": "yi-cloudversify",
+                                "route": "/statistics/nodes",
                                 "target": {
                                     "stage": "main",
-                                    "gclass": "C_AGENT_STATS",
-                                    "kw": { "title": "stats" },
+                                    "gclass": "C_NODES",
+                                    "kw": { "title": "nodes", "workspace": "statistics", "min_version": "7.7.0" },
                                     "lifecycle": "keep_alive"
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "id": "terminal",
+                    "name": "terminal",
+                    "icon": "yi-lock",
+                    "tooltip": "Interactive SSH-style console to a node (PTY backdoor, any version)",
+                    "route": "/terminal",
+                    "submenu": {
+                        "render": { "top-sub": "tabs" },
+                        "items": [
+                            {
+                                "id": "picker",
+                                "name": "nodes",
+                                "icon": "yi-cloudversify",
+                                "route": "/terminal/nodes",
+                                "target": {
+                                    "stage": "main",
+                                    "gclass": "C_NODES",
+                                    "kw": { "title": "nodes", "workspace": "terminal", "min_version": "" },
+                                    "lifecycle": "keep_alive"
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "id": "settings",
+                    "name": "settings",
+                    "icon": "yi-gear",
+                    "tooltip": "Application settings",
+                    "route": "/settings",
+                    "submenu": {
+                        "render": { "top-sub": "tabs" },
+                        "items": [
+                            {
+                                "id": "preference",
+                                "name": "preferences",
+                                "icon": "yi-gear",
+                                "route": "/settings/preference",
+                                "target": {
+                                    "stage": "main",
+                                    "gclass": "C_ACCOUNT_VIEW",
+                                    "kw": { "view": "preference" },
+                                    "lifecycle": "lazy_destroy"
+                                }
+                            },
+                            {
+                                "id": "about",
+                                "name": "about",
+                                "icon": "yi-question",
+                                "route": "/settings/about",
+                                "target": {
+                                    "stage": "main",
+                                    "gclass": "C_ACCOUNT_VIEW",
+                                    "kw": { "view": "about" },
+                                    "lifecycle": "lazy_destroy"
                                 }
                             }
                         ]

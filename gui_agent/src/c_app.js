@@ -294,18 +294,54 @@ function destroy_shell(gobj)
 
 
 /***************************************************************
- *      Multi-agent console tabs controller
+ *      Per-node workspaces controller
  *
- *  Selected nodes (C_AGENT_CONFIG.selected_nodes) drive one top-sub
- *  tab per node, built at runtime via yui_shell_set_submenu(). Each
- *  tab routes to a C_AGENT_CONSOLE pinned to that node; it is red when
- *  the node is not in the live list-agents set, and closable.
+ *  The primary rail has three per-node workspaces — Commands,
+ *  Statistics, Terminal — plus Settings. Each per-node workspace
+ *  owns a submenu = one FIXED node-picker tab (C_NODES, filtered by
+ *  min_version) followed by one DYNAMIC, closable tab per node the
+ *  operator selected in that picker. Selection lives per workspace in
+ *  C_AGENT_CONFIG; the submenu is (re)built at runtime via
+ *  yui_shell_set_submenu(). A node tab is red when the node is not in
+ *  the live list-agents set.
+ *
+ *  Routes per workspace <ws>:
+ *      /<ws>/nodes         fixed picker  (declared in app_config)
+ *      /<ws>/node          resolution ancestor + empty state
+ *      /<ws>/node/<id>     one dynamic tab per selected node
+ *
+ *  WORKSPACES is the single source of truth of which workspaces build
+ *  dynamic tabs and with which tab gclass. A workspace whose picker
+ *  exists in app_config but that is absent here shows its picker only
+ *  (selecting a node there is a no-op until it is wired in).
  ***************************************************************/
-const CONSOLE_HOME_ROUTE = "/console/agent";
+const WORKSPACES = {
+    commands:   {min_version: "7.7.0", tab_gclass: "C_AGENT_CONSOLE"},
+    statistics: {min_version: "7.7.0", tab_gclass: "C_AGENT_STATS"},
+    terminal:   {min_version: "",      tab_gclass: "C_AGENT_TTY"}
+};
 
-function console_tab_route(id)
+function picker_route(ws)
 {
-    return CONSOLE_HOME_ROUTE + "/" + encodeURIComponent(id);
+    return "/" + ws + "/nodes";
+}
+
+function node_home_route(ws)
+{
+    return "/" + ws + "/node";
+}
+
+function node_tab_route(ws, id)
+{
+    return node_home_route(ws) + "/" + encodeURIComponent(id);
+}
+
+/*  Resolve "/<ws>/..." to a KNOWN workspace id, or "".  */
+function ws_from_route(route)
+{
+    let m = /^\/([^/]+)\//.exec(String(route || ""));
+    let ws = m ? m[1] : "";
+    return WORKSPACES[ws] ? ws : "";
 }
 
 /*  nav item id "node-<id>" -> "<id>"  */
@@ -333,41 +369,71 @@ function parse_live_hosts(data)
     return live;
 }
 
-/*  One tab per selected node; red when not live; each closable. */
-function rebuild_console_tabs(gobj)
+/*  The fixed picker tab for a workspace (C_NODES, version-filtered). */
+function workspace_picker_item(ws)
+{
+    let spec = WORKSPACES[ws];
+    return {
+        id:       "picker",
+        name:     "nodes",
+        icon:     "yi-cloudversify",
+        route:    picker_route(ws),
+        closable: false,
+        target: {
+            stage:     "main",
+            gclass:    "C_NODES",
+            kw:        {workspace: ws, min_version: spec.min_version, title: "nodes"},
+            lifecycle: "keep_alive"
+        }
+    };
+}
+
+/*  Fixed picker + one tab per selected node; red when not live; each
+ *  node tab closable. */
+function rebuild_workspace_tabs(gobj, ws)
 {
     let priv = gobj.priv;
-    if(!priv.shell) {
+    if(!priv.shell || !WORKSPACES[ws]) {
         return;
     }
+    let spec = WORKSPACES[ws];
     let config = gobj_find_service("agent_config", false);
-    let nodes = config ? agent_config_get_selected_nodes(config) : [];
+    let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
     let live = priv.live_hosts || {};
-    let items = nodes.map((n) => {
+    let items = [workspace_picker_item(ws)];
+    for(let n of nodes) {
         let connected = !!live[n.id];
-        return {
+        items.push({
             id:       "node-" + n.id,
             name:     n.host || n.id,
-            route:    console_tab_route(n.id),
+            route:    node_tab_route(ws, n.id),
             class:    connected ? "" : "yui-nav-disconnected",
             closable: true,
             target: {
                 stage:     "main",
-                gclass:    "C_AGENT_CONSOLE",
+                gclass:    spec.tab_gclass,
                 kw:        {node: n.id, title: n.host || n.id},
                 lifecycle: "keep_alive"
             }
-        };
-    });
-    yui_shell_set_submenu(priv.shell, "console", items);
+        });
+    }
+    yui_shell_set_submenu(priv.shell, ws, items);
 }
 
-/*  Route of the first open node tab, or null when none. */
-function console_first_route(gobj)
+/*  Rebuild every wired workspace (on session-open and list-agents). */
+function rebuild_all_workspaces(gobj)
+{
+    for(let ws in WORKSPACES) {
+        rebuild_workspace_tabs(gobj, ws);
+    }
+}
+
+/*  Route of a workspace's first open node tab, else its picker. */
+function workspace_first_route(gobj, ws)
 {
     let config = gobj_find_service("agent_config", false);
-    let nodes = config ? agent_config_get_selected_nodes(config) : [];
-    return nodes.length ? console_tab_route(nodes[0].id) : null;
+    let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
+    return nodes.length ? node_tab_route(ws, nodes[0].id) : picker_route(ws);
 }
 
 /*
@@ -432,10 +498,11 @@ function ac_on_open(gobj, event, kw, src)
     let shell = build_shell(gobj);
     yui_shell_refresh_avatars(shell);
 
-    /*  Multi-agent console: paint the per-node tabs from the persisted
-     *  selection, then seed the live-node set (tab red state) once. No
-     *  polling — later refreshes come from the Nodes "Refresh" button. */
-    rebuild_console_tabs(gobj);
+    /*  Per-node workspaces: paint each workspace's fixed picker + per-node
+     *  tabs from the persisted selection, then seed the live-node set (tab
+     *  red state) once. No polling — later refreshes come from the picker's
+     *  "Refresh" button. */
+    rebuild_all_workspaces(gobj);
     request_live_agents(gobj);
     return 0;
 }
@@ -583,18 +650,22 @@ function ac_open_devtools(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Selected nodes changed (Nodes checkbox or a closed tab) →
- *  rebuild the console tabs.
+ *  Selected nodes changed (a picker checkbox or a closed tab) →
+ *  rebuild just that workspace's tabs.
  ***************************************************************/
 function ac_selected_nodes_changed(gobj, event, kw, src)
 {
-    rebuild_console_tabs(gobj);
+    let ws = (kw && kw.workspace) || "";
+    if(WORKSPACES[ws]) {
+        rebuild_workspace_tabs(gobj, ws);
+    }
     return 0;
 }
 
 /***************************************************************
- *  A console tab's ✕ → drop that node; if it was the visible tab,
- *  land on a remaining one (or the home empty-state).
+ *  A node tab's ✕ → drop that node from its workspace; if it was
+ *  the visible tab, land on a remaining one (or that workspace's
+ *  picker).
  ***************************************************************/
 function ac_nav_item_close(gobj, event, kw, src)
 {
@@ -602,43 +673,55 @@ function ac_nav_item_close(gobj, event, kw, src)
     if(!id) {
         return 0;
     }
+    let closed_route = (kw && kw.route) || "";
+    let ws = ws_from_route(closed_route);
+    if(!ws) {
+        return 0;
+    }
     let shell = gobj.priv.shell;
-    let closed_route = (kw && kw.route) || console_tab_route(id);
     let was_active = !!(shell && gobj_read_attr(shell, "current_route") === closed_route);
 
     let config = gobj_find_service("agent_config", false);
     if(config) {
         /*  -> EV_SELECTED_NODES_CHANGED -> ac_selected_nodes_changed -> rebuild */
-        agent_config_remove_selected_node(config, id);
+        agent_config_remove_selected_node(config, ws, id);
     }
     if(was_active && shell) {
-        yui_shell_navigate(shell, console_first_route(gobj) || CONSOLE_HOME_ROUTE);
+        yui_shell_navigate(shell, workspace_first_route(gobj, ws));
     }
     return 0;
 }
 
 /***************************************************************
- *  Landing on the node-less console home with nodes open → jump to
- *  the first tab (deferred, so we don't re-enter navigate_to mid-publish).
+ *  Landing on a workspace's node-less home (/<ws>/node) with nodes
+ *  open → jump to the right node tab (deferred, so we don't re-enter
+ *  navigate_to mid-publish).
  *
  *  Match on the RESOLVED `base`, not the raw `route`: after an F5 the
- *  restored hash is a node route (/console/agent/<node>) that resolves to
- *  the declared ancestor /console/agent (the node-less empty-state console)
- *  because the per-node tabs aren't rebuilt yet. `base` is /console/agent
- *  in that fallback, so we catch it and redirect; a real, resolved node tab
- *  has `base` === its own node route and is left alone (no yank on every
- *  tab switch).
+ *  restored hash is a node route (/<ws>/node/<id>) that resolves to the
+ *  declared ancestor /<ws>/node because the per-node tabs aren't rebuilt
+ *  yet. `base` is /<ws>/node in that fallback, so we catch it and
+ *  redirect; a real, resolved node tab has `base` === its own node route
+ *  and is left alone (no yank on every tab switch).
  ***************************************************************/
 function ac_route_changed(gobj, event, kw, src)
 {
-    if(((kw && kw.base) || "") !== CONSOLE_HOME_ROUTE) {
+    let base = (kw && kw.base) || "";
+    let ws = "";
+    for(let w in WORKSPACES) {
+        if(base === node_home_route(w)) {
+            ws = w;
+            break;
+        }
+    }
+    if(!ws) {
         return 0;
     }
     /*  Prefer the EXACT node from the restored URL tail (subpath) when it is
-     *  still an open tab — so F5 lands back on the very console you were on,
-     *  not just the first. Fall back to the first open node otherwise (bare
-     *  console home, or a node that was closed). */
-    let target = console_first_route(gobj);
+     *  still an open tab — so F5 lands back on the very tab you were on, not
+     *  just the first. Fall back to the first open node (or the picker)
+     *  otherwise (bare workspace home, or a node that was closed). */
+    let target = workspace_first_route(gobj, ws);
     let sub = (kw && kw.subpath) || "";
     if(sub) {
         let id = sub;
@@ -648,9 +731,9 @@ function ac_route_changed(gobj, event, kw, src)
             id = sub;   /*  malformed % escape: use the raw tail  */
         }
         let config = gobj_find_service("agent_config", false);
-        let nodes = config ? agent_config_get_selected_nodes(config) : [];
+        let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
         if(nodes.some((n) => n && n.id === id)) {
-            target = console_tab_route(id);
+            target = node_tab_route(ws, id);
         }
     }
     if(target) {
@@ -674,7 +757,7 @@ function ac_link_answer(gobj, event, kw, src)
         return 0;
     }
     gobj.priv.live_hosts = parse_live_hosts(kw.data);
-    rebuild_console_tabs(gobj);
+    rebuild_all_workspaces(gobj);
     return 0;
 }
 

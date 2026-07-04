@@ -46,7 +46,7 @@ const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,                        null, "Subscriber of output events"),
 SDATA(data_type_t.DTP_STRING,   "active_node",  sdata_flag_t.SDF_PERSIST, "",      "Active node (hostname/UUID from list-agents)"),
 SDATA(data_type_t.DTP_STRING,   "display_mode", sdata_flag_t.SDF_PERSIST, "table", "Command answer display: table | form (raw JSON)"),
-SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "[]",  "Nodes with an open Console tab: [{id, host}, ...]"),
+SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "{}",  "Selected nodes per workspace: {workspace: [{id, host}, ...]}"),
 SDATA(data_type_t.DTP_JSON,     "cmd_history",  sdata_flag_t.SDF_PERSIST, "[]",    "Global console command history: [cmd,...] most-recent first (shared by all nodes)"),
 SDATA(data_type_t.DTP_JSON,     "shortkeys",    sdata_flag_t.SDF_PERSIST, JSON.stringify(DEFAULT_SHORTKEYS), "Console command shortkeys {key: template}; $1 $2 … are positional args (ycli parity)"),
 SDATA_END()
@@ -150,67 +150,97 @@ function agent_config_set_display_mode(gobj, mode)
 }
 
 /***************************************************************
- *  Selected nodes — the set of nodes with an open Console tab.
- *  Each entry is {id, host}: id is the agent_id used to route
- *  command-agent; host is the display label.
+ *  Selected nodes are kept PER WORKSPACE ("commands" / "statistics"
+ *  / "terminal"): each workspace has its own fixed node-picker tab
+ *  and opens one dynamic tab per selected node. The persistent
+ *  attr is a map {workspace: [{id, host}, ...]}. id is the agent_id
+ *  used to route command-agent / write-tty; host is the display
+ *  label.
+ *
+ *  Legacy note: earlier releases stored a single flat list (the
+ *  Console was the only multi-node workspace). A persisted array is
+ *  migrated on read under the "commands" workspace so an operator's
+ *  open tabs survive the upgrade.
  ***************************************************************/
-function agent_config_get_selected_nodes(gobj)
+function read_selection_map(gobj)
 {
-    let list = gobj_read_attr(gobj, "selected_nodes");
+    let raw = gobj_read_attr(gobj, "selected_nodes");
+    if(Array.isArray(raw)) {
+        return {commands: raw};
+    }
+    if(raw && typeof raw === "object") {
+        return raw;
+    }
+    return {};
+}
+
+function write_selection_map(gobj, map)
+{
+    gobj_write_attr(gobj, "selected_nodes", map);
+    gobj_save_persistent_attrs(gobj, "selected_nodes");
+}
+
+/***************************************************************
+ *  The selected nodes of one workspace, [] when none.
+ ***************************************************************/
+function agent_config_get_selected_nodes(gobj, workspace)
+{
+    let list = read_selection_map(gobj)[workspace];
     return Array.isArray(list) ? list : [];
 }
 
 /***************************************************************
- *  Replace the whole selected-nodes list, persist, and notify.
+ *  Replace one workspace's selected-nodes list, persist, notify.
  ***************************************************************/
-function agent_config_set_selected_nodes(gobj, list)
+function agent_config_set_selected_nodes(gobj, workspace, list)
 {
-    gobj_write_attr(gobj, "selected_nodes", Array.isArray(list) ? list : []);
-    gobj_save_persistent_attrs(gobj, "selected_nodes");
+    let map = read_selection_map(gobj);
+    map[workspace] = Array.isArray(list) ? list : [];
+    write_selection_map(gobj, map);
     gobj_publish_event(gobj, "EV_SELECTED_NODES_CHANGED",
-        {selected_nodes: agent_config_get_selected_nodes(gobj)});
+        {workspace: workspace, selected_nodes: map[workspace]});
 }
 
 /***************************************************************
- *  Is a node id currently selected?
+ *  Is a node id selected in this workspace?
  ***************************************************************/
-function agent_config_is_node_selected(gobj, id)
+function agent_config_is_node_selected(gobj, workspace, id)
 {
     if(!id) {
         return false;
     }
-    return agent_config_get_selected_nodes(gobj).some((n) => n && n.id === id);
+    return agent_config_get_selected_nodes(gobj, workspace).some((n) => n && n.id === id);
 }
 
 /***************************************************************
- *  Add or remove a node {id, host} from the selection (toggle),
- *  preserving order for the remaining tabs.
+ *  Add or remove a node {id, host} from a workspace's selection
+ *  (toggle), preserving order for the remaining tabs.
  ***************************************************************/
-function agent_config_toggle_selected_node(gobj, node)
+function agent_config_toggle_selected_node(gobj, workspace, node)
 {
     if(!node || !node.id) {
         return;
     }
-    let list = agent_config_get_selected_nodes(gobj).slice();
+    let list = agent_config_get_selected_nodes(gobj, workspace).slice();
     let idx = list.findIndex((n) => n && n.id === node.id);
     if(idx >= 0) {
         list.splice(idx, 1);
     } else {
         list.push({id: node.id, host: node.host || node.id});
     }
-    agent_config_set_selected_nodes(gobj, list);
+    agent_config_set_selected_nodes(gobj, workspace, list);
 }
 
 /***************************************************************
- *  Remove one node id from the selection (used by tab close).
+ *  Remove one node id from a workspace's selection (tab close).
  ***************************************************************/
-function agent_config_remove_selected_node(gobj, id)
+function agent_config_remove_selected_node(gobj, workspace, id)
 {
     if(!id) {
         return;
     }
-    let list = agent_config_get_selected_nodes(gobj).filter((n) => n && n.id !== id);
-    agent_config_set_selected_nodes(gobj, list);
+    let list = agent_config_get_selected_nodes(gobj, workspace).filter((n) => n && n.id !== id);
+    agent_config_set_selected_nodes(gobj, workspace, list);
 }
 
 /***************************************************************

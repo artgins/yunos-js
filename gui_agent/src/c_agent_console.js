@@ -2,7 +2,7 @@
  *          c_agent_console.js
  *
  *      C_AGENT_CONSOLE — control-plane CLI to a yuneta agent, a routed
- *      stage view (mounted by C_YUI_SHELL at /console/agent).
+ *      stage view (mounted by C_YUI_SHELL at /commands/node/<id>).
  *
  *      The v2 successor of the old webix "Yuneta CLI": a command input
  *      with history + a response area. It does NOT own a transport —

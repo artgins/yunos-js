@@ -48,6 +48,13 @@ const es = {
         "email":             "Correo electrónico",
         "password":          "Contraseña",
 
+        /* workspaces (rail primario) */
+        "commands":          "Comandos",
+        "statistics":        "Estadísticas",
+        "terminal":          "Terminal",
+        "reconnect":         "Reconectar",
+        "closed":            "Cerrado",
+
         /* dominio consola */
         "console":           "Consola",
         "agent cli":         "CLI del agente",

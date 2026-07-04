@@ -54,6 +54,7 @@ import {register_c_agent_link} from "./c_agent_link.js";
 import {register_c_nodes} from "./c_nodes.js";
 import {register_c_agent_console} from "./c_agent_console.js";
 import {register_c_agent_stats} from "./c_agent_stats.js";
+import {register_c_agent_tty} from "./c_agent_tty.js";
 
 import {setup_locale} from "./locales/locales.js";
 import {apply_theme, current_theme} from "./theme.js";
@@ -112,6 +113,7 @@ function main()
     register_c_nodes();
     register_c_agent_console();
     register_c_agent_stats();
+    register_c_agent_tty();
 
     /*------------------------------------------------*
      *          Start yuneta

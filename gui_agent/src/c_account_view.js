@@ -1,15 +1,20 @@
 /***********************************************************************
  *          c_account_view.js
  *
- *      C_ACCOUNT_VIEW — the three account-menu pages, one gclass
- *      parameterised by the `view` attr:
+ *      C_ACCOUNT_VIEW — the Settings pages, one gclass parameterised by
+ *      the `view` attr and mounted as Settings sub-tabs (and reachable
+ *      from the avatar menu):
  *
- *        - "preference" : appearance (theme + language) selectors that
- *                         apply immediately and persist in this browser.
- *        - "developer"  : read-only diagnostics (deployment identity,
- *                         session, control-center link, active node).
+ *        - "preference" : appearance (theme + language + command-answer
+ *                         display) and the shortkeys manager; all apply
+ *                         immediately and persist in this browser.
  *        - "about"      : product card (mark, version, tenant/plane,
- *                         documentation link, copyright).
+ *                         documentation link, copyright) plus read-only
+ *                         Diagnostics (deployment identity, session,
+ *                         control-center link, active node).
+ *
+ *      (The avatar's "developer" entry is NOT a page here — it toggles the
+ *      dev window via EV_OPEN_DEVTOOLS in C_APP.)
  *
  *      Like every shell view it exposes a $container (required by
  *      C_YUI_SHELL). All user-visible strings go through i18next so the

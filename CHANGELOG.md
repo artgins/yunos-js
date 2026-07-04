@@ -29,6 +29,30 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ### gui_agent (7.6.8 cycle)
 
+- **Four-workspace refactor.** The primary rail is now **Commands ·
+  Statistics · Terminal · Settings**, and the three per-node workspaces share
+  one pattern: a fixed node-picker tab (`C_NODES`) plus one closable, dynamic
+  tab per selected node (red when the node drops). Node selection is kept
+  **per workspace** in `C_AGENT_CONFIG` (a legacy flat `selected_nodes` list is
+  migrated under `commands`). The `C_APP` tabs controller is generalized over a
+  `WORKSPACES` table (routes `/​<ws>/nodes` and `/​<ws>/node/<id>`, F5 restore
+  per workspace).
+  - **Commands** and **Statistics** list only agents **≥ 7.7.0** (the
+    controlcenter command/stats capability marker); `C_NODES` filters the
+    `list-agents` result by version. `C_AGENT_STATS` is now pinned to one node
+    (its internal node selector removed) and disambiguates answers by
+    `console_purpose="stats"` + `console_node`, so several stats tabs and the
+    Console coexist on the one link.
+  - **Terminal** (new, `C_AGENT_TTY`): an interactive **xterm.js** console to a
+    node over the shared `agent_link` — `open-console`/`close-console` via
+    `command-agent`, `write-tty` for keystrokes, `EV_TTY_DATA` (re-published by
+    `C_AGENT_LINK`) for output. Each tab owns a globally-unique console name and
+    filters `EV_TTY_*` by it. Served by both `yuno_agent` and `yuno_agent22`, so
+    every agent version is listed (no version gate). PTY geometry is fixed at
+    open (no runtime resize on the agent side); **Reconnect** opens a fresh
+    console at the current size.
+  - **Settings** promoted to a primary item (Preferences + About); the avatar
+    menu trimmed to Settings / Developer / Sign out.
 - Multi-agent Console: one top-sub tab per selected node; F5 restores the exact
   open node from the route subpath.
 - Command helper: per-node `help` cache → Tab completion (name + parameters),
