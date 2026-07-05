@@ -174,6 +174,7 @@ function mt_start(gobj)
     }
     refresh_status(gobj);
     ensure_commands_cache(gobj);
+    watch_activation(gobj);
 }
 
 /***************************************************************
@@ -226,10 +227,36 @@ function refresh_status(gobj)
 }
 
 /***************************************************************
+ *  Focus the command input whenever this tab (re)becomes the visible one,
+ *  so selecting a Commands tab lets you type straight away. The shell
+ *  reveals a keep_alive view by removing `is-hidden` from its $container
+ *  (there is no activation hook), so watch that class flip.
+ ***************************************************************/
+function watch_activation(gobj)
+{
+    let priv = gobj.priv;
+    let $c = gobj_read_attr(gobj, "$container");
+    if(!$c || typeof MutationObserver === "undefined") {
+        return;
+    }
+    priv.vis_obs = new MutationObserver(function() {
+        if(!$c.classList.contains("is-hidden") && priv.$input) {
+            priv.$input.focus();
+        }
+    });
+    priv.vis_obs.observe($c, {attributes: true, attributeFilter: ["class"]});
+}
+
+/***************************************************************
  *          Framework Method: Stop
  ***************************************************************/
 function mt_stop(gobj)
 {
+    let priv = gobj.priv;
+    if(priv.vis_obs) {
+        priv.vis_obs.disconnect();
+        priv.vis_obs = null;
+    }
     destroy_table(gobj);
 }
 

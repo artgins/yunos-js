@@ -114,6 +114,10 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   `MutationObserver` on the view's `is-hidden` flip), so you can type without
   clicking first.
 - **Fixes (review pass).**
+  - **Commands — focus the input on tab select.** Selecting a Commands tab now
+    moves keyboard focus straight to `CONSOLE_INPUT` (a `MutationObserver` on
+    the view's `is-hidden` flip), so you can type without clicking first — same
+    mechanism as the Terminal xterm focus.
   - **Commands — visible "running…" feedback.** Sending a command now paints
     a `running…` placeholder in the response pane until the answer arrives,
     instead of blanking it with no indication (the old `…` was written to the
