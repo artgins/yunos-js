@@ -496,7 +496,27 @@ function ac_tty_data(gobj, event, kw, src)
  ***************************************************************/
 function ac_tty_close(gobj, event, kw, src)
 {
-    if(!is_my_console(gobj, kw)) {
+    let mine = gobj_read_attr(gobj, "console_name") || "";
+    if(!mine) {
+        return 0;   /*  this tab has no open console → not ours  */
+    }
+    let data = kw && kw.data;
+    let name = (data && data.name) || "";
+    /*
+     *  Normally close only the tab whose console name matches, so several
+     *  Terminal tabs stay discriminated. But an OLD agent — before the c_pty
+     *  EV_TTY_CLOSE stray-brace fix (commit 00d31c5c8) — publishes the close
+     *  with a NULL kw: no name at all. ycommand still ends, but a named match
+     *  never fires here, so `exit` used to leave the tab hanging open.
+     *
+     *  So: when the close CARRIES a name, require an exact match; when it
+     *  carries NONE, accept it for this tab (which has an open console) so
+     *  `exit` closes it like ycommand. A nameless close can't be scoped to a
+     *  node, so if several OLD-agent terminals are open at once they close
+     *  together — new agents send a name and are unaffected; the real fix is
+     *  upgrading the agent.
+     */
+    if(name && name !== mine) {
         return 0;
     }
     gobj_write_str_attr(gobj, "console_name", "");
