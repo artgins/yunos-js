@@ -22,25 +22,33 @@
 }
 
 /* ====================================================================
- *  Per-node connection status on the workspace tabs.
- *  Each node tab carries a "yi-hexagon-nodes" glyph whose colour reflects
- *  the node's liveness — this replaces the single global toolbar dot,
- *  which had no meaning once the console went multi-node.
+ *  Per-node connection status on the workspace tabs — a small circle
+ *  (the same look as the old global toolbar dot, but one per node tab),
+ *  keyed off the tab's connected/disconnected class. This replaces the
+ *  single global dot, which had no meaning once the console went
+ *  multi-node. The `.icon` span is Bulma's; the <i> inside it is drawn as
+ *  the circle (not a yi-* icon-font glyph). Colours are fixed (readable in
+ *  light and dark), matching the original dot.
  *
- *  Connected: green the GLYPH ONLY (the label stays neutral, so a wall of
- *  connected tabs isn't loud). Disconnected: redden the whole tab (label +
- *  glyph, via the icon's currentColor mask) so a dropped node stands out.
- *
- *  The selector deliberately omits the `.tabs` hop: the nav container is a
- *  single element carrying BOTH `yui-nav-tabs` and `tabs`, so a
- *  `.yui-nav-tabs .tabs` descendant match never resolves — the <li> is
- *  matched directly under `.yui-nav-tabs`.
+ *  The selector omits the `.tabs` hop: the nav container is a single
+ *  element carrying BOTH `yui-nav-tabs` and `tabs`, so a `.yui-nav-tabs
+ *  .tabs` descendant match never resolves — the <li> is matched directly.
  * ==================================================================== */
-.yui-nav-tabs li.yui-nav-connected a .icon {
-    color: var(--bulma-success, #48c78e);
+.yui-nav-tabs li a i.agent-conn-dot {
+    display: inline-block;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 9999px;
+    background-color: #9aa5b1;   /* neutral until liveness is known */
+    box-shadow: 0 0 0 2px rgba(154, 165, 177, 0.25);
 }
-.yui-nav-tabs li.yui-nav-disconnected a {
-    color: var(--bulma-danger, #f14668);
+.yui-nav-tabs li.yui-nav-connected a i.agent-conn-dot {
+    background-color: #1FAE6F;
+    box-shadow: 0 0 0 2px rgba(31, 174, 111, 0.30);
+}
+.yui-nav-tabs li.yui-nav-disconnected a i.agent-conn-dot {
+    background-color: #D64545;
+    box-shadow: 0 0 0 2px rgba(214, 69, 69, 0.30);
 }
 
 /* ====================================================================

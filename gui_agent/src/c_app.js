@@ -431,12 +431,14 @@ function rebuild_workspace_tabs(gobj, ws)
         items.push({
             id:       "node-" + n.id,
             name:     n.host || n.id,
-            /*  Per-tab connection status glyph: green when the node is in the
-             *  live list-agents set, red when it dropped. Replaces the single
-             *  global toolbar dot, which had no meaning once the console went
-             *  multi-node (app_config no longer declares a "connection" item).
-             *  The icon inherits the tab's text colour via the class below. */
-            icon:     "yi-hexagon-nodes",
+            /*  Per-tab connection status dot: a small circle (like the old
+             *  global toolbar dot, but one per node tab) — green when the node
+             *  is in the live list-agents set, red when it dropped. It is not
+             *  a yi-* icon-font glyph but a CSS circle drawn in app.css, keyed
+             *  off the connected/disconnected class below. Replaces the single
+             *  global dot, which had no meaning once the console went
+             *  multi-node (app_config no longer declares a "connection" item). */
+            icon:     "agent-conn-dot",
             route:    node_tab_route(ws, n.id),
             class:    connected ? "yui-nav-connected" : "yui-nav-disconnected",
             closable: true,
