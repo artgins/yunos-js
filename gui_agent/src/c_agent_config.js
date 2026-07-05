@@ -47,6 +47,7 @@ SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,                        null, 
 SDATA(data_type_t.DTP_STRING,   "active_node",  sdata_flag_t.SDF_PERSIST, "",      "Active node (hostname/UUID from list-agents)"),
 SDATA(data_type_t.DTP_STRING,   "display_mode", sdata_flag_t.SDF_PERSIST, "table", "Command answer display: table | form (raw JSON)"),
 SDATA(data_type_t.DTP_STRING,   "stats_layout", sdata_flag_t.SDF_PERSIST, "single", "Statistics cards layout: single (one tab, all cards) | tabs (a tab per yuno)"),
+SDATA(data_type_t.DTP_INTEGER,  "stats_refresh", sdata_flag_t.SDF_PERSIST, 2,       "Statistics auto-refresh interval in seconds (0 = off)"),
 SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "{}",  "Selected nodes per workspace: {workspace: [{id, host}, ...]}"),
 SDATA(data_type_t.DTP_JSON,     "active_tabs",  sdata_flag_t.SDF_PERSIST, "{}",    "Last-active node tab per workspace: {workspace: node_id}"),
 SDATA(data_type_t.DTP_JSON,     "cmd_history",  sdata_flag_t.SDF_PERSIST, "[]",    "Global console command history: [cmd,...] most-recent first (shared by all nodes)"),
@@ -171,6 +172,36 @@ function agent_config_set_stats_layout(gobj, layout)
     gobj_write_attr(gobj, "stats_layout", v);
     gobj_save_persistent_attrs(gobj, "stats_layout");
     gobj_publish_event(gobj, "EV_STATS_LAYOUT_CHANGED", {stats_layout: v});
+}
+
+/***************************************************************
+ *  Statistics auto-refresh interval, in SECONDS (0 = off). A
+ *  DELIBERATE, opt-in exception to Yuneta's no-polling rule — the live
+ *  stats cards re-request on this cadence (default 2 s). See
+ *  [[feedback_no_polling_use_events]] and [[feedback_stats_polling_exception]].
+ ***************************************************************/
+function agent_config_get_stats_refresh(gobj)
+{
+    let v = parseInt(gobj_read_attr(gobj, "stats_refresh"), 10);
+    if(isNaN(v) || v < 0) {
+        return 2;
+    }
+    return v;
+}
+
+/***************************************************************
+ *  Set the stats auto-refresh interval (seconds), persist, notify (open
+ *  stats views re-arm their timer).
+ ***************************************************************/
+function agent_config_set_stats_refresh(gobj, secs)
+{
+    let v = parseInt(secs, 10);
+    if(isNaN(v) || v < 0) {
+        v = 0;
+    }
+    gobj_write_attr(gobj, "stats_refresh", v);
+    gobj_save_persistent_attrs(gobj, "stats_refresh");
+    gobj_publish_event(gobj, "EV_STATS_REFRESH_CHANGED", {stats_refresh: v});
 }
 
 /***************************************************************
@@ -431,7 +462,8 @@ function create_gclass(gclass_name)
     const event_types = [
         ["EV_ACTIVE_NODE_CHANGED",    event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
         ["EV_SELECTED_NODES_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
-        ["EV_STATS_LAYOUT_CHANGED",   event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
+        ["EV_STATS_LAYOUT_CHANGED",   event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
+        ["EV_STATS_REFRESH_CHANGED",  event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
     ];
 
     __gclass__ = gclass_create(
@@ -471,6 +503,8 @@ export {
     agent_config_set_display_mode,
     agent_config_get_stats_layout,
     agent_config_set_stats_layout,
+    agent_config_get_stats_refresh,
+    agent_config_set_stats_refresh,
     agent_config_get_selected_nodes,
     agent_config_set_selected_nodes,
     agent_config_is_node_selected,

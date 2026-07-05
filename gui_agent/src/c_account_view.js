@@ -55,6 +55,8 @@ import {
     agent_config_set_display_mode,
     agent_config_get_stats_layout,
     agent_config_set_stats_layout,
+    agent_config_get_stats_refresh,
+    agent_config_set_stats_refresh,
     agent_config_get_shortkeys,
     agent_config_set_shortkey,
     agent_config_remove_shortkey,
@@ -286,6 +288,23 @@ function build_preference(gobj)
         }
     );
 
+    /*  Statistics auto-refresh interval (seconds; 0 = off). A deliberate
+     *  opt-in polling exception, applied live by the open stats views.  */
+    let stats_refresh = config ? agent_config_get_stats_refresh(config) : 2;
+    let $refresh_sel = createElement2(
+        ["select", {"aria-label": t("stats refresh")},
+            [0, 1, 2, 5, 10, 30].map((s) => ["option", {value: String(s)}, (s === 0 ? t("off") : `${s} s`)]),
+            {change: (e) => {
+                if(config) {
+                    agent_config_set_stats_refresh(config, parseInt(e.target.value, 10));
+                }
+                render(gobj);
+            }}
+        ]
+    );
+    $refresh_sel.value = String(stats_refresh);
+    let stats_refresh_ctrl = ["div", {class: "select"}, [$refresh_sel]];
+
     /*  Terminal font size — the shared DEFAULT for every Terminal tab
      *  (same persisted value the tab's A− / A+ buttons drive). A stepper so
      *  Settings matches the toolbar; open tabs pick a change up on their next
@@ -333,6 +352,7 @@ function build_preference(gobj)
                         field("language", "Language", lang_seg),
                         field("display mode", "Command answers", display_seg),
                         field("statistics layout", "Statistics cards", stats_layout_seg),
+                        field("stats refresh", "Auto-refresh stats", stats_refresh_ctrl),
                         field("terminal font size", "Terminal font size", font_seg)
                     ]
                 ],

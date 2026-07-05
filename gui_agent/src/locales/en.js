@@ -88,6 +88,8 @@ const en = {
         "statistics layout": "Statistics cards",
         "stats one tab":     "One tab",
         "stats tab per yuno": "Tab per yuno",
+        "stats refresh":     "Auto-refresh stats",
+        "off":               "Off",
         "raw json":          "Raw JSON",
         "no consoles":       "No consoles open",
         "pick nodes hint":   "Select one or more nodes in Nodes to open a console tab for each.",

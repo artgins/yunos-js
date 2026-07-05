@@ -38,6 +38,7 @@ import i18next, {t} from "i18next";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
     agent_config_get_selected_nodes,
+    agent_config_get_stats_refresh,
     stats_sel_id,
     stats_sel_parse,
 } from "./c_agent_config.js";
@@ -86,7 +87,8 @@ let __gclass__ = null;
 function mt_create(gobj)
 {
     let priv = gobj.priv;
-    priv.cards = {};   /*  composite key -> {$body}  */
+    priv.cards = {};       /*  composite key -> {$body}  */
+    priv.visible = true;   /*  poll only while the tab is shown  */
 
     /*
      *  CHILD subscription model
@@ -110,6 +112,7 @@ function mt_create(gobj)
     gobj_write_attr(gobj, "config_svc", config);
     if(config) {
         gobj_subscribe_event(config, "EV_SELECTED_NODES_CHANGED", {}, gobj);
+        gobj_subscribe_event(config, "EV_STATS_REFRESH_CHANGED", {}, gobj);
     }
 
     let $c = createElement2(
@@ -128,6 +131,8 @@ function mt_start(gobj)
     build_dom(gobj);
     render_state(gobj);
     render_cards(gobj);
+    watch_visibility(gobj);
+    arm_poll(gobj);
 
     priv.on_lang = () => {
         let $c = gobj_read_attr(gobj, "$container");
@@ -143,6 +148,11 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     let priv = gobj.priv;
+    disarm_poll(gobj);
+    if(priv.vis_obs) {
+        priv.vis_obs.disconnect();
+        priv.vis_obs = null;
+    }
     if(priv.on_lang) {
         i18next.off("languageChanged", priv.on_lang);
         priv.on_lang = null;
@@ -394,6 +404,75 @@ function request_stats_for(gobj, node, yuno_id)
     agent_link_command(link, "command-agent", kw_send);
 }
 
+/***************************************************************
+ *  Auto-refresh. A DELIBERATE, opt-in exception to Yuneta's no-polling
+ *  rule (default 2 s, configurable / disable-able in Settings): while the
+ *  link is up, re-request every visible card's stats on a fixed cadence.
+ *  It only re-fetches the CURRENT targets — the card DOM is not rebuilt,
+ *  each answer just refills its own body — so no flicker/scroll reset.
+ ***************************************************************/
+function poll_tick(gobj)
+{
+    let link = gobj_read_attr(gobj, "link_svc");
+    if(!link || !agent_link_is_connected(link)) {
+        return;
+    }
+    for(let tgt of compute_targets(gobj)) {
+        request_stats_for(gobj, tgt.node, tgt.yuno_id);
+    }
+}
+
+function disarm_poll(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.poll_timer) {
+        clearInterval(priv.poll_timer);
+        priv.poll_timer = null;
+    }
+}
+
+function arm_poll(gobj)
+{
+    disarm_poll(gobj);
+    let priv = gobj.priv;
+    let config = gobj_read_attr(gobj, "config_svc");
+    let secs = config ? agent_config_get_stats_refresh(config) : 0;
+    let link = gobj_read_attr(gobj, "link_svc");
+    if(secs > 0 && priv.visible && link && agent_link_is_connected(link)) {
+        priv.poll_timer = setInterval(() => poll_tick(gobj), secs * 1000);
+    }
+}
+
+/***************************************************************
+ *  Poll only while this tab is the visible stage view — the shell
+ *  reveals/hides a keep_alive view by toggling `is-hidden` on its
+ *  $container (no hook), so watch that flip: on show, re-arm + refresh
+ *  now; on hide, disarm so we don't hammer the control center for a tab
+ *  nobody is looking at.
+ ***************************************************************/
+function watch_visibility(gobj)
+{
+    let priv = gobj.priv;
+    let $c = gobj_read_attr(gobj, "$container");
+    if(!$c || typeof MutationObserver === "undefined") {
+        return;
+    }
+    priv.vis_obs = new MutationObserver(function() {
+        let vis = !$c.classList.contains("is-hidden");
+        if(vis === priv.visible) {
+            return;
+        }
+        priv.visible = vis;
+        if(vis) {
+            arm_poll(gobj);
+            poll_tick(gobj);   /*  fresh numbers the moment you return  */
+        } else {
+            disarm_poll(gobj);
+        }
+    });
+    priv.vis_obs.observe($c, {attributes: true, attributeFilter: ["class"]});
+}
+
 
 
 
@@ -408,12 +487,23 @@ function ac_on_open(gobj, event, kw, src)
 {
     render_state(gobj);
     render_cards(gobj);
+    arm_poll(gobj);
     return 0;
 }
 
 function ac_on_close(gobj, event, kw, src)
 {
+    disarm_poll(gobj);   /*  no point polling a dropped link  */
     render_state(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Auto-refresh interval changed in Settings — re-arm the timer.
+ ***************************************************************/
+function ac_stats_refresh_changed(gobj, event, kw, src)
+{
+    arm_poll(gobj);
     return 0;
 }
 
@@ -497,7 +587,8 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",          ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
             ["EV_MT_STATS_ANSWER",   ac_mt_stats_answer,   null],
-            ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null]
+            ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null],
+            ["EV_STATS_REFRESH_CHANGED",  ac_stats_refresh_changed,  null]
         ]]
     ];
 
@@ -509,7 +600,8 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",          0],
         ["EV_MT_COMMAND_ANSWER", 0],
         ["EV_MT_STATS_ANSWER",   0],
-        ["EV_SELECTED_NODES_CHANGED", 0]
+        ["EV_SELECTED_NODES_CHANGED", 0],
+        ["EV_STATS_REFRESH_CHANGED",  0]
     ];
 
     __gclass__ = gclass_create(

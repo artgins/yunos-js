@@ -88,6 +88,8 @@ const es = {
         "statistics layout": "Tarjetas de estadísticas",
         "stats one tab":     "Una pestaña",
         "stats tab per yuno": "Pestaña por yuno",
+        "stats refresh":     "Auto-refresco de stats",
+        "off":               "No",
         "raw json":          "JSON crudo",
         "no consoles":       "No hay consolas abiertas",
         "pick nodes hint":   "Selecciona uno o más nodos en Nodos para abrir una pestaña de consola por cada uno.",
