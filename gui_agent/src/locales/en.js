@@ -53,6 +53,8 @@ const en = {
         "statistics":        "Statistics",
         "terminal":          "Terminal",
         "reconnect":         "Reconnect",
+        "font smaller":      "Smaller font",
+        "font larger":       "Larger font",
         "closed":            "Closed",
         "failed":            "Failed",
         "open console failed": "Could not open the console",

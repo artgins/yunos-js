@@ -53,6 +53,8 @@ const es = {
         "statistics":        "Estadísticas",
         "terminal":          "Terminal",
         "reconnect":         "Reconectar",
+        "font smaller":      "Fuente más pequeña",
+        "font larger":       "Fuente más grande",
         "closed":            "Cerrado",
         "failed":            "Fallo",
         "open console failed": "No se pudo abrir la consola",

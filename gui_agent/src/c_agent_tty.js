@@ -44,6 +44,8 @@ import {
     refresh_language,
     msg_iev_write_key,
     msg_iev_read_key,
+    kw_get_local_storage_value,
+    kw_set_local_storage_value,
 } from "@yuneta/gobj-js";
 
 import {t} from "i18next";
@@ -67,6 +69,12 @@ const GCLASS_NAME = "C_AGENT_TTY";
  *  terminal (v1). */
 const TERM_THEME_DARK  = {background: "#1e1e1e", foreground: "#d4d4d4", cursor: "#d4d4d4"};
 const TERM_THEME_LIGHT = {background: "#ffffff", foreground: "#1e1e1e", cursor: "#1e1e1e"};
+
+/*  xterm font size, adjustable from the toolbar (A− / A+). Persisted in the
+ *  browser and shared by every Terminal tab; clamped to a sane range.  */
+const FONT_SIZE_DEFAULT = 13;
+const FONT_SIZE_MIN     = 8;
+const FONT_SIZE_MAX     = 28;
 
 
 /***************************************************************
@@ -251,15 +259,38 @@ function build_dom(gobj)
 
     priv.$status = createElement2(["span", {class: "is-size-7 has-text-grey"}, ""]);
 
+    /*  Font size A− / A+ (icon-only; a title carries the meaning on mobile).  */
+    priv.$font_dec = createElement2(
+        ["button", {class: "button is-small", type: "button", style: "margin-left:auto;",
+                    title: t("font smaller"), "aria-label": t("font smaller")},
+            ["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-minus"}]]],
+            {click: () => change_font_size(gobj, -1)}]
+    );
+    priv.$font_inc = createElement2(
+        ["button", {class: "button is-small", type: "button",
+                    title: t("font larger"), "aria-label": t("font larger")},
+            ["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-plus"}]]],
+            {click: () => change_font_size(gobj, +1)}]
+    );
+
+    /*  Reconnect: icon + label; the label is hidden on mobile so the button
+     *  stays legible (icon-only) on a narrow toolbar.  */
     priv.$reconnect = createElement2(
-        ["button", {class: "button is-small", type: "button", style: "margin-left:auto;", i18n: "reconnect"},
-            "Reconnect", {click: () => open_console(gobj)}]
+        ["button", {class: "button is-small", type: "button",
+                    title: t("reconnect"), "aria-label": t("reconnect")},
+            [
+                ["span", {class: "icon is-small"}, [["i", {class: "yi-arrows-rotate"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "reconnect"}, "Reconnect"]
+            ],
+            {click: () => open_console(gobj)}]
     );
 
     priv.$toolbar = createElement2(
         ["div", {class: "is-flex is-align-items-center mb-2", style: "gap:0.5rem;"}, [
             ["span", {class: "is-family-monospace is-size-7 has-text-weight-semibold"}, node || t("select a node")],
             priv.$status,
+            priv.$font_dec,
+            priv.$font_inc,
             priv.$reconnect
         ]]
     );
@@ -288,7 +319,7 @@ function create_terminal(gobj)
         cursorBlink:  true,
         convertEol:   false,
         fontFamily:   "monospace",
-        fontSize:     13,
+        fontSize:     get_font_size(),
         scrollback:   5000,
         theme:        theme
     });
@@ -304,6 +335,54 @@ function create_terminal(gobj)
     term.onData((d) => send_keys(gobj, d));
     priv.term = term;
     priv.fit = fit;
+}
+
+/***************************************************************
+ *  Persisted xterm font size (shared by every Terminal tab), clamped
+ *  to [FONT_SIZE_MIN, FONT_SIZE_MAX]; falls back to the default when
+ *  unset or out of range.
+ ***************************************************************/
+function get_font_size()
+{
+    let v = parseInt(kw_get_local_storage_value("tty_font_size", FONT_SIZE_DEFAULT, true), 10);
+    if(!(v >= FONT_SIZE_MIN && v <= FONT_SIZE_MAX)) {
+        return FONT_SIZE_DEFAULT;
+    }
+    return v;
+}
+
+/***************************************************************
+ *  A− / A+ toolbar buttons: change the font size by delta, persist it,
+ *  then re-render + refit THIS tab's xterm. A no-op at the clamp limits.
+ *  The node PTY geometry is fixed at open, so the display just reflows
+ *  locally — a Reconnect re-syncs cols/rows if the change is large.
+ ***************************************************************/
+function change_font_size(gobj, delta)
+{
+    let cur = get_font_size();
+    let next = cur + delta;
+    if(next < FONT_SIZE_MIN) {
+        next = FONT_SIZE_MIN;
+    }
+    if(next > FONT_SIZE_MAX) {
+        next = FONT_SIZE_MAX;
+    }
+    if(next === cur) {
+        return;
+    }
+    kw_set_local_storage_value("tty_font_size", next);
+
+    let priv = gobj.priv;
+    if(priv.term) {
+        priv.term.options.fontSize = next;
+        if(priv.fit) {
+            try {
+                priv.fit.fit();
+            } catch(e) {
+                /*  container not sized yet — keep geometry  */
+            }
+        }
+    }
 }
 
 /***************************************************************

@@ -98,6 +98,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   dot, one per tab) — green when the node is in the live `list-agents` set, red
   when it dropped — across all three per-node workspaces. The console panel
   keeps its own per-panel status line.
+- **Terminal — font size + mobile-legible toolbar.** Two toolbar buttons
+  (A− / A+, `yi-magnifying-glass-minus`/`-plus`) change the xterm font size,
+  persisted in the browser and shared by every Terminal tab (clamped 8–28).
+  Reconnect now carries an icon (`yi-arrows-rotate`) with its label hidden on
+  mobile so the toolbar stays legible when narrow — the new house rule: row
+  buttons carry an icon and go icon-only on mobile.
 - **Fixes (review pass).**
   - **Commands — visible "running…" feedback.** Sending a command now paints
     a `running…` placeholder in the response pane until the answer arrives,
