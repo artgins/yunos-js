@@ -70,9 +70,11 @@ const GCLASS_NAME = "C_AGENT_TTY";
 const TERM_THEME_DARK  = {background: "#1e1e1e", foreground: "#d4d4d4", cursor: "#d4d4d4"};
 const TERM_THEME_LIGHT = {background: "#ffffff", foreground: "#1e1e1e", cursor: "#1e1e1e"};
 
-/*  xterm font size, adjustable from the toolbar (A− / A+). Persisted in the
- *  browser and shared by every Terminal tab; clamped to a sane range.  */
-const FONT_SIZE_DEFAULT = 13;
+/*  xterm font size. The DEFAULT is a browser-persisted preference set in
+ *  Settings → Preferences and used by every Terminal tab when it (re)opens.
+ *  The toolbar A− / A+ buttons only nudge THIS tab's live size (priv.font_size)
+ *  and are NOT persisted, so reopening the tab falls back to the default.  */
+const FONT_SIZE_DEFAULT = 19;
 const FONT_SIZE_MIN     = 8;
 const FONT_SIZE_MAX     = 28;
 
@@ -315,11 +317,15 @@ function create_terminal(gobj)
         return;
     }
     let theme = (current_theme() === "light") ? TERM_THEME_LIGHT : TERM_THEME_DARK;
+    /*  Seed this tab's live size from the persisted default (Settings). The
+     *  A− / A+ buttons mutate priv.font_size only; a fresh view (reopened tab)
+     *  starts from the default again. */
+    priv.font_size = get_font_size();
     let term = new Terminal({
         cursorBlink:  true,
         convertEol:   false,
         fontFamily:   "monospace",
-        fontSize:     get_font_size(),
+        fontSize:     priv.font_size,
         scrollback:   5000,
         theme:        theme
     });
@@ -338,9 +344,10 @@ function create_terminal(gobj)
 }
 
 /***************************************************************
- *  Persisted xterm font size (shared by every Terminal tab), clamped
- *  to [FONT_SIZE_MIN, FONT_SIZE_MAX]; falls back to the default when
- *  unset or out of range.
+ *  The DEFAULT xterm font size — a browser-persisted preference (set in
+ *  Settings). Clamped to [FONT_SIZE_MIN, FONT_SIZE_MAX]; falls back to
+ *  FONT_SIZE_DEFAULT when unset or out of range. Every Terminal tab seeds
+ *  its live size from this on (re)open.
  ***************************************************************/
 function get_font_size()
 {
@@ -352,9 +359,10 @@ function get_font_size()
 }
 
 /***************************************************************
- *  Persist an absolute font size (clamped), the shared default for every
- *  Terminal tab. Also driven from Settings → Preferences. Returns the
- *  value actually stored; a NaN/out-of-range input is clamped/ignored.
+ *  Persist the DEFAULT font size (clamped). Driven from Settings →
+ *  Preferences ONLY — the per-tab A− / A+ buttons do not call this, so a
+ *  toolbar nudge never changes the default. Returns the stored value; a
+ *  NaN/out-of-range input is clamped/ignored.
  ***************************************************************/
 function set_font_size(size)
 {
@@ -373,19 +381,27 @@ function set_font_size(size)
 }
 
 /***************************************************************
- *  A− / A+ toolbar buttons: change the font size by delta, persist it,
- *  then re-render + refit THIS tab's xterm. A no-op at the clamp limits.
- *  The node PTY geometry is fixed at open, so the display just reflows
- *  locally — a Reconnect re-syncs cols/rows if the change is large.
+ *  A− / A+ toolbar buttons: nudge ONLY this tab's live font size
+ *  (priv.font_size) and re-render + refit its xterm — a TEMPORARY,
+ *  per-terminal change, never persisted, so reopening the tab returns to
+ *  the default. A no-op at the clamp limits. The node PTY geometry is fixed
+ *  at open, so the display just reflows locally.
  ***************************************************************/
 function change_font_size(gobj, delta)
 {
-    let cur = get_font_size();
-    let next = set_font_size(cur + delta);
+    let priv = gobj.priv;
+    let cur = priv.font_size || get_font_size();
+    let next = cur + delta;
+    if(next < FONT_SIZE_MIN) {
+        next = FONT_SIZE_MIN;
+    }
+    if(next > FONT_SIZE_MAX) {
+        next = FONT_SIZE_MAX;
+    }
     if(next === cur) {
         return;
     }
-    let priv = gobj.priv;
+    priv.font_size = next;
     if(priv.term) {
         priv.term.options.fontSize = next;
         if(priv.fit) {
