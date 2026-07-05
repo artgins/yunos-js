@@ -7,9 +7,12 @@ built on the **v2 declarative shell** of `@yuneta/gobj-ui`
 It is the modern successor of the old webix "Yuneta CLI"
 (`yuno_gui/v2/.../ui_yuneta_cli.js`). **Four workspaces** in the primary rail:
 **Commands** (control-plane CLI to a node's yunos), **Statistics** (live
-`SDF_RSTATS` counters), **Terminal** (an interactive xterm.js PTY console), and
-**Settings**. The three per-node workspaces share one pattern — a fixed
-node-picker tab plus one closable tab per selected node. Commands/Statistics
+`SDF_RSTATS` counters as cards), **Terminal** (an interactive xterm.js PTY
+console), and **Settings**. **Commands** and **Terminal** share one pattern — a
+flat node-picker tab (`C_NODES`) plus one closable tab per selected node.
+**Statistics** differs: its picker is a **nodes→yunos tree** (`C_STATS_NODES`)
+where you select *yunos*, and their counters render as **cards** (one tab for
+all cards by default, or a tab per yuno — a Settings toggle). Commands/Statistics
 list only agents **≥ 7.7.0**; Terminal works on any version. TreeDB browsing
 lives in the separate **`gui_treedb`** SPA, not here.
 
@@ -90,15 +93,22 @@ npm run build      # production bundle into dist/
 ## Status
 
 **Live**, restructured into **four primary workspaces** — **Commands**
-(`C_AGENT_CONSOLE`), **Statistics** (`C_AGENT_STATS`), **Terminal**
-(`C_AGENT_TTY`, xterm.js over the agent PTY), **Settings**. The three per-node
-workspaces share one pattern: a fixed node-picker tab (`C_NODES`) plus one
-closable tab per selected node. Commands/Statistics require agent **≥ 7.7.0**;
-Terminal works on any version (needs the `open-console` authz — an admin role).
-TreeDB is **not** part of this app — it is the separate `gui_treedb` SPA.
-Time-series charts (`C_YUI_UPLOT`) over the live counters are a possible
-follow-up. The phased build history below is kept for context; see **Changes**
-for the per-cycle detail.
+(`C_AGENT_CONSOLE`), **Statistics** (`C_STATS_NODES` tree picker +
+`C_AGENT_STATS` cards), **Terminal** (`C_AGENT_TTY`, xterm.js over the agent
+PTY), **Settings**. **Commands** and **Terminal** share the flat pattern: a
+node-picker tab (`C_NODES`) plus one closable tab per selected node.
+**Statistics** picks **yunos** from a nodes→yunos tree and shows their
+`SDF_RSTATS` counters as **cards** — a single tab holding all cards (default)
+or a tab per yuno (Settings toggle "Statistics cards"). The cards **auto-refresh**
+(default 2 s, Settings; a deliberate opt-in exception to Yuneta's no-polling
+rule, visible-tab only) and **highlight** any counter that changed since the last
+refresh. Commands/Statistics require agent **≥ 7.7.0**; Terminal works on any
+version (needs the `open-console` authz — an admin role). Selecting a tab focuses
+its input (Commands) / xterm (Terminal); node tabs carry a green/red connection
+dot; the last-active tab is remembered per workspace. TreeDB is **not** part of
+this app — it is the separate `gui_treedb` SPA. Time-series charts
+(`C_YUI_UPLOT`) over the live counters are a possible follow-up. See the
+`CHANGELOG.md` (repo root) for the per-cycle detail.
 
 ## Changes
 
@@ -108,16 +118,21 @@ This yuno is JavaScript and deploys independently of the SDK (see
 
 ### 7.6.8 cycle
 
-- **Live Stats (`C_AGENT_STATS`).** A new primary panel (`/stats/live`): pick a
-  node (all connected agents) and one of its running yunos, and see that yuno's
-  `SDF_RSTATS` counters as a searchable/sortable table. All three steps ride the
-  shared `agent_link` over `command-agent` — `list-agents` (nodes),
-  `list-yunos` (yunos), `stats-yuno id=<yuno>` (counters, a flat `{stat: value}`
-  object). The view's own fetches are tagged `console_purpose="stats"` (echoed
-  back in `__md_iev__`, [[md_iev round-trip]]) so the Console ignores them and
-  vice-versa. No polling — the table refreshes on selection change and the
-  Refresh button. Number formatting stays Intl-free (the `navigator.language`
-  crash landmine), so `C_YUI_UPLOT` charts are deferred.
+- **Statistics (tree picker + cards).** The Statistics workspace picker is a
+  **nodes→yunos tree** (`C_STATS_NODES`): each node (`list-agents`, ≥ 7.7.0)
+  expands to its running yunos (`list-yunos` per node), and a checkbox on a yuno
+  row selects it. Selected yunos' `SDF_RSTATS` counters render as **cards**
+  (`C_AGENT_STATS`, `stats-yuno id=<yuno>`) — a single tab holding a card per
+  selected yuno (default), or a tab per yuno (Settings toggle). Fetches are
+  tagged `console_purpose` + `console_node` + `console_yuno` (echoed in
+  `__md_iev__`, [[md_iev round-trip]]) so each answer updates exactly its own
+  card and other panels ignore it. Integer counters get fixed "." grouping
+  (Intl-free — the `navigator.language` crash landmine). The cards **auto-refresh**
+  on a timer (default 2 s, Settings "Auto-refresh stats", 0 = off; a deliberate
+  opt-in exception to the no-polling rule — polls only the visible tab's current
+  cards while the link is up) and a counter that **changed** since the last
+  refresh is accented for that cycle. `C_YUI_UPLOT` time-series charts remain a
+  possible follow-up.
 - **TreeDB removed.** TreeDB browsing now lives in the dedicated `gui_treedb`
   SPA; the placeholder menu and the blocked `C_TREEDB_GATE`/`C_TREEDB_PANEL`
   adapters (plus the `C_YUI_TREEDB_*` registrations) were dropped from this app.
