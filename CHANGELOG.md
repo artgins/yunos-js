@@ -119,6 +119,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 - **Nodes table sorted by version by default.** The node picker now opens
   sorted by agent version descending (highest on top), with a numeric dotted
   sorter so `7.10.0` ranks above `7.9.0` (not a plain string sort).
+- **Dark-theme tree toggle.** Tabulator hardcodes the tree expand/collapse
+  control (the `+`/`-` box) to a `#333` border and `#333` strokes on a
+  near-black wash — invisible on a dark background. A `[data-theme=dark]`
+  override in `app.css` repaints the border, hover wash and `+`/`-` strokes to
+  full contrast so the Stats/Nodes tree toggle reads clearly.
 - **Per-node connection status on the tabs.** The single global toolbar
   connection dot made no sense once the console went multi-node, so it is
   removed (`app_config` no longer declares a `connection` item). Instead each
