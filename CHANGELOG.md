@@ -99,15 +99,6 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   when it dropped — across all three per-node workspaces. The console panel
   keeps its own per-panel status line.
 - **Fixes (review pass).**
-  - **Terminal — `exit` closes the tab against OLD agents too.** An agent
-    predating the `c_pty` `EV_TTY_CLOSE` stray-brace fix (commit `00d31c5c8`)
-    publishes the close with a NULL kw — no console `name` — so the tab could
-    not match it and hung open after `exit` (ycommand still ended). Now the
-    close is matched by name when it carries one (multi-tab discrimination for
-    new agents) and, when it carries none, accepted for a tab that has an open
-    console so `exit` closes it. A nameless close can't be scoped to a node, so
-    several simultaneous old-agent terminals would close together; new agents
-    are unaffected.
   - **Commands — visible "running…" feedback.** Sending a command now paints
     a `running…` placeholder in the response pane until the answer arrives,
     instead of blanking it with no indication (the old `…` was written to the
