@@ -84,6 +84,7 @@ const en = {
         "graph":             "Graph",
         "table":             "Table",
         "display mode":      "Command answers",
+        "terminal font size": "Terminal font size",
         "raw json":          "Raw JSON",
         "no consoles":       "No consoles open",
         "pick nodes hint":   "Select one or more nodes in Nodes to open a console tab for each.",

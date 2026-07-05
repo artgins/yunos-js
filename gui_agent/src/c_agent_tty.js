@@ -352,6 +352,27 @@ function get_font_size()
 }
 
 /***************************************************************
+ *  Persist an absolute font size (clamped), the shared default for every
+ *  Terminal tab. Also driven from Settings → Preferences. Returns the
+ *  value actually stored; a NaN/out-of-range input is clamped/ignored.
+ ***************************************************************/
+function set_font_size(size)
+{
+    let n = parseInt(size, 10);
+    if(isNaN(n)) {
+        return get_font_size();
+    }
+    if(n < FONT_SIZE_MIN) {
+        n = FONT_SIZE_MIN;
+    }
+    if(n > FONT_SIZE_MAX) {
+        n = FONT_SIZE_MAX;
+    }
+    kw_set_local_storage_value("tty_font_size", n);
+    return n;
+}
+
+/***************************************************************
  *  A− / A+ toolbar buttons: change the font size by delta, persist it,
  *  then re-render + refit THIS tab's xterm. A no-op at the clamp limits.
  *  The node PTY geometry is fixed at open, so the display just reflows
@@ -360,18 +381,10 @@ function get_font_size()
 function change_font_size(gobj, delta)
 {
     let cur = get_font_size();
-    let next = cur + delta;
-    if(next < FONT_SIZE_MIN) {
-        next = FONT_SIZE_MIN;
-    }
-    if(next > FONT_SIZE_MAX) {
-        next = FONT_SIZE_MAX;
-    }
+    let next = set_font_size(cur + delta);
     if(next === cur) {
         return;
     }
-    kw_set_local_storage_value("tty_font_size", next);
-
     let priv = gobj.priv;
     if(priv.term) {
         priv.term.options.fontSize = next;
@@ -720,4 +733,11 @@ function register_c_agent_tty()
     return create_gclass(GCLASS_NAME);
 }
 
-export {register_c_agent_tty};
+export {
+    register_c_agent_tty,
+    get_font_size,
+    set_font_size,
+    FONT_SIZE_MIN,
+    FONT_SIZE_MAX,
+    FONT_SIZE_DEFAULT,
+};

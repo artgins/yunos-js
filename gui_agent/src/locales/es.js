@@ -84,6 +84,7 @@ const es = {
         "graph":             "Grafo",
         "table":             "Tabla",
         "display mode":      "Respuestas de comandos",
+        "terminal font size": "Tamaño de fuente del terminal",
         "raw json":          "JSON crudo",
         "no consoles":       "No hay consolas abiertas",
         "pick nodes hint":   "Selecciona uno o más nodos en Nodos para abrir una pestaña de consola por cada uno.",

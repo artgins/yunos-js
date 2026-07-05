@@ -44,6 +44,12 @@ import {app_set_theme} from "./c_app.js";
 import {agent_login_username, agent_login_is_logged_in} from "./c_agent_login.js";
 import {agent_link_is_connected} from "./c_agent_link.js";
 import {
+    get_font_size as tty_get_font_size,
+    set_font_size as tty_set_font_size,
+    FONT_SIZE_MIN,
+    FONT_SIZE_MAX,
+} from "./c_agent_tty.js";
+import {
     agent_config_get_active_node,
     agent_config_get_display_mode,
     agent_config_set_display_mode,
@@ -261,6 +267,33 @@ function build_preference(gobj)
         }
     );
 
+    /*  Terminal font size — the shared DEFAULT for every Terminal tab
+     *  (same persisted value the tab's A− / A+ buttons drive). A stepper so
+     *  Settings matches the toolbar; open tabs pick a change up on their next
+     *  (re)open.  */
+    let font_size = tty_get_font_size();
+    function font_button(icon, title_key, at_limit, on_click)
+    {
+        let attrs = {type: "button", class: "button",
+                     title: t(title_key), "aria-label": t(title_key)};
+        if(at_limit) {
+            attrs.disabled = "disabled";
+        }
+        return ["button", attrs,
+            [["span", {class: "icon"}, [["span", {class: icon}, ""]]]],
+            {click: on_click}];
+    }
+    let font_seg = ["div", {class: "buttons has-addons"},
+        [
+            font_button("yi-magnifying-glass-minus", "font smaller", font_size <= FONT_SIZE_MIN,
+                function() { tty_set_font_size(font_size - 1); render(gobj); }),
+            ["button", {type: "button", class: "button is-static", style: "min-width:4.5rem;"},
+                `${font_size} px`],
+            font_button("yi-magnifying-glass-plus", "font larger", font_size >= FONT_SIZE_MAX,
+                function() { tty_set_font_size(font_size + 1); render(gobj); })
+        ]
+    ];
+
     function field(label_key, label_text, control)
     {
         return ["div", {class: "field", style: "margin-bottom:1.25rem;"},
@@ -279,7 +312,8 @@ function build_preference(gobj)
                     [
                         field("theme", "Theme", theme_seg),
                         field("language", "Language", lang_seg),
-                        field("display mode", "Command answers", display_seg)
+                        field("display mode", "Command answers", display_seg),
+                        field("terminal font size", "Terminal font size", font_seg)
                     ]
                 ],
                 build_shortkeys(gobj)

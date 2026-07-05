@@ -101,9 +101,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 - **Terminal — font size + mobile-legible toolbar.** Two toolbar buttons
   (A− / A+, `yi-magnifying-glass-minus`/`-plus`) change the xterm font size,
   persisted in the browser and shared by every Terminal tab (clamped 8–28).
-  Reconnect now carries an icon (`yi-arrows-rotate`) with its label hidden on
-  mobile so the toolbar stays legible when narrow — the new house rule: row
-  buttons carry an icon and go icon-only on mobile.
+  The same value is exposed in **Settings → Preferences** ("Terminal font
+  size", a −/+ stepper) as the shared default; open tabs pick a change up on
+  their next (re)open. Reconnect now carries an icon (`yi-arrows-rotate`) with
+  its label hidden on mobile so the toolbar stays legible when narrow — the new
+  house rule: row buttons carry an icon and go icon-only on mobile.
 - **Fixes (review pass).**
   - **Commands — visible "running…" feedback.** Sending a command now paints
     a `running…` placeholder in the response pane until the answer arrives,
