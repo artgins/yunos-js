@@ -93,6 +93,25 @@
 }
 
 /* ====================================================================
+ *  Tree expand/collapse control (the +/- box) in dark theme.
+ *  Tabulator hardcodes the box border and the +/- strokes to #333 on
+ *  a near-black wash — a dark glyph in a dark box on a dark background,
+ *  effectively invisible. Repaint border, wash and strokes light.
+ * ==================================================================== */
+[data-theme=dark] .tabulator-data-tree-control {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.55);
+}
+[data-theme=dark] .tabulator-data-tree-control:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+[data-theme=dark] .tabulator-data-tree-control .tabulator-data-tree-control-expand,
+[data-theme=dark] .tabulator-data-tree-control .tabulator-data-tree-control-expand:after,
+[data-theme=dark] .tabulator-data-tree-control .tabulator-data-tree-control-collapse:after {
+    background: rgba(255, 255, 255, 0.85);
+}
+
+/* ====================================================================
  *  Console input row: full-width "?" (help) and history popovers.
  *  Bulma anchors a dropdown menu to its (narrow) button with a small
  *  min-width — cramped on mobile. Make the two console popovers span the
