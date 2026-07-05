@@ -152,7 +152,7 @@
                                 "route": "/statistics/nodes",
                                 "target": {
                                     "stage": "main",
-                                    "gclass": "C_NODES",
+                                    "gclass": "C_STATS_NODES",
                                     "kw": { "title": "nodes", "workspace": "statistics", "min_version": "7.7.0" },
                                     "lifecycle": "keep_alive"
                                 }

@@ -203,6 +203,30 @@ function agent_config_set_selected_nodes(gobj, workspace, list)
 }
 
 /***************************************************************
+ *  The Statistics workspace selects YUNOS, not nodes. A yuno is
+ *  identified by (node, yuno_id), stored through the SAME per-workspace
+ *  selection machinery as a composite id "node<US>yuno_id" (US = the
+ *  ASCII unit separator, absent from hostnames / uuids / yuno ids), so a
+ *  selected yuno gets a tab and survives a reload like any other.
+ ***************************************************************/
+const STATS_SEP = "\x1f";
+
+function stats_sel_id(node, yuno_id)
+{
+    return String(node || "") + STATS_SEP + String(yuno_id || "");
+}
+
+function stats_sel_parse(id)
+{
+    let s = String(id || "");
+    let i = s.indexOf(STATS_SEP);
+    if(i < 0) {
+        return {node: s, yuno_id: ""};
+    }
+    return {node: s.slice(0, i), yuno_id: s.slice(i + 1)};
+}
+
+/***************************************************************
  *  Is a node id selected in this workspace?
  ***************************************************************/
 function agent_config_is_node_selected(gobj, workspace, id)
@@ -428,6 +452,8 @@ export {
     agent_config_remove_selected_node,
     agent_config_get_active_tab,
     agent_config_set_active_tab,
+    stats_sel_id,
+    stats_sel_parse,
     agent_config_get_history,
     agent_config_set_history,
     agent_config_get_shortkeys,

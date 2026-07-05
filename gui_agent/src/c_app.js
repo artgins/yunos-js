@@ -50,6 +50,7 @@ import {
     agent_config_is_node_selected,
     agent_config_get_active_tab,
     agent_config_set_active_tab,
+    stats_sel_parse,
 } from "./c_agent_config.js";
 
 import {
@@ -324,7 +325,10 @@ function destroy_shell(gobj)
  ***************************************************************/
 const WORKSPACES = {
     commands:   {min_version: "7.7.0", tab_gclass: "C_AGENT_CONSOLE"},
-    statistics: {min_version: "7.7.0", tab_gclass: "C_AGENT_STATS"},
+    /*  Statistics selects YUNOS: its picker is the C_STATS_NODES tree and a
+     *  selected item id is the composite "node<US>yuno_id" (stats_sel_parse),
+     *  so a tab is opened per yuno rather than per node.  */
+    statistics: {min_version: "7.7.0", tab_gclass: "C_AGENT_STATS", unit: "yuno"},
     terminal:   {min_version: "",      tab_gclass: "C_AGENT_TTY"}
 };
 
@@ -394,10 +398,13 @@ function parse_live_hosts(data)
     return live;
 }
 
-/*  The fixed picker tab for a workspace (C_NODES, version-filtered). */
+/*  The fixed picker tab for a workspace: the flat C_NODES for node-unit
+ *  workspaces (Commands/Terminal), the C_STATS_NODES tree for the
+ *  yuno-unit Statistics workspace. Version-filtered. */
 function workspace_picker_item(ws)
 {
     let spec = WORKSPACES[ws];
+    let picker_gclass = (spec.unit === "yuno") ? "C_STATS_NODES" : "C_NODES";
     return {
         id:       "picker",
         name:     "nodes",
@@ -406,7 +413,7 @@ function workspace_picker_item(ws)
         closable: false,
         target: {
             stage:     "main",
-            gclass:    "C_NODES",
+            gclass:    picker_gclass,
             kw:        {workspace: ws, min_version: spec.min_version, title: "nodes"},
             lifecycle: "keep_alive"
         }
@@ -425,19 +432,23 @@ function rebuild_workspace_tabs(gobj, ws)
     let config = gobj_find_service("agent_config", false);
     let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
     let live = priv.live_hosts || {};
+    let is_yuno = spec.unit === "yuno";
     let items = [workspace_picker_item(ws)];
     for(let n of nodes) {
-        let connected = !!live[n.id];
+        /*  For the yuno-unit workspace, the selected id is the composite
+         *  "node<US>yuno_id"; the connection dot + tab kw need the node part.  */
+        let parsed = is_yuno ? stats_sel_parse(n.id) : {node: n.id, yuno_id: ""};
+        let connected = !!live[parsed.node];
+        let kw = is_yuno
+            ? {node: parsed.node, yuno_id: parsed.yuno_id, yuno_label: n.host || n.id}
+            : {node: n.id, title: n.host || n.id};
         items.push({
             id:       "node-" + n.id,
             name:     n.host || n.id,
             /*  Per-tab connection status dot: a small circle (like the old
-             *  global toolbar dot, but one per node tab) — green when the node
-             *  is in the live list-agents set, red when it dropped. It is not
-             *  a yi-* icon-font glyph but a CSS circle drawn in app.css, keyed
-             *  off the connected/disconnected class below. Replaces the single
-             *  global dot, which had no meaning once the console went
-             *  multi-node (app_config no longer declares a "connection" item). */
+             *  global toolbar dot, but one per tab) — green when the node is in
+             *  the live list-agents set, red when it dropped. A CSS circle
+             *  (app.css) keyed off the connected/disconnected class below.  */
             icon:     "agent-conn-dot",
             route:    node_tab_route(ws, n.id),
             class:    connected ? "yui-nav-connected" : "yui-nav-disconnected",
@@ -445,7 +456,7 @@ function rebuild_workspace_tabs(gobj, ws)
             target: {
                 stage:     "main",
                 gclass:    spec.tab_gclass,
-                kw:        {node: n.id, title: n.host || n.id},
+                kw:        kw,
                 lifecycle: "keep_alive"
             }
         });

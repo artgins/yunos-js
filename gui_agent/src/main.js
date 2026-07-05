@@ -52,6 +52,7 @@ import {register_c_agent_config} from "./c_agent_config.js";
 import {register_c_agent_login} from "./c_agent_login.js";
 import {register_c_agent_link} from "./c_agent_link.js";
 import {register_c_nodes} from "./c_nodes.js";
+import {register_c_stats_nodes} from "./c_stats_nodes.js";
 import {register_c_agent_console} from "./c_agent_console.js";
 import {register_c_agent_stats} from "./c_agent_stats.js";
 import {register_c_agent_tty} from "./c_agent_tty.js";
@@ -111,6 +112,7 @@ function main()
     register_c_agent_link();
     register_c_gui_agent_view();
     register_c_nodes();
+    register_c_stats_nodes();
     register_c_agent_console();
     register_c_agent_stats();
     register_c_agent_tty();

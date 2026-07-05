@@ -91,6 +91,17 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   (`submenu.default = /<ws>/node`) and `workspace_first_route` prefers the
   saved tab (falling back to the first open node, then the picker). The picker
   stays one click away as tab 0.
+- **Statistics refactor — tree picker + per-yuno cards.** The Statistics
+  workspace no longer picks a node and drills into a yuno via a dropdown.
+  Instead its picker is a **tree** (`C_STATS_NODES`): each node (agent ≥ 7.7.0,
+  `list-agents`) expands to its running **yunos** as sub-rows (`list-yunos` per
+  node), and a checkbox on a yuno row selects it. Each selected yuno opens its
+  own tab (`C_AGENT_STATS`, refactored) rendering that yuno's `SDF_RSTATS`
+  counters as **one card** (role^name header + node + a stat/value table).
+  Selection is a yuno keyed by a composite id `node<US>yuno_id`, so the tab +
+  reload machinery is reused. Integer counters get fixed "." grouping (no
+  `Intl`/`navigator.language`). No polling — the tree loads on open / Refresh,
+  a card on selection / Refresh.
 - **Nodes table sorted by version by default.** The node picker now opens
   sorted by agent version descending (highest on top), with a numeric dotted
   sorter so `7.10.0` ranks above `7.9.0` (not a plain string sort).

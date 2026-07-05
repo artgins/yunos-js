@@ -1,29 +1,20 @@
 /***********************************************************************
  *          c_agent_stats.js
  *
- *      C_AGENT_STATS — live statistics of a yuno, a routed stage view.
- *      One instance is PINNED to a single node (the `node` attr, set by
- *      the Statistics workspace tab at /statistics/node/<id>); the node
- *      picker (C_NODES) chooses which nodes get a tab. The empty-state
- *      route /statistics/node carries node="".
+ *      C_AGENT_STATS — live statistics of a single YUNO, a routed stage
+ *      view. One instance is PINNED to a (node, yuno_id) pair chosen in
+ *      the Statistics tree picker (C_STATS_NODES); each selected yuno
+ *      gets its own tab. The counters (SDF_RSTATS) render as ONE card.
+ *      The empty-state route /statistics/node carries node="".
  *
- *      Like the Console, it owns no transport: it uses the shared
- *      C_AGENT_LINK ("agent_link") and routes everything through the
- *      control center. Two steps, both over `command-agent` to the pinned
- *      node:
- *          1. list-yunos (node)  -> fills the YUNO selector (running).
- *          2. stats-yuno id=<y>  -> the yuno's SDF_RSTATS counters,
- *                                   rendered as a Tabulator table.
- *
- *      The shared link re-publishes every answer to ALL panels, so this
- *      view tags its own fetches with console_purpose="stats" AND
- *      console_node=<node> (both echoed back in __md_iev__) and handles
- *      only answers matching BOTH — so several per-node Statistics tabs
- *      (and the Console) coexist on the one link without cross-talk. The
- *      Console ignores any answer carrying a non-console purpose.
- *
- *      No polling (a discarded pattern in Yuneta): the table refreshes on
- *      selection change and on the explicit Refresh button.
+ *      Like the Console it owns no transport: it drives the shared
+ *      C_AGENT_LINK. It asks `stats-yuno id=<yuno_id>` of the pinned node
+ *      (over command-agent) and renders the answer's flat {stat: value}
+ *      object. The shared link re-publishes every answer to ALL panels,
+ *      so this view tags its fetch with console_purpose="stats" +
+ *      console_node + console_yuno (echoed back in __md_iev__) and renders
+ *      only the answer matching all three — several yuno tabs coexist on
+ *      the one link. No polling: refresh on open + the Refresh button.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -31,8 +22,8 @@
 import {
     SDATA, SDATA_END, data_type_t,
     gclass_create, log_error,
-    gobj_parent, gobj_name,
-    gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr, gobj_write_str_attr,
+    gobj_parent,
+    gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_subscribe_event,
     gobj_find_service,
     createElement2,
@@ -44,7 +35,6 @@ import {
 } from "@yuneta/gobj-js";
 
 import i18next, {t} from "i18next";
-import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 
@@ -59,15 +49,14 @@ const GCLASS_NAME = "C_AGENT_STATS";
  *              Attrs
  ***************************************************************/
 const attrs_table = [
-SDATA(data_type_t.DTP_POINTER,  "subscriber",  0,  null,     "Subscriber of output events"),
+SDATA(data_type_t.DTP_POINTER,  "subscriber",  0,  null,         "Subscriber of output events"),
 
 SDATA(data_type_t.DTP_STRING,   "title",       0,  "statistics", "View title (i18n key)"),
-SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,     "Root HTMLElement"),
-SDATA(data_type_t.DTP_POINTER,  "link_svc",    0,  null,     "C_AGENT_LINK service"),
-SDATA(data_type_t.DTP_POINTER,  "tabulator",   0,  null,     "Tabulator instance"),
-SDATA(data_type_t.DTP_JSON,     "yunos",       0,  "[]",     "Running yunos of the pinned node"),
-SDATA(data_type_t.DTP_STRING,   "node",        0,  "",       "Pinned node id (host/uuid); '' = empty state"),
-SDATA(data_type_t.DTP_STRING,   "yuno_id",     0,  "",       "Selected yuno id"),
+SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,         "Root HTMLElement"),
+SDATA(data_type_t.DTP_POINTER,  "link_svc",    0,  null,         "C_AGENT_LINK service"),
+SDATA(data_type_t.DTP_STRING,   "node",        0,  "",           "Pinned node id (host/uuid); '' = empty state"),
+SDATA(data_type_t.DTP_STRING,   "yuno_id",     0,  "",           "Pinned yuno id"),
+SDATA(data_type_t.DTP_STRING,   "yuno_label",  0,  "",           "Yuno label (role^name) for the card header"),
 SDATA_END()
 ];
 
@@ -90,7 +79,7 @@ let __gclass__ = null;
 function mt_create(gobj)
 {
     let priv = gobj.priv;
-    priv.table_id = `stats_table_${gobj_name(gobj)}`;
+    priv.last_stats = null;   /*  last rendered {stat: value} (re-render on lang)  */
 
     /*
      *  CHILD subscription model
@@ -124,20 +113,15 @@ function mt_start(gobj)
     let priv = gobj.priv;
 
     build_dom(gobj);
-    create_table(gobj);
     render_state(gobj);
-    /*  Pinned node: load its yunos directly (the picker already listed
-     *  the nodes — no list-agents here). If the link is not open yet, the
-     *  EV_ON_OPEN action retries. */
-    request_yunos(gobj);
+    /*  Pinned yuno: fetch its stats. If the link is not open yet, the
+     *  EV_ON_OPEN action retries.  */
+    request_stats(gobj);
 
-    /*  Tabulator headers are rendered by formatters, not data-i18n DOM,
-     *  so rebuild the columns on a language switch (no browser refresh).  */
     priv.on_lang = () => {
-        let table = gobj_read_attr(gobj, "tabulator");
-        if(table && table._ready) {
-            table.setColumns(make_columns());
-        }
+        let $c = gobj_read_attr(gobj, "$container");
+        refresh_language($c, t);
+        set_stats(gobj, priv.last_stats);   /*  re-render header labels  */
     };
     i18next.on("languageChanged", priv.on_lang);
 }
@@ -151,11 +135,6 @@ function mt_stop(gobj)
     if(priv.on_lang) {
         i18next.off("languageChanged", priv.on_lang);
         priv.on_lang = null;
-    }
-    let table = gobj_read_attr(gobj, "tabulator");
-    if(table) {
-        table.destroy();
-        gobj_write_attr(gobj, "tabulator", null);
     }
 }
 
@@ -188,10 +167,6 @@ function clear_node($n)
     }
 }
 
-/***************************************************************
- *  Minimal HTML escaping for values rendered as Tabulator
- *  formatter HTML.
- ***************************************************************/
 function esc(s)
 {
     return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => {
@@ -200,8 +175,26 @@ function esc(s)
 }
 
 /***************************************************************
- *  Build the static shell: the yuno selector + Refresh toolbar,
- *  the Tabulator host, and the not-connected notice.
+ *  Format a counter value. Integers get "." thousands grouping
+ *  (fixed separator — NOT navigator.language, the known crash
+ *  landmine); everything else prints as-is.
+ ***************************************************************/
+function fmt_value(v)
+{
+    if(v === null || v === undefined) {
+        return "";
+    }
+    if(typeof v === "number" && Number.isInteger(v)) {
+        let neg = v < 0 ? "-" : "";
+        let s = String(Math.abs(v));
+        return neg + s.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    }
+    return String(v);
+}
+
+/***************************************************************
+ *  Static shell: a Refresh toolbar, the card host, and the
+ *  not-connected notice.
  ***************************************************************/
 function build_dom(gobj)
 {
@@ -212,33 +205,27 @@ function build_dom(gobj)
     }
     clear_node($c);
 
-    /*  The node is pinned by the tab; only the yuno is chosen here. Yuno
-     *  selector (running yunos of the pinned node).  */
-    priv.$yuno = createElement2(["select", {"aria-label": t("select a yuno")}, null, {
-        change: () => on_yuno_change(gobj)
-    }]);
-    let $yuno_wrap = createElement2(["div", {class: "select", style: "min-width:0;"}, [priv.$yuno]]);
-
     priv.$refresh = createElement2(
-        ["button", {class: "button", type: "button", style: "margin-left:auto;", i18n: "refresh"},
-            "Refresh", {click: () => request_stats(gobj)}]
+        ["button", {class: "button is-small", type: "button",
+                    title: t("refresh"), "aria-label": t("refresh")},
+            [["span", {class: "icon is-small"}, [["i", {class: "yi-arrows-rotate"}]]]],
+            {click: () => request_stats(gobj)}]
     );
 
     priv.$toolbar = createElement2(
-        ["div", {class: "is-flex is-align-items-center mb-2", style: "gap:0.5rem; flex-wrap:wrap;"}, [
-            $yuno_wrap,
-            priv.$refresh
+        ["div", {class: "is-flex is-align-items-center mb-2", style: "gap:0.5rem;"}, [
+            ["span", {class: "is-family-monospace is-size-7 has-text-weight-semibold"},
+                gobj_read_attr(gobj, "yuno_label") || gobj_read_attr(gobj, "node") || t("statistics")],
+            ["span", {style: "margin-left:auto;"}, [priv.$refresh]]
         ]]
     );
     $c.appendChild(priv.$toolbar);
 
-    /*  Tabulator host  */
-    priv.$tablewrap = createElement2(
-        ["div", {style: "flex:1; min-height:0;"}, [
-            ["div", {id: priv.table_id}, []]
-        ]]
+    /*  Card host (scrolls when the counters overflow).  */
+    priv.$cards = createElement2(
+        ["div", {class: "STATS_CARDS", style: "flex:1; min-height:0; overflow:auto;"}, []]
     );
-    $c.appendChild(priv.$tablewrap);
+    $c.appendChild(priv.$cards);
 
     /*  Not-connected notice.  */
     priv.$notif = createElement2(
@@ -251,60 +238,62 @@ function build_dom(gobj)
 }
 
 /***************************************************************
- *  Column definitions. Rebuilt on create + on every language
- *  change so the two headers re-translate live.
+ *  Render the pinned yuno's counters as ONE card: role^name header,
+ *  node subtitle, then a stat/value table.
  ***************************************************************/
-function make_columns()
+function set_stats(gobj, data)
 {
-    /*  Numeric values right-aligned monospace; strings left. No Intl
-     *  grouping (navigator.language is a known crash landmine here).  */
-    function value_formatter(cell)
-    {
-        let v = cell.getValue();
-        if(v === null || v === undefined) {
-            return "";
+    let priv = gobj.priv;
+    priv.last_stats = data;
+    if(!priv.$cards) {
+        return;
+    }
+    clear_node(priv.$cards);
+
+    let node = gobj_read_attr(gobj, "node") || "";
+    let label = gobj_read_attr(gobj, "yuno_label") || gobj_read_attr(gobj, "yuno_id") || "";
+
+    let rows = [];
+    if(data && typeof data === "object" && !Array.isArray(data)) {
+        for(let k of Object.keys(data)) {
+            rows.push([k, data[k]]);
         }
-        if(typeof v === "number") {
-            return `<span class="is-family-monospace">${esc(v)}</span>`;
-        }
-        return esc(v);
     }
 
-    return [
-        {title: t("statistic"), field: "stat", widthGrow: 2},
-        {title: t("value"), field: "value", widthGrow: 1, hozAlign: "right",
-            formatter: value_formatter}
-    ];
+    let body;
+    if(!rows.length) {
+        body = ["p", {class: "has-text-grey is-size-7", i18n: "no statistics"}, "No statistics"];
+    } else {
+        let trs = rows.map(([k, v]) => {
+            return `<tr><td>${esc(k)}</td>` +
+                   `<td class="has-text-right is-family-monospace">${esc(fmt_value(v))}</td></tr>`;
+        }).join("");
+        /*  Raw-HTML content (a string starting with '<') is parsed and
+         *  appended by createElement2 — the table is agent-sourced but
+         *  every cell is esc()'d above.  */
+        body = ["div", {class: "STATS_TABLE", style: "overflow:auto;"},
+            `<table class="table is-fullwidth is-narrow is-size-7"><tbody>${trs}</tbody></table>`];
+    }
+
+    let card = createElement2(
+        ["div", {class: "card STATS_CARD", style: "max-width:640px;"},
+            [
+                ["div", {class: "card-content", style: "padding:0.9rem;"},
+                    [
+                        ["p", {class: "is-size-6 has-text-weight-bold is-family-monospace"}, esc(label)],
+                        ["p", {class: "is-size-7 has-text-grey mb-2"}, esc(node)],
+                        body
+                    ]
+                ]
+            ]
+        ]
+    );
+    priv.$cards.appendChild(card);
+    refresh_language(priv.$cards, t);
 }
 
 /***************************************************************
- *  Fill a <select> with options, preserving `selected` when it is
- *  still present. `items` = [{value, label}], `placeholder` shows
- *  when the list is empty.
- ***************************************************************/
-function fill_select($select, items, selected, placeholder)
-{
-    if(!$select) {
-        return;
-    }
-    clear_node($select);
-    if(!items.length) {
-        $select.appendChild(createElement2(["option", {value: ""}, placeholder]));
-        $select.disabled = true;
-        return;
-    }
-    $select.disabled = false;
-    for(let it of items) {
-        let attrs = {value: it.value};
-        if(it.value === selected) {
-            attrs.selected = "selected";
-        }
-        $select.appendChild(createElement2(["option", attrs, it.label]));
-    }
-}
-
-/***************************************************************
- *  Toggle the toolbar/table vs the not-connected notice.
+ *  Toggle the card vs the not-connected notice.
  ***************************************************************/
 function render_state(gobj)
 {
@@ -313,55 +302,8 @@ function render_state(gobj)
     let connected = !!(link && agent_link_is_connected(link));
 
     priv.$toolbar.style.display = connected ? "" : "none";
-    priv.$tablewrap.style.display = connected ? "" : "none";
+    priv.$cards.style.display = connected ? "" : "none";
     priv.$notif.style.display = connected ? "none" : "";
-}
-
-/***************************************************************
- *  Create the (empty) Tabulator instance.
- ***************************************************************/
-function create_table(gobj)
-{
-    let priv = gobj.priv;
-
-    let table = new Tabulator(`#${priv.table_id}`, {
-        index:          "stat",
-        layout:         "fitColumns",
-        maxHeight:      "100%",
-        placeholder:    t("no statistics"),
-        columnDefaults: {headerHozAlign: "left", resizable: false},
-        columns:        make_columns()
-    });
-    table._ready = false;
-    table.on("tableBuilt", function() {
-        table._ready = true;
-        if(table._pendingData !== undefined) {
-            table.setData(table._pendingData);
-            delete table._pendingData;
-        }
-    });
-    gobj_write_attr(gobj, "tabulator", table);
-}
-
-/***************************************************************
- *  Push a stats {stat: value} object into the table as rows.
- ***************************************************************/
-function set_stats(gobj, data)
-{
-    let rows = [];
-    if(data && typeof data === "object" && !Array.isArray(data)) {
-        for(let k of Object.keys(data)) {
-            rows.push({stat: k, value: data[k]});
-        }
-    }
-    let table = gobj_read_attr(gobj, "tabulator");
-    if(table) {
-        if(table._ready) {
-            table.replaceData(rows);
-        } else {
-            table._pendingData = rows;
-        }
-    }
 }
 
 
@@ -375,24 +317,7 @@ function set_stats(gobj, data)
 
 
 /***************************************************************
- *  Ask the pinned node for its yunos (fills the yuno selector).
- *  Tagged with our purpose + node so only this tab consumes it.
- ***************************************************************/
-function request_yunos(gobj)
-{
-    let link = gobj_read_attr(gobj, "link_svc");
-    let node = gobj_read_attr(gobj, "node") || "";
-    if(!node || !link || !agent_link_is_connected(link)) {
-        return;
-    }
-    let kw_send = {agent_id: node, cmd2agent: "list-yunos"};
-    msg_iev_write_key(kw_send, "console_purpose", "stats");
-    msg_iev_write_key(kw_send, "console_node", node);
-    agent_link_command(link, "command-agent", kw_send);
-}
-
-/***************************************************************
- *  Ask the pinned node for the selected yuno's stats.
+ *  Ask the pinned node for the pinned yuno's stats.
  ***************************************************************/
 function request_stats(gobj)
 {
@@ -402,8 +327,6 @@ function request_stats(gobj)
     if(!node || !yuno_id || !link || !agent_link_is_connected(link)) {
         return;
     }
-    /*  Target the single yuno by id; stats_to_yuno() defaults the service
-     *  to the yuno_role, so the citizen gclass RSTATS come back.  */
     let kw_send = {agent_id: node, cmd2agent: `stats-yuno id="${yuno_id}"`};
     msg_iev_write_key(kw_send, "console_purpose", "stats");
     msg_iev_write_key(kw_send, "console_node", node);
@@ -411,72 +334,25 @@ function request_stats(gobj)
     agent_link_command(link, "command-agent", kw_send);
 }
 
-
-
-
-                    /***************************
-                     *      Selection
-                     ***************************/
-
-
-
-
 /***************************************************************
- *  Yuno list arrived — fill the yuno selector (running only),
- *  keep or default the selection, then load its stats.
+ *  Is this answer ours? (purpose + node + yuno all match).
  ***************************************************************/
-function set_yunos(gobj, data)
+function is_mine(gobj, kw)
 {
-    let yunos = [];
-    if(Array.isArray(data)) {
-        for(let y of data) {
-            /*  stats only make sense for a running yuno; a missing
-             *  yuno_running field means "unknown" — keep it.  */
-            if(y && y.yuno_running === false) {
-                continue;
-            }
-            let id = y && y.id;
-            if(id) {
-                /*  Label as "role^name" (Yuneta's canonical yuno id form):
-                 *  distinguishes several instances of the same role (each
-                 *  still targets its own treedb id).  */
-                let role = (y && y.yuno_role) || "";
-                let name = (y && y.yuno_name) || "";
-                let label = (role && name) ? `${role}^${name}` : (role || name || id);
-                yunos.push({id: id, label: label});
-            }
-        }
+    if(msg_iev_read_key(kw, "console_purpose") !== "stats") {
+        return false;
     }
-    gobj_write_attr(gobj, "yunos", yunos);
-
-    let cur = gobj_read_attr(gobj, "yuno_id") || "";
-    let ids = yunos.map((y) => y.id);
-    let chosen = (cur && ids.includes(cur)) ? cur : (ids.length ? ids[0] : "");
-
-    fill_select(gobj.priv.$yuno,
-        yunos.map((y) => ({value: y.id, label: y.label})),
-        chosen, t("select a yuno"));
-
-    gobj_write_str_attr(gobj, "yuno_id", chosen);
-    if(chosen) {
-        request_stats(gobj);
-    } else {
-        set_stats(gobj, null);
+    let my_node = gobj_read_attr(gobj, "node") || "";
+    let ans_node = msg_iev_read_key(kw, "console_node");
+    if(my_node && ans_node && ans_node !== my_node) {
+        return false;
     }
-}
-
-/***************************************************************
- *  Yuno selector changed (user).
- ***************************************************************/
-function on_yuno_change(gobj)
-{
-    let yuno_id = gobj.priv.$yuno ? gobj.priv.$yuno.value : "";
-    gobj_write_str_attr(gobj, "yuno_id", yuno_id);
-    if(yuno_id) {
-        request_stats(gobj);
-    } else {
-        set_stats(gobj, null);
+    let my_yuno = gobj_read_attr(gobj, "yuno_id") || "";
+    let ans_yuno = msg_iev_read_key(kw, "console_yuno");
+    if(my_yuno && ans_yuno && ans_yuno !== my_yuno) {
+        return false;
     }
+    return true;
 }
 
 
@@ -489,13 +365,10 @@ function on_yuno_change(gobj)
 
 
 
-/***************************************************************
- *  Link in session — (re)load the pinned node's yunos.
- ***************************************************************/
 function ac_on_open(gobj, event, kw, src)
 {
     render_state(gobj);
-    request_yunos(gobj);
+    request_stats(gobj);
     return 0;
 }
 
@@ -506,60 +379,26 @@ function ac_on_close(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Command answer. The shared link re-publishes every answer to all
- *  panels; we handle only our own list-yunos fetch — tagged with
- *  console_purpose="stats" AND console_node=<our node>, so another
- *  node's Statistics tab (or the Console) never steals it. The stats
- *  counters do NOT arrive here — a `stats-yuno` answer is a __message__
- *  (EV_MT_STATS_ANSWER), handled below; the `command-agent` reply here
- *  is just the dispatch ack (data null).
+ *  The stats-yuno dispatch ack (data null). Surface only a failed
+ *  dispatch (e.g. no authz); the counters arrive via EV_MT_STATS_ANSWER.
  ***************************************************************/
 function ac_mt_command_answer(gobj, event, kw, src)
 {
-    /*  Only OUR fetches (purpose) for OUR node.  */
-    if(msg_iev_read_key(kw, "console_purpose") !== "stats") {
+    if(!is_mine(gobj, kw)) {
         return 0;
     }
-    let my_node = gobj_read_attr(gobj, "node") || "";
-    let ans_node = msg_iev_read_key(kw, "console_node");
-    if(my_node && ans_node && ans_node !== my_node) {
-        return 0;
+    if(typeof kw.result === "number" && kw.result < 0) {
+        set_stats(gobj, null);   /*  clear; the notice/empty card shows  */
     }
-
-    let stk = msg_iev_get_stack(gobj, kw, "command_stack", false);
-    let command = kw_get_str(gobj, stk, "command", "", 0);
-    if(command === "list-yunos") {
-        set_yunos(gobj, kw.data);
-        return 0;
-    }
-
-    /*  Anything else (e.g. the command-agent dispatch ack) is not
-     *  rendered here — the real counters come via EV_MT_STATS_ANSWER.  */
     return 0;
 }
 
 /***************************************************************
- *  Stats answer. A `stats-yuno` reply is a __message__, re-published
- *  by the link as EV_MT_STATS_ANSWER (the Console never subscribes to
- *  it, so no cross-talk). `data` is a flat {stat: value} object. Filter
- *  by purpose + node so only the pinned tab renders it.
+ *  Stats answer — a `stats-yuno` reply (flat {stat: value}).
  ***************************************************************/
 function ac_mt_stats_answer(gobj, event, kw, src)
 {
-    if(msg_iev_read_key(kw, "console_purpose") !== "stats") {
-        return 0;
-    }
-    let my_node = gobj_read_attr(gobj, "node") || "";
-    let ans_node = msg_iev_read_key(kw, "console_node");
-    if(my_node && ans_node && ans_node !== my_node) {
-        return 0;
-    }
-    /*  Drop a late answer for a yuno the user has already switched away
-     *  from — otherwise it would overwrite the currently-selected yuno's
-     *  table (both requests ride the one shared link).  */
-    let my_yuno = gobj_read_attr(gobj, "yuno_id") || "";
-    let ans_yuno = msg_iev_read_key(kw, "console_yuno");
-    if(my_yuno && ans_yuno && ans_yuno !== my_yuno) {
+    if(!is_mine(gobj, kw)) {
         return 0;
     }
     set_stats(gobj, kw.data);
@@ -576,9 +415,6 @@ function ac_mt_stats_answer(gobj, event, kw, src)
 
 
 
-/*---------------------------------------------*
- *          Global methods table
- *---------------------------------------------*/
 const gmt = {
     mt_create:  mt_create,
     mt_start:   mt_start,
@@ -586,9 +422,6 @@ const gmt = {
     mt_destroy: mt_destroy
 };
 
-/***************************************************************
- *          Create the GClass
- ***************************************************************/
 function create_gclass(gclass_name)
 {
     if(__gclass__) {
@@ -639,9 +472,6 @@ function create_gclass(gclass_name)
     return 0;
 }
 
-/***************************************************************
- *          Register GClass
- ***************************************************************/
 function register_c_agent_stats()
 {
     return create_gclass(GCLASS_NAME);
