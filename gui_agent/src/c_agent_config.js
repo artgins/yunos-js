@@ -46,6 +46,7 @@ const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,                        null, "Subscriber of output events"),
 SDATA(data_type_t.DTP_STRING,   "active_node",  sdata_flag_t.SDF_PERSIST, "",      "Active node (hostname/UUID from list-agents)"),
 SDATA(data_type_t.DTP_STRING,   "display_mode", sdata_flag_t.SDF_PERSIST, "table", "Command answer display: table | form (raw JSON)"),
+SDATA(data_type_t.DTP_STRING,   "stats_layout", sdata_flag_t.SDF_PERSIST, "single", "Statistics cards layout: single (one tab, all cards) | tabs (a tab per yuno)"),
 SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "{}",  "Selected nodes per workspace: {workspace: [{id, host}, ...]}"),
 SDATA(data_type_t.DTP_JSON,     "active_tabs",  sdata_flag_t.SDF_PERSIST, "{}",    "Last-active node tab per workspace: {workspace: node_id}"),
 SDATA(data_type_t.DTP_JSON,     "cmd_history",  sdata_flag_t.SDF_PERSIST, "[]",    "Global console command history: [cmd,...] most-recent first (shared by all nodes)"),
@@ -148,6 +149,28 @@ function agent_config_set_display_mode(gobj, mode)
 {
     gobj_write_attr(gobj, "display_mode", mode || "table");
     gobj_save_persistent_attrs(gobj, "display_mode");
+}
+
+/***************************************************************
+ *  Statistics cards layout: "single" (default; one tab holding a card
+ *  per selected yuno) or "tabs" (one tab per selected yuno).
+ ***************************************************************/
+function agent_config_get_stats_layout(gobj)
+{
+    let v = gobj_read_attr(gobj, "stats_layout");
+    return (v === "tabs") ? "tabs" : "single";
+}
+
+/***************************************************************
+ *  Set the Statistics layout, persist it, notify (C_APP rebuilds the
+ *  Statistics workspace tabs).
+ ***************************************************************/
+function agent_config_set_stats_layout(gobj, layout)
+{
+    let v = (layout === "tabs") ? "tabs" : "single";
+    gobj_write_attr(gobj, "stats_layout", v);
+    gobj_save_persistent_attrs(gobj, "stats_layout");
+    gobj_publish_event(gobj, "EV_STATS_LAYOUT_CHANGED", {stats_layout: v});
 }
 
 /***************************************************************
@@ -407,7 +430,8 @@ function create_gclass(gclass_name)
      ***************************************************************/
     const event_types = [
         ["EV_ACTIVE_NODE_CHANGED",    event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
-        ["EV_SELECTED_NODES_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
+        ["EV_SELECTED_NODES_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
+        ["EV_STATS_LAYOUT_CHANGED",   event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
     ];
 
     __gclass__ = gclass_create(
@@ -445,6 +469,8 @@ export {
     agent_config_set_active_node,
     agent_config_get_display_mode,
     agent_config_set_display_mode,
+    agent_config_get_stats_layout,
+    agent_config_set_stats_layout,
     agent_config_get_selected_nodes,
     agent_config_set_selected_nodes,
     agent_config_is_node_selected,

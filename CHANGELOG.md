@@ -102,6 +102,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   reload machinery is reused. Integer counters get fixed "." grouping (no
   `Intl`/`navigator.language`). No polling — the tree loads on open / Refresh,
   a card on selection / Refresh.
+  - **Cards layout setting.** A **Settings → Preferences** toggle ("Statistics
+    cards", `stats_layout` persisted) chooses between **one tab holding all
+    cards** (default) and **a tab per yuno**. In single mode `C_AGENT_STATS`
+    (all-mode) renders a card per selected yuno and tracks the tree's selection
+    live; `C_APP` swaps the Statistics tabs on the setting change.
 - **Nodes table sorted by version by default.** The node picker now opens
   sorted by agent version descending (highest on top), with a numeric dotted
   sorter so `7.10.0` ranks above `7.9.0` (not a plain string sort).

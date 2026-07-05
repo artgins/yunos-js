@@ -1,20 +1,21 @@
 /***********************************************************************
  *          c_agent_stats.js
  *
- *      C_AGENT_STATS — live statistics of a single YUNO, a routed stage
- *      view. One instance is PINNED to a (node, yuno_id) pair chosen in
- *      the Statistics tree picker (C_STATS_NODES); each selected yuno
- *      gets its own tab. The counters (SDF_RSTATS) render as ONE card.
- *      The empty-state route /statistics/node carries node="".
+ *      C_AGENT_STATS — live statistics rendered as CARDS, one per yuno.
+ *      A routed stage view with two shapes, chosen by the Statistics
+ *      layout setting (Settings → Preferences):
  *
- *      Like the Console it owns no transport: it drives the shared
- *      C_AGENT_LINK. It asks `stats-yuno id=<yuno_id>` of the pinned node
- *      (over command-agent) and renders the answer's flat {stat: value}
- *      object. The shared link re-publishes every answer to ALL panels,
- *      so this view tags its fetch with console_purpose="stats" +
- *      console_node + console_yuno (echoed back in __md_iev__) and renders
- *      only the answer matching all three — several yuno tabs coexist on
- *      the one link. No polling: refresh on open + the Refresh button.
+ *        - per-yuno tab  : pinned to one (node, yuno_id) -> ONE card.
+ *        - single tab    : all:true + workspace -> a card per SELECTED
+ *                          yuno (reads the tree picker's selection and
+ *                          re-renders as it changes).
+ *
+ *      It owns no transport: it drives the shared C_AGENT_LINK, asking
+ *      `stats-yuno id=<yuno_id>` (over command-agent) of each target node
+ *      and rendering the flat {stat: value} answer. Every fetch is tagged
+ *      console_purpose="stats" + console_node + console_yuno (echoed in
+ *      __md_iev__) so each answer updates exactly its own card and other
+ *      panels ignore it. No polling: on open, selection change, Refresh.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -28,15 +29,18 @@ import {
     gobj_find_service,
     createElement2,
     refresh_language,
-    msg_iev_get_stack,
     msg_iev_write_key,
     msg_iev_read_key,
-    kw_get_str,
 } from "@yuneta/gobj-js";
 
 import i18next, {t} from "i18next";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
+import {
+    agent_config_get_selected_nodes,
+    stats_sel_id,
+    stats_sel_parse,
+} from "./c_agent_config.js";
 
 
 /***************************************************************
@@ -54,9 +58,12 @@ SDATA(data_type_t.DTP_POINTER,  "subscriber",  0,  null,         "Subscriber of 
 SDATA(data_type_t.DTP_STRING,   "title",       0,  "statistics", "View title (i18n key)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,         "Root HTMLElement"),
 SDATA(data_type_t.DTP_POINTER,  "link_svc",    0,  null,         "C_AGENT_LINK service"),
-SDATA(data_type_t.DTP_STRING,   "node",        0,  "",           "Pinned node id (host/uuid); '' = empty state"),
-SDATA(data_type_t.DTP_STRING,   "yuno_id",     0,  "",           "Pinned yuno id"),
-SDATA(data_type_t.DTP_STRING,   "yuno_label",  0,  "",           "Yuno label (role^name) for the card header"),
+SDATA(data_type_t.DTP_POINTER,  "config_svc",  0,  null,         "C_AGENT_CONFIG service"),
+SDATA(data_type_t.DTP_BOOLEAN,  "all",         0,  false,        "true = one card per SELECTED yuno (single tab)"),
+SDATA(data_type_t.DTP_STRING,   "workspace",   0,  "statistics", "Selection bucket (all mode)"),
+SDATA(data_type_t.DTP_STRING,   "node",        0,  "",           "Pinned node id (per-yuno mode)"),
+SDATA(data_type_t.DTP_STRING,   "yuno_id",     0,  "",           "Pinned yuno id (per-yuno mode)"),
+SDATA(data_type_t.DTP_STRING,   "yuno_label",  0,  "",           "Yuno label role^name (per-yuno mode)"),
 SDATA_END()
 ];
 
@@ -79,7 +86,7 @@ let __gclass__ = null;
 function mt_create(gobj)
 {
     let priv = gobj.priv;
-    priv.last_stats = null;   /*  last rendered {stat: value} (re-render on lang)  */
+    priv.cards = {};   /*  composite key -> {$body}  */
 
     /*
      *  CHILD subscription model
@@ -98,6 +105,12 @@ function mt_create(gobj)
         gobj_subscribe_event(link, "EV_MT_COMMAND_ANSWER", {}, gobj);
         gobj_subscribe_event(link, "EV_MT_STATS_ANSWER", {}, gobj);
     }
+    /*  In "all" mode the card set tracks the tree picker's selection.  */
+    let config = gobj_find_service("agent_config", true);
+    gobj_write_attr(gobj, "config_svc", config);
+    if(config) {
+        gobj_subscribe_event(config, "EV_SELECTED_NODES_CHANGED", {}, gobj);
+    }
 
     let $c = createElement2(
         ["div", {class: "view-card", style: "display:flex; flex-direction:column; height:100%;"}, []]
@@ -114,14 +127,12 @@ function mt_start(gobj)
 
     build_dom(gobj);
     render_state(gobj);
-    /*  Pinned yuno: fetch its stats. If the link is not open yet, the
-     *  EV_ON_OPEN action retries.  */
-    request_stats(gobj);
+    render_cards(gobj);
 
     priv.on_lang = () => {
         let $c = gobj_read_attr(gobj, "$container");
         refresh_language($c, t);
-        set_stats(gobj, priv.last_stats);   /*  re-render header labels  */
+        render_cards(gobj);
     };
     i18next.on("languageChanged", priv.on_lang);
 }
@@ -176,8 +187,7 @@ function esc(s)
 
 /***************************************************************
  *  Format a counter value. Integers get "." thousands grouping
- *  (fixed separator — NOT navigator.language, the known crash
- *  landmine); everything else prints as-is.
+ *  (fixed separator — NOT navigator.language, the crash landmine).
  ***************************************************************/
 function fmt_value(v)
 {
@@ -193,7 +203,51 @@ function fmt_value(v)
 }
 
 /***************************************************************
- *  Static shell: a Refresh toolbar, the card host, and the
+ *  The yunos to show, as [{node, yuno_id, label}]. "all" mode reads
+ *  the tree picker's selection; per-yuno mode is the single pinned pair.
+ ***************************************************************/
+function compute_targets(gobj)
+{
+    if(gobj_read_attr(gobj, "all")) {
+        let config = gobj_read_attr(gobj, "config_svc");
+        let ws = gobj_read_attr(gobj, "workspace") || "statistics";
+        let sel = config ? agent_config_get_selected_nodes(config, ws) : [];
+        return sel.map((it) => {
+            let p = stats_sel_parse(it.id);
+            return {node: p.node, yuno_id: p.yuno_id, label: it.host || p.yuno_id};
+        });
+    }
+    let node = gobj_read_attr(gobj, "node") || "";
+    let yuno_id = gobj_read_attr(gobj, "yuno_id") || "";
+    if(!node || !yuno_id) {
+        return [];
+    }
+    return [{node: node, yuno_id: yuno_id, label: gobj_read_attr(gobj, "yuno_label") || yuno_id}];
+}
+
+/***************************************************************
+ *  Counters table for one card's body (agent-sourced, cells esc()'d).
+ ***************************************************************/
+function table_html(data)
+{
+    let rows = [];
+    if(data && typeof data === "object" && !Array.isArray(data)) {
+        for(let k of Object.keys(data)) {
+            rows.push([k, data[k]]);
+        }
+    }
+    if(!rows.length) {
+        return `<p class="has-text-grey is-size-7">${esc(t("no statistics"))}</p>`;
+    }
+    let trs = rows.map(([k, v]) => {
+        return `<tr><td>${esc(k)}</td>` +
+               `<td class="has-text-right is-family-monospace">${esc(fmt_value(v))}</td></tr>`;
+    }).join("");
+    return `<table class="table is-fullwidth is-narrow is-size-7"><tbody>${trs}</tbody></table>`;
+}
+
+/***************************************************************
+ *  Static shell: a header/Refresh toolbar, the cards host, and the
  *  not-connected notice.
  ***************************************************************/
 function build_dom(gobj)
@@ -205,29 +259,33 @@ function build_dom(gobj)
     }
     clear_node($c);
 
+    let is_all = !!gobj_read_attr(gobj, "all");
+    let heading = is_all
+        ? t("statistics")
+        : (gobj_read_attr(gobj, "yuno_label") || gobj_read_attr(gobj, "node") || t("statistics"));
+
     priv.$refresh = createElement2(
         ["button", {class: "button is-small", type: "button",
                     title: t("refresh"), "aria-label": t("refresh")},
             [["span", {class: "icon is-small"}, [["i", {class: "yi-arrows-rotate"}]]]],
-            {click: () => request_stats(gobj)}]
+            {click: () => render_cards(gobj)}]
     );
 
     priv.$toolbar = createElement2(
         ["div", {class: "is-flex is-align-items-center mb-2", style: "gap:0.5rem;"}, [
-            ["span", {class: "is-family-monospace is-size-7 has-text-weight-semibold"},
-                gobj_read_attr(gobj, "yuno_label") || gobj_read_attr(gobj, "node") || t("statistics")],
+            ["span", {class: "is-family-monospace is-size-7 has-text-weight-semibold"}, heading],
             ["span", {style: "margin-left:auto;"}, [priv.$refresh]]
         ]]
     );
     $c.appendChild(priv.$toolbar);
 
-    /*  Card host (scrolls when the counters overflow).  */
+    /*  Cards host: wraps into a responsive grid on wide screens.  */
     priv.$cards = createElement2(
-        ["div", {class: "STATS_CARDS", style: "flex:1; min-height:0; overflow:auto;"}, []]
+        ["div", {class: "STATS_CARDS is-flex", style: "flex:1; min-height:0; overflow:auto; " +
+                 "flex-wrap:wrap; gap:0.75rem; align-content:flex-start;"}, []]
     );
     $c.appendChild(priv.$cards);
 
-    /*  Not-connected notice.  */
     priv.$notif = createElement2(
         ["div", {class: "notification is-light", style: "display:none;", i18n: "not connected to an agent"},
             "Not connected"]
@@ -238,62 +296,66 @@ function build_dom(gobj)
 }
 
 /***************************************************************
- *  Render the pinned yuno's counters as ONE card: role^name header,
- *  node subtitle, then a stat/value table.
+ *  (Re)build the cards for the current targets and fetch each one's
+ *  stats. Called on start, on selection change (all mode), and Refresh.
  ***************************************************************/
-function set_stats(gobj, data)
+function render_cards(gobj)
 {
     let priv = gobj.priv;
-    priv.last_stats = data;
     if(!priv.$cards) {
         return;
     }
     clear_node(priv.$cards);
+    priv.cards = {};
 
-    let node = gobj_read_attr(gobj, "node") || "";
-    let label = gobj_read_attr(gobj, "yuno_label") || gobj_read_attr(gobj, "yuno_id") || "";
-
-    let rows = [];
-    if(data && typeof data === "object" && !Array.isArray(data)) {
-        for(let k of Object.keys(data)) {
-            rows.push([k, data[k]]);
-        }
+    let targets = compute_targets(gobj);
+    if(!targets.length) {
+        priv.$cards.appendChild(createElement2(
+            ["p", {class: "has-text-grey is-size-7 p-2", i18n: "pick yunos hint"},
+                "Select one or more yunos in Nodes."]
+        ));
+        refresh_language(priv.$cards, t);
+        return;
     }
 
-    let body;
-    if(!rows.length) {
-        body = ["p", {class: "has-text-grey is-size-7", i18n: "no statistics"}, "No statistics"];
-    } else {
-        let trs = rows.map(([k, v]) => {
-            return `<tr><td>${esc(k)}</td>` +
-                   `<td class="has-text-right is-family-monospace">${esc(fmt_value(v))}</td></tr>`;
-        }).join("");
-        /*  Raw-HTML content (a string starting with '<') is parsed and
-         *  appended by createElement2 — the table is agent-sourced but
-         *  every cell is esc()'d above.  */
-        body = ["div", {class: "STATS_TABLE", style: "overflow:auto;"},
-            `<table class="table is-fullwidth is-narrow is-size-7"><tbody>${trs}</tbody></table>`];
-    }
-
-    let card = createElement2(
-        ["div", {class: "card STATS_CARD", style: "max-width:640px;"},
-            [
-                ["div", {class: "card-content", style: "padding:0.9rem;"},
-                    [
-                        ["p", {class: "is-size-6 has-text-weight-bold is-family-monospace"}, esc(label)],
-                        ["p", {class: "is-size-7 has-text-grey mb-2"}, esc(node)],
-                        body
+    for(let tgt of targets) {
+        let $body = createElement2(
+            ["div", {class: "STATS_TABLE", style: "overflow:auto;"},
+                `<p class="has-text-grey is-size-7">…</p>`]
+        );
+        let $card = createElement2(
+            ["div", {class: "card STATS_CARD", style: "width:20rem; max-width:100%;"},
+                [
+                    ["div", {class: "card-content", style: "padding:0.9rem;"},
+                        [
+                            ["p", {class: "is-size-6 has-text-weight-bold is-family-monospace"}, tgt.label],
+                            ["p", {class: "is-size-7 has-text-grey mb-2"}, tgt.node],
+                            $body
+                        ]
                     ]
                 ]
             ]
-        ]
-    );
-    priv.$cards.appendChild(card);
-    refresh_language(priv.$cards, t);
+        );
+        priv.$cards.appendChild($card);
+        priv.cards[stats_sel_id(tgt.node, tgt.yuno_id)] = {$body: $body};
+        request_stats_for(gobj, tgt.node, tgt.yuno_id);
+    }
 }
 
 /***************************************************************
- *  Toggle the card vs the not-connected notice.
+ *  Fill one card's body from a stats answer.
+ ***************************************************************/
+function fill_card(gobj, node, yuno_id, data)
+{
+    let priv = gobj.priv;
+    let card = priv.cards[stats_sel_id(node, yuno_id)];
+    if(card && card.$body) {
+        card.$body.innerHTML = table_html(data);
+    }
+}
+
+/***************************************************************
+ *  Toggle the cards vs the not-connected notice.
  ***************************************************************/
 function render_state(gobj)
 {
@@ -317,13 +379,11 @@ function render_state(gobj)
 
 
 /***************************************************************
- *  Ask the pinned node for the pinned yuno's stats.
+ *  Ask a node for one yuno's stats.
  ***************************************************************/
-function request_stats(gobj)
+function request_stats_for(gobj, node, yuno_id)
 {
     let link = gobj_read_attr(gobj, "link_svc");
-    let node = gobj_read_attr(gobj, "node") || "";
-    let yuno_id = gobj_read_attr(gobj, "yuno_id") || "";
     if(!node || !yuno_id || !link || !agent_link_is_connected(link)) {
         return;
     }
@@ -332,27 +392,6 @@ function request_stats(gobj)
     msg_iev_write_key(kw_send, "console_node", node);
     msg_iev_write_key(kw_send, "console_yuno", yuno_id);
     agent_link_command(link, "command-agent", kw_send);
-}
-
-/***************************************************************
- *  Is this answer ours? (purpose + node + yuno all match).
- ***************************************************************/
-function is_mine(gobj, kw)
-{
-    if(msg_iev_read_key(kw, "console_purpose") !== "stats") {
-        return false;
-    }
-    let my_node = gobj_read_attr(gobj, "node") || "";
-    let ans_node = msg_iev_read_key(kw, "console_node");
-    if(my_node && ans_node && ans_node !== my_node) {
-        return false;
-    }
-    let my_yuno = gobj_read_attr(gobj, "yuno_id") || "";
-    let ans_yuno = msg_iev_read_key(kw, "console_yuno");
-    if(my_yuno && ans_yuno && ans_yuno !== my_yuno) {
-        return false;
-    }
-    return true;
 }
 
 
@@ -368,7 +407,7 @@ function is_mine(gobj, kw)
 function ac_on_open(gobj, event, kw, src)
 {
     render_state(gobj);
-    request_stats(gobj);
+    render_cards(gobj);
     return 0;
 }
 
@@ -379,29 +418,49 @@ function ac_on_close(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  The stats-yuno dispatch ack (data null). Surface only a failed
- *  dispatch (e.g. no authz); the counters arrive via EV_MT_STATS_ANSWER.
+ *  Selection changed (all mode) — rebuild the card set.
+ ***************************************************************/
+function ac_selected_nodes_changed(gobj, event, kw, src)
+{
+    if(!gobj_read_attr(gobj, "all")) {
+        return 0;
+    }
+    let ws = gobj_read_attr(gobj, "workspace") || "statistics";
+    if(kw && kw.workspace && kw.workspace !== ws) {
+        return 0;
+    }
+    render_cards(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  stats-yuno dispatch ack (data null). A failed dispatch clears that
+ *  yuno's card; the real counters arrive via EV_MT_STATS_ANSWER.
  ***************************************************************/
 function ac_mt_command_answer(gobj, event, kw, src)
 {
-    if(!is_mine(gobj, kw)) {
+    if(msg_iev_read_key(kw, "console_purpose") !== "stats") {
         return 0;
     }
     if(typeof kw.result === "number" && kw.result < 0) {
-        set_stats(gobj, null);   /*  clear; the notice/empty card shows  */
+        let node = msg_iev_read_key(kw, "console_node") || "";
+        let yuno = msg_iev_read_key(kw, "console_yuno") || "";
+        fill_card(gobj, node, yuno, null);
     }
     return 0;
 }
 
 /***************************************************************
- *  Stats answer — a `stats-yuno` reply (flat {stat: value}).
+ *  Stats answer — route the flat {stat: value} to its card.
  ***************************************************************/
 function ac_mt_stats_answer(gobj, event, kw, src)
 {
-    if(!is_mine(gobj, kw)) {
+    if(msg_iev_read_key(kw, "console_purpose") !== "stats") {
         return 0;
     }
-    set_stats(gobj, kw.data);
+    let node = msg_iev_read_key(kw, "console_node") || "";
+    let yuno = msg_iev_read_key(kw, "console_yuno") || "";
+    fill_card(gobj, node, yuno, kw.data);
     return 0;
 }
 
@@ -437,7 +496,8 @@ function create_gclass(gclass_name)
             ["EV_ON_OPEN",           ac_on_open,           null],
             ["EV_ON_CLOSE",          ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
-            ["EV_MT_STATS_ANSWER",   ac_mt_stats_answer,   null]
+            ["EV_MT_STATS_ANSWER",   ac_mt_stats_answer,   null],
+            ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null]
         ]]
     ];
 
@@ -448,7 +508,8 @@ function create_gclass(gclass_name)
         ["EV_ON_OPEN",           0],
         ["EV_ON_CLOSE",          0],
         ["EV_MT_COMMAND_ANSWER", 0],
-        ["EV_MT_STATS_ANSWER",   0]
+        ["EV_MT_STATS_ANSWER",   0],
+        ["EV_SELECTED_NODES_CHANGED", 0]
     ];
 
     __gclass__ = gclass_create(

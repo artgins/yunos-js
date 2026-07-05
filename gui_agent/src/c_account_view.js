@@ -53,6 +53,8 @@ import {
     agent_config_get_active_node,
     agent_config_get_display_mode,
     agent_config_set_display_mode,
+    agent_config_get_stats_layout,
+    agent_config_set_stats_layout,
     agent_config_get_shortkeys,
     agent_config_set_shortkey,
     agent_config_remove_shortkey,
@@ -267,6 +269,23 @@ function build_preference(gobj)
         }
     );
 
+    /*  Statistics cards layout: one tab holding all cards (default) vs a
+     *  tab per selected yuno. C_APP rebuilds the Statistics tabs on change.  */
+    let stats_layout = config ? agent_config_get_stats_layout(config) : "single";
+    let stats_layout_seg = segment(
+        [
+            {value: "single", i18n: "stats one tab",      text: "One tab",      icon: "yi-table"},
+            {value: "tabs",   i18n: "stats tab per yuno", text: "Tab per yuno", icon: "yi-eye"}
+        ],
+        stats_layout,
+        function(v) {
+            if(config) {
+                agent_config_set_stats_layout(config, v);
+            }
+            render(gobj);
+        }
+    );
+
     /*  Terminal font size — the shared DEFAULT for every Terminal tab
      *  (same persisted value the tab's A− / A+ buttons drive). A stepper so
      *  Settings matches the toolbar; open tabs pick a change up on their next
@@ -313,6 +332,7 @@ function build_preference(gobj)
                         field("theme", "Theme", theme_seg),
                         field("language", "Language", lang_seg),
                         field("display mode", "Command answers", display_seg),
+                        field("statistics layout", "Statistics cards", stats_layout_seg),
                         field("terminal font size", "Terminal font size", font_seg)
                     ]
                 ],

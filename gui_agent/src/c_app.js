@@ -50,6 +50,7 @@ import {
     agent_config_is_node_selected,
     agent_config_get_active_tab,
     agent_config_set_active_tab,
+    agent_config_get_stats_layout,
     stats_sel_parse,
 } from "./c_agent_config.js";
 
@@ -122,6 +123,8 @@ function mt_create(gobj)
      *  the multi-agent console tabs track selected_nodes. */
     let config = gobj_create_service("agent_config", "C_AGENT_CONFIG", {}, gobj);
     gobj_subscribe_event(config, "EV_SELECTED_NODES_CHANGED", {}, gobj);
+    /*  Statistics layout toggle (Settings) → rebuild the Statistics tabs. */
+    gobj_subscribe_event(config, "EV_STATS_LAYOUT_CHANGED", {}, gobj);
 
     /*  Login service (child of self) — subscribe to all its output
      *  events (EV_LOGIN_ACCEPTED/DENIED/REFRESHED/LOGOUT_DONE) with the
@@ -332,6 +335,18 @@ const WORKSPACES = {
     terminal:   {min_version: "",      tab_gclass: "C_AGENT_TTY"}
 };
 
+/*  Reserved tab id for the Statistics "single" layout: one tab holding a
+ *  card per selected yuno (route /statistics/node/__all__). Not a selected
+ *  item — the tree checkboxes drive its content.  */
+const STATS_ALL_ID = "__all__";
+
+/*  "single" (default) | "tabs" — only meaningful for the yuno-unit
+ *  Statistics workspace.  */
+function stats_layout(config)
+{
+    return config ? agent_config_get_stats_layout(config) : "single";
+}
+
 function picker_route(ws)
 {
     return "/" + ws + "/nodes";
@@ -434,6 +449,30 @@ function rebuild_workspace_tabs(gobj, ws)
     let live = priv.live_hosts || {};
     let is_yuno = spec.unit === "yuno";
     let items = [workspace_picker_item(ws)];
+
+    /*  Statistics "single" layout: the picker plus ONE non-closable tab that
+     *  holds a card per selected yuno (shown only when something is selected).
+     *  The tree checkboxes add/remove cards; there are no per-yuno tabs.  */
+    if(is_yuno && stats_layout(config) === "single") {
+        if(nodes.length) {
+            items.push({
+                id:       "node-" + STATS_ALL_ID,
+                name:     t("statistics"),
+                icon:     "yi-eye",
+                route:    node_tab_route(ws, STATS_ALL_ID),
+                closable: false,
+                target: {
+                    stage:     "main",
+                    gclass:    spec.tab_gclass,
+                    kw:        {all: true, workspace: ws},
+                    lifecycle: "keep_alive"
+                }
+            });
+        }
+        yui_shell_set_submenu(priv.shell, ws, items);
+        return;
+    }
+
     for(let n of nodes) {
         /*  For the yuno-unit workspace, the selected id is the composite
          *  "node<US>yuno_id"; the connection dot + tab kw need the node part.  */
@@ -480,6 +519,11 @@ function workspace_first_route(gobj, ws)
 {
     let config = gobj_find_service("agent_config", false);
     let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
+    /*  Statistics "single" layout: land on the one all-cards tab when any
+     *  yuno is selected, else the picker.  */
+    if(WORKSPACES[ws] && WORKSPACES[ws].unit === "yuno" && stats_layout(config) === "single") {
+        return nodes.length ? node_tab_route(ws, STATS_ALL_ID) : picker_route(ws);
+    }
     if(!nodes.length) {
         return picker_route(ws);
     }
@@ -755,6 +799,26 @@ function ac_selected_nodes_changed(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Statistics layout toggled in Settings (single ↔ tabs) → rebuild the
+ *  Statistics tabs. If we are currently in that workspace, land on the
+ *  right tab for the new layout (deferred, so we don't re-enter navigate).
+ ***************************************************************/
+function ac_stats_layout_changed(gobj, event, kw, src)
+{
+    rebuild_workspace_tabs(gobj, "statistics");
+    let shell = gobj.priv.shell;
+    let cur = shell ? gobj_read_attr(shell, "current_route") : "";
+    if(shell && cur && ws_from_route(cur) === "statistics") {
+        setTimeout(() => {
+            if(gobj.priv.shell) {
+                yui_shell_navigate(gobj.priv.shell, workspace_first_route(gobj, "statistics"));
+            }
+        }, 0);
+    }
+    return 0;
+}
+
+/***************************************************************
  *  A node tab's ✕ → drop that node from its workspace; if it was
  *  the visible tab, land on a remaining one (or that workspace's
  *  picker).
@@ -912,6 +976,7 @@ function create_gclass(gclass_name)
             ["EV_OPEN_DEVTOOLS",    ac_open_devtools,   null],
             /*  multi-agent console tabs  */
             ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null],
+            ["EV_STATS_LAYOUT_CHANGED", ac_stats_layout_changed, null],
             ["EV_NAV_ITEM_CLOSE",   ac_nav_item_close,  null],
             ["EV_ROUTE_CHANGED",    ac_route_changed,   null],
             ["EV_MT_COMMAND_ANSWER", ac_link_answer,    null]
@@ -935,6 +1000,7 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_LANGUAGE",  0],
         ["EV_OPEN_DEVTOOLS",    0],
         ["EV_SELECTED_NODES_CHANGED", 0],
+        ["EV_STATS_LAYOUT_CHANGED", 0],
         ["EV_NAV_ITEM_CLOSE",   0],
         ["EV_ROUTE_CHANGED",    0],
         ["EV_MT_COMMAND_ANSWER", 0]
