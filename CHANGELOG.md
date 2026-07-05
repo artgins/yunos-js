@@ -91,6 +91,9 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   (`submenu.default = /<ws>/node`) and `workspace_first_route` prefers the
   saved tab (falling back to the first open node, then the picker). The picker
   stays one click away as tab 0.
+- **Nodes table sorted by version by default.** The node picker now opens
+  sorted by agent version descending (highest on top), with a numeric dotted
+  sorter so `7.10.0` ranks above `7.9.0` (not a plain string sort).
 - **Per-node connection status on the tabs.** The single global toolbar
   connection dot made no sense once the console went multi-node, so it is
   removed (`app_config` no longer declares a `connection` item). Instead each

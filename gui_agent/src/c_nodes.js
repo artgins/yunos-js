@@ -266,6 +266,25 @@ function version_gte(a, b)
 }
 
 /***************************************************************
+ *  Tabulator column sorter: compare two dotted versions numerically
+ *  (so 7.10.0 > 7.9.0, unlike a plain string sort). Returns the
+ *  ascending delta; Tabulator flips it for a "desc" sort.
+ ***************************************************************/
+function version_cmp(a, b)
+{
+    let A = version_tuple(a);
+    let B = version_tuple(b);
+    let n = Math.max(A.length, B.length);
+    for(let i = 0; i < n; i++) {
+        let d = (A[i] || 0) - (B[i] || 0);
+        if(d !== 0) {
+            return d;
+        }
+    }
+    return 0;
+}
+
+/***************************************************************
  *  Does this node meet the workspace's minimum version? Commands
  *  and Statistics need agent >= 7.7.0 (the capability marker that
  *  gates controlcenter command/stats forwarding); Terminal (PTY
@@ -440,7 +459,7 @@ function make_columns(gobj)
             titleFormatter: selall_formatter, headerClick: selall_click},
         {title: t("host"),    field: "host",    formatter: host_formatter},
         {title: t("role"),    field: "role"},
-        {title: t("version"), field: "version"},
+        {title: t("version"), field: "version", sorter: version_cmp},
         {title: t("uuid"),    field: "uuid",    formatter: uuid_formatter}
     ];
 }
@@ -468,6 +487,8 @@ function create_table(gobj)
         placeholder: t("no nodes"),
         columnDefaults: {headerHozAlign: "left", resizable: false},
         columns:     make_columns(gobj),
+        /*  Default order: highest agent version on top (numeric, not string).  */
+        initialSort: [{column: "version", dir: "desc"}],
         rowFormatter: row_formatter
     };
 
