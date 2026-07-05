@@ -172,3 +172,13 @@ This yuno is JavaScript and deploys independently of the SDK (see
   active-row highlight and a single search+refresh toolbar line.
 - **Session.** Silent recovery after a sleep/reconnect NAK (refresh + reopen)
   instead of dropping to the login screen.
+- **Developer monitor & window manager.** The avatar → **Developer** window was
+  reworked (in gobj-ui) from a raw traffic dumper into a yuno-monitor console: a
+  folding **bullet** traffic log, a persistent view selector (Detailed / Compact
+  / Name only), direction + free-text + hide-periodic filters, per-event mute,
+  and a live stats strip. Its host `C_YUI_WINDOW` got neutral theme-aware chrome
+  (SVG minimize / maximize / close, mobile full-screen sheet) and now opts into a
+  new **dock / taskbar** (`C_YUI_WINDOW_MANAGER`): this app creates the
+  `__window_manager__` service at startup, so minimizing the Developer window
+  sends it to a dock chip (bottom-left, `yi-terminal` icon) that restores or
+  closes it. Detail in the gobj-ui CHANGELOG (2.1.1–2.1.8).
