@@ -146,6 +146,7 @@ function mt_create(gobj)
 function mt_start(gobj)
 {
     build_dom(gobj);
+    watch_activation(gobj);
 
     /*  Defer the xterm fit+open until the stage is laid out and visible
      *  (a fit against a zero-size container yields 0 cols/rows). */
@@ -165,6 +166,10 @@ function mt_stop(gobj)
     if(priv.boot) {
         clearTimeout(priv.boot);
         priv.boot = null;
+    }
+    if(priv.vis_obs) {
+        priv.vis_obs.disconnect();
+        priv.vis_obs = null;
     }
     /*  Best-effort: tell the node to close the PTY (frees the bash). */
     close_console(gobj);
@@ -341,6 +346,28 @@ function create_terminal(gobj)
     term.onData((d) => send_keys(gobj, d));
     priv.term = term;
     priv.fit = fit;
+}
+
+/***************************************************************
+ *  Focus the xterm whenever this tab (re)becomes the visible one, so
+ *  selecting a Terminal tab lets you type straight away. The shell reveals
+ *  a keep_alive view by removing `is-hidden` from its $container (there is
+ *  no activation hook), so watch that class flip. The first connect is
+ *  already focused by ac_tty_open; this covers switching back to a tab.
+ ***************************************************************/
+function watch_activation(gobj)
+{
+    let priv = gobj.priv;
+    let $c = gobj_read_attr(gobj, "$container");
+    if(!$c || typeof MutationObserver === "undefined") {
+        return;
+    }
+    priv.vis_obs = new MutationObserver(function() {
+        if(!$c.classList.contains("is-hidden") && priv.term) {
+            priv.term.focus();
+        }
+    });
+    priv.vis_obs.observe($c, {attributes: true, attributeFilter: ["class"]});
 }
 
 /***************************************************************

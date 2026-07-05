@@ -110,6 +110,9 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   returns to the default. Reconnect now carries an icon (`yi-arrows-rotate`)
   with its label hidden on mobile so the toolbar stays legible when narrow —
   the new house rule: row buttons carry an icon and go icon-only on mobile.
+  Selecting a Terminal tab now moves keyboard focus straight to the xterm (a
+  `MutationObserver` on the view's `is-hidden` flip), so you can type without
+  clicking first.
 - **Fixes (review pass).**
   - **Commands — visible "running…" feedback.** Sending a command now paints
     a `running…` placeholder in the response pane until the answer arrives,
