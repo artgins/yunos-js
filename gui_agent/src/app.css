@@ -99,16 +99,16 @@
  *  effectively invisible. Repaint border, wash and strokes light.
  * ==================================================================== */
 [data-theme=dark] .tabulator-data-tree-control {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.14) !important;
+    border-color: rgba(255, 255, 255, 0.85) !important;
 }
 [data-theme=dark] .tabulator-data-tree-control:hover {
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.28) !important;
 }
 [data-theme=dark] .tabulator-data-tree-control .tabulator-data-tree-control-expand,
 [data-theme=dark] .tabulator-data-tree-control .tabulator-data-tree-control-expand:after,
 [data-theme=dark] .tabulator-data-tree-control .tabulator-data-tree-control-collapse:after {
-    background: rgba(255, 255, 255, 0.85);
+    background: #ffffff !important;
 }
 
 /* ====================================================================
