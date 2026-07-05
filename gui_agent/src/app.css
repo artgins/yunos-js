@@ -52,6 +52,28 @@
 }
 
 /* ====================================================================
+ *  Statistics cards: a counter value that changed since the previous
+ *  auto-refresh is accented (amber, bold) for that one cycle and reverts
+ *  to normal when it settles — no animation (transient effects are off by
+ *  house preference). Theme-aware.
+ * ==================================================================== */
+.STATS_CARD .stats-changed {
+    color: #c76b1f;
+    font-weight: 700;
+}
+@media (prefers-color-scheme: dark) {
+    .STATS_CARD .stats-changed {
+        color: #f0a35e;
+    }
+}
+:root[data-theme="light"] .STATS_CARD .stats-changed {
+    color: #c76b1f;
+}
+:root[data-theme="dark"] .STATS_CARD .stats-changed {
+    color: #f0a35e;
+}
+
+/* ====================================================================
  *  Nodes view: the active node row inside the Tabulator table.
  *  Green wash + left accent, theme-aware, with enough specificity
  *  (three classes) to beat the striped row !important backgrounds.

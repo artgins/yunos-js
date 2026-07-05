@@ -113,7 +113,9 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
     opt-in exception to Yuneta's no-polling rule (RSTATS has no push path). Kept
     tight: `C_AGENT_STATS` polls only the current card targets, only while the
     tab is **visible** (a MutationObserver disarms it when hidden and refreshes
-    on show), and only while the link is up.
+    on show), and only while the link is up. A counter whose value **changed**
+    since the previous refresh is accented (amber/bold, `.stats-changed`) for
+    that one cycle and reverts when it settles — no animation.
 - **Nodes table sorted by version by default.** The node picker now opens
   sorted by agent version descending (highest on top), with a numeric dotted
   sorter so `7.10.0` ranks above `7.9.0` (not a plain string sort).

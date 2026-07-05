@@ -87,8 +87,9 @@ let __gclass__ = null;
 function mt_create(gobj)
 {
     let priv = gobj.priv;
-    priv.cards = {};       /*  composite key -> {$body}  */
-    priv.visible = true;   /*  poll only while the tab is shown  */
+    priv.cards = {};        /*  composite key -> {$body}  */
+    priv.last_values = {};  /*  composite key -> last {stat: value} (change hl)  */
+    priv.visible = true;    /*  poll only while the tab is shown  */
 
     /*
      *  CHILD subscription model
@@ -237,8 +238,12 @@ function compute_targets(gobj)
 
 /***************************************************************
  *  Counters table for one card's body (agent-sourced, cells esc()'d).
+ *  A value that differs from `prev` (the previous refresh) gets the
+ *  `stats-changed` accent colour; unchanged values render normal — so a
+ *  changed counter lights up for one refresh cycle and reverts on the
+ *  next if it settles.
  ***************************************************************/
-function table_html(data)
+function table_html(data, prev)
 {
     let rows = [];
     if(data && typeof data === "object" && !Array.isArray(data)) {
@@ -250,8 +255,10 @@ function table_html(data)
         return `<p class="has-text-grey is-size-7">${esc(t("no statistics"))}</p>`;
     }
     let trs = rows.map(([k, v]) => {
+        let changed = prev && Object.prototype.hasOwnProperty.call(prev, k) && prev[k] !== v;
+        let cls = "has-text-right is-family-monospace" + (changed ? " stats-changed" : "");
         return `<tr><td>${esc(k)}</td>` +
-               `<td class="has-text-right is-family-monospace">${esc(fmt_value(v))}</td></tr>`;
+               `<td class="${cls}">${esc(fmt_value(v))}</td></tr>`;
     }).join("");
     return `<table class="table is-fullwidth is-narrow is-size-7"><tbody>${trs}</tbody></table>`;
 }
@@ -319,6 +326,15 @@ function render_cards(gobj)
     priv.cards = {};
 
     let targets = compute_targets(gobj);
+    /*  Drop remembered values for yunos no longer shown (change highlight).  */
+    let keep = {};
+    targets.forEach((tgt) => { keep[stats_sel_id(tgt.node, tgt.yuno_id)] = true; });
+    Object.keys(priv.last_values).forEach((k) => {
+        if(!keep[k]) {
+            delete priv.last_values[k];
+        }
+    });
+
     if(!targets.length) {
         priv.$cards.appendChild(createElement2(
             ["p", {class: "has-text-grey is-size-7 p-2", i18n: "pick yunos hint"},
@@ -358,9 +374,15 @@ function render_cards(gobj)
 function fill_card(gobj, node, yuno_id, data)
 {
     let priv = gobj.priv;
-    let card = priv.cards[stats_sel_id(node, yuno_id)];
+    let key = stats_sel_id(node, yuno_id);
+    let card = priv.cards[key];
     if(card && card.$body) {
-        card.$body.innerHTML = table_html(data);
+        card.$body.innerHTML = table_html(data, priv.last_values[key]);
+    }
+    /*  Remember this refresh's values so the next tick can highlight the
+     *  ones that changed. A null/failed answer keeps the last snapshot.  */
+    if(data && typeof data === "object" && !Array.isArray(data)) {
+        priv.last_values[key] = data;
     }
 }
 
