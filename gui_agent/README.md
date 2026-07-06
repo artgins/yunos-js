@@ -135,6 +135,21 @@ This yuno is JavaScript and deploys independently of the SDK (see
 - **Global Tabulator CSS.** Tabulator theme fixes moved to the library
   (`@yuneta/gobj-ui/src/tabulator.css`); the Nodes active-row uses the shared
   `.yui-row-active` class.
+- **Statistics per-card Reset.** Each Statistics card gained a broom-icon **Reset**
+  button that sends `stats-yuno id="<yuno>" stats="__reset__"` for that yuno; the
+  zeroed values return on the same stats-answer path and refill the card. Effective
+  only where the gclass honours `__reset__` (kernel iogate/channel/gates); app
+  gclasses that keep counters in private fields surfaced via `mt_reading` need their
+  own `mt_stats(__reset__)` — a pending backend review, not a gui bug.
+- **Dev monitor Copy + Expanded (inherited).** From gobj-ui: a **Copy** button
+  (copies the visible traffic) and an **Expanded** JSON view with Schema/Data/
+  Metadata section toggles in the Developer window.
+- **Account menu + adaptive dialogs.** The account (avatar) menu now holds **About**
+  (+ Developer + Sign out); **Settings** is a tab-less **rail** view (Preferences),
+  no longer duplicated in the menu. **About** opens as the standardized gobj-ui
+  **adaptive dialog** (2.1.12): a centered card with the close **X top-right** on
+  desktop, a full-screen sheet with a **back arrow top-left** on mobile; the popup
+  backdrop was lightened (2.1.13). App at **0.2.0**.
 
 ### 7.6.8 cycle
 
