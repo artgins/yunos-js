@@ -6,12 +6,9 @@
         "keywords": "TreeDB GUI"
     },
     "csp_connect_src": [
-        "_comment: List every WebSocket and HTTPS origin the GUI must reach.  Must stay aligned with backend_urls + bff_urls in src/conf/backend_config.js.  In dev /auth is same-origin (Vite proxies to https://localhost:1804) — the BFF entry is for production builds.",
-        "wss://localhost:1602",
-        "wss://localhost:1604",
-        "https://localhost:1802",
-        "https://localhost:1804",
-        "wss://app.wattyzer.com:1602",
-        "https://app.wattyzer.com:1804"
+        "_comment: The TreeDB browser connects to backends the USER configures at runtime (in the connection picker), on ARBITRARY hosts, plus the co-located auth BFF. A fixed origin allowlist cannot express that, so allow the wss: and https: schemes broadly — the user controls which hosts it talks to and the choice is stored locally in the browser. ws://localhost is for local dev only (mixed content blocks plain ws from the HTTPS prod app anyway).",
+        "wss:",
+        "https:",
+        "ws://localhost:1808"
     ]
 }

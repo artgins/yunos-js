@@ -30,7 +30,7 @@ export default defineConfig({
         },
         proxy: {
             "/auth": {
-                target: "https://localhost:1802",
+                target: "https://localhost:1808",
                 changeOrigin: true,
                 secure: false      // accept self-signed certs in dev
             }

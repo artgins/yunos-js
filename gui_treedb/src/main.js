@@ -1,9 +1,22 @@
 /***********************************************************************
  *          main.js
  *
- *          Entry point
+ *          TreeDB GUI — entry point.
  *
- *          Copyright (c) 2025, ArtGins.
+ *          Built on the declarative shell + nav stack (C_YUI_SHELL +
+ *          C_YUI_NAV) from the v2 line of @yuneta/gobj-ui, consumed as a
+ *          local file: dependency on the kernel/js/gobj-ui submodule. Menu
+ *          structure lives in src/app_config.json; this file wires the
+ *          GClasses and starts the yuno.
+ *
+ *          Multi-backend: the user configures backend connections at
+ *          runtime (Settings/picker), stored in browser localStorage; the
+ *          SPA authenticates once at the co-located auth_bff and forwards
+ *          the access_token in each C_IEVENT_CLI identity_card to the
+ *          (possibly remote) treedb backends. See
+ *          [[project_gui_treedb_v2_migration]] and YUNO_AUTH.md §2.2.
+ *
+ *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
 import {
@@ -16,311 +29,168 @@ import {
     gobj_create_default_service,
     gobj_start,
     gobj_play,
-    gobj_yuno,
-    trace_msg,
     register_c_yuno,
     register_c_timer,
     register_c_ievent_cli,
-    kw_get_local_storage_value,
-    gobj_read_attr,
-    gobj_write_bool_attr,
 } from "@yuneta/gobj-js";
 
-import {register_c_yuneta_gui} from "./c_yuneta_gui.js";
-import {register_c_login} from "./c_login.js";
-import {register_c_ui_todo} from "./c_ui_todo.js";
+/*
+ *  Import the specific gobj-ui modules (NOT the @yuneta/gobj-ui/index.js
+ *  barrel): the barrel transitively loads c_yui_uplot.js -> uplot, whose
+ *  module-top-level Intl.NumberFormat(navigator.language) can throw on a
+ *  browser reporting a non-standard navigator.language. Same pattern as
+ *  gui_agent / wattyzer.
+ */
+import {register_c_yui_shell}  from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {register_c_yui_nav}    from "@yuneta/gobj-ui/src/c_yui_nav.js";
+import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
 
-import {
-    register_c_yui_main,
-    register_c_yui_window,
-    register_c_yui_tabs,
-    register_c_yui_form,
-    register_c_yui_routing,
-    register_c_yui_map,
-    register_c_yui_uplot,
-    register_c_yui_json_graph,
-    register_c_yui_treedb_topics,
-    register_c_yui_treedb_topic_with_form,
-    register_c_yui_treedb_graph,
-    register_c_g6_nodes_tree,
-    register_c_yui_gobj_tree_js,
-    inject_svg_icons,
-} from "@yuneta/gobj-ui";
+import {register_c_yui_treedb_topics}          from "@yuneta/gobj-ui/src/c_yui_treedb_topics.js";
+import {register_c_yui_treedb_topic_with_form} from "@yuneta/gobj-ui/src/c_yui_treedb_topic_with_form.js";
+import {register_c_yui_treedb_graph}           from "@yuneta/gobj-ui/src/c_yui_treedb_graph.js";
+import {register_c_g6_nodes_tree}              from "@yuneta/gobj-ui/src/c_g6_nodes_tree.js";
+import {register_c_yui_json_graph}             from "@yuneta/gobj-ui/src/c_yui_json_graph.js";
+
+import {register_c_treedb_config} from "./c_treedb_config.js";
+import {register_c_treedb_links}  from "./c_treedb_links.js";
+import {register_c_login}         from "./c_login.js";
+import {register_c_treedb_picker} from "./c_treedb_picker.js";
+import {register_c_app}           from "./c_app.js";
+
+import {setup_locale} from "./locales/locales.js";
+import {apply_theme, current_theme} from "./theme.js";
 
 import "bulma/css/bulma.css";
+import "@yuneta/gobj-ui/src/c_yui_shell.css";
 import "@yuneta/gobj-ui/src/yui_icons.css";
 
-import "tabulator-tables/dist/css/tabulator.min.css"; // Import Tabulator CSS
+import "tabulator-tables/dist/css/tabulator.min.css";
 import "tabulator-tables/dist/css/tabulator_bulma.css";
+import "@yuneta/gobj-ui/src/tabulator.css";
 import "uplot/dist/uPlot.min.css";
 import "maplibre-gl/dist/maplibre-gl.css";
-
 import "vanilla-jsoneditor/themes/jse-theme-dark.css";
-import "tom-select/dist/css/tom-select.css"; // Import Tom-Select CSS
-
+import "tom-select/dist/css/tom-select.css";
 import "bulma-switch-control/css/main.css";
 
-import "@yuneta/gobj-ui/src/c_yui_main.css";
 import "@yuneta/gobj-ui/src/c_yui_map.css";
-import "@yuneta/gobj-ui/src/c_yui_routing.css";
 import "@yuneta/gobj-ui/src/ytable.css";
 import "@yuneta/gobj-ui/src/yui_toolbar.css";
 import "@yuneta/gobj-ui/src/lib_graph.css";
 
-/************************************************
- *          Data
- ************************************************/
-const yuno_name = "TreeDB GUI";
-const yuno_role = "treedb_gui";
-const yuno_version = "7.0.0";
+import app_config from "./app_config.json";
 
-const remote_yuno_role = "db_history_wz";
-const remote_yuno_service = "db_history_wz";
-const required_services = ["treedb_wattyzer", "treedb_authzs", "treedb_system_schema"];
-
-/*
- *  TEST Trace Simple Machine
- *  Set 1 or 2 to see activity machine.
- *  1: without kw details
- *  2: with kw details.
- */
-let tracing = 0;
-let trace_timer = 0;
-
-/*
- *  Trace inter-events or gobjs creation
- */
-let trace_inter_event = 0;
-let trace_creation = 0;
-let trace_i18n = 0;
-let trace_start_stop = 0;
-let trace_subscriptions = 0;
 
 /************************************************
- *          Startup code
+ *          Yuno identity
  ************************************************/
-if(!('WebSocket' in window)) {
-    window.alert("This app cannot run without websockets!");
-}
+const yuno_name    = "TreeDB GUI";
+const yuno_role    = "gui_treedb";
+const yuno_version = "0.2.0";
 
-function isFlexSupported()
-{
-    // Create a temporary element
-    let testElement = document.createElement('div');
-
-    // Attempt to set the display property to flex
-    testElement.style.display = 'flex';
-
-    // Check if the display property is set to flex
-    return testElement.style.display === 'flex';
-}
-
-if(!isFlexSupported()) {
-    window.alert("This app cannot run in old browser versions!");
-}
 
 /***************************************************************
- *
+ *          Startup checks
+ ***************************************************************/
+if(!("WebSocket" in window)) {
+    window.alert("This app cannot run without WebSockets!");
+}
+
+
+/***************************************************************
+ *          main()
  ***************************************************************/
 function main()
 {
     /*----------------------------*
-     *      Register gclass
+     *      Register gclasses
      *----------------------------*/
-    /*
-     *  Yunetas-js kernel
-     */
+    /*  Yunetas-js kernel  */
     register_c_yuno();
     register_c_timer();
     register_c_ievent_cli();
 
-    /*
-     *  App
-     */
-    register_c_yuneta_gui();
-    register_c_login();
-    register_c_yui_gobj_tree_js();
-    register_c_ui_todo();
+    /*  Shell + nav stack (v2)  */
+    register_c_yui_shell();
+    register_c_yui_nav();
+    register_c_yui_window();     /*  host for the developer panel  */
 
-    /*
-     *  Yui library
-     */
-    register_c_yui_main();
-    register_c_yui_routing();
-    register_c_yui_map();
-    register_c_yui_treedb_graph();
-    register_c_yui_treedb_topic_with_form();
+    /*  TreeDB editor gclasses (from gobj-ui)  */
     register_c_yui_treedb_topics();
-    register_c_yui_uplot();
-    register_c_yui_window();
-    register_c_yui_form();
-    register_c_yui_tabs();
+    register_c_yui_treedb_topic_with_form();
+    register_c_yui_treedb_graph();
     register_c_g6_nodes_tree();
     register_c_yui_json_graph();
 
+    /*  App root + config + login + links + picker  */
+    register_c_treedb_config();
+    register_c_treedb_links();
+    register_c_login();
+    register_c_treedb_picker();
+    register_c_app();
+
     /*------------------------------------------------*
-     *          Start yuneta
+     *          Start yuneta (localStorage-backed persistence)
      *------------------------------------------------*/
     gobj_start_up(
-        null,                           // jn_global_settings
-        db_load_persistent_attrs,       // load_persistent_attrs_fn
-        db_save_persistent_attrs,       // save_persistent_attrs_fn
-        db_remove_persistent_attrs,     // remove_persistent_attrs_fn
-        db_list_persistent_attrs,       // list_persistent_attrs_fn
-        null,                           // global_command_parser_fn
-        null                            // global_stats_parser_fn
+        null,                       // jn_global_settings
+        db_load_persistent_attrs,
+        db_save_persistent_attrs,
+        db_remove_persistent_attrs,
+        db_list_persistent_attrs,
+        null,                       // global_command_parser_fn
+        null                        // global_stats_parser_fn
     );
 
     /*------------------------------------------------*
-     *  Create the __yuno__ gobj, the grandfather.
+     *          Create the __yuno__
      *------------------------------------------------*/
-    trace_msg("CREATING __yuno__");
     let yuno = gobj_create_yuno(
-        "gui_yuno",
+        "gui_treedb_yuno",
         "C_YUNO",
         {
-            yuno_name: yuno_name,
-            yuno_role: yuno_role,
-            yuno_version: yuno_version,
-            required_services: required_services,
-            tracing: tracing,
-            trace_timer: trace_timer,
-            trace_inter_event: trace_inter_event,
-            trace_ievent_callback: null,
-            trace_creation: kw_get_local_storage_value("trace_creation", trace_creation, false),
-            trace_i18n: kw_get_local_storage_value("trace_i18n", trace_i18n, false),
-            trace_start_stop: kw_get_local_storage_value("trace_start_stop", trace_start_stop, false),
-            trace_subscriptions: kw_get_local_storage_value("trace_subscriptions", trace_subscriptions, false),
+            yuno_name:    yuno_name,
+            yuno_role:    yuno_role,
+            yuno_version: yuno_version
         }
     );
 
-    /*-------------------------------------*
-     *      Create default_service
-     *-------------------------------------*/
-    trace_msg("CREATING default_service");
-    let gobj_service = gobj_create_default_service(
-        "gui_service",
-        "C_YUNETA_GUI",
+    /*  i18n + theme before anything renders.  */
+    setup_locale();
+    apply_theme(current_theme());
+
+    /*------------------------------------------------*
+     *      C_TREEDB_APP is the default service: owns login +
+     *      config + links, gates the shell behind a session.
+     *------------------------------------------------*/
+    gobj_create_default_service(
+        "app",
+        "C_TREEDB_APP",
         {
-            remote_yuno_role: remote_yuno_role,
-            remote_yuno_service: remote_yuno_service,
-            required_services: required_services,
+            config:   app_config,
+            use_hash: true
         },
-        gobj_yuno()
+        yuno
     );
 
-    /*-------------------------------------*
-     *      Play yuno
-     *-------------------------------------*/
+    /*------------------------------------------------*
+     *          Play
+     *------------------------------------------------*/
     gobj_start(yuno);
-    gobj_play(yuno);    // this will start default service
+    gobj_play(yuno);
 }
 
+
 /***************************************************************
- *
+ *          Bootstrap on window load
  ***************************************************************/
-window.addEventListener('load', function() {
-    inject_svg_icons();
-
-    /*
-     *  Delete message "Loading application. Wait please..."
-     */
-    document.getElementById("loading-message").remove();
-
-    /*
-     *  Clean url hash
-     */
-    window.location.hash = '';
-
-    main();
-
-    manage_bulma_modals();
-
-    window.addEventListener("beforeunload", function() {
-        gobj_write_bool_attr(gobj_yuno(), "browser_beforeunload", true);
-        let r = gobj_read_attr(gobj_yuno(), "changesLost");
-        return r ? r : null;
-    });
-
-    /*
-     *  Manage modals of Bulma
-     */
-    function manage_bulma_modals()
-    {
-        // Functions to open and close a modal
-        function openModal($el)
-        {
-            $el.classList.add('is-active');
-        }
-
-        function closeModal($el)
-        {
-            $el.classList.remove('is-active');
-            if($el.parentElement.classList.contains('popup-layer')) {
-                $el.remove();
-            }
-        }
-
-        function closeAllModals()
-        {
-            (document.querySelectorAll('.modal') || []).forEach(($modal) => {
-                closeModal($modal);
-            });
-            (document.querySelectorAll('.popup') || []).forEach(($modal) => {
-                closeModal($modal);
-            });
-        }
-
-        // Add a click event on buttons to open a specific modal
-        (document.querySelectorAll('.js-modal-trigger') || []).forEach(($trigger) => {
-            const modal = $trigger.dataset.target;
-            const $target = document.getElementById(modal);
-
-            $trigger.addEventListener('click', () => {
-                openModal($target);
-            });
-        });
-
-        // Add a click event on various child elements to close the parent modal
-        // (document.querySelectorAll('.modal-background, .modal-close, .modal-card-head .delete, .modal-card-foot .button') || []).forEach(($close) => {
-        //     const $target = $close.closest('.modal');
-        //
-        //     $close.addEventListener('click', () => {
-        //         closeModal($target);
-        //     });
-        // });
-
-        // Add a keyboard event to close all modals
-        document.addEventListener('keydown', (event) => {
-            if(event.key === "Escape") {
-                closeAllModals();
-            }
-        });
-
-        /*
-         *
-         *  Add a click event to close all modals when click outside from popup
-         *  WARNING: Remember add:
-         *          event.stopPropagation();
-         *  if you don't want to get the event here.
-         */
-        document.addEventListener('click', (event) => {
-            (document.querySelectorAll('.modal') || []).forEach(($element) => {
-                if(!$element.contains(event.target)) {
-                    if($element.classList.contains('is-active')) {
-                        closeModal($element);
-                    }
-                }
-            });
-
-            (document.querySelectorAll('.popup') || []).forEach(($element) => {
-                if(!$element.contains(event.target)) {
-                    if($element.classList.contains('is-active')) {
-                        closeModal($element);
-                    }
-                }
-            });
-        });
+window.addEventListener("load", function() {
+    let loading = document.getElementById("loading-message");
+    if(loading) {
+        loading.remove();
     }
-
+    if(!window.location.hash) {
+        window.location.hash = "";
+    }
+    main();
 });

@@ -77,4 +77,30 @@ function setup_locale()
     }
 }
 
-export {setup_locale};
+/***************************************************************
+ *  Current language ("en" | "es").
+ ***************************************************************/
+function current_locale()
+{
+    return i18next.language || "es";
+}
+
+/***************************************************************
+ *  Switch language at runtime, persist it, keep luxon in sync.
+ ***************************************************************/
+function switch_locale(locale)
+{
+    let locales = get_locales();
+    if(!locales[locale]) {
+        log_error("switch_locale: unknown '" + locale + "'");
+        return current_locale();
+    }
+    i18next.changeLanguage(locale);
+    kw_set_local_storage_value("locale", locale);
+    if(locale === "en" || locale === "es") {
+        luxonSettings.defaultLocale = locale;
+    }
+    return locale;
+}
+
+export {setup_locale, switch_locale, current_locale};

@@ -1,0 +1,151 @@
+{
+    "_comment": "TreeDB GUI shell config. Two per-workspace rails — Topics (table editors) and Graphs (node graphs). Each declares ONLY its fixed picker tab (C_TREEDB_PICKER: manage connections + check which treedbs to open); the C_TREEDB_APP controller replaces the submenu at runtime, keeping the picker as tab 0 and appending one closable tab per selected treedb of a CONNECTED backend. The picker target.kw carries only the workspace string; the dynamic treedb tabs carry the live gobj_remote_yuno pointer (built in JS via yui_shell_set_submenu). Theme/language/logout live in the top toolbar. Connections + tokens are browser-local (localStorage).",
+
+    "shell": {
+        "breakpoints": "bulma",
+
+        "zones": {
+            "top":     { "host": "toolbar",        "show_on": "*" },
+            "left":    { "host": "menu.primary",   "show_on": ">=desktop" },
+            "bottom":  { "host": "menu.primary",   "show_on": "<desktop"  },
+            "top-sub": { "host": "menu.secondary", "show_on": "*" },
+            "center":  { "host": "stage.main" }
+        },
+
+        "stages": {
+            "main": { "zone": "center", "default_route": "/topics/connections" }
+        },
+
+        "_routes_comment": "Resolution-ancestor routes for the per-workspace dynamic treedb tabs (a tab /<ws>/db/<sel> resolves here on F5 before the controller rebuilds it). Both point at the workspace picker so an F5 lands on the connection manager until the tab is rebuilt.",
+        "routes": {
+            "/topics/db": {
+                "stage": "main",
+                "gclass": "C_TREEDB_PICKER",
+                "kw": { "workspace": "topics", "title": "connections" },
+                "lifecycle": "keep_alive"
+            },
+            "/graphs/db": {
+                "stage": "main",
+                "gclass": "C_TREEDB_PICKER",
+                "kw": { "workspace": "graphs", "title": "connections" },
+                "lifecycle": "keep_alive"
+            }
+        }
+    },
+
+    "toolbar": {
+        "zone": "top",
+        "aria_label": "TreeDB GUI toolbar",
+        "items": [
+            {
+                "id": "brand",
+                "type": "brand",
+                "wordmark": "TreeDB GUI",
+                "alt": "TreeDB GUI",
+                "aria_label": "TreeDB GUI home",
+                "action": { "type": "navigate", "route": "/topics/connections" }
+            },
+            {
+                "id": "lang",
+                "icon": "yi-language",
+                "name": "ES/EN",
+                "align": "end",
+                "aria_label": "Toggle language",
+                "action": { "type": "event", "event": "EV_TOGGLE_LANGUAGE" }
+            },
+            {
+                "id": "theme",
+                "icon": "yi-moon",
+                "name": "",
+                "align": "end",
+                "aria_label": "Toggle dark theme",
+                "action": { "type": "event", "event": "EV_TOGGLE_THEME" }
+            },
+            {
+                "id": "user",
+                "type": "avatar",
+                "align": "end",
+                "aria_label": "Account menu",
+                "action": {
+                    "type": "dropdown",
+                    "items": [
+                        {
+                            "id": "developer",
+                            "name": "developer",
+                            "icon": "yi-square-js",
+                            "action": { "type": "event", "event": "EV_OPEN_DEVTOOLS" }
+                        },
+                        { "type": "divider" },
+                        {
+                            "id": "logout",
+                            "name": "logout",
+                            "icon": "yi-sign-out-alt",
+                            "action": { "type": "event", "event": "EV_LOGOUT" }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+
+    "menu": {
+        "primary": {
+            "render": {
+                "left":   { "layout": "vertical", "icon_pos": "left", "show_label": true },
+                "bottom": { "layout": "icon-bar", "icon_pos": "top",  "show_label": true }
+            },
+            "items": [
+                {
+                    "id": "topics",
+                    "name": "topics",
+                    "icon": "yi-table",
+                    "tooltip": "Browse a treedb's topics as tables",
+                    "route": "/topics",
+                    "submenu": {
+                        "render": { "top-sub": "tabs" },
+                        "default": "/topics/connections",
+                        "items": [
+                            {
+                                "id": "picker",
+                                "name": "connections",
+                                "icon": "yi-cloudversify",
+                                "route": "/topics/connections",
+                                "target": {
+                                    "stage": "main",
+                                    "gclass": "C_TREEDB_PICKER",
+                                    "kw": { "workspace": "topics", "title": "connections" },
+                                    "lifecycle": "keep_alive"
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "id": "graphs",
+                    "name": "graphs",
+                    "icon": "yi-hexagon-nodes",
+                    "tooltip": "Browse a treedb as a node graph",
+                    "route": "/graphs",
+                    "submenu": {
+                        "render": { "top-sub": "tabs" },
+                        "default": "/graphs/connections",
+                        "items": [
+                            {
+                                "id": "picker",
+                                "name": "connections",
+                                "icon": "yi-cloudversify",
+                                "route": "/graphs/connections",
+                                "target": {
+                                    "stage": "main",
+                                    "gclass": "C_TREEDB_PICKER",
+                                    "kw": { "workspace": "graphs", "title": "connections" },
+                                    "lifecycle": "keep_alive"
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+}

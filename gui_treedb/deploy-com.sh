@@ -1,6 +1,6 @@
 #!/bin/sh
 
-NODE="treedb.yunetas.com"
+NODE="artgins.ytreedb.com"
 
 rsync -avzL --delete \
     --exclude \.webassets-cache --exclude \.sass-cache --exclude \.cache \
