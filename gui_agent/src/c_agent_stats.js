@@ -349,12 +349,27 @@ function render_cards(gobj)
             ["div", {class: "STATS_TABLE", style: "overflow:auto;"},
                 `<p class="has-text-grey is-size-7">…</p>`]
         );
+        /*  Per-card reset: zero THIS yuno's RSTATS counters (icon-only, the
+         *  title carries the meaning — mobile-friendly).  */
+        let $reset = createElement2(
+            ["button", {class: "button is-small is-white STATS_RESET", type: "button",
+                        title: t("reset stats"), "aria-label": t("reset stats")},
+                [["span", {class: "icon is-small"}, [["i", {class: "yi-broom"}]]]],
+                {click: () => request_reset_for(gobj, tgt.node, tgt.yuno_id)}]
+        );
         let $card = createElement2(
             ["div", {class: "card STATS_CARD", style: "width:20rem; max-width:100%;"},
                 [
                     ["div", {class: "card-content", style: "padding:0.9rem;"},
                         [
-                            ["p", {class: "is-size-6 has-text-weight-bold is-family-monospace"}, tgt.label],
+                            ["div", {class: "is-flex is-align-items-center mb-1", style: "gap:0.5rem;"},
+                                [
+                                    ["p", {class: "is-size-6 has-text-weight-bold is-family-monospace",
+                                           style: "flex:1 1 auto; min-width:0; overflow:hidden; " +
+                                                  "text-overflow:ellipsis; white-space:nowrap;"}, tgt.label],
+                                    $reset
+                                ]
+                            ],
                             ["p", {class: "is-size-7 has-text-grey mb-2"}, tgt.node],
                             $body
                         ]
@@ -420,6 +435,26 @@ function request_stats_for(gobj, node, yuno_id)
         return;
     }
     let kw_send = {agent_id: node, cmd2agent: `stats-yuno id="${yuno_id}"`};
+    msg_iev_write_key(kw_send, "console_purpose", "stats");
+    msg_iev_write_key(kw_send, "console_node", node);
+    msg_iev_write_key(kw_send, "console_yuno", yuno_id);
+    agent_link_command(link, "command-agent", kw_send);
+}
+
+/***************************************************************
+ *  Reset one yuno's SDF_RSTATS counters. `stats="__reset__"` makes the
+ *  yuno's stats parser zero its RSTATS attrs and return the fresh values
+ *  — which arrive via EV_MT_STATS_ANSWER (console_purpose="stats") and
+ *  refill this card, so the counters visibly drop to zero. Same tagging
+ *  as request_stats_for so the answer routes to the right card.
+ ***************************************************************/
+function request_reset_for(gobj, node, yuno_id)
+{
+    let link = gobj_read_attr(gobj, "link_svc");
+    if(!node || !yuno_id || !link || !agent_link_is_connected(link)) {
+        return;
+    }
+    let kw_send = {agent_id: node, cmd2agent: `stats-yuno id="${yuno_id}" stats="__reset__"`};
     msg_iev_write_key(kw_send, "console_purpose", "stats");
     msg_iev_write_key(kw_send, "console_node", node);
     msg_iev_write_key(kw_send, "console_yuno", yuno_id);

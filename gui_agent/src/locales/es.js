@@ -117,6 +117,7 @@ const es = {
         "statistic":         "Estadística",
         "value":             "Valor",
         "no statistics":     "Sin estadísticas",
+        "reset stats":       "Reiniciar estadísticas",
         "settings":          "Configuración",
         "agents":            "Agentes",
         "authentication":    "Autenticación",

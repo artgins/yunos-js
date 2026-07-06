@@ -117,6 +117,7 @@ const en = {
         "statistic":         "Statistic",
         "value":             "Value",
         "no statistics":     "No statistics",
+        "reset stats":       "Reset statistics",
         "settings":          "Settings",
         "agents":            "Agents",
         "authentication":    "Authentication",
