@@ -180,5 +180,14 @@ This yuno is JavaScript and deploys independently of the SDK (see
   (SVG minimize / maximize / close, mobile full-screen sheet) and now opts into a
   new **dock / taskbar** (`C_YUI_WINDOW_MANAGER`): this app creates the
   `__window_manager__` service at startup, so minimizing the Developer window
-  sends it to a dock chip (bottom-left, `yi-terminal` icon) that restores or
-  closes it. Detail in the gobj-ui CHANGELOG (2.1.1–2.1.8).
+  sends it to a dock chip (`yi-terminal` icon) that restores or closes it. The
+  dock is created in **responsive** mode: a floating bar pinned bottom-left on
+  desktop (where the bottom is clear), and an inline taskbar row in the shell's
+  free `bottom-sub` zone on mobile (the primary menu owns the `bottom` zone), so
+  it never covers the menu. Detail in the gobj-ui CHANGELOG (2.1.1–2.1.9).
+
+- **Tabulator styling is global.** Tabulator is a first-class element across the
+  yunos, so its theme fixes live in the library (`@yuneta/gobj-ui/src/tabulator.css`:
+  dark-theme tree control + the reusable `.yui-row-active` row highlight) rather
+  than in this app's `app.css`. The Nodes active-row uses the shared
+  `.yui-row-active` class.

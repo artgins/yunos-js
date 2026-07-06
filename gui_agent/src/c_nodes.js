@@ -472,12 +472,12 @@ function create_table(gobj)
 {
     let priv = gobj.priv;
 
-    /*  green wash + accent on rows with an open Console tab
-     *  (styles in app.css, reusing the .node-row-active class)  */
+    /*  green wash + accent on rows with an open Console tab (the shared
+     *  .yui-row-active class from @yuneta/gobj-ui/src/tabulator.css)  */
     function row_formatter(row)
     {
         let n = row.getData();
-        row.getElement().classList.toggle("node-row-active", is_selected_node(gobj, n));
+        row.getElement().classList.toggle("yui-row-active", is_selected_node(gobj, n));
     }
 
     let settings = {

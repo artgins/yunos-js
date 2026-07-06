@@ -66,6 +66,7 @@ import "@yuneta/gobj-ui/src/c_yui_shell.css";
 import "@yuneta/gobj-ui/src/yui_icons.css";
 import "tabulator-tables/dist/css/tabulator.min.css";
 import "tabulator-tables/dist/css/tabulator_bulma.css";
+import "@yuneta/gobj-ui/src/tabulator.css";   // global Tabulator theme fixes
 import "./app.css";
 
 import app_config from "./app_config.json";
@@ -175,11 +176,20 @@ function main()
      *      Window manager (dock/taskbar). A named service so
      *      C_YUI_WINDOW hosts (e.g. the Developer monitor) can
      *      opt in via gobj_find_service("__window_manager__").
+     *
+     *      Responsive placement: a floating bar pinned bottom-left on
+     *      desktop (where the bottom is clear), an inline taskbar row in
+     *      the shell's free `bottom-sub` zone on mobile (above the primary
+     *      menu, which owns the `bottom` zone) so it never covers it.
      *------------------------------------------------*/
     gobj_create_service(
         "__window_manager__",
         "C_YUI_WINDOW_MANAGER",
-        {},
+        {
+            dock_mode:       "responsive",
+            dock_corner:     "bottom-left",
+            inline_selector: '[data-zone="bottom-sub"]'
+        },
         yuno
     );
 
