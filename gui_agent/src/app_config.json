@@ -16,7 +16,7 @@
             "main": { "zone": "center", "default_route": "/commands/node" }
         },
 
-        "_routes_comment": "Resolution-ancestor + empty-state routes for the per-node workspaces (a node tab /<ws>/node/<id> resolves here on F5 before the controller rebuilds it). Settings pages are declared as submenu targets under the Settings primary item, not here.",
+        "_routes_comment": "Resolution-ancestor + empty-state routes for the per-node workspaces (a node tab /<ws>/node/<id> resolves here on F5 before the controller rebuilds it). About opens as an adaptive dialog from the account menu (EV_OPEN_ABOUT), not a route. Settings (preferences) is a direct target on the Settings primary item.",
         "routes": {
             "/commands/node": {
                 "stage": "main",
@@ -75,13 +75,13 @@
                 "aria_label": "Account menu",
                 "action": {
                     "type": "dropdown",
-                    "_items_comment": "Account menu is trimmed: Preferences + About are now the Settings primary item (rail). Only the developer-window toggle and Sign out remain here.",
+                    "_items_comment": "Account menu: Settings is NOT here (it is a primary rail item). About lives here (app info), plus the developer-window toggle and Sign out.",
                     "items": [
                         {
-                            "id": "settings",
-                            "name": "settings",
-                            "icon": "yi-gear",
-                            "action": { "type": "navigate", "route": "/settings/preference" }
+                            "id": "about",
+                            "name": "about",
+                            "icon": "yi-question",
+                            "action": { "type": "event", "event": "EV_OPEN_ABOUT" }
                         },
                         {
                             "id": "developer",
@@ -191,34 +191,12 @@
                     "icon": "yi-gear",
                     "tooltip": "Application settings",
                     "route": "/settings",
-                    "submenu": {
-                        "render": { "top-sub": "tabs" },
-                        "items": [
-                            {
-                                "id": "preference",
-                                "name": "preferences",
-                                "icon": "yi-gear",
-                                "route": "/settings/preference",
-                                "target": {
-                                    "stage": "main",
-                                    "gclass": "C_ACCOUNT_VIEW",
-                                    "kw": { "view": "preference" },
-                                    "lifecycle": "lazy_destroy"
-                                }
-                            },
-                            {
-                                "id": "about",
-                                "name": "about",
-                                "icon": "yi-question",
-                                "route": "/settings/about",
-                                "target": {
-                                    "stage": "main",
-                                    "gclass": "C_ACCOUNT_VIEW",
-                                    "kw": { "view": "about" },
-                                    "lifecycle": "lazy_destroy"
-                                }
-                            }
-                        ]
+                    "_comment": "No tabs for now: a direct target (preferences). About moved to the account menu; add a submenu here again if Settings grows more pages.",
+                    "target": {
+                        "stage": "main",
+                        "gclass": "C_ACCOUNT_VIEW",
+                        "kw": { "view": "preference" },
+                        "lifecycle": "lazy_destroy"
                     }
                 }
             ]

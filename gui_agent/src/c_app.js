@@ -42,6 +42,7 @@ import {
     yui_shell_set_submenu,
     yui_shell_navigate,
 } from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_shell_show_modal} from "@yuneta/gobj-ui/src/shell_modals.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
@@ -252,6 +253,7 @@ function build_shell(gobj)
     gobj_subscribe_event(shell, "EV_TOGGLE_LANGUAGE", {}, gobj);
     gobj_subscribe_event(shell, "EV_LOGOUT",          {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_DEVTOOLS",   {}, gobj);
+    gobj_subscribe_event(shell, "EV_OPEN_ABOUT",      {}, gobj);
     /*  Multi-agent console: a tab's ✕ removes its node; landing on the
      *  console home redirects to the first open node tab. */
     gobj_subscribe_event(shell, "EV_NAV_ITEM_CLOSE",  {}, gobj);
@@ -763,6 +765,40 @@ function ac_open_devtools(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  EV_OPEN_ABOUT — the "About" entry in the account menu. Opens the
+ *  About view (C_ACCOUNT_VIEW view=about) as the standardized adaptive
+ *  dialog (desktop X top-right / mobile back top-left); the view gobj is
+ *  created here and destroyed on close. Idempotent toggle.
+ ***************************************************************/
+function ac_open_about(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.about_modal) {                 /*  toggle: close  */
+        priv.about_modal.close();
+        return 0;
+    }
+    if(!priv.shell) {
+        return 0;
+    }
+    let view = gobj_create_pure_child("about-view", "C_ACCOUNT_VIEW", {view: "about"}, gobj);
+    gobj_start(view);
+    let $c = gobj_read_attr(view, "$container");
+    priv.about_modal = yui_shell_show_modal(priv.shell, $c, {
+        dialog: true,
+        title: "about",
+        t: t,
+        on_close: function() {
+            priv.about_modal = null;
+            if(gobj_is_running(view)) {
+                gobj_stop(view);
+            }
+            gobj_destroy(view);
+        }
+    });
+    return 0;
+}
+
+/***************************************************************
  *  Selected nodes changed (a picker checkbox or a closed tab) →
  *  rebuild just that workspace's tabs.
  ***************************************************************/
@@ -974,6 +1010,7 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_THEME",     ac_toggle_theme,    null],
             ["EV_TOGGLE_LANGUAGE",  ac_toggle_language, null],
             ["EV_OPEN_DEVTOOLS",    ac_open_devtools,   null],
+            ["EV_OPEN_ABOUT",       ac_open_about,      null],
             /*  multi-agent console tabs  */
             ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null],
             ["EV_STATS_LAYOUT_CHANGED", ac_stats_layout_changed, null],
@@ -999,6 +1036,7 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_THEME",     0],
         ["EV_TOGGLE_LANGUAGE",  0],
         ["EV_OPEN_DEVTOOLS",    0],
+        ["EV_OPEN_ABOUT",       0],
         ["EV_SELECTED_NODES_CHANGED", 0],
         ["EV_STATS_LAYOUT_CHANGED", 0],
         ["EV_NAV_ITEM_CLOSE",   0],
