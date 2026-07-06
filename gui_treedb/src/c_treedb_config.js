@@ -174,7 +174,15 @@ function treedb_config_upsert_connection(gobj, conn)
         label:               conn.label || conn.url,
         url:                 conn.url,
         remote_yuno_role:    conn.remote_yuno_role || "",
-        remote_yuno_service: conn.remote_yuno_service || ""
+        remote_yuno_service: conn.remote_yuno_service || "",
+        /*
+         *  The treedb names to browse on this backend. Required for backends
+         *  whose identity ack's services_roles lists only the connected
+         *  service (e.g. db_history_wz), not the treedbs. When empty the
+         *  picker falls back to services_roles (works for controlcenter-style
+         *  backends that DO list their treedbs there).
+         */
+        treedbs:             Array.isArray(conn.treedbs) ? conn.treedbs : []
     };
     let list = treedb_config_get_connections(gobj);
     let idx = list.findIndex((c) => c && c.id === stored.id);
@@ -185,8 +193,41 @@ function treedb_config_upsert_connection(gobj, conn)
     }
     gobj_write_attr(gobj, "connections", list);
     gobj_save_persistent_attrs(gobj, "connections");
-    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list});
+    /*  `conn` lets the app (re)open just the affected transport.  */
+    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list, conn: stored});
     return stored;
+}
+
+/***************************************************************
+ *  Replace the WHOLE connections list (the Settings Tabulator editor is
+ *  the source of truth), persist, notify. Drops selected treedbs that
+ *  point at a connection id no longer present.
+ ***************************************************************/
+function treedb_config_set_connections(gobj, list)
+{
+    let clean = Array.isArray(list) ? list.filter((c) => c && c.id) : [];
+    gobj_write_attr(gobj, "connections", clean);
+    gobj_save_persistent_attrs(gobj, "connections");
+
+    /*  Prune open tabs whose connection is gone.  */
+    let alive = {};
+    for(let c of clean) {
+        alive[c.id] = true;
+    }
+    let map = read_selection_map(gobj);
+    let touched = false;
+    for(let ws in map) {
+        let kept = (map[ws] || []).filter((s) => s && alive[s.conn_id]);
+        if(kept.length !== (map[ws] || []).length) {
+            map[ws] = kept;
+            touched = true;
+        }
+    }
+    if(touched) {
+        write_selection_map(gobj, map);
+    }
+
+    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: clean});
 }
 
 /***************************************************************
@@ -434,6 +475,7 @@ export {
     treedb_config_get_connections,
     treedb_config_get_connection,
     treedb_config_upsert_connection,
+    treedb_config_set_connections,
     treedb_config_remove_connection,
     treedb_config_get_selected,
     treedb_config_is_selected,

@@ -2,19 +2,18 @@
  *          c_treedb_picker.js
  *
  *      C_TREEDB_PICKER — the fixed tab-0 of each workspace (Topics /
- *      Graphs). It is the connection + treedb manager:
+ *      Graphs). It SELECTS which treedbs to open in this workspace:
  *
- *        - lists the configured backend connections (add / edit / remove),
- *          persisted in C_TREEDB_CONFIG;
- *        - shows each connection's live status and, when connected, the
- *          treedbs it exposes (from the identity ack's services_roles,
- *          cached in C_TREEDB_LINKS);
- *        - a checkbox per treedb opens/closes it as a tab in THIS workspace
- *          (per-workspace selection in C_TREEDB_CONFIG); the app root
- *          rebuilds the workspace tabs on the change.
+ *        - lists the configured backend connections (read-only here —
+ *          connections are added / edited / removed in Settings);
+ *        - shows each connection's live status and its declared treedbs
+ *          (or, as a fallback, the treedbs discovered from the identity
+ *          ack's services_roles);
+ *        - a checkbox per treedb opens/closes it as a tab in THIS
+ *          workspace (per-workspace selection in C_TREEDB_CONFIG); the app
+ *          root rebuilds the workspace tabs on the change.
  *
- *      A view: it builds its own `$container` in mt_create and the shell
- *      mounts it (reads $container, appends, starts).
+ *      A view: it builds its own `$container` for the shell to mount.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -32,9 +31,6 @@ import {t} from "i18next";
 
 import {
     treedb_config_get_connections,
-    treedb_config_upsert_connection,
-    treedb_config_remove_connection,
-    treedb_config_get_selected,
     treedb_config_is_selected,
     treedb_config_toggle_selected,
     sel_id,
@@ -64,8 +60,7 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    $body:      null,   /*  where connection cards render          */
-    adding:     false,  /*  the add-connection form is visible     */
+    $body: null,   /*  where connection cards render  */
 };
 
 let __gclass__ = null;
@@ -87,10 +82,6 @@ function mt_create(gobj)
 {
     build_ui(gobj);
 
-    /*
-     *  Re-render on connection-list changes, per-workspace selection
-     *  changes, and connection up/down (to refresh status + treedb list).
-     */
     let config = gobj_find_service("treedb_config", false);
     if(config) {
         gobj_subscribe_event(config, "EV_CONNECTIONS_CHANGED", {}, gobj);
@@ -145,29 +136,27 @@ function build_ui(gobj)
     let $body = createElement2(["div", {class: "ytreedb-picker-body"}, []]);
     priv.$body = $body;
 
+    let $manage = createElement2(
+        ["button", {class: "button is-small", id: "ytreedb-manage-btn",
+                    i18n: "manage connections"}, "Manage connections"]);
+    $manage.addEventListener("click", () => {
+        /*  hash routing: jump to the Settings page.  */
+        window.location.hash = "#/settings";
+    });
+
     let $container = createElement2(
         ["div", {class: "ytreedb-picker p-4", gclass: "C_TREEDB_PICKER"},
             [
                 ["div", {class: "level mb-3"}, [
                     ["div", {class: "level-left"}, [
-                        ["h2", {class: "title is-5", i18n: "connections"}, "Connections"]
+                        ["h2", {class: "title is-5", i18n: "treedbs"}, "TreeDBs"]
                     ]],
-                    ["div", {class: "level-right"}, [
-                        ["button", {class: "button is-primary is-small",
-                                    id: "ytreedb-add-btn", i18n: "add connection"},
-                            "Add connection"]
-                    ]]
+                    ["div", {class: "level-right"}, [$manage]]
                 ]],
                 $body
             ]
         ]
     );
-
-    let $add = $container.querySelector("#ytreedb-add-btn");
-    $add.addEventListener("click", () => {
-        priv.adding = !priv.adding;
-        render(gobj);
-    });
 
     gobj_write_attr(gobj, "$container", $container);
     refresh_language($container, t);
@@ -189,7 +178,6 @@ function clear_node($el)
 function status_dot(connected)
 {
     return ["span", {
-        class: connected ? "ytreedb-dot is-connected" : "ytreedb-dot is-disconnected",
         style: "display:inline-block; width:0.7em; height:0.7em; border-radius:50%; "
              + "margin-right:0.5em; vertical-align:middle; background:"
              + (connected ? "#48c78e" : "#b5b5b5") + ";"
@@ -197,14 +185,17 @@ function status_dot(connected)
 }
 
 /***************************************************************
- *  The treedbs a connection exposes (from services_roles), excluding
- *  the internal treedb_system_schema unless a system view is wanted.
+ *  The treedbs to show for a connection: the user-declared list, else
+ *  the services_roles keys (minus the connected service + system).
  ***************************************************************/
-function connection_treedbs(services_roles)
+function connection_treedbs(conn, services_roles)
 {
+    if(Array.isArray(conn.treedbs) && conn.treedbs.length) {
+        return conn.treedbs.slice().sort();
+    }
     let names = [];
     for(let name in (services_roles || {})) {
-        if(name === "treedb_system_schema") {
+        if(name === "treedb_system_schema" || name === conn.remote_yuno_service) {
             continue;
         }
         names.push(name);
@@ -214,26 +205,26 @@ function connection_treedbs(services_roles)
 }
 
 /***************************************************************
- *  Render one connection card.
+ *  Render one connection card with its treedb checkboxes.
  ***************************************************************/
 function render_connection(gobj, conn)
 {
     let workspace = gobj_read_attr(gobj, "workspace");
     let links = gobj_find_service("treedb_links", false);
+    let config = gobj_find_service("treedb_config", false);
     let connected = links ? treedb_links_is_connected(links, conn.id) : false;
     let services_roles = links ? treedb_links_get_services_roles(links, conn.id) : {};
-    let treedbs = connection_treedbs(services_roles);
+    let treedbs = connection_treedbs(conn, services_roles);
 
     let $treedb_list = createElement2(["div", {class: "ytreedb-treedbs mt-2"}, []]);
-    if(connected && treedbs.length) {
+    if(treedbs.length) {
         for(let name of treedbs) {
             let id = sel_id(conn.id, name);
-            let checked = treedb_config_is_selected(
-                gobj_find_service("treedb_config", false), workspace, id);
+            let checked = treedb_config_is_selected(config, workspace, id);
             let $cb = createElement2(["input", {type: "checkbox"}]);
             $cb.checked = !!checked;
+            $cb.disabled = !connected;
             $cb.addEventListener("change", () => {
-                let config = gobj_find_service("treedb_config", false);
                 treedb_config_toggle_selected(config, workspace,
                     {conn_id: conn.id, treedb_name: name, label: `${name} · ${conn.label}`});
             });
@@ -244,94 +235,21 @@ function render_connection(gobj, conn)
         }
     } else if(connected) {
         $treedb_list.appendChild(createElement2(
-            ["p", {class: "is-size-7 has-text-grey", i18n: "no treedbs exposed"}, "No treedbs exposed"]));
+            ["p", {class: "is-size-7 has-text-grey", i18n: "no treedbs declared"},
+                "No treedbs declared — add them in Settings."]));
     } else {
         $treedb_list.appendChild(createElement2(
             ["p", {class: "is-size-7 has-text-grey", i18n: "connecting"}, "Connecting…"]));
     }
 
-    let $remove = createElement2(
-        ["button", {class: "button is-small is-danger is-light", "aria-label": "remove",
-                    title: t("remove")}, [["span", {class: "icon"}, [["i", {class: "yi-trash"}]]]]]);
-    $remove.addEventListener("click", () => {
-        let config = gobj_find_service("treedb_config", false);
-        treedb_config_remove_connection(config, conn.id);
-    });
-
     return createElement2(
         ["div", {class: "box p-3 mb-2", gclass: "TREEDB_CONNECTION_CARD"},
             [
-                ["div", {class: "level is-mobile mb-1"}, [
-                    ["div", {class: "level-left"}, [
-                        ["span", {class: "has-text-weight-semibold"},
-                            [status_dot(connected), ["span", {}, conn.label || conn.url]]]
-                    ]],
-                    ["div", {class: "level-right"}, [$remove]]
-                ]],
+                ["div", {class: "mb-1 has-text-weight-semibold"},
+                    [status_dot(connected), ["span", {}, conn.label || conn.url]]],
                 ["p", {class: "is-size-7 has-text-grey"},
                     `${conn.url}  ·  ${conn.remote_yuno_role || "?"}/${conn.remote_yuno_service || "?"}`],
                 $treedb_list
-            ]
-        ]
-    );
-}
-
-/***************************************************************
- *  The inline add-connection form.
- ***************************************************************/
-function render_add_form(gobj)
-{
-    let $url  = createElement2(["input", {class: "input is-small", type: "text",
-        placeholder: "wss://host:1602"}]);
-    let $role = createElement2(["input", {class: "input is-small", type: "text",
-        placeholder: "remote_yuno_role"}]);
-    let $svc  = createElement2(["input", {class: "input is-small", type: "text",
-        placeholder: "remote_yuno_service (treedb host yuno)"}]);
-    let $label = createElement2(["input", {class: "input is-small", type: "text",
-        placeholder: "label (optional)"}]);
-
-    let $save = createElement2(["button", {class: "button is-small is-primary", i18n: "save"}, "Save"]);
-    $save.addEventListener("click", () => {
-        let url = $url.value.trim();
-        if(!url) {
-            return;
-        }
-        let config = gobj_find_service("treedb_config", false);
-        treedb_config_upsert_connection(config, {
-            url:                 url,
-            remote_yuno_role:    $role.value.trim(),
-            remote_yuno_service: $svc.value.trim(),
-            label:               $label.value.trim() || url
-        });
-        gobj.priv.adding = false;
-        render(gobj);
-    });
-
-    let $cancel = createElement2(["button", {class: "button is-small", i18n: "cancel"}, "Cancel"]);
-    $cancel.addEventListener("click", () => {
-        gobj.priv.adding = false;
-        render(gobj);
-    });
-
-    let field = (label_key, label_txt, $input) => [
-        "div", {class: "field"},
-        [
-            ["label", {class: "label is-small", i18n: label_key}, label_txt],
-            ["div", {class: "control"}, [$input]]
-        ]
-    ];
-
-    return createElement2(
-        ["div", {class: "box p-3 mb-3", gclass: "TREEDB_ADD_FORM"},
-            [
-                field("backend url", "Backend URL", $url),
-                field("remote_yuno_role", "Remote yuno role", $role),
-                field("remote_yuno_service", "Remote yuno service", $svc),
-                field("label", "Label", $label),
-                ["div", {class: "field is-grouped mt-3"}, [
-                    ["div", {class: "control"}, [$save]],
-                    ["div", {class: "control"}, [$cancel]]
-                ]]
             ]
         ]
     );
@@ -348,16 +266,12 @@ function render(gobj)
     }
     clear_node(priv.$body);
 
-    if(priv.adding) {
-        priv.$body.appendChild(render_add_form(gobj));
-    }
-
     let config = gobj_find_service("treedb_config", false);
     let conns = config ? treedb_config_get_connections(config) : [];
-    if(!conns.length && !priv.adding) {
+    if(!conns.length) {
         priv.$body.appendChild(createElement2(
             ["p", {class: "has-text-grey", i18n: "no connections yet"},
-                "No connections yet. Add one to browse its treedbs."]));
+                "No connections yet. Add one in Settings to browse its treedbs."]));
     }
     for(let conn of conns) {
         priv.$body.appendChild(render_connection(gobj, conn));

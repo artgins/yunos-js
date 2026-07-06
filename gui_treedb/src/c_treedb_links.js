@@ -181,11 +181,51 @@ function treedb_links_ensure(gobj, conn)
     gobj_subscribe_event(iev, "EV_ON_CLOSE",  {}, gobj);
     gobj_subscribe_event(iev, "EV_ON_ID_NAK", {}, gobj);
 
-    priv.conns[conn.id] = {iev: iev, name: name};
+    priv.conns[conn.id] = {iev: iev, name: name, coords: conn_coords(conn)};
     priv.by_name[name] = conn.id;
 
     gobj_start_tree(iev);
     return iev;
+}
+
+/***************************************************************
+ *  The connection coordinates that, when changed, require recreating
+ *  the transport (C_IEVENT_CLI bakes them at mt_create). Label / treedbs
+ *  are NOT here — they are display/selection only.
+ ***************************************************************/
+function conn_coords(conn)
+{
+    return (conn.url || "") + "|" + (conn.remote_yuno_role || "")
+        + "|" + (conn.remote_yuno_service || "");
+}
+
+/***************************************************************
+ *  Reconcile the live transports with the configured connections:
+ *  create missing ones, recreate those whose coordinates changed, and
+ *  close those no longer configured. Unchanged connections keep their
+ *  live session (open tabs undisturbed).
+ ***************************************************************/
+function treedb_links_sync(gobj, connections)
+{
+    let priv = gobj.priv;
+    let wanted = {};
+    for(let conn of (connections || [])) {
+        if(!conn || !conn.id || !conn.url) {
+            continue;
+        }
+        wanted[conn.id] = true;
+        let e = priv.conns[conn.id];
+        if(!e) {
+            treedb_links_ensure(gobj, conn);
+        } else if(e.coords !== conn_coords(conn)) {
+            treedb_links_reopen(gobj, conn);
+        }
+    }
+    for(let id of Object.keys(priv.conns)) {
+        if(!wanted[id]) {
+            treedb_links_close(gobj, id);
+        }
+    }
 }
 
 /***************************************************************
@@ -410,6 +450,7 @@ export {
     register_c_treedb_links,
     treedb_links_set_token,
     treedb_links_ensure,
+    treedb_links_sync,
     treedb_links_get_iev,
     treedb_links_get_services_roles,
     treedb_links_is_connected,

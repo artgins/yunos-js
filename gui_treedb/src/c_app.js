@@ -56,7 +56,7 @@ import {
 
 import {
     treedb_links_set_token,
-    treedb_links_ensure,
+    treedb_links_sync,
     treedb_links_get_iev,
     treedb_links_is_connected,
     treedb_links_reopen,
@@ -338,11 +338,17 @@ function rebuild_workspace_tabs(gobj, ws)
             closable: true,
             target: {
                 stage:     "main",
-                gclass:    spec.view,
+                /*  C_TREEDB_VIEW hosts the real treedb view AS A SERVICE so
+                 *  C_IEVENT_CLI can route its command answers back (a pure
+                 *  shell child is not findable by gobj_find_service).  */
+                gclass:    "C_TREEDB_VIEW",
                 kw: {
-                    treedb_name:     sel.treedb_name,
+                    view_gclass:      spec.view,
+                    treedb_name:      sel.treedb_name,
                     gobj_remote_yuno: iev,
-                    system:          false
+                    workspace:        ws,
+                    conn_id:          sel.conn_id,
+                    system:           false
                 },
                 lifecycle: "keep_alive"
             }
@@ -359,18 +365,17 @@ function rebuild_all_workspaces(gobj)
 }
 
 /***************************************************************
- *  Ensure a transport exists for every configured connection.
+ *  Reconcile the live transports with the configured connections
+ *  (open new, recreate edited, close removed).
  ***************************************************************/
-function ensure_all_connections(gobj)
+function sync_connections(gobj)
 {
     let config = gobj_find_service("treedb_config", false);
     let links = gobj_find_service("treedb_links", false);
     if(!config || !links) {
         return;
     }
-    for(let conn of treedb_config_get_connections(config)) {
-        treedb_links_ensure(links, conn);
-    }
+    treedb_links_sync(links, treedb_config_get_connections(config));
 }
 
 /***************************************************************
@@ -412,7 +417,7 @@ function ac_login_accepted(gobj, event, kw, src)
     build_shell(gobj);
     yui_shell_refresh_avatars(gobj.priv.shell);
 
-    ensure_all_connections(gobj);
+    sync_connections(gobj);
     rebuild_all_workspaces(gobj);
     return 0;
 }
@@ -614,7 +619,7 @@ function ac_selected_treedbs_changed(gobj, event, kw, src)
  ***************************************************************/
 function ac_connections_changed(gobj, event, kw, src)
 {
-    ensure_all_connections(gobj);
+    sync_connections(gobj);
     rebuild_all_workspaces(gobj);
     return 0;
 }

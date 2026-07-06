@@ -51,11 +51,13 @@ import {register_c_yui_treedb_graph}           from "@yuneta/gobj-ui/src/c_yui_t
 import {register_c_g6_nodes_tree}              from "@yuneta/gobj-ui/src/c_g6_nodes_tree.js";
 import {register_c_yui_json_graph}             from "@yuneta/gobj-ui/src/c_yui_json_graph.js";
 
-import {register_c_treedb_config} from "./c_treedb_config.js";
-import {register_c_treedb_links}  from "./c_treedb_links.js";
-import {register_c_login}         from "./c_login.js";
-import {register_c_treedb_picker} from "./c_treedb_picker.js";
-import {register_c_app}           from "./c_app.js";
+import {register_c_treedb_config}   from "./c_treedb_config.js";
+import {register_c_treedb_links}    from "./c_treedb_links.js";
+import {register_c_login}           from "./c_login.js";
+import {register_c_treedb_picker}   from "./c_treedb_picker.js";
+import {register_c_treedb_settings} from "./c_treedb_settings.js";
+import {register_c_treedb_view}     from "./c_treedb_view.js";
+import {register_c_app}             from "./c_app.js";
 
 import {setup_locale} from "./locales/locales.js";
 import {apply_theme, current_theme} from "./theme.js";
@@ -127,6 +129,8 @@ function main()
     register_c_treedb_links();
     register_c_login();
     register_c_treedb_picker();
+    register_c_treedb_settings();
+    register_c_treedb_view();
     register_c_app();
 
     /*------------------------------------------------*

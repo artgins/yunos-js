@@ -40,6 +40,7 @@
             {
                 "id": "brand",
                 "type": "brand",
+                "logo": "/yuneta-y.svg",
                 "wordmark": "TreeDB GUI",
                 "alt": "TreeDB GUI",
                 "aria_label": "TreeDB GUI home",
@@ -143,6 +144,19 @@
                                 }
                             }
                         ]
+                    }
+                },
+                {
+                    "id": "settings",
+                    "name": "settings",
+                    "icon": "yi-gear",
+                    "tooltip": "Manage backend connections",
+                    "route": "/settings",
+                    "target": {
+                        "stage": "main",
+                        "gclass": "C_TREEDB_SETTINGS",
+                        "kw": { "title": "settings" },
+                        "lifecycle": "lazy_destroy"
                     }
                 }
             ]
