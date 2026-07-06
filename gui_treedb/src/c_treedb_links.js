@@ -168,18 +168,18 @@ function treedb_links_ensure(gobj, conn)
         remote_yuno_role:    conn.remote_yuno_role || "",
         remote_yuno_service: conn.remote_yuno_service || "",
         remote_yuno_name:    "",
-        jwt:                 priv.token
+        jwt:                 priv.token,
+        /*
+         *  The `subscriber` attr makes the iev deliver its LOCAL published
+         *  events (EV_ON_OPEN/CLOSE/ID_NAK/OPEN_ERROR) to us via a null (all)
+         *  subscription, which stays LOCAL. Subscribing to SPECIFIC events on
+         *  a C_IEVENT_CLI instead is treated as a REMOTE subscription and is
+         *  forwarded to the backend as __subscribing__ (which logs
+         *  "SUBSCRIBING event ignored"). The treedb views subscribe to this
+         *  iev separately for their own answers / EV_TREEDB_NODE_* events.
+         */
+        subscriber:          gobj
     }, gobj_yuno());
-
-    /*
-     *  Subscribe ONLY to the connection-level events (not null/all): the
-     *  treedb views subscribe to this same iev for their own answers /
-     *  EV_TREEDB_NODE_* events, so this service must not also receive
-     *  events it does not declare ("event NOT defined in state").
-     */
-    gobj_subscribe_event(iev, "EV_ON_OPEN",   {}, gobj);
-    gobj_subscribe_event(iev, "EV_ON_CLOSE",  {}, gobj);
-    gobj_subscribe_event(iev, "EV_ON_ID_NAK", {}, gobj);
 
     priv.conns[conn.id] = {iev: iev, name: name, coords: conn_coords(conn)};
     priv.by_name[name] = conn.id;
@@ -195,8 +195,12 @@ function treedb_links_ensure(gobj, conn)
  ***************************************************************/
 function conn_coords(conn)
 {
+    /*  treedbs is included so editing it reopens the connection: it feeds
+     *  the yuno's required_services, which is baked into the identity_card
+     *  the backend uses to authorize per-treedb command access.  */
     return (conn.url || "") + "|" + (conn.remote_yuno_role || "")
-        + "|" + (conn.remote_yuno_service || "");
+        + "|" + (conn.remote_yuno_service || "")
+        + "|" + (Array.isArray(conn.treedbs) ? conn.treedbs.join(",") : "");
 }
 
 /***************************************************************
@@ -365,6 +369,16 @@ function ac_on_id_nak(gobj, event, kw, src)
     return republish(gobj, src, "EV_ON_ID_NAK", kw);
 }
 
+/***************************************************************
+ *  The iev could not open. Delivered by the local (subscriber-attr)
+ *  subscription; handled here so it does not trip "event NOT defined in
+ *  state". Not republished — the app reacts to EV_ON_CLOSE / EV_ON_ID_NAK.
+ ***************************************************************/
+function ac_on_open_error(gobj, event, kw, src)
+{
+    return 0;
+}
+
 
 
 
@@ -400,9 +414,10 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const states = [
         ["ST_IDLE", [
-            ["EV_ON_OPEN",   ac_on_open,   null],
-            ["EV_ON_CLOSE",  ac_on_close,  null],
-            ["EV_ON_ID_NAK", ac_on_id_nak, null]
+            ["EV_ON_OPEN",       ac_on_open,       null],
+            ["EV_ON_CLOSE",      ac_on_close,      null],
+            ["EV_ON_ID_NAK",     ac_on_id_nak,     null],
+            ["EV_ON_OPEN_ERROR", ac_on_open_error, null]
         ]]
     ];
 
@@ -412,9 +427,10 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const out = event_flag_t.EVF_OUTPUT_EVENT | event_flag_t.EVF_NO_WARN_SUBS;
     const event_types = [
-        ["EV_ON_OPEN",   out],
-        ["EV_ON_CLOSE",  out],
-        ["EV_ON_ID_NAK", out]
+        ["EV_ON_OPEN",       out],
+        ["EV_ON_CLOSE",      out],
+        ["EV_ON_ID_NAK",     out],
+        ["EV_ON_OPEN_ERROR", 0]
     ];
 
     __gclass__ = gclass_create(

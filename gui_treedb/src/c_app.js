@@ -343,12 +343,11 @@ function rebuild_workspace_tabs(gobj, ws)
                  *  shell child is not findable by gobj_find_service).  */
                 gclass:    "C_TREEDB_VIEW",
                 kw: {
-                    view_gclass:      spec.view,
-                    treedb_name:      sel.treedb_name,
-                    gobj_remote_yuno: iev,
-                    workspace:        ws,
-                    conn_id:          sel.conn_id,
-                    system:           false
+                    view_gclass: spec.view,
+                    treedb_name: sel.treedb_name,
+                    workspace:   ws,
+                    conn_id:     sel.conn_id,
+                    system:      false
                 },
                 lifecycle: "keep_alive"
             }
@@ -375,7 +374,26 @@ function sync_connections(gobj)
     if(!config || !links) {
         return;
     }
-    treedb_links_sync(links, treedb_config_get_connections(config));
+    let conns = treedb_config_get_connections(config);
+
+    /*
+     *  The C_IEVENT_CLI identity_card advertises `required_services` (read
+     *  from the yuno). The backend's C_AUTHZ only authorizes commands to
+     *  the treedb services listed there — with an empty list it grants only
+     *  the connected service and silently DROPS a `descs` to treedb_wattyzer.
+     *  Advertise the union of every connection's treedbs so each backend
+     *  grants the subset it hosts. (conn_coords includes treedbs, so a
+     *  treedbs edit reopens that connection to re-send the identity card.)
+     */
+    let req = {};
+    for(let c of conns) {
+        for(let db of (c.treedbs || [])) {
+            req[db] = true;
+        }
+    }
+    gobj_write_attr(gobj_yuno(), "required_services", Object.keys(req));
+
+    treedb_links_sync(links, conns);
 }
 
 /***************************************************************
