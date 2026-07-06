@@ -77,7 +77,7 @@ import app_config from "./app_config.json";
  ************************************************/
 const yuno_name    = "Yuneta Agent Console";
 const yuno_role    = "gui_agent";
-const yuno_version = "0.1.0";
+const yuno_version = "0.2.0";
 
 
 /***************************************************************
