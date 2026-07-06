@@ -10,8 +10,9 @@ Contents:
 
 - **gui_agent** — Agent Console: a control-plane CLI/GUI to operate yuneta
   agents through the controlcenter (multi-agent console, nodes list, stats).
-- **gui_treedb** — TreeDB GUI: table + graph views over timeranger2/treedb,
-  with the Keycloak/OAuth2-PKCE + BFF login.
+- **gui_treedb** — TreeDB GUI: table + graph views over timeranger2/treedb, on
+  the gobj-ui V2 declarative shell, browsing MULTIPLE user-configured backends
+  (auth_bff login + access_token forwarded in each C_IEVENT_CLI identity_card).
 - Keycloak login-form / BFF notes and `FUTURE-JS.md`.
 
 Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` via local `file:`
@@ -189,6 +190,21 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
 
 ### gui_treedb
 
-- TreeDB table + graph GUI over timeranger2/treedb, on the legacy GClass GUI
-  stack; OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`). See
-  `gui_treedb/README`.
+- **Rebuilt on the gobj-ui V2 declarative shell (C_YUI_SHELL/NAV), multi-backend
+  (0.2.0).** Migrated off the legacy GClass GUI stack (C_YUI_MAIN/ROUTING) onto
+  the V2 shell, and generalized from a single hardwired backend to browsing
+  treedbs on MULTIPLE user-configured backends on other hosts. The SPA
+  authenticates once at the co-located auth_bff (BFF cookie) and forwards the
+  access_token in each C_IEVENT_CLI identity_card to the (possibly remote)
+  treedb backends — see the opt-in `POST /auth/token` endpoint in yunetas
+  `c_auth_bff.c` and `YUNO_AUTH.md §2.2`. New gclasses: C_TREEDB_APP (root),
+  C_TREEDB_CONFIG (connections + selection in localStorage), C_TREEDB_LINKS
+  (one C_IEVENT_CLI per connection, jwt forwarded), C_TREEDB_LOGIN, C_TREEDB_PICKER
+  (treedb selection), C_TREEDB_SETTINGS (editable Tabulator connection editor),
+  C_TREEDB_VIEW (hosts C_YUI_TREEDB_TOPICS/GRAPH as a named service so command
+  answers route back). CSP broadened to `wss:`/`https:` for runtime-configured
+  backends. Verified end-to-end against db_history_wz on app.wattyzer.com.
+  KEY: the identity_card must advertise the treedbs in `required_services` or the
+  backend authz gate silently drops the `descs`. See `gui_treedb/README`.
+- (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
+  OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).
