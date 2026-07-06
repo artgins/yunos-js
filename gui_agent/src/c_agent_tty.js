@@ -57,6 +57,7 @@ import "@xterm/xterm/css/xterm.css";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {agent_config_remove_selected_node} from "./c_agent_config.js";
 import {current_theme} from "./theme.js";
+import {install_touch_selection} from "./tty_touch_select.js";
 
 
 /***************************************************************
@@ -173,6 +174,10 @@ function mt_stop(gobj)
     }
     /*  Best-effort: tell the node to close the PTY (frees the bash). */
     close_console(gobj);
+    if(priv.touch_teardown) {
+        priv.touch_teardown();
+        priv.touch_teardown = null;
+    }
     if(priv.term) {
         priv.term.dispose();
         priv.term = null;
@@ -346,6 +351,12 @@ function create_terminal(gobj)
     term.onData((d) => send_keys(gobj, d));
     priv.term = term;
     priv.fit = fit;
+
+    /*  Touch text-selection (xterm's own selection is mouse-only, so a
+     *  phone long-press selects nothing). Drives xterm's public select
+     *  API from touch + shows a Copy bubble. Desktop is unaffected (touch
+     *  events never fire). */
+    priv.touch_teardown = install_touch_selection(term, priv.$term, {t: t});
 }
 
 /***************************************************************

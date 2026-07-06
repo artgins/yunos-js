@@ -116,6 +116,26 @@ This yuno is JavaScript and deploys independently of the SDK (see
 `deploy-com.sh`), so its changes live here rather than in the top-level
 `CHANGELOG.md`.
 
+### 7.7.0 cycle
+
+- **Terminal touch selection (mobile).** xterm.js selection is mouse-only, so on
+  a phone a long-press selected nothing. New `tty_touch_select.js` adds a touch
+  gesture driving xterm's public selection API: **long-press** selects the word
+  under the finger (haptic tick), **drag** extends it (char-level within a row,
+  line-level across rows — xterm has no public multi-row char API), **release**
+  shows a floating **Copy** bubble that writes `getSelection()` to the clipboard,
+  and a tap elsewhere dismisses. A quick drag (no long-press) is left to xterm's
+  own viewport scroll. Desktop is unaffected (touch events never fire). Root-caused
+  with headless-browser reproductions of the shipped xterm v6 build. _Follow-up:
+  tune long-press timing / native-callout suppression against real iOS/Android._
+- **Responsive window-manager dock.** `__window_manager__` is created in
+  `responsive` mode (gobj-ui 2.1.9): floating bottom-left on desktop, an inline
+  taskbar row in the shell's free `bottom-sub` zone on mobile so it sits above the
+  primary menu instead of covering it.
+- **Global Tabulator CSS.** Tabulator theme fixes moved to the library
+  (`@yuneta/gobj-ui/src/tabulator.css`); the Nodes active-row uses the shared
+  `.yui-row-active` class.
+
 ### 7.6.8 cycle
 
 - **Statistics (tree picker + cards).** The Statistics workspace picker is a
