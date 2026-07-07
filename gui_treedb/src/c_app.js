@@ -30,10 +30,14 @@ import {
     gobj_subscribe_event, gobj_send_event,
     gobj_find_service, gobj_yuno,
     gobj_start_tree, gobj_stop, gobj_stop_tree, gobj_destroy, gobj_is_running,
-    refresh_language,
+    createElement2, refresh_language,
 } from "@yuneta/gobj-js";
 
 import {t} from "i18next";
+
+import pkg from "../package.json";
+
+import {yui_shell_show_modal} from "@yuneta/gobj-ui/src/shell_modals.js";
 
 import {
     yui_shell_set_avatar_provider,
@@ -69,6 +73,7 @@ import {setup_dev, dev_window_was_open} from "@yuneta/gobj-ui/src/yui_dev.js";
 import {switch_locale, current_locale} from "./locales/locales.js";
 import {current_theme, apply_theme, toggle_theme} from "./theme.js";
 import {mount_login} from "./login.js";
+import {deploy_info} from "./conf/deploy.js";
 
 
 /***************************************************************
@@ -238,6 +243,7 @@ function build_shell(gobj)
     gobj_subscribe_event(shell, "EV_TOGGLE_LANGUAGE", {}, gobj);
     gobj_subscribe_event(shell, "EV_LOGOUT",          {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_DEVTOOLS",   {}, gobj);
+    gobj_subscribe_event(shell, "EV_OPEN_ABOUT",      {}, gobj);
     gobj_subscribe_event(shell, "EV_NAV_ITEM_CLOSE",  {}, gobj);
     gobj_subscribe_event(shell, "EV_ROUTE_CHANGED",   {}, gobj);
     gobj_start_tree(shell);
@@ -776,6 +782,85 @@ function ac_open_devtools(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  EV_OPEN_ABOUT — the "About" entry in the account menu. Opens a
+ *  product card (mark + version + deployment + doc link) as the
+ *  standardized adaptive dialog (desktop X top-right / mobile back
+ *  top-left). Self-contained: no view gclass, just a DOM node handed
+ *  to the shell modal. Idempotent toggle.
+ ***************************************************************/
+function ac_open_about(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.about_modal) {                 /*  toggle: close  */
+        priv.about_modal.close();
+        return 0;
+    }
+    if(!priv.shell) {
+        return 0;
+    }
+
+    let dep = deploy_info();
+
+    let $content = createElement2(
+        ["div", {class: "treedb-about", gclass: "C_TREEDB_APP", style: "max-width:560px;"},
+            [
+                ["div", {class: "box"},
+                    [
+                        ["div", {style: "display:flex; gap:1rem; align-items:center;"},
+                            [
+                                ["img", {
+                                    src: "/treedb-mark.svg",
+                                    alt: "TreeDB",
+                                    width: "60",
+                                    height: "60",
+                                    style: "flex:0 0 auto;"
+                                }],
+                                ["div", {style: "flex:1 1 auto; min-width:0;"},
+                                    [
+                                        ["h2", {class: "title is-4", style: "margin-bottom:0.15rem;",
+                                                i18n: "treedb console"}, "TreeDB Console"],
+                                        ["p", {class: "subtitle is-6",
+                                               style: "color:#5B6B7E; margin-bottom:0.6rem;"},
+                                            `v${pkg.version || ""} · ${dep.tenant}`],
+                                        ["p", {style: "color:#5B6B7E; margin-bottom:0.75rem;",
+                                               i18n: "about description"},
+                                            "Browse your TreeDB topics as tables and nodes as graphs " +
+                                            "across every configured backend."],
+                                        ["a", {
+                                            class: "button is-link is-light is-small",
+                                            href: "https://doc.yuneta.io",
+                                            target: "_blank",
+                                            rel: "noopener noreferrer"
+                                        },
+                                            [
+                                                ["span", {class: "icon"}, [["span", {class: "yi-question"}]]],
+                                                ["span", {i18n: "documentation"}, "Documentation"]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                ["p", {class: "is-size-7", style: "color:#9AA7B4; margin-top:0.5rem; text-align:right;"},
+                    "© 2026 ArtGins"]
+            ]
+        ]
+    );
+
+    priv.about_modal = yui_shell_show_modal(priv.shell, $content, {
+        dialog: true,
+        title: "about",
+        t: t,
+        on_close: function() {
+            priv.about_modal = null;
+        }
+    });
+    return 0;
+}
+
+/***************************************************************
  *  A treedb was checked/unchecked in the picker → rebuild that
  *  workspace's tabs and navigate to (or away from) the tab.
  ***************************************************************/
@@ -951,6 +1036,7 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_THEME",     ac_toggle_theme,    null],
             ["EV_TOGGLE_LANGUAGE",  ac_toggle_language, null],
             ["EV_OPEN_DEVTOOLS",    ac_open_devtools,   null],
+            ["EV_OPEN_ABOUT",       ac_open_about,      null],
             /*  workspace tabs  */
             ["EV_SELECTED_TREEDBS_CHANGED", ac_selected_treedbs_changed, null],
             ["EV_CONNECTIONS_CHANGED",      ac_connections_changed,      null],
@@ -973,6 +1059,7 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_THEME",     0],
         ["EV_TOGGLE_LANGUAGE",  0],
         ["EV_OPEN_DEVTOOLS",    0],
+        ["EV_OPEN_ABOUT",       0],
         ["EV_SELECTED_TREEDBS_CHANGED", 0],
         ["EV_CONNECTIONS_CHANGED",      0],
         ["EV_NAV_ITEM_CLOSE",   0],

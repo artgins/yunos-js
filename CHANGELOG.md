@@ -22,6 +22,15 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): "About" dialog in the account menu.** A new About entry
+  (account dropdown, between Developer and Sign out) opens the standardized
+  adaptive dialog (desktop X top-right / mobile back sheet) with a product
+  card: the TreeDB mark, `TreeDB Console` + `version · deployment tenant`, a
+  one-line description and a Documentation link to `doc.yuneta.io`.
+  Self-contained in `C_TREEDB_APP` (`EV_OPEN_ABOUT` → `yui_shell_show_modal`,
+  idempotent toggle) — no view gclass, mirroring gui_agent's About. The account
+  menu's `developer` / `logout` labels are now translated too (they fell
+  through to lower-case English before).
 - **fix(gui_treedb): the transport rebind now really mounts the fresh view
   (editing `treedbs` left a blank/crashed tab).** The treedb views remove
   their own `$container` from the DOM in `mt_destroy`, so

@@ -63,6 +63,14 @@ const en = {
         "login feature graphs":               "Nodes & links as graphs",
         "login feature multibackend":         "Multiple backends at once",
 
+        /* account menu + About dialog */
+        "developer":                          "Developer",
+        "logout":                             "Sign Out",
+        "about":                              "About",
+        "treedb console":                     "TreeDB Console",
+        "about description":                  "Browse your TreeDB topics as tables and nodes as graphs across every configured backend.",
+        "documentation":                      "Documentation",
+
         "_xxx":                               "last key — insert new ones above"
     }
 };

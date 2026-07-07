@@ -63,6 +63,14 @@ const es = {
         "login feature graphs":               "Nodos y enlaces como grafos",
         "login feature multibackend":         "Varios backends a la vez",
 
+        /* account menu + About dialog */
+        "developer":                          "Desarrollador",
+        "logout":                             "Cerrar sesión",
+        "about":                              "Acerca de",
+        "treedb console":                     "Consola TreeDB",
+        "about description":                  "Explora tus topics TreeDB como tablas y nodos como grafos en cada backend configurado.",
+        "documentation":                      "Documentación",
+
         "_xxx":                               "last key — insert new ones above"
     }
 };
