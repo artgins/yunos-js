@@ -155,14 +155,21 @@ function mt_stop(gobj)
 
 /***************************************************************
  *          Framework Method: Destroy
+ *
+ *  The hosted view is a SERVICE created with this gobj as parent, so
+ *  gobj_destroy cascades to it — do NOT destroy it again here
+ *  ("gobj NULL or DESTROYED"). Cleanup already ran in mt_stop. Just drop
+ *  our references (mirrors wattyzer's C_WZ_TREEDB.mt_destroy).
  ***************************************************************/
 function mt_destroy(gobj)
 {
     let priv = gobj.priv;
-    if(priv.view) {
-        gobj_destroy(priv.view);
-        priv.view = null;
+    priv.view = null;
+    let $c = gobj_read_attr(gobj, "$container");
+    if($c && $c.parentNode) {
+        $c.parentNode.removeChild($c);
     }
+    gobj_write_attr(gobj, "$container", null);
 }
 
 

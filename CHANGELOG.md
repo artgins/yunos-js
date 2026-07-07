@@ -234,5 +234,21 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   in gobj-ui's `g6_drag_canvas_touch.js`, not a duplication symptom.) Diagnosed
   by driving the live app with Playwright: the backend `descs` answer was
   correct (proper `cols`/headers), the blank titles were purely client-side.
+- **Fixed reconnect regressions vs the gui_agent/wattyzer references (audit).**
+  A cross-app comparison surfaced transport/reconnect wiring the V2 rebuild
+  dropped:
+  - **`gobj NULL or DESTROYED` on WS close.** `C_TREEDB_VIEW.mt_destroy` called
+    `gobj_destroy` on its hosted view, a SERVICE child the framework already
+    cascade-destroys — a double-destroy logging one error per pruned tab.
+    Mirrored wattyzer's `C_WZ_TREEDB.mt_destroy` (just drop the references).
+  - **Unbounded refresh→reopen→NAK loop.** `ac_login_refreshed` cleared the
+    recovery latch immediately and `ac_on_open` never re-armed it, so a backend
+    that kept rejecting the forwarded token drove an endless `/auth/refresh` +
+    reconnect loop. Added a per-connection `nak_recovered` latch: one silent
+    refresh + reopen; a repeat NAK closes THAT connection's transport (breaking
+    the loop) without logging the user out — the BFF session and other backends
+    are unaffected (gui_agent logs out here because it is single-link;
+    gui_treedb is multi-backend). Verified live with Playwright (tab open/close
+    → no `gobj NULL or DESTROYED`).
 - (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
   OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).

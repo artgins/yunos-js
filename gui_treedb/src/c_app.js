@@ -60,6 +60,7 @@ import {
     treedb_links_get_iev,
     treedb_links_is_connected,
     treedb_links_reopen,
+    treedb_links_close,
     treedb_links_close_all,
 } from "./c_treedb_links.js";
 
@@ -98,8 +99,9 @@ SDATA_END()
 let PRIVATE_DATA = {
     shell:        null,
     login_ui:     null,
-    nak_conns:    null,   /*  set of conn_ids awaiting token refresh  */
-    refreshing:   false,
+    nak_conns:    null,   /*  conn_ids awaiting the in-flight token refresh  */
+    nak_recovered: null,  /*  conn_ids already reopened once with a fresh token  */
+    refreshing:   false,  /*  a BFF refresh is in flight (dedupes concurrent NAKs)  */
     mounted_base: "",     /*  last EV_ROUTE_CHANGED base (resolved route)  */
 };
 
@@ -122,6 +124,7 @@ function mt_create(gobj)
 {
     __app_gobj__ = gobj;
     gobj.priv.nak_conns = {};
+    gobj.priv.nak_recovered = {};
     gobj.priv.mounted_base = "";
 
     /*  Config service (child of self).  */
@@ -513,6 +516,9 @@ function ac_login_refreshed(gobj, event, kw, src)
     for(let conn_id of Object.keys(priv.nak_conns)) {
         let conn = config ? treedb_config_get_connection(config, conn_id) : null;
         if(conn && links) {
+            /*  Mark it "refreshed once": a repeat NAK after this reopen is a
+             *  genuine rejection, caught in ac_on_id_nak (no more looping). */
+            priv.nak_recovered[conn_id] = true;
             treedb_links_reopen(links, conn);
         }
     }
@@ -525,6 +531,13 @@ function ac_login_refreshed(gobj, event, kw, src)
  ***************************************************************/
 function ac_on_open(gobj, event, kw, src)
 {
+    let conn_id = (kw && kw.conn_id) || "";
+    if(conn_id) {
+        /*  Reconnected successfully → clear its recovery marks so a LATER
+         *  token expiry is treated as a fresh, retriable NAK again. */
+        delete gobj.priv.nak_recovered[conn_id];
+        delete gobj.priv.nak_conns[conn_id];
+    }
     rebuild_all_workspaces(gobj);
     restore_tab_from_url(gobj);
     return 0;
@@ -541,16 +554,38 @@ function ac_on_close(gobj, event, kw, src)
 
 /***************************************************************
  *  A connection's identity was NAK'd: usually an expired access_token.
- *  Note it and trigger ONE silent refresh; on EV_LOGIN_REFRESHED the
- *  flagged connections are reopened with the fresh token.
+ *
+ *  First NAK for a connection → ONE silent BFF refresh, then reopen it with
+ *  the fresh token (ac_login_refreshed). If it NAKs AGAIN after that reopen
+ *  (the fresh token is genuinely rejected by that backend — e.g. no role for
+ *  the treedb, or `expose_access_token` off so the forwarded token is empty),
+ *  give up on THAT connection: close its transport so it stops the
+ *  refresh→reopen→NAK loop. We do NOT log the user out — the BFF session and
+ *  the other backends are unaffected (unlike gui_agent, which is single-link
+ *  and logs out on the second NAK).
  ***************************************************************/
 function ac_on_id_nak(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     let conn_id = (kw && kw.conn_id) || "";
+
+    /*  Second NAK after a refresh for THIS connection → real rejection, not a
+     *  stale-token race. Stop retrying it (breaks the loop); leave the rest. */
+    if(conn_id && priv.nak_recovered[conn_id]) {
+        delete priv.nak_recovered[conn_id];
+        delete priv.nak_conns[conn_id];
+        let links = gobj_find_service("treedb_links", false);
+        if(links) {
+            treedb_links_close(links, conn_id);
+        }
+        rebuild_all_workspaces(gobj);
+        return 0;
+    }
+
     if(conn_id) {
         priv.nak_conns[conn_id] = true;
     }
+    /*  `refreshing` dedupes concurrent NAKs into a single refresh request. */
     if(!priv.refreshing) {
         priv.refreshing = true;
         let login = gobj_find_service("treedb_login", false);
@@ -579,6 +614,7 @@ function ac_login_denied(gobj, event, kw, src)
     let priv = gobj.priv;
     priv.refreshing = false;
     priv.nak_conns = {};
+    priv.nak_recovered = {};
     let msg = (kw && (kw.error || kw.error_code)) || t("login failed");
 
     if(priv.shell) {
