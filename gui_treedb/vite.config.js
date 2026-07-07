@@ -8,6 +8,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
     resolve: {
         preserveSymlinks: true,
+        /*
+         *  Force a SINGLE copy of i18next across the bundle. gobj-ui ships its
+         *  own node_modules/i18next (declared dependency), so without dedupe
+         *  Vite bundles two copies: gui_treedb initializes copy A (locales.js)
+         *  while the vendored treedb view (`import {t} from "i18next"`) binds
+         *  copy B, which is never initialized — every column header then
+         *  renders blank (Tabulator's `&nbsp;` placeholder for an empty title).
+         *  Deduping makes both share the one initialized instance.
+         */
+        dedupe: ["i18next"],
         alias: [
             {
                 find: "@yuneta/gobj-js",
