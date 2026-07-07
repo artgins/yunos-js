@@ -22,6 +22,17 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **chore(gui_treedb): purge unused `public/` boilerplate (~1.2 MB → 8 KB).**
+  Nothing in the app referenced the HTML5-boilerplate leftovers (`404.html`,
+  `browserconfig.xml`, `robots.txt`, `humans.txt`, `publi_page/`), the old
+  yuneta-Y brand set (`yuneta-y-*`, `logo*`, `tile*`, `icon.png`,
+  `artgins-logo.png`, `yuneta-label.*`), the webix-era `images/` icons,
+  `fonts/` (3 TTFs) or `icons/icons.js` — all removed. `public/` now matches
+  gui_agent's baseline: `treedb-mark.svg` + `site.webmanifest` + a
+  `favicon.ico` regenerated from `treedb-mark.svg` (real multi-size ICO
+  16/32/48 — the old file was a yuneta-Y PNG renamed `.ico`). Also dropped
+  `src/logos_svg.js` (inline old-brand SVGs, imported by nothing; bundle
+  hash unchanged).
 - **fix(gui_treedb): Settings table vanished after revisiting the page.**
   Settings is a `lazy_destroy` route, but `C_TREEDB_SETTINGS.mt_destroy`
   never removed its `$container` from the stage, so each visit leaked a
