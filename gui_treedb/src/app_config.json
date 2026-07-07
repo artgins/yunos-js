@@ -104,7 +104,8 @@
                     "route": "/topics",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
-                        "default": "/topics/connections",
+                        "_default_comment": "The home route /topics/db (not the picker) so C_TREEDB_APP.ac_route_changed can redirect a primary-nav entry to the workspace's last-active tab; the picker stays reachable as its own tab.",
+                        "default": "/topics/db",
                         "items": [
                             {
                                 "id": "picker",
@@ -129,7 +130,8 @@
                     "route": "/graphs",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
-                        "default": "/graphs/connections",
+                        "_default_comment": "Home route /graphs/db (see topics submenu default comment).",
+                        "default": "/graphs/db",
                         "items": [
                             {
                                 "id": "picker",

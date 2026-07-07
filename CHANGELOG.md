@@ -305,5 +305,16 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   the control-center's `EV_ON_OPEN`; gui_treedb has no single equivalent, so the
   JWT is its authoritative identity.) Verified live with Playwright (initials
   show on fresh login AND after F5).
+- **Switching workspaces remembers the active tab.** Going topics ↔ graphs
+  (clicking a primary nav item) always dropped onto that workspace's
+  "connections" picker, losing the treedb tab you were on. The submenu default
+  is now the workspace home route (`/<ws>/db`) instead of the picker, and
+  `C_TREEDB_APP.ac_route_changed` redirects a primary-nav entry to
+  `workspace_first_route` — the last-active tab if it still has a tab, else the
+  first open tab, else the picker (mirrors gui_agent). The F5 fallback (base
+  `/<ws>/db` WITH a subpath) is left for `restore_tab_from_url`, so a reload is
+  unaffected. The picker stays reachable as its own "connections" tab. Verified
+  live with Playwright (topics→graphs→topics returns to the treedb tab; F5 topic
+  restore still works).
 - (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
   OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).

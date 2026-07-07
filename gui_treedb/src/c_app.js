@@ -388,6 +388,39 @@ function rebuild_all_workspaces(gobj)
 }
 
 /***************************************************************
+ *  The route to land on when entering a workspace (clicking its primary
+ *  nav item): its last-active tab when that treedb still has a tab, else the
+ *  first open tab, else the picker. Persisting the active tab is what makes
+ *  switching topics ↔ graphs return to the tab you were on instead of the
+ *  connection manager. "Has a tab" matches rebuild_workspace_tabs (transport
+ *  exists AND connected OR ever-connected).
+ ***************************************************************/
+function workspace_first_route(gobj, ws)
+{
+    let priv = gobj.priv;
+    let config = gobj_find_service("treedb_config", false);
+    let links = gobj_find_service("treedb_links", false);
+    let selected = config ? treedb_config_get_selected(config, ws) : [];
+    let has_tab = function(s) {
+        if(!links || !s) {
+            return false;
+        }
+        let iev = treedb_links_get_iev(links, s.conn_id);
+        return !!iev &&
+            (treedb_links_is_connected(links, s.conn_id) || !!priv.ever_connected[s.conn_id]);
+    };
+    let open = selected.filter(has_tab);
+    if(!open.length) {
+        return picker_route(ws);
+    }
+    let active = config ? treedb_config_get_active_tab(config, ws) : "";
+    if(active && open.some((s) => s && s.id === active)) {
+        return db_tab_route(ws, active);
+    }
+    return db_tab_route(ws, open[0].id);
+}
+
+/***************************************************************
  *  Re-navigate to the treedb tab named in the URL once its backend
  *  connection is up.
  *
@@ -823,23 +856,48 @@ function ac_route_changed(gobj, event, kw, src)
      *  a real, resolved treedb tab (base === /<ws>/db/<sel>).  */
     gobj.priv.mounted_base = base;
 
-    /*  Which treedb this route is (or wants to be):
-     *    - a real tab     → base is /<ws>/db/<sel>
-     *    - an F5 fallback → base is /<ws>/db, the sel is the subpath tail
-     *  Persist it as the workspace's active tab either way, so a reload or a
-     *  return restores it.  */
     let prefix = db_home_route(ws) + "/";
-    let sel_id_ = "";
     if(base.indexOf(prefix) === 0) {
-        sel_id_ = decode_tail(base.slice(prefix.length));
-    } else if(base === db_home_route(ws)) {
-        sel_id_ = decode_tail((kw && kw.subpath) || "");
-    }
-    if(sel_id_) {
-        let config = gobj_find_service("treedb_config", false);
-        if(config) {
-            treedb_config_set_active_tab(config, ws, sel_id_);
+        /*  A real, resolved treedb tab (base is /<ws>/db/<sel>) → remember it
+         *  as this workspace's active tab, so switching away and back returns
+         *  here.  */
+        let sel_id_ = decode_tail(base.slice(prefix.length));
+        if(sel_id_) {
+            let config = gobj_find_service("treedb_config", false);
+            if(config) {
+                treedb_config_set_active_tab(config, ws, sel_id_);
+            }
         }
+        return 0;
+    }
+
+    if(base === db_home_route(ws)) {
+        /*  Landed on the workspace home /<ws>/db. Two ways to get here:
+         *    - F5 fallback: the hash is /<ws>/db/<sel>[/<topic>] but the tab
+         *      is not built yet → base resolves to the ancestor with a
+         *      subpath. Persist the sel; restore_tab_from_url jumps to it on
+         *      the next EV_ON_OPEN. Do NOT redirect here (it would clobber the
+         *      hash before restore can read it).
+         *    - primary-nav: clicking the workspace's menu item lands on its
+         *      default (/<ws>/db) with NO subpath → go to the last-active tab.  */
+        let sub = decode_tail(((kw && kw.subpath) || "").split("/")[0]);
+        if(sub) {
+            let config = gobj_find_service("treedb_config", false);
+            if(config) {
+                treedb_config_set_active_tab(config, ws, sub);
+            }
+            return 0;
+        }
+        let target = workspace_first_route(gobj, ws);
+        if(target && target !== base) {
+            /*  Deferred so we don't re-enter navigate mid-publish. */
+            setTimeout(function() {
+                if(gobj.priv.shell) {
+                    yui_shell_navigate(gobj.priv.shell, target);
+                }
+            }, 0);
+        }
+        return 0;
     }
     return 0;
 }
