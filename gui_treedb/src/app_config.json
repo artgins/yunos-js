@@ -16,7 +16,7 @@
             "main": { "zone": "center", "default_route": "/topics/connections" }
         },
 
-        "_routes_comment": "Resolution-ancestor routes for the per-workspace dynamic treedb tabs (a tab /<ws>/db/<sel> resolves here on F5 before the controller rebuilds it). Both point at the workspace picker so an F5 lands on the connection manager until the tab is rebuilt.",
+        "_routes_comment": "Resolution-ancestor routes for the per-workspace dynamic treedb tabs (a tab /<ws>/db/<sel> resolves here on F5 before the controller rebuilds it). Both point at the workspace picker so an F5 shows the connection manager while the backend connects; once EV_ON_OPEN rebuilds the tab, C_TREEDB_APP.restore_tab_from_url re-navigates to it so the reload lands on the tab the operator was on.",
         "routes": {
             "/topics/db": {
                 "stage": "main",

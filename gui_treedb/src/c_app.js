@@ -96,10 +96,11 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    shell:     null,
-    login_ui:  null,
-    nak_conns: null,   /*  set of conn_ids awaiting token refresh  */
-    refreshing: false,
+    shell:        null,
+    login_ui:     null,
+    nak_conns:    null,   /*  set of conn_ids awaiting token refresh  */
+    refreshing:   false,
+    mounted_base: "",     /*  last EV_ROUTE_CHANGED base (resolved route)  */
 };
 
 let __gclass__ = null;
@@ -121,6 +122,7 @@ function mt_create(gobj)
 {
     __app_gobj__ = gobj;
     gobj.priv.nak_conns = {};
+    gobj.priv.mounted_base = "";
 
     /*  Config service (child of self).  */
     let config = gobj_create_service("treedb_config", "C_TREEDB_CONFIG", {}, gobj);
@@ -364,6 +366,59 @@ function rebuild_all_workspaces(gobj)
 }
 
 /***************************************************************
+ *  Re-navigate to the treedb tab named in the URL once its backend
+ *  connection is up.
+ *
+ *  On F5 (or a mid-session reconnect) the hash is /<ws>/db/<sel>, but the
+ *  dynamic tab only exists after EV_ON_OPEN rebuilds it. Until then the
+ *  shell resolves the route to its declared ancestor (/<ws>/db → the
+ *  picker), so a reload lands on the connection manager instead of the tab
+ *  the operator was on. Called right after the tabs are (re)built: if the
+ *  URL points at a treedb whose tab now exists, jump to it.
+ ***************************************************************/
+function restore_tab_from_url(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.shell) {
+        return;
+    }
+    let cur = gobj_read_attr(priv.shell, "current_route") || "";
+    let ws = ws_from_route(cur);
+    if(!ws) {
+        return;
+    }
+    let prefix = db_home_route(ws) + "/";
+    if(cur.indexOf(prefix) !== 0) {
+        /*  Not a treedb-tab URL (e.g. the picker) — nothing to restore.  */
+        return;
+    }
+    let sel_id_ = decode_tail(cur.slice(prefix.length));
+    let target = db_tab_route(ws, sel_id_);
+    if(priv.mounted_base === target) {
+        /*  Already resting on the real tab (base resolved to it exactly).  */
+        return;
+    }
+    /*  Only jump once the tab actually exists: its treedb must be selected
+     *  AND its backend connected — the same condition rebuild_workspace_tabs
+     *  uses to emit the tab.  */
+    let config = gobj_find_service("treedb_config", false);
+    let links = gobj_find_service("treedb_links", false);
+    let selected = config ? treedb_config_get_selected(config, ws) : [];
+    let hit = selected.find((s) => s && s.id === sel_id_);
+    if(!hit || !(links && treedb_links_is_connected(links, hit.conn_id))) {
+        /*  Tab not available yet; a later EV_ON_OPEN retries this.  */
+        return;
+    }
+    /*  Deferred: EV_ON_OPEN is a published event, so navigating synchronously
+     *  would re-enter the shell mid-publish.  */
+    setTimeout(function() {
+        if(gobj.priv.shell) {
+            yui_shell_navigate(gobj.priv.shell, target);
+        }
+    }, 0);
+}
+
+/***************************************************************
  *  Reconcile the live transports with the configured connections
  *  (open new, recreate edited, close removed).
  ***************************************************************/
@@ -471,6 +526,7 @@ function ac_login_refreshed(gobj, event, kw, src)
 function ac_on_open(gobj, event, kw, src)
 {
     rebuild_all_workspaces(gobj);
+    restore_tab_from_url(gobj);
     return 0;
 }
 
@@ -674,13 +730,27 @@ function ac_route_changed(gobj, event, kw, src)
     if(!ws) {
         return 0;
     }
+    /*  Remember the resolved base so restore_tab_from_url can tell an
+     *  unbuilt-tab fallback (base === /<ws>/db, the picker is showing) from
+     *  a real, resolved treedb tab (base === /<ws>/db/<sel>).  */
+    gobj.priv.mounted_base = base;
+
+    /*  Which treedb this route is (or wants to be):
+     *    - a real tab     → base is /<ws>/db/<sel>
+     *    - an F5 fallback → base is /<ws>/db, the sel is the subpath tail
+     *  Persist it as the workspace's active tab either way, so a reload or a
+     *  return restores it.  */
     let prefix = db_home_route(ws) + "/";
-    let route = (kw && kw.route) || base;
-    if(route.indexOf(prefix) === 0) {
-        let id = decode_tail(route.slice(prefix.length));
+    let sel_id_ = "";
+    if(base.indexOf(prefix) === 0) {
+        sel_id_ = decode_tail(base.slice(prefix.length));
+    } else if(base === db_home_route(ws)) {
+        sel_id_ = decode_tail((kw && kw.subpath) || "");
+    }
+    if(sel_id_) {
         let config = gobj_find_service("treedb_config", false);
         if(config) {
-            treedb_config_set_active_tab(config, ws, id);
+            treedb_config_set_active_tab(config, ws, sel_id_);
         }
     }
     return 0;

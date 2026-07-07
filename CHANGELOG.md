@@ -206,5 +206,12 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   backends. Verified end-to-end against db_history_wz on app.wattyzer.com.
   KEY: the identity_card must advertise the treedbs in `required_services` or the
   backend authz gate silently drops the `descs`. See `gui_treedb/README`.
+- **F5 / reconnect restores the open treedb tab.** The per-workspace treedb tabs
+  are only built once their backend is CONNECTED, so on a reload (or a slow
+  reconnect) the hash `/​<ws>/db/<sel>` first resolves to its ancestor and the
+  shell shows the connection picker. `C_TREEDB_APP` now re-navigates to the tab
+  named in the URL as soon as `EV_ON_OPEN` rebuilds it (`restore_tab_from_url`),
+  so a refresh lands back on the treedb the operator was on instead of the
+  connection manager.
 - (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
   OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).
