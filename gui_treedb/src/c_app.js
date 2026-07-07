@@ -102,6 +102,7 @@ let PRIVATE_DATA = {
     nak_conns:    null,   /*  conn_ids awaiting the in-flight token refresh  */
     nak_recovered: null,  /*  conn_ids already reopened once with a fresh token  */
     refreshing:   false,  /*  a BFF refresh is in flight (dedupes concurrent NAKs)  */
+    ever_connected: null, /*  conn_ids that reached session at least once (keep tab)  */
     mounted_base: "",     /*  last EV_ROUTE_CHANGED base (resolved route)  */
 };
 
@@ -125,6 +126,7 @@ function mt_create(gobj)
     __app_gobj__ = gobj;
     gobj.priv.nak_conns = {};
     gobj.priv.nak_recovered = {};
+    gobj.priv.ever_connected = {};
     gobj.priv.mounted_base = "";
 
     /*  Config service (child of self).  */
@@ -313,7 +315,18 @@ function picker_item(ws)
 
 /***************************************************************
  *  (Re)build one workspace's tabs: picker + one tab per selected treedb
- *  whose connection is currently in session (a live gobj_remote_yuno).
+ *  whose connection has a live transport.
+ *
+ *  A tab is emitted once its connection reaches session (EV_ON_OPEN sets
+ *  `ever_connected`) and is KEPT across a later transient WS drop — coloured
+ *  `yui-nav-disconnected` (red) instead of being removed. Dropping it would
+ *  make the shell prune + destroy the mounted C_TREEDB_VIEW on every clean
+ *  1001 flap, only to rebuild it on reconnect (churn: lost scroll/selection,
+ *  re-`descs`/`nodes` storms). The C_IEVENT_CLI transport survives a clean
+ *  close and auto-reconnects underneath, so the view's resolved pointer stays
+ *  valid and its subscriptions resend — mirrors how gui_agent keeps node tabs
+ *  mounted and only recolours them. The tab is removed only when its transport
+ *  is actually gone (`!iev`: connection removed, or closed by the NAK give-up).
  ***************************************************************/
 function rebuild_workspace_tabs(gobj, ws)
 {
@@ -330,9 +343,10 @@ function rebuild_workspace_tabs(gobj, ws)
     for(let sel of selected) {
         let iev = links ? treedb_links_get_iev(links, sel.conn_id) : null;
         let connected = links ? treedb_links_is_connected(links, sel.conn_id) : false;
-        if(!iev || !connected) {
-            /*  Not connected yet: the picker shows it as connecting; the tab
-             *  appears once EV_ON_OPEN rebuilds this workspace.  */
+        let ever = !!priv.ever_connected[sel.conn_id];
+        if(!iev || (!connected && !ever)) {
+            /*  No transport yet, or never connected: the picker shows it as
+             *  connecting; the tab appears on its first EV_ON_OPEN.  */
             continue;
         }
         items.push({
@@ -340,6 +354,8 @@ function rebuild_workspace_tabs(gobj, ws)
             name:     sel.label || sel.treedb_name,
             icon:     spec.icon,
             route:    db_tab_route(ws, sel.id),
+            /*  Red label while the backend is dropped; the view stays mounted. */
+            class:    connected ? "" : "yui-nav-disconnected",
             closable: true,
             target: {
                 stage:     "main",
@@ -451,6 +467,19 @@ function sync_connections(gobj)
     }
     gobj_write_attr(gobj_yuno(), "required_services", Object.keys(req));
 
+    /*  Forget per-connection state for connections no longer configured. */
+    let alive = {};
+    for(let c of conns) {
+        alive[c.id] = true;
+    }
+    for(let priv_map of [gobj.priv.ever_connected, gobj.priv.nak_recovered, gobj.priv.nak_conns]) {
+        for(let conn_id of Object.keys(priv_map)) {
+            if(!alive[conn_id]) {
+                delete priv_map[conn_id];
+            }
+        }
+    }
+
     treedb_links_sync(links, conns);
 }
 
@@ -533,6 +562,8 @@ function ac_on_open(gobj, event, kw, src)
 {
     let conn_id = (kw && kw.conn_id) || "";
     if(conn_id) {
+        /*  Reached session → keep its tab across later transient drops. */
+        gobj.priv.ever_connected[conn_id] = true;
         /*  Reconnected successfully → clear its recovery marks so a LATER
          *  token expiry is treated as a fresh, retriable NAK again. */
         delete gobj.priv.nak_recovered[conn_id];
@@ -574,6 +605,7 @@ function ac_on_id_nak(gobj, event, kw, src)
     if(conn_id && priv.nak_recovered[conn_id]) {
         delete priv.nak_recovered[conn_id];
         delete priv.nak_conns[conn_id];
+        delete priv.ever_connected[conn_id];   /*  transport gone → drop its tab  */
         let links = gobj_find_service("treedb_links", false);
         if(links) {
             treedb_links_close(links, conn_id);

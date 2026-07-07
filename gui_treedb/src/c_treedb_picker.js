@@ -38,7 +38,6 @@ import {
 
 import {
     treedb_links_is_connected,
-    treedb_links_get_services_roles,
 } from "./c_treedb_links.js";
 
 
@@ -185,23 +184,20 @@ function status_dot(connected)
 }
 
 /***************************************************************
- *  The treedbs to show for a connection: the user-declared list, else
- *  the services_roles keys (minus the connected service + system).
+ *  The treedbs to browse for a connection: the curated `treedbs` list
+ *  configured per connection in Settings.
+ *
+ *  This is the contract — like wattyzer's static route table. We do NOT
+ *  fall back to enumerating every `services_roles` key: that offered
+ *  NON-treedb services (e.g. the raw `tranger_authz` C_TRANGER that backs
+ *  `treedb_authzs`), and sending a treedb `descs` to a ranger fails with
+ *  "command not available". When none are configured, the card shows the
+ *  "add them in Settings" hint (render_connection). A future enhancement
+ *  could discover real treedbs via the backend `treedbs` command (C_NODE).
  ***************************************************************/
-function connection_treedbs(conn, services_roles)
+function connection_treedbs(conn)
 {
-    if(Array.isArray(conn.treedbs) && conn.treedbs.length) {
-        return conn.treedbs.slice().sort();
-    }
-    let names = [];
-    for(let name in (services_roles || {})) {
-        if(name === "treedb_system_schema" || name === conn.remote_yuno_service) {
-            continue;
-        }
-        names.push(name);
-    }
-    names.sort();
-    return names;
+    return (Array.isArray(conn.treedbs) ? conn.treedbs.slice() : []).sort();
 }
 
 /***************************************************************
@@ -213,8 +209,7 @@ function render_connection(gobj, conn)
     let links = gobj_find_service("treedb_links", false);
     let config = gobj_find_service("treedb_config", false);
     let connected = links ? treedb_links_is_connected(links, conn.id) : false;
-    let services_roles = links ? treedb_links_get_services_roles(links, conn.id) : {};
-    let treedbs = connection_treedbs(conn, services_roles);
+    let treedbs = connection_treedbs(conn);
 
     let $treedb_list = createElement2(["div", {class: "ytreedb-treedbs mt-2"}, []]);
     if(treedbs.length) {

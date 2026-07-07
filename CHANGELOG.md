@@ -250,5 +250,25 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
     are unaffected (gui_agent logs out here because it is single-link;
     gui_treedb is multi-backend). Verified live with Playwright (tab open/close
     → no `gobj NULL or DESTROYED`).
+- **Tabs survive a WS flap; picker only offers real treedbs (audit follow-ups).**
+  - **Keep the treedb tab mounted across a transient disconnect** instead of
+    removing it. `rebuild_workspace_tabs` dropped the tab whenever its backend
+    was not `connected`, so the shell pruned + destroyed the mounted
+    `C_TREEDB_VIEW` on every clean WS close, rebuilding it on reconnect (churn:
+    lost scroll/selection, re-`descs`/`nodes`). Now a connection that reached
+    session at least once (`ever_connected`) keeps its tab, coloured
+    `yui-nav-disconnected` (red) while dropped — the C_IEVENT_CLI transport
+    survives a clean close and reconnects underneath, so the view stays valid.
+    Mirrors gui_agent (keep node tabs, recolour). Verified live with Playwright
+    (force-close the socket → tab stays, goes red, view not destroyed,
+    recovers). The tab is removed only when the transport is truly gone.
+  - **Picker offers only real treedbs.** `connection_treedbs` fell back to
+    enumerating every `services_roles` key when a connection had no curated
+    `treedbs`, which offered NON-treedb services (e.g. the raw `tranger_authz`
+    C_TRANGER that backs `treedb_authzs`); browsing one sent a treedb `descs` to
+    a ranger → "command not available". Now the curated `treedbs` list (Settings)
+    is the contract, like wattyzer's static route table; when empty the card
+    shows the "add them in Settings" hint. (The browsable authz treedb is
+    `treedb_authzs`, not `tranger_authz`.)
 - (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
   OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).
