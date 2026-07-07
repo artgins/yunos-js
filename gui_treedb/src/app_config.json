@@ -40,7 +40,7 @@
             {
                 "id": "brand",
                 "type": "brand",
-                "logo": "/yuneta-y.svg",
+                "logo": "/treedb-mark.svg",
                 "wordmark": "TreeDB GUI",
                 "alt": "TreeDB GUI",
                 "aria_label": "TreeDB GUI home",

@@ -1,12 +1,13 @@
 {
-  "short_name": "",
-  "name": "",
+  "short_name": "TreeDB",
+  "name": "TreeDB GUI",
   "icons": [{
-    "src": "icon.png",
-    "type": "image/png",
-    "sizes": "192x192"
+    "src": "treedb-mark.svg",
+    "type": "image/svg+xml",
+    "sizes": "any",
+    "purpose": "any"
   }],
   "start_url": "/?utm_source=homescreen",
-  "background_color": "#fafafa",
-  "theme_color": "#fafafa"
+  "background_color": "#115E59",
+  "theme_color": "#0D9488"
 }
