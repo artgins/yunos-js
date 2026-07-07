@@ -116,9 +116,18 @@ function mt_stop(gobj)
 
 /***************************************************************
  *          Framework Method: Destroy
+ *
+ *  Remove our $container from the DOM (the view is lazy_destroy: a
+ *  hidden leftover copy would shadow the fixed table div id of the
+ *  next Settings instance, leaving its Tabulator invisible).
  ***************************************************************/
 function mt_destroy(gobj)
 {
+    let $c = gobj_read_attr(gobj, "$container");
+    if($c && $c.parentNode) {
+        $c.parentNode.removeChild($c);
+    }
+    gobj_write_attr(gobj, "$container", null);
 }
 
 
@@ -290,6 +299,16 @@ function create_table(gobj)
 {
     let table_id = gobj_read_attr(gobj, "table_id");
 
+    /*  Attach Tabulator to OUR table div (not the global `#id` selector):
+     *  a stale hidden container with the same id would win the
+     *  document-wide query and swallow the table.  */
+    let $container = gobj_read_attr(gobj, "$container");
+    let $div = $container ? $container.querySelector(`#${table_id}`) : null;
+    if(!$div) {
+        log_error(`${GCLASS_NAME}: table div '${table_id}' not found in $container`);
+        return;
+    }
+
     let settings = {
         index:          "id",
         layout:         "fitColumns",
@@ -299,7 +318,7 @@ function create_table(gobj)
         columns:        make_columns(gobj)
     };
 
-    let table = new Tabulator(`#${table_id}`, settings);
+    let table = new Tabulator($div, settings);
     table.on("tableBuilt", function() {
         table.setData(rows_from_config(gobj));
     });

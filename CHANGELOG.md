@@ -22,6 +22,16 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): Settings table vanished after revisiting the page.**
+  Settings is a `lazy_destroy` route, but `C_TREEDB_SETTINGS.mt_destroy`
+  never removed its `$container` from the stage, so each visit leaked a
+  hidden copy holding the fixed `#treedb_settings_table` div; the next
+  visit's Tabulator, attached by `#id` selector, built its table inside
+  the stale hidden container and the visible page showed no table.
+  `mt_destroy` now removes the container (matching gui_agent's views) and
+  Tabulator attaches to the element found inside OUR `$container`, immune
+  to duplicate ids. (gobj-ui 2.2.2 also removes the container shell-side
+  on `lazy_destroy` — cause-level fix.)
 - **New TreeDB logo + branded loading splash (gui_treedb, gui_agent).** The
   gui_treedb login/favicon dropped the generic yuneta-Y mark for a purpose-made
   `treedb-mark.svg` — a node-link graph (four nodes, teal tile) that reads as a
