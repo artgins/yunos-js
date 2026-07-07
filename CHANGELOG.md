@@ -22,6 +22,21 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): a mounted treedb tab no longer strands a destroyed
+  transport after a connection reopen.** `C_TREEDB_LINKS` RECREATES a
+  connection's `C_IEVENT_CLI` on a token-refresh reopen (NAK → silent refresh
+  → `treedb_links_reopen`) and on a coords edit in Settings — but a mounted
+  `C_TREEDB_VIEW` resolved the transport once in `mt_create` and baked it into
+  the hosted view's `gobj_remote_yuno` (plus its `EV_TREEDB_NODE_*`
+  subscriptions), so after a SUCCESSFUL recovery the tab looked connected but
+  its `descs`/`nodes` went to a destroyed gobj forever (until close+reopen or
+  F5). The wrapper now also subscribes to `treedb_links`' `EV_ON_OPEN`: when
+  ITS connection reaches session on a DIFFERENT transport gobj than the hosted
+  view holds, it rebuilds the hosted service in place against the new iev
+  (deferred out of the publish; container swapped in the mounted DOM keeping
+  the shell's show/hide state; URL-selected topic/mode re-applied). A plain WS
+  reconnect (same gobj) is ignored, as before. This also heals a tab created
+  before its transport existed ("Backend not connected" placeholder).
 - **chore(gui_treedb): purge unused `public/` boilerplate (~1.2 MB → 8 KB).**
   Nothing in the app referenced the HTML5-boilerplate leftovers (`404.html`,
   `browserconfig.xml`, `robots.txt`, `humans.txt`, `publi_page/`), the old

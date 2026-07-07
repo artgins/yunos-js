@@ -31,7 +31,7 @@ import {
     gobj_find_service,
     gobj_parent, gobj_name,
     gobj_subscribe_event, gobj_unsubscribe_event, gobj_send_event,
-    gobj_start, gobj_stop, gobj_destroy, gobj_is_running,
+    gobj_start, gobj_stop, gobj_destroy, gobj_is_running, gobj_is_destroying,
     createElement2,
 } from "@yuneta/gobj-js";
 
@@ -63,9 +63,10 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    view:      null,   /*  the hosted treedb view (a service)  */
-    sel_event: null,   /*  child event bridged to the URL subpath  */
-    seg:       null,   /*  last applied/navigated subpath (dedup guard)  */
+    view:         null,   /*  the hosted treedb view (a service)  */
+    sel_event:    null,   /*  child event bridged to the URL subpath  */
+    seg:          null,   /*  last applied/navigated subpath (dedup guard)  */
+    rebind_timer: null,   /*  pending deferred transport rebind  */
 };
 
 let __gclass__ = null;
@@ -88,51 +89,7 @@ function mt_create(gobj)
     let priv = gobj.priv;
 
     let view_gclass = gobj_read_attr(gobj, "view_gclass");
-    let treedb_name = gobj_read_attr(gobj, "treedb_name");
     let conn_id     = gobj_read_attr(gobj, "conn_id");
-
-    /*
-     *  Resolve the live transport by connection id — a pointer cannot be
-     *  passed reliably through the shell's kw path.
-     */
-    let links = gobj_find_service("treedb_links", false);
-    let remote = links ? treedb_links_get_iev(links, conn_id) : null;
-
-    if(!view_gclass || !remote) {
-        log_error(`${GCLASS_NAME}: no live transport for conn_id '${conn_id}'`);
-        gobj_write_attr(gobj, "$container", createElement2(
-            ["div", {class: "p-4 has-text-grey", i18n: "backend not connected"},
-                "Backend not connected."]
-        ));
-        return;
-    }
-
-    /*
-     *  Create the real treedb view as a NAMED SERVICE so C_IEVENT_CLI can
-     *  route its command answers / EV_TREEDB_NODE_* back (gobj_find_service).
-     *  Unique, lower-case name per (workspace, connection, treedb).
-     */
-    let name = service_name(gobj);
-    let view = gobj_create_service(
-        name,
-        view_gclass,
-        {
-            gobj_remote_yuno: remote,
-            treedb_name:      treedb_name,
-            system:           gobj_read_attr(gobj, "system")
-        },
-        gobj
-    );
-    priv.view = view;
-
-    /*  The treedb view builds its own $container in ITS mt_create; expose
-     *  it as ours so the shell mounts/toggles the same DOM.  */
-    let $c = gobj_read_attr(view, "$container");
-    if(!$c) {
-        log_error(`${GCLASS_NAME}: hosted view '${view_gclass}' did not expose $container`);
-        $c = createElement2(["div", {}, ""]);
-    }
-    gobj_write_attr(gobj, "$container", $c);
 
     /*
      *  Bridge the hosted view's selection <-> the URL subpath so a reload /
@@ -153,6 +110,31 @@ function mt_create(gobj)
     if(shell) {
         gobj_subscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
     }
+
+    /*
+     *  Resolve the live transport by connection id — a pointer cannot be
+     *  passed reliably through the shell's kw path. Watch OUR connection's
+     *  EV_ON_OPEN too: C_TREEDB_LINKS RECREATES the transport on a token
+     *  refresh (treedb_links_reopen) or a coords edit — a mounted view that
+     *  kept the old pointer would talk to a destroyed gobj forever (looks
+     *  connected, never loads). ac_transport_open rebinds it in place.
+     */
+    let links = gobj_find_service("treedb_links", false);
+    if(links) {
+        gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
+    }
+    let remote = links ? treedb_links_get_iev(links, conn_id) : null;
+
+    if(!view_gclass || !remote) {
+        log_error(`${GCLASS_NAME}: no live transport for conn_id '${conn_id}'`);
+        gobj_write_attr(gobj, "$container", createElement2(
+            ["div", {class: "p-4 has-text-grey", i18n: "backend not connected"},
+                "Backend not connected."]
+        ));
+        return;
+    }
+
+    build_hosted_view(gobj, remote);
 }
 
 /***************************************************************
@@ -175,10 +157,18 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     let priv = gobj.priv;
+    if(priv.rebind_timer) {
+        clearTimeout(priv.rebind_timer);
+        priv.rebind_timer = null;
+    }
     /*  Unsubscribe the shell's EV_ROUTE_CHANGED while the parent is alive. */
     let shell = gobj_parent(gobj);
     if(shell) {
         gobj_unsubscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
+    }
+    let links = gobj_find_service("treedb_links", false);
+    if(links) {
+        gobj_unsubscribe_event(links, "EV_ON_OPEN", {}, gobj);
     }
     if(priv.view && gobj_is_running(priv.view)) {
         gobj_stop(priv.view);
@@ -224,6 +214,120 @@ function service_name(gobj)
     let treedb  = gobj_read_attr(gobj, "treedb_name") || "db";
     let raw = `tv_${ws}_${conn_id}_${treedb}`;
     return raw.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+}
+
+/***************************************************************
+ *  Create the real treedb view as a NAMED SERVICE so C_IEVENT_CLI can
+ *  route its command answers / EV_TREEDB_NODE_* back (gobj_find_service).
+ *  Unique, lower-case name per (workspace, connection, treedb). Writes
+ *  the hosted view's $container as ours so the shell mounts/toggles the
+ *  same DOM. Returns the view (or null — error already logged).
+ ***************************************************************/
+function build_hosted_view(gobj, remote)
+{
+    let priv = gobj.priv;
+    let view_gclass = gobj_read_attr(gobj, "view_gclass");
+
+    let view = gobj_create_service(
+        service_name(gobj),
+        view_gclass,
+        {
+            gobj_remote_yuno: remote,
+            treedb_name:      gobj_read_attr(gobj, "treedb_name"),
+            system:           gobj_read_attr(gobj, "system")
+        },
+        gobj
+    );
+    priv.view = view;
+    if(!view) {
+        log_error(`${GCLASS_NAME}: cannot create hosted view '${view_gclass}'`);
+        return null;
+    }
+
+    /*  The treedb view builds its own $container in ITS mt_create; expose
+     *  it as ours so the shell mounts/toggles the same DOM.  */
+    let $c = gobj_read_attr(view, "$container");
+    if(!$c) {
+        log_error(`${GCLASS_NAME}: hosted view '${view_gclass}' did not expose $container`);
+        $c = createElement2(["div", {}, ""]);
+    }
+    gobj_write_attr(gobj, "$container", $c);
+    return view;
+}
+
+/***************************************************************
+ *  Apply a URL segment to the hosted view: TOPICS → show that topic;
+ *  GRAPH → set that operation mode.
+ ***************************************************************/
+function apply_seg(gobj, seg)
+{
+    let priv = gobj.priv;
+    if(!priv.view || !seg) {
+        return;
+    }
+    if(priv.sel_event === "EV_OPERATION_MODE_CHANGED") {
+        gobj_send_event(priv.view, "EV_SET_OPERATION_MODE",
+            {operation_mode: seg}, gobj);
+    } else {
+        gobj_send_event(priv.view, "EV_SHOW",
+            {href: `${gobj_name(priv.view)}?${seg}`}, gobj);
+    }
+}
+
+/***************************************************************
+ *  The connection's transport was RECREATED (token-refresh reopen or a
+ *  coords edit): the hosted view holds a pointer to the DESTROYED iev
+ *  (baked as its gobj_remote_yuno at create, plus its EV_TREEDB_NODE_*
+ *  subscriptions). Rebuild it in place against the new transport: destroy
+ *  the old service, create a fresh one (it resolves + subscribes the new
+ *  iev in its mt_create) and swap the $container in the mounted DOM.
+ ***************************************************************/
+function rebind_hosted_view(gobj)
+{
+    let priv = gobj.priv;
+    if(gobj_is_destroying(gobj)) {
+        return;
+    }
+    let conn_id = gobj_read_attr(gobj, "conn_id");
+    let links = gobj_find_service("treedb_links", false);
+    let remote = links ? treedb_links_get_iev(links, conn_id) : null;
+    if(!remote) {
+        return;     /*  connection gone meanwhile; the app prunes the tab  */
+    }
+    if(priv.view && gobj_read_attr(priv.view, "gobj_remote_yuno") === remote) {
+        return;     /*  same transport (plain WS flap) — nothing to rebind  */
+    }
+
+    let $old = gobj_read_attr(gobj, "$container");
+    if(priv.view) {
+        if(gobj_is_running(priv.view)) {
+            gobj_stop(priv.view);
+        }
+        gobj_destroy(priv.view);
+        priv.view = null;
+    }
+
+    let view = build_hosted_view(gobj, remote);
+    if(!view) {
+        return;     /*  Error already logged  */
+    }
+
+    /*  Swap the container where the shell mounted the old one, keeping the
+     *  shell's show/hide state (it toggles is-hidden on the attr it re-reads).  */
+    let $new = gobj_read_attr(gobj, "$container");
+    if($old && $old.parentNode && $new && $new !== $old) {
+        if($old.classList.contains("is-hidden")) {
+            $new.classList.add("is-hidden");
+        }
+        $old.parentNode.replaceChild($new, $old);
+    }
+
+    if(gobj_is_running(gobj) && !gobj_is_running(view)) {
+        gobj_start(view);
+    }
+
+    /*  Restore the URL-selected topic / operation mode on the fresh view.  */
+    apply_seg(gobj, priv.seg);
 }
 
 
@@ -276,13 +380,40 @@ function ac_route_changed(gobj, event, kw, src)
         return 0;
     }
     priv.seg = subpath;
-    if(priv.sel_event === "EV_OPERATION_MODE_CHANGED") {
-        gobj_send_event(priv.view, "EV_SET_OPERATION_MODE",
-            {operation_mode: subpath}, gobj);
-    } else {
-        gobj_send_event(priv.view, "EV_SHOW",
-            {href: `${gobj_name(priv.view)}?${subpath}`}, gobj);
+    apply_seg(gobj, subpath);
+    return 0;
+}
+
+/***************************************************************
+ *  C_TREEDB_LINKS → a connection reached session. Only OUR connection
+ *  matters, and only when its transport gobj is NOT the one the hosted
+ *  view holds — i.e. treedb_links RECREATED it (token-refresh reopen or a
+ *  coords edit; a plain WS reconnect keeps the same gobj and is ignored).
+ *  Deferred: we are inside treedb_links' publish, and the rebind destroys
+ *  gobjs — re-entering the publisher synchronously is forbidden.
+ ***************************************************************/
+function ac_transport_open(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let conn_id = gobj_read_attr(gobj, "conn_id");
+    if(!kw || kw.conn_id !== conn_id) {
+        return 0;   /*  another connection  */
     }
+    let links = gobj_find_service("treedb_links", false);
+    let remote = links ? treedb_links_get_iev(links, conn_id) : null;
+    if(!remote) {
+        return 0;
+    }
+    if(priv.view && gobj_read_attr(priv.view, "gobj_remote_yuno") === remote) {
+        return 0;   /*  same transport — subscriptions resend on their own  */
+    }
+    if(priv.rebind_timer) {
+        clearTimeout(priv.rebind_timer);
+    }
+    priv.rebind_timer = setTimeout(function() {
+        priv.rebind_timer = null;
+        rebind_hosted_view(gobj);
+    }, 0);
     return 0;
 }
 
@@ -314,14 +445,16 @@ function create_gclass(gclass_name)
         ["ST_IDLE", [
             ["EV_TOPIC_SELECTED",         ac_child_selected, null],
             ["EV_OPERATION_MODE_CHANGED", ac_child_selected, null],
-            ["EV_ROUTE_CHANGED",          ac_route_changed,  null]
+            ["EV_ROUTE_CHANGED",          ac_route_changed,  null],
+            ["EV_ON_OPEN",                ac_transport_open, null]
         ]]
     ];
 
     const event_types = [
         ["EV_TOPIC_SELECTED",         0],
         ["EV_OPERATION_MODE_CHANGED", 0],
-        ["EV_ROUTE_CHANGED",          0]
+        ["EV_ROUTE_CHANGED",          0],
+        ["EV_ON_OPEN",                0]
     ];
 
     __gclass__ = gclass_create(
