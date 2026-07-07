@@ -316,5 +316,13 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   unaffected. The picker stays reachable as its own "connections" tab. Verified
   live with Playwright (topics→graphs→topics returns to the treedb tab; F5 topic
   restore still works).
+- **Inline error on a failed treedb load (via gobj-ui 2.1.14).** Opening a
+  target that isn't a treedb (or one the user has no authz for) no longer pops a
+  blocking app modal that wedged the SPA behind an empty tab — the treedb views
+  (`C_YUI_TREEDB_TOPICS/GRAPH`, in gobj-ui) now show a non-blocking inline banner
+  on a `descs` failure. Completes the migration-audit follow-up B3 (B1 already
+  stops the picker from offering non-treedbs; this is the graceful fallback when
+  one is opened anyway, e.g. a stale selection or a revoked role). Verified live
+  with Playwright (opening `tranger_authz` shows the inline banner, no modal).
 - (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
   OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).
