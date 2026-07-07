@@ -270,5 +270,18 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
     is the contract, like wattyzer's static route table; when empty the card
     shows the "add them in Settings" hint. (The browsable authz treedb is
     `treedb_authzs`, not `tranger_authz`.)
+- **Surface a backend that can't be reached (audit C2).** A connection with a
+  bad URL / cert / closed port / down backend showed "Connecting…" forever:
+  `C_TREEDB_LINKS` swallowed `EV_ON_OPEN_ERROR` while `C_IEVENT_CLI` retried
+  silently in the background. Now the transport records the failure per
+  connection and re-publishes `EV_ON_OPEN_ERROR` (tagged with `conn_id`); the
+  picker card shows "Cannot connect (…) — retrying…" in red instead. The
+  transport keeps retrying, so a fixed/again-reachable backend recovers on its
+  own (the error clears on `EV_ON_OPEN`). One unreachable backend never tears
+  down the shell or affects other backends (multi-backend, unlike wattyzer's
+  single-link `ac_on_open_error` which logs out). `C_TREEDB_APP` declares the
+  event as a no-op (it is a null-subscriber to every links event). Verified live
+  with Playwright (a wrong-port connection shows the error; a good one connects
+  alongside; no FSM "event not defined" crash).
 - (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
   OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).

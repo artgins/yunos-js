@@ -57,10 +57,11 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    conns:   null,  /*  conn_id  -> { iev, name }      */
-    by_name: null,  /*  iev name -> conn_id            */
-    token:   "",    /*  forwarded access_token (jwt)   */
-    seq:     0,     /*  monotonic iev-name counter     */
+    conns:       null,  /*  conn_id  -> { iev, name }      */
+    by_name:     null,  /*  iev name -> conn_id            */
+    open_errors: null,  /*  conn_id  -> { url, reason }  (last connect failure)  */
+    token:       "",    /*  forwarded access_token (jwt)   */
+    seq:         0,     /*  monotonic iev-name counter     */
 };
 
 let __gclass__ = null;
@@ -83,6 +84,7 @@ function mt_create(gobj)
     let priv = gobj.priv;
     priv.conns = {};
     priv.by_name = {};
+    priv.open_errors = {};
     priv.token = "";
     priv.seq = 0;
 
@@ -255,6 +257,15 @@ function treedb_links_get_services_roles(gobj, conn_id)
 }
 
 /***************************************************************
+ *  The last connect failure for a connection, or null. {url, reason, code}.
+ *  Set on EV_ON_OPEN_ERROR, cleared on EV_ON_OPEN.
+ ***************************************************************/
+function treedb_links_get_open_error(gobj, conn_id)
+{
+    return gobj.priv.open_errors[conn_id] || null;
+}
+
+/***************************************************************
  *  True while a connection is in session.
  ***************************************************************/
 function treedb_links_is_connected(gobj, conn_id)
@@ -269,6 +280,7 @@ function treedb_links_is_connected(gobj, conn_id)
 function treedb_links_close(gobj, conn_id)
 {
     let priv = gobj.priv;
+    delete priv.open_errors[conn_id];
     let e = priv.conns[conn_id];
     if(!e) {
         return;
@@ -350,6 +362,10 @@ function ac_on_open(gobj, event, kw, src)
     if(conn_id && priv.conns[conn_id]) {
         priv.conns[conn_id].services_roles = (kw && kw.services_roles) || {};
     }
+    /*  Connected → clear any prior connect-failure state. */
+    if(conn_id) {
+        delete priv.open_errors[conn_id];
+    }
     return republish(gobj, src, "EV_ON_OPEN", kw);
 }
 
@@ -370,13 +386,25 @@ function ac_on_id_nak(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  The iev could not open. Delivered by the local (subscriber-attr)
- *  subscription; handled here so it does not trip "event NOT defined in
- *  state". Not republished — the app reacts to EV_ON_CLOSE / EV_ON_ID_NAK.
+ *  The iev could not open (bad URL / cert / port / backend down).
+ *  C_IEVENT_CLI keeps retrying forever by design, so without surfacing this
+ *  the picker would show "connecting" indefinitely. Record the failure per
+ *  connection and re-publish it (tagged with conn_id) so the picker can show
+ *  the cause. (The transport keeps retrying — a fixed backend recovers on its
+ *  own and clears the error via EV_ON_OPEN.)
  ***************************************************************/
 function ac_on_open_error(gobj, event, kw, src)
 {
-    return 0;
+    let priv = gobj.priv;
+    let conn_id = priv.by_name[gobj_name(src)] || "";
+    if(conn_id) {
+        priv.open_errors[conn_id] = {
+            url:    (kw && kw.url) || "",
+            reason: (kw && kw.reason) || "",
+            code:   (kw && kw.code) || 0
+        };
+    }
+    return republish(gobj, src, "EV_ON_OPEN_ERROR", kw);
 }
 
 
@@ -430,7 +458,7 @@ function create_gclass(gclass_name)
         ["EV_ON_OPEN",       out],
         ["EV_ON_CLOSE",      out],
         ["EV_ON_ID_NAK",     out],
-        ["EV_ON_OPEN_ERROR", 0]
+        ["EV_ON_OPEN_ERROR", out]
     ];
 
     __gclass__ = gclass_create(
@@ -469,6 +497,7 @@ export {
     treedb_links_sync,
     treedb_links_get_iev,
     treedb_links_get_services_roles,
+    treedb_links_get_open_error,
     treedb_links_is_connected,
     treedb_links_close,
     treedb_links_close_all,

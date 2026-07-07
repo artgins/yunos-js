@@ -38,6 +38,7 @@ import {
 
 import {
     treedb_links_is_connected,
+    treedb_links_get_open_error,
 } from "./c_treedb_links.js";
 
 
@@ -90,6 +91,7 @@ function mt_create(gobj)
     if(links) {
         gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
         gobj_subscribe_event(links, "EV_ON_CLOSE", {}, gobj);
+        gobj_subscribe_event(links, "EV_ON_OPEN_ERROR", {}, gobj);
     }
 }
 
@@ -209,6 +211,7 @@ function render_connection(gobj, conn)
     let links = gobj_find_service("treedb_links", false);
     let config = gobj_find_service("treedb_config", false);
     let connected = links ? treedb_links_is_connected(links, conn.id) : false;
+    let open_error = (links && !connected) ? treedb_links_get_open_error(links, conn.id) : null;
     let treedbs = connection_treedbs(conn);
 
     let $treedb_list = createElement2(["div", {class: "ytreedb-treedbs mt-2"}, []]);
@@ -232,21 +235,32 @@ function render_connection(gobj, conn)
         $treedb_list.appendChild(createElement2(
             ["p", {class: "is-size-7 has-text-grey", i18n: "no treedbs declared"},
                 "No treedbs declared — add them in Settings."]));
-    } else {
+    } else if(!open_error) {
+        /*  Only "connecting" while there is no connect failure; a failure is
+         *  shown at card level below (independent of the treedbs branch). */
         $treedb_list.appendChild(createElement2(
             ["p", {class: "is-size-7 has-text-grey", i18n: "connecting"}, "Connecting…"]));
     }
 
+    let $card_body = [
+        ["div", {class: "mb-1 has-text-weight-semibold"},
+            [status_dot(connected), ["span", {}, conn.label || conn.url]]],
+        ["p", {class: "is-size-7 has-text-grey"},
+            `${conn.url}  ·  ${conn.remote_yuno_role || "?"}/${conn.remote_yuno_service || "?"}`]
+    ];
+    if(open_error) {
+        /*  Surface the connect failure (bad URL / cert / port / backend down)
+         *  instead of a permanent "Connecting…". The transport keeps retrying,
+         *  so it recovers on its own if the backend comes up. */
+        let detail = (open_error.reason ||
+            (open_error.code ? "code " + open_error.code : "")).toString().trim();
+        $card_body.push(["p", {class: "is-size-7 has-text-danger"},
+            "Cannot connect" + (detail ? " (" + detail + ")" : "") + " — retrying…"]);
+    }
+    $card_body.push($treedb_list);
+
     return createElement2(
-        ["div", {class: "box p-3 mb-2", gclass: "TREEDB_CONNECTION_CARD"},
-            [
-                ["div", {class: "mb-1 has-text-weight-semibold"},
-                    [status_dot(connected), ["span", {}, conn.label || conn.url]]],
-                ["p", {class: "is-size-7 has-text-grey"},
-                    `${conn.url}  ·  ${conn.remote_yuno_role || "?"}/${conn.remote_yuno_service || "?"}`],
-                $treedb_list
-            ]
-        ]
+        ["div", {class: "box p-3 mb-2", gclass: "TREEDB_CONNECTION_CARD"}, $card_body]
     );
 }
 
@@ -320,7 +334,8 @@ function create_gclass(gclass_name)
             ["EV_CONNECTIONS_CHANGED",      ac_refresh, null],
             ["EV_SELECTED_TREEDBS_CHANGED", ac_refresh, null],
             ["EV_ON_OPEN",                  ac_refresh, null],
-            ["EV_ON_CLOSE",                 ac_refresh, null]
+            ["EV_ON_CLOSE",                 ac_refresh, null],
+            ["EV_ON_OPEN_ERROR",            ac_refresh, null]
         ]]
     ];
 
@@ -328,7 +343,8 @@ function create_gclass(gclass_name)
         ["EV_CONNECTIONS_CHANGED",      0],
         ["EV_SELECTED_TREEDBS_CHANGED", 0],
         ["EV_ON_OPEN",                  0],
-        ["EV_ON_CLOSE",                 0]
+        ["EV_ON_CLOSE",                 0],
+        ["EV_ON_OPEN_ERROR",            0]
     ];
 
     __gclass__ = gclass_create(
