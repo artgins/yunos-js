@@ -22,6 +22,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **New TreeDB logo + branded loading splash (gui_treedb, gui_agent).** The
+  gui_treedb login/favicon dropped the generic yuneta-Y mark for a purpose-made
+  `treedb-mark.svg` — a node-link graph (four nodes, teal tile) that reads as a
+  TreeDB. Both apps' pre-shell "loading" screen (was a plain — and for gui_treedb,
+  garish red-on-lilac — text banner) is now a full-screen branded splash: the app
+  mark, its name, and a spinner on the brand gradient (teal for TreeDB, blue for
+  Agent Console), so the first paint already matches the login and the hand-off is
+  seamless. Reduced-motion friendly; `main.js` still removes it on ready.
 - **Redesigned login screen for gui_agent and gui_treedb (like wattyzer).**
   Both pre-shell logins were a plain centered Bulma box on a flat gradient. They
   now use the same polished split-card design as wattyzer's login: a brand-tinted

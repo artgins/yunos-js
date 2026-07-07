@@ -80,7 +80,7 @@ function render_html(dep)
 
             <aside class="ylogin-welcome">
                 <div class="ylogin-brand">
-                    <img class="ylogin-mark" src="/yuneta-y.svg" alt="">
+                    <img class="ylogin-mark" src="/treedb-mark.svg" alt="">
                     <span class="ylogin-wordmark">TreeDB GUI</span>
                 </div>
                 <h1 class="ylogin-welcome-title"
@@ -102,7 +102,7 @@ function render_html(dep)
             <section class="ylogin-form">
 
                 <header class="ylogin-form-header">
-                    <img class="ylogin-mobile-mark" src="/yuneta-y.svg" alt="TreeDB GUI">
+                    <img class="ylogin-mobile-mark" src="/treedb-mark.svg" alt="TreeDB GUI">
                     <div class="ylogin-quick">
                         <button type="button" class="yquick-btn" data-quick="theme">
                             <span class="yquick-icon" data-quick-icon="theme"></span>
