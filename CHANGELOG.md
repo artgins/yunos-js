@@ -37,9 +37,15 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   keyboard and hid the bar otherwise). A `ResizeObserver` refits the xterm to
   its host on every viewport change (keyboard open/close, rotation), so the
   terminal fills the space again after the keyboard closes instead of staying
-  short — a keyboard toggle only changes row count (columns are constant), so
-  the local refit stays consistent with the node PTY's frozen geometry (the
-  agent still has no runtime SIGWINCH path). Desktop is unaffected.
+  short. Each refit now also pushes the new geometry to the node with a
+  `resize-console name=<c> cx=<cols> cy=<rows>` command (SDK Unreleased:
+  `resize-console` → `EV_RESIZE_TTY` → `TIOCSWINSZ`/`SIGWINCH` on the pty
+  master), so full-screen programs (vim, less, htop) reflow instead of the pty
+  staying frozen at its open-time size; sent only when cols/rows actually change,
+  tagged `console_purpose="tty_resize"` so its ack is ignored. Needs the node's
+  agent at the SDK build that ships `resize-console` — an older agent just
+  answers "command not found" (ignored), so the terminal still works locally.
+  Desktop is unaffected.
 - **feat(gui_treedb): "About" dialog in the account menu.** A new About entry
   (account dropdown, between Developer and Sign out) opens the standardized
   adaptive dialog (desktop X top-right / mobile back sheet) with a product

@@ -134,11 +134,13 @@ This yuno is JavaScript and deploys independently of the SDK (see
   refits the xterm to its host on every viewport change (keyboard open/close,
   rotation) so the terminal fills the space again after the keyboard closes
   instead of staying short; a keyboard toggle changes only the row count
-  (columns are constant), so the local refit stays consistent with the node
-  PTY's frozen geometry. _Follow-up: browsers without `interactive-widget`
-  support (older Android WebViews, current iOS Safari) still overlay — pin the
-  bar to `visualViewport` there; and the agent still has no runtime SIGWINCH, so
-  a full-screen TUI opened after a resize sees stale rows._
+  (columns are constant). Each refit also pushes the new geometry to the node
+  (`resize-console` → `EV_RESIZE_TTY` → `TIOCSWINSZ`/`SIGWINCH` on the pty
+  master, SDK Unreleased), so full-screen programs reflow instead of the pty
+  staying frozen at its open-time size; needs the node's agent at that SDK build
+  (an older agent answers "command not found", ignored). _Follow-up: browsers
+  without `interactive-widget` support (older Android WebViews, current iOS
+  Safari) still overlay — pin the bar to `visualViewport` there._
 - **Terminal touch selection (mobile).** xterm.js selection is mouse-only, so on
   a phone a long-press selected nothing. New `tty_touch_select.js` adds a touch
   gesture driving xterm's public selection API: **long-press** selects the word
