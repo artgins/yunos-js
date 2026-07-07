@@ -31,7 +31,10 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   escape/control bytes through the same `send_keys` path. **Ctrl** is a sticky
   modifier (arm → next key from bar or soft keyboard becomes its control byte).
   Buttons emit on `pointerdown` + `preventDefault` so the xterm keeps focus and
-  the keyboard stays open. Desktop is unaffected.
+  the keyboard stays open. The viewport meta now declares
+  `interactive-widget=resizes-content` so the on-screen keyboard shrinks the
+  layout viewport and the bar reflows **above** it (Android Chrome overlaid the
+  keyboard and hid the bar otherwise). Desktop is unaffected.
 - **feat(gui_treedb): "About" dialog in the account menu.** A new About entry
   (account dropdown, between Developer and Sign out) opens the standardized
   adaptive dialog (desktop X top-right / mobile back sheet) with a product

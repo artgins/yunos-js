@@ -3,7 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title></title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--
+        interactive-widget=resizes-content: when the on-screen keyboard opens,
+        shrink the LAYOUT viewport (not just the visual one) so `height:100%`
+        chains reflow above the keyboard. Without it Android Chrome overlays the
+        keyboard and hides the Terminal's mobile key bar (which sits at the card
+        bottom). Ignored by browsers that don't support it (graceful fallback).
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <meta name="robots" content="noindex, nofollow">
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/agent-mark.svg" type="image/svg+xml">

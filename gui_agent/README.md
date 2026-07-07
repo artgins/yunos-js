@@ -127,8 +127,13 @@ This yuno is JavaScript and deploys independently of the SDK (see
   **^C ^D ^Z | / - Home End**. **Ctrl** is a sticky modifier — arm it, then the
   next key (bar or soft keyboard) is sent as its control byte. Buttons fire on
   `pointerdown` + `preventDefault`, so the xterm keeps focus and the keyboard
-  stays open. _Follow-up: on iOS the bar may sit behind the keyboard; pin it to
-  `visualViewport` if a real device needs it._
+  stays open. To keep the bar **above** the keyboard the viewport meta declares
+  `interactive-widget=resizes-content`, so the on-screen keyboard shrinks the
+  layout viewport and the app's `height:100%` chain reflows above it (Android
+  Chrome overlaid the keyboard otherwise, hiding the bar). _Follow-up: browsers
+  without `interactive-widget` support (older Android WebViews, current iOS
+  Safari) still overlay; pin the bar to `visualViewport` there if a real device
+  needs it._
 - **Terminal touch selection (mobile).** xterm.js selection is mouse-only, so on
   a phone a long-press selected nothing. New `tty_touch_select.js` adds a touch
   gesture driving xterm's public selection API: **long-press** selects the word
