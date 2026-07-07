@@ -1,128 +1,333 @@
 /***********************************************************************
  *          login.js
  *
- *          Pre-shell login screen: a full-page centered card with the
- *          brand, a username + password form (show/hide), a busy state
- *          and an error line. Mounted by C_TREEDB_APP when there is no
- *          session, unmounted on EV_LOGIN_ACCEPTED.
+ *          Pre-shell login screen for gui_treedb (TreeDB GUI) — pure DOM
+ *          module. A centered split card: a brand-tinted welcome panel on
+ *          the left and the username/password form on the right, collapsing
+ *          to form-only below 900px. Theme + language quick toggles,
+ *          password reveal, busy state, error banner. Mounted by
+ *          C_TREEDB_APP when there is no session, unmounted on
+ *          EV_LOGIN_ACCEPTED. Same visual language as wattyzer's login,
+ *          TreeDB (teal) palette.
  *
- *          mount_login({on_submit}) -> { unmount, set_busy, set_error }
+ *          mount_login({on_submit}) -> { unmount, set_busy, set_error, clear_error }
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
-import {createElement2, refresh_language} from "@yuneta/gobj-js";
 import {t} from "i18next";
 
+import {current_theme, toggle_theme} from "./theme.js";
+import {switch_locale, current_locale} from "./locales/locales.js";
 import {deploy_info} from "./conf/deploy.js";
+import pkg from "../package.json";
+
+const VERSION = pkg.version || "";
 
 
 /***************************************************************
- *  Mount the login screen on document.body.
+ *  Build the login screen and attach it to <body>.
  ***************************************************************/
 function mount_login(opts)
 {
-    opts = opts || {};
+    let on_submit = (opts && opts.on_submit) || function() {};
     let dep = deploy_info();
 
-    let $pwd = createElement2(["input", {
-        class: "input", type: "password", name: "password",
-        placeholder: "", autocomplete: "current-password"
-    }]);
-    let $eye = createElement2(["i", {class: "yi-eye"}]);
-    let $eyebtn = createElement2(
-        ["button", {class: "button", type: "button", "aria-label": "show password",
-                    tabindex: "-1"}, [["span", {class: "icon"}, [$eye]]]]
-    );
-    $eyebtn.addEventListener("click", () => {
-        let show = ($pwd.type === "password");
-        $pwd.type = show ? "text" : "password";
-        $eye.className = show ? "yi-eye-slash" : "yi-eye";
-        $pwd.focus();
-    });
+    let root = document.createElement("div");
+    root.className = "ytreedb-login";
+    root.innerHTML = render_html(dep);
+    document.body.appendChild(root);
 
-    let $user = createElement2(["input", {
-        class: "input", type: "text", name: "username",
-        placeholder: "", autocomplete: "username", autofocus: "true"
-    }]);
+    paint_i18n(root);
+    paint_quick(root);
+    let api = wire_form(root, on_submit);
+    wire_quick(root);
 
-    let $error = createElement2(["p", {class: "help is-danger", style: "min-height:1.25em;"}, ""]);
-
-    let $btn = createElement2(
-        ["button", {class: "button is-primary is-fullwidth", type: "submit", i18n: "login"}, "Sign In"]
-    );
-
-    let submit = () => {
-        let username = $user.value.trim();
-        let password = $pwd.value;
-        if(!username || !password) {
-            set_error(t("username and password are required"));
-            return;
+    setTimeout(function() {
+        let u = root.querySelector("input[name=username]");
+        if(u) {
+            u.focus();
         }
-        set_error("");
-        set_busy(true);
-        if(typeof opts.on_submit === "function") {
-            opts.on_submit({username, password});
+    }, 350);
+
+    return {
+        set_error:   api.set_error,
+        clear_error: api.clear_error,
+        set_busy:    api.set_busy,
+        unmount:     function() {
+            if(root && root.parentNode) {
+                root.parentNode.removeChild(root);
+            }
         }
     };
-
-    let $form = createElement2(
-        ["form", {class: "box", style: "width:100%; max-width:400px;"},
-            [
-                ["div", {style: "text-align:center; margin-bottom:1.25rem;"}, [
-                    ["h1", {class: "title is-4 mt-3 mb-1", style: "color:#2E7CD6;"}, "TreeDB GUI"],
-                    ["p", {class: "is-size-7 has-text-grey"}, `${dep.tenant}`]
-                ]],
-                ["div", {class: "field"}, [
-                    ["label", {class: "label is-small", i18n: "username"}, "Username"],
-                    ["div", {class: "control"}, [$user]]
-                ]],
-                ["div", {class: "field"}, [
-                    ["label", {class: "label is-small", i18n: "password"}, "Password"],
-                    ["div", {class: "field has-addons mb-0"}, [
-                        ["div", {class: "control is-expanded"}, [$pwd]],
-                        ["div", {class: "control"}, [$eyebtn]]
-                    ]]
-                ]],
-                $error,
-                ["div", {class: "field mt-4"}, [["div", {class: "control"}, [$btn]]]]
-            ]
-        ]
-    );
-    $form.addEventListener("submit", (ev) => { ev.preventDefault(); submit(); });
-
-    let $overlay = createElement2(
-        ["div", {class: "ytreedb-login",
-                 style: "position:fixed; inset:0; z-index:1000; display:flex; " +
-                        "align-items:center; justify-content:center; padding:1.5rem; " +
-                        "background:linear-gradient(135deg,#1F3A5F 0%,#2E7CD6 100%);"},
-            [$form]]
-    );
-    document.body.appendChild($overlay);
-    refresh_language($overlay, t);
-    setTimeout(() => { $user.focus(); }, 0);
-
-    function set_busy(busy)
-    {
-        $btn.classList.toggle("is-loading", !!busy);
-        $user.disabled = !!busy;
-        $pwd.disabled = !!busy;
-    }
-
-    function set_error(text)
-    {
-        $error.textContent = text || "";
-    }
-
-    function unmount()
-    {
-        if($overlay && $overlay.parentNode) {
-            $overlay.parentNode.removeChild($overlay);
-        }
-        $overlay = null;
-    }
-
-    return {unmount, set_busy, set_error};
 }
+
+
+                    /***************************
+                     *      DOM construction
+                     ***************************/
+
+
+function render_html(dep)
+{
+    return `
+        <div class="ylogin-bg" aria-hidden="true">
+            <div class="ylogin-orb ylogin-orb-1"></div>
+            <div class="ylogin-orb ylogin-orb-2"></div>
+        </div>
+
+        <div class="ylogin-card" role="main">
+
+            <aside class="ylogin-welcome">
+                <div class="ylogin-brand">
+                    <img class="ylogin-mark" src="/yuneta-y.svg" alt="">
+                    <span class="ylogin-wordmark">TreeDB GUI</span>
+                </div>
+                <h1 class="ylogin-welcome-title"
+                    data-i18n="login welcome title"
+                    data-default="Browse your TreeDB graphs">Browse your TreeDB graphs</h1>
+                <p class="ylogin-welcome-lead"
+                   data-i18n="login welcome lead"
+                   data-default="Explore topics as tables and nodes as graphs across every configured backend — one console for all your treedbs.">Explore topics as tables and nodes as graphs across every configured backend — one console for all your treedbs.</p>
+
+                <ul class="ylogin-features">
+                    <li>${svg_bolt()}<span data-i18n="login feature topics" data-default="Topics as editable tables">Topics as editable tables</span></li>
+                    <li>${svg_bolt()}<span data-i18n="login feature graphs" data-default="Nodes &amp; links as graphs">Nodes &amp; links as graphs</span></li>
+                    <li>${svg_bolt()}<span data-i18n="login feature multibackend" data-default="Multiple backends at once">Multiple backends at once</span></li>
+                </ul>
+
+                <div class="ylogin-spark" aria-hidden="true"></div>
+            </aside>
+
+            <section class="ylogin-form">
+
+                <header class="ylogin-form-header">
+                    <img class="ylogin-mobile-mark" src="/yuneta-y.svg" alt="TreeDB GUI">
+                    <div class="ylogin-quick">
+                        <button type="button" class="yquick-btn" data-quick="theme">
+                            <span class="yquick-icon" data-quick-icon="theme"></span>
+                        </button>
+                        <button type="button" class="yquick-btn" data-quick="lang">
+                            <span class="yquick-icon">${svg_globe()}</span>
+                            <span class="yquick-label" data-quick-label="lang"></span>
+                        </button>
+                    </div>
+                </header>
+
+                <h2 class="ylogin-title" data-i18n="sign in" data-default="Sign in">Sign in</h2>
+                <p class="ylogin-subtitle">${dep.tenant || "TreeDB"}</p>
+
+                <form class="ylogin-fields" novalidate>
+                    <div class="ylogin-alert" data-role="error" hidden></div>
+
+                    <label class="yfield">
+                        <span class="yfield-label" data-i18n="username" data-default="Username">Username</span>
+                        <input type="text" name="username" autocomplete="username" required>
+                    </label>
+
+                    <label class="yfield">
+                        <span class="yfield-label" data-i18n="password" data-default="Password">Password</span>
+                        <div class="yfield-password">
+                            <input type="password" name="password" autocomplete="current-password" required>
+                            <button type="button" class="ypassword-toggle" data-action="toggle-password"
+                                    aria-pressed="false" aria-label="${t("show password", {defaultValue: "Show password"})}">
+                                <span data-password-icon>${svg_eye()}</span>
+                            </button>
+                        </div>
+                    </label>
+
+                    <button type="submit" class="ylogin-cta">
+                        <span data-i18n="sign in" data-default="Sign in">Sign in</span>
+                    </button>
+                </form>
+            </section>
+
+            <footer class="ylogin-footer">
+                <p data-role="footer-line"></p>
+            </footer>
+        </div>
+    `;
+}
+
+
+                    /***************************
+                     *      Form wiring
+                     ***************************/
+
+
+function wire_form(root, on_submit)
+{
+    let form  = root.querySelector(".ylogin-fields");
+    let alert = form.querySelector("[data-role=error]");
+    let cta   = form.querySelector(".ylogin-cta");
+    let user  = form.querySelector("input[name=username]");
+    let pwd   = form.querySelector("input[name=password]");
+
+    function set_error(msg) {
+        alert.textContent = msg || "";
+        alert.hidden = !msg;
+    }
+    function clear_error() {
+        alert.textContent = "";
+        alert.hidden = true;
+    }
+    function set_busy(on) {
+        form.querySelectorAll("input, button").forEach(function(el) {
+            el.disabled = !!on;
+        });
+        cta.classList.toggle("is-busy", !!on);
+    }
+
+    form.addEventListener("submit", function(ev) {
+        ev.preventDefault();
+        let username = String(user.value || "").trim();
+        let password = String(pwd.value || "");
+        if(!username || !password) {
+            set_error(t("username and password are required",
+                {defaultValue: "Username and password are required"}));
+            return;
+        }
+        clear_error();
+        set_busy(true);
+        on_submit({username: username, password: password});
+    });
+
+    let toggle   = root.querySelector("[data-action=toggle-password]");
+    let pwd_icon = toggle.querySelector("[data-password-icon]");
+    toggle.addEventListener("click", function() {
+        let revealed = pwd.type === "text";
+        pwd.type = revealed ? "password" : "text";
+        pwd_icon.innerHTML = revealed ? svg_eye() : svg_eye_off();
+        toggle.setAttribute("aria-pressed", revealed ? "false" : "true");
+        toggle.setAttribute("aria-label",
+            t(revealed ? "show password" : "hide password",
+                {defaultValue: revealed ? "Show password" : "Hide password"}));
+    });
+
+    return {set_error, clear_error, set_busy};
+}
+
+
+                    /***************************
+                     *      Quick toggles
+                     ***************************/
+
+
+function wire_quick(root)
+{
+    let theme_btn = root.querySelector("[data-quick=theme]");
+    theme_btn.addEventListener("click", function() {
+        toggle_theme();
+        paint_quick(root);
+    });
+
+    let lang_btn = root.querySelector("[data-quick=lang]");
+    lang_btn.addEventListener("click", function() {
+        switch_locale(current_locale() === "es" ? "en" : "es");
+        paint_i18n(root);
+        paint_quick(root);
+    });
+}
+
+function paint_quick(root)
+{
+    let icon = root.querySelector("[data-quick-icon=theme]");
+    if(icon) {
+        icon.innerHTML = (current_theme() === "light") ? svg_moon() : svg_sun();
+    }
+    let theme_btn = root.querySelector("[data-quick=theme]");
+    if(theme_btn) {
+        theme_btn.setAttribute("aria-label", t("toggle theme", {defaultValue: "Toggle theme"}));
+    }
+    let lang = root.querySelector("[data-quick-label=lang]");
+    if(lang) {
+        lang.textContent = current_locale().toUpperCase();
+    }
+}
+
+
+                    /***************************
+                     *      i18n re-paint
+                     ***************************/
+
+
+function paint_i18n(root)
+{
+    root.querySelectorAll("[data-i18n]").forEach(function(el) {
+        let key = el.dataset.i18n;
+        let def = el.dataset.default || el.textContent;
+        el.textContent = t(key, {defaultValue: def});
+    });
+    let footer = root.querySelector("[data-role=footer-line]");
+    if(footer) {
+        let year = new Date().getFullYear();
+        footer.textContent = `© ${year} ArtGins` + (VERSION ? ` · v${VERSION}` : "");
+    }
+}
+
+
+                    /***************************
+                     *      Inline SVGs
+                     ***************************/
+
+
+function svg_globe()
+{
+    return `<svg class="ysvg" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M2 8 H14 M8 2 C5 5 5 11 8 14 M8 2 C11 5 11 11 8 14"
+              fill="none" stroke="currentColor" stroke-width="1.2"/>
+    </svg>`;
+}
+
+function svg_sun()
+{
+    return `<svg class="ysvg" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="8" r="3" fill="currentColor"/>
+        <g stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+            <line x1="8" y1="1.5" x2="8" y2="3.5"/><line x1="8" y1="12.5" x2="8" y2="14.5"/>
+            <line x1="1.5" y1="8" x2="3.5" y2="8"/><line x1="12.5" y1="8" x2="14.5" y2="8"/>
+            <line x1="3.4" y1="3.4" x2="4.8" y2="4.8"/><line x1="11.2" y1="11.2" x2="12.6" y2="12.6"/>
+            <line x1="3.4" y1="12.6" x2="4.8" y2="11.2"/><line x1="11.2" y1="4.8" x2="12.6" y2="3.4"/>
+        </g>
+    </svg>`;
+}
+
+function svg_moon()
+{
+    return `<svg class="ysvg" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M13 9.5 A6 6 0 0 1 6.5 3 A6 6 0 1 0 13 9.5 Z" fill="currentColor"/>
+    </svg>`;
+}
+
+function svg_eye()
+{
+    return `<svg class="ysvg" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M1.5 8 C 3.4 4.5, 5.5 3.2, 8 3.2 C 10.5 3.2, 12.6 4.5, 14.5 8
+                 C 12.6 11.5, 10.5 12.8, 8 12.8 C 5.5 12.8, 3.4 11.5, 1.5 8 Z"
+              fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+        <circle cx="8" cy="8" r="2.4" fill="currentColor"/>
+    </svg>`;
+}
+
+function svg_eye_off()
+{
+    return `<svg class="ysvg" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M1.5 8 C 3.4 4.5, 5.5 3.2, 8 3.2 C 10.5 3.2, 12.6 4.5, 14.5 8
+                 C 12.6 11.5, 10.5 12.8, 8 12.8 C 5.5 12.8, 3.4 11.5, 1.5 8 Z"
+              fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+        <circle cx="8" cy="8" r="2.4" fill="currentColor"/>
+        <line x1="2.4" y1="13.6" x2="13.6" y2="2.4" stroke="var(--yl-card-bg,#fff)" stroke-width="2.4" stroke-linecap="round"/>
+        <line x1="2.4" y1="13.6" x2="13.6" y2="2.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>`;
+}
+
+function svg_bolt()
+{
+    return `<svg class="ysvg ysvg-bolt" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M9 1 L3 9 H7 L6 15 L13 6 H9 Z" fill="currentColor"/>
+    </svg>`;
+}
+
 
 export {mount_login};

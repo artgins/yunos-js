@@ -50,6 +50,19 @@ const es = {
         "server_busy":                        "El servidor está ocupado. Inténtelo en un momento.",
 
         /* mantener al final — insertar nuevas claves antes */
+        "sign in":                            "Iniciar sesión",
+        "username":                           "Usuario",
+        "password":                           "Contraseña",
+        "show password":                      "Mostrar contraseña",
+        "hide password":                      "Ocultar contraseña",
+        "toggle theme":                       "Cambiar tema",
+        "username and password are required": "Usuario y contraseña son obligatorios",
+        "login welcome title":                "Explora tus grafos TreeDB",
+        "login welcome lead":                 "Explora topics como tablas y nodos como grafos en cada backend configurado — una sola consola para todos tus treedbs.",
+        "login feature topics":               "Topics como tablas editables",
+        "login feature graphs":               "Nodos y enlaces como grafos",
+        "login feature multibackend":         "Varios backends a la vez",
+
         "_xxx":                               "last key — insert new ones above"
     }
 };

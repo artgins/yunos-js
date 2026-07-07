@@ -50,6 +50,19 @@ const en = {
         "server_busy":                        "The server is busy. Please try again in a moment.",
 
         /* keep this last so adding new keys above never hits the comma trap */
+        "sign in":                            "Sign in",
+        "username":                           "Username",
+        "password":                           "Password",
+        "show password":                      "Show password",
+        "hide password":                      "Hide password",
+        "toggle theme":                       "Toggle theme",
+        "username and password are required": "Username and password are required",
+        "login welcome title":                "Browse your TreeDB graphs",
+        "login welcome lead":                 "Explore topics as tables and nodes as graphs across every configured backend — one console for all your treedbs.",
+        "login feature topics":               "Topics as editable tables",
+        "login feature graphs":               "Nodes & links as graphs",
+        "login feature multibackend":         "Multiple backends at once",
+
         "_xxx":                               "last key — insert new ones above"
     }
 };

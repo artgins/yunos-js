@@ -79,6 +79,7 @@ import "@yuneta/gobj-ui/src/c_yui_map.css";
 import "@yuneta/gobj-ui/src/ytable.css";
 import "@yuneta/gobj-ui/src/yui_toolbar.css";
 import "@yuneta/gobj-ui/src/lib_graph.css";
+import "./login.css";
 
 import app_config from "./app_config.json";
 

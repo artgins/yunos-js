@@ -191,6 +191,16 @@ const en = {
         "about description": "Browser console to operate Yuneta agents through the control center.",
         "documentation":     "Documentation",
 
+        "sign in":               "Sign in",
+        "show password":         "Show password",
+        "hide password":         "Hide password",
+        "toggle theme":          "Toggle theme",
+        "login welcome title":   "Operate your Yuneta agents",
+        "login welcome lead":    "Run commands, watch live statistics and open a terminal on every node — from one console, through the control center.",
+        "login feature commands":"Multi-node command console",
+        "login feature stats":   "Live statistics & health",
+        "login feature terminal":"Interactive node terminal",
+
         /* keep this last so adding new keys above never hits the comma trap */
         "_xxx":              "last key — insert new ones above"
     }

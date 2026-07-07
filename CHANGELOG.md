@@ -22,6 +22,20 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **Redesigned login screen for gui_agent and gui_treedb (like wattyzer).**
+  Both pre-shell logins were a plain centered Bulma box on a flat gradient. They
+  now use the same polished split-card design as wattyzer's login: a brand-tinted
+  welcome panel (mark + wordmark + a one-line pitch + three feature bullets) beside
+  the sign-in form, animated ambient background orbs, a gradient CTA, a password
+  reveal, theme + language quick toggles, and a version footer — collapsing to
+  form-only below 900px, theme-aware (light/dark), and reduced-motion friendly.
+  Each keeps its own palette and copy: gui_agent = Agent Console (indigo/blue),
+  gui_treedb = TreeDB GUI (teal). New `login.js` + `login.css` per app (imported
+  in `main.js`); new i18n keys added to both locales (EN + ES). The BFF login
+  contract is unchanged (`on_submit({username, password})`; the controller still
+  exposes `set_busy` / `set_error` / `unmount`).
+
+
 - **chore: initial snapshot.** Extracted from `yunetas/yunos/js` at yunetas
   **7.6.8**. History was not carried over (it remains in the yunetas repo); the
   layout, `package.json` files and `file:` dependencies are unchanged, so the

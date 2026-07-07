@@ -191,6 +191,16 @@ const es = {
         "about description": "Consola web para operar agentes Yuneta a través del control center.",
         "documentation":     "Documentación",
 
+        "sign in":               "Iniciar sesión",
+        "show password":         "Mostrar contraseña",
+        "hide password":         "Ocultar contraseña",
+        "toggle theme":          "Cambiar tema",
+        "login welcome title":   "Opera tus agentes Yuneta",
+        "login welcome lead":    "Ejecuta comandos, observa estadísticas en vivo y abre un terminal en cada nodo — desde una sola consola, a través del control center.",
+        "login feature commands":"Consola de comandos multi-nodo",
+        "login feature stats":   "Estadísticas y salud en vivo",
+        "login feature terminal":"Terminal interactivo de nodo",
+
         /* mantener al final — insertar nuevas claves antes */
         "_xxx":              "última clave — insertar nuevas antes"
     }
