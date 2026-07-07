@@ -118,6 +118,17 @@ This yuno is JavaScript and deploys independently of the SDK (see
 
 ### 7.7.0 cycle
 
+- **Terminal mobile key bar.** A phone's on-screen keyboard has no Esc / Tab /
+  Ctrl / arrow / Home-End keys, so on mobile the PTY console couldn't complete
+  (Tab), walk history (↑ ↓), edit the line (← →) or interrupt (^C) — everything
+  works on desktop, where physical keys already reach `onData`. `c_agent_tty.js`
+  now appends a two-row accessory bar (`is-hidden-tablet`, so desktop is
+  unaffected) that injects the exact byte sequences: **Esc Tab Ctrl ← ↑ ↓ →** /
+  **^C ^D ^Z | / - Home End**. **Ctrl** is a sticky modifier — arm it, then the
+  next key (bar or soft keyboard) is sent as its control byte. Buttons fire on
+  `pointerdown` + `preventDefault`, so the xterm keeps focus and the keyboard
+  stays open. _Follow-up: on iOS the bar may sit behind the keyboard; pin it to
+  `visualViewport` if a real device needs it._
 - **Terminal touch selection (mobile).** xterm.js selection is mouse-only, so on
   a phone a long-press selected nothing. New `tty_touch_select.js` adds a touch
   gesture driving xterm's public selection API: **long-press** selects the word

@@ -257,6 +257,38 @@ function new_console_name(node)
 }
 
 /***************************************************************
+ *  Mobile soft-key accessory bar. A phone's on-screen keyboard has no
+ *  Esc / Tab / Ctrl / arrow / Home-End keys, so a shell can't complete
+ *  (Tab), walk history (↑ ↓), edit the line (← →) or interrupt (^C).
+ *  These buttons inject the exact byte sequences those keys emit; on
+ *  desktop the bar is hidden (physical keys already produce them, see
+ *  onData). `"__ctrl__"` is the sticky modifier (see set_ctrl_armed):
+ *  arm it, then the next key — from this bar OR the soft keyboard —
+ *  is sent as its control character.
+ ***************************************************************/
+const KEYBAR_ROWS = [
+    [
+        ["Esc",     "\x1b"],
+        ["Tab",     "\t"],
+        ["Ctrl",    "__ctrl__"],
+        ["←",  "\x1b[D"],
+        ["↑",  "\x1b[A"],
+        ["↓",  "\x1b[B"],
+        ["→",  "\x1b[C"]
+    ],
+    [
+        ["^C",      "\x03"],
+        ["^D",      "\x04"],
+        ["^Z",      "\x1a"],
+        ["|",       "|"],
+        ["/",       "/"],
+        ["-",       "-"],
+        ["Home",    "\x1b[H"],
+        ["End",     "\x1b[F"]
+    ]
+];
+
+/***************************************************************
  *  Build the static shell: a one-line toolbar (node + reconnect) and
  *  the xterm host.
  ***************************************************************/
@@ -316,7 +348,58 @@ function build_dom(gobj)
     );
     $c.appendChild(priv.$term);
 
+    /*  Mobile-only soft-key accessory bar (hidden on desktop).  */
+    $c.appendChild(build_keybar(gobj));
+
     refresh_language($c, t);
+}
+
+/***************************************************************
+ *  Build the two-row mobile key bar (see KEYBAR_ROWS). Each button
+ *  emits on `pointerdown` and preventDefaults it, so the xterm keeps
+ *  focus and the soft keyboard stays open. Hidden on tablet+ via
+ *  `is-hidden-tablet`; the inline `display:flex` only takes effect on
+ *  mobile where that utility does not apply.
+ ***************************************************************/
+function build_keybar(gobj)
+{
+    let priv = gobj.priv;
+
+    let rows = KEYBAR_ROWS.map(function(row) {
+        let btns = row.map(function(pair) {
+            let label = pair[0];
+            let seq = pair[1];
+            let $b = createElement2(
+                ["button", {
+                    class: "button is-small is-family-monospace TTY_KEY",
+                    type: "button", tabindex: "-1",
+                    style: "flex:1 1 0; min-width:2.1rem; padding-left:0.3rem; " +
+                           "padding-right:0.3rem;",
+                    "aria-label": label
+                }, label]
+            );
+            $b.addEventListener("pointerdown", function(e) {
+                e.preventDefault();          /*  keep xterm focused / keyboard open  */
+                if(seq === "__ctrl__") {
+                    set_ctrl_armed(gobj, !priv.ctrl_armed);
+                    return;
+                }
+                tty_input(gobj, seq, true);
+            });
+            if(seq === "__ctrl__") {
+                priv.$ctrl = $b;
+            }
+            return $b;
+        });
+        return createElement2(["div", {class: "is-flex", style: "gap:0.25rem;"}, btns]);
+    });
+
+    priv.$keybar = createElement2(
+        ["div", {class: "TTY_KEYBAR is-hidden-tablet",
+                 style: "flex:0 0 auto; display:flex; flex-direction:column; " +
+                        "gap:0.25rem; margin-top:0.4rem;"}, rows]
+    );
+    return priv.$keybar;
 }
 
 /***************************************************************
@@ -349,8 +432,8 @@ function create_terminal(gobj)
     } catch(e) {
         /*  container not sized yet — keep xterm's default geometry  */
     }
-    /*  Keystrokes -> node PTY.  */
-    term.onData((d) => send_keys(gobj, d));
+    /*  Keystrokes -> node PTY (through the sticky-Ctrl gate).  */
+    term.onData((d) => tty_input(gobj, d, false));
     priv.term = term;
     priv.fit = fit;
 
@@ -563,6 +646,69 @@ function send_keys(gobj, data)
     msg_iev_write_key(kw, "console_purpose", "tty");
     msg_iev_write_key(kw, "console_node", node);
     agent_link_command(link, "command-agent", kw);
+}
+
+/***************************************************************
+ *  Single gate for every keystroke — xterm onData AND the mobile key
+ *  bar. Applies the sticky-Ctrl modifier: when armed, a single soft-
+ *  keyboard character becomes its control byte (Ctrl-C = \x03…), then
+ *  the modifier disarms. Bar keys pass `from_bar=true` and carry their
+ *  own literal sequence, so they only consume/clear the arm.
+ ***************************************************************/
+function tty_input(gobj, data, from_bar)
+{
+    let priv = gobj.priv;
+    if(priv.ctrl_armed) {
+        set_ctrl_armed(gobj, false);
+        if(!from_bar) {
+            let c = ctrl_char(data);
+            if(c !== null) {
+                data = c;
+            }
+        }
+    }
+    send_keys(gobj, data);
+    if(priv.term) {
+        priv.term.focus();
+    }
+}
+
+/***************************************************************
+ *  Arm/disarm the sticky Ctrl modifier and reflect it on the button.
+ ***************************************************************/
+function set_ctrl_armed(gobj, on)
+{
+    let priv = gobj.priv;
+    priv.ctrl_armed = !!on;
+    if(priv.$ctrl) {
+        priv.$ctrl.classList.toggle("is-info", priv.ctrl_armed);
+        priv.$ctrl.classList.toggle("is-selected", priv.ctrl_armed);
+    }
+}
+
+/***************************************************************
+ *  Map a single character to its Ctrl-<char> control byte (a→\x01 …
+ *  z→\x1a, @[\]^_ and space→\x00, ?→\x7f). Returns null when the char
+ *  has no control mapping (then the raw char is sent unchanged).
+ ***************************************************************/
+function ctrl_char(s)
+{
+    if(typeof s !== "string" || s.length !== 1) {
+        return null;
+    }
+    let code = s.charCodeAt(0);
+    if(code >= 97 && code <= 122) {          /*  a-z  */
+        code -= 96;
+    } else if(code >= 64 && code <= 95) {    /*  @ A-Z [ \ ] ^ _  */
+        code -= 64;
+    } else if(code === 32) {                 /*  space -> NUL  */
+        code = 0;
+    } else if(code === 63) {                 /*  ? -> DEL  */
+        code = 127;
+    } else {
+        return null;
+    }
+    return String.fromCharCode(code);
 }
 
 /***************************************************************

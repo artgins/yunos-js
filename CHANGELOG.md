@@ -22,6 +22,16 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_agent): mobile key bar for the Terminal.** A phone's soft keyboard
+  has no Esc / Tab / Ctrl / arrow / Home-End keys, so on mobile the xterm PTY
+  console couldn't complete (Tab), walk history (↑ ↓), edit the line (← →) or
+  interrupt (^C) — desktop was fine (physical keys reach `onData`). `c_agent_tty.js`
+  now appends a two-row accessory bar (mobile-only via `is-hidden-tablet`):
+  **Esc Tab Ctrl ← ↑ ↓ →** / **^C ^D ^Z | / - Home End**, each injecting the exact
+  escape/control bytes through the same `send_keys` path. **Ctrl** is a sticky
+  modifier (arm → next key from bar or soft keyboard becomes its control byte).
+  Buttons emit on `pointerdown` + `preventDefault` so the xterm keeps focus and
+  the keyboard stays open. Desktop is unaffected.
 - **feat(gui_treedb): "About" dialog in the account menu.** A new About entry
   (account dropdown, between Developer and Sign out) opens the standardized
   adaptive dialog (desktop X top-right / mobile back sheet) with a product
