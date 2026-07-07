@@ -22,6 +22,32 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_agent): dedupe i18next in vite config.** gui_agent's
+  `vite.config.js` had the `preserveSymlinks` aliases but no
+  `resolve.dedupe`, so the vendored gobj-ui's own `node_modules/i18next`
+  bundled as a SECOND instance — module-level `t()` in gobj-ui views ran on
+  an uninitialized i18next and rendered blank (the recorded footgun).
+  Replicated gui_treedb's dedupe list.
+- **fix(gui_agent): a typed `list-agents` now renders in the Commands
+  console.** The answer filter dropped EVERY `list-agents` answer (meant to
+  hide the Nodes picker's fetch), so an operator typing `list-agents` never
+  saw the result and the "running…" placeholder stuck. Only unmarked
+  answers (no `console_seq`/`console_node` echoed in `__md_iev__`) are
+  swallowed now; a typed one carries this panel's markers and renders.
+- **fix(gui_agent): a transient `write-tty` failure no longer orphans the
+  remote bash.** Any `result<0` answer tagged `tty` cleared `console_name`
+  and marked the session Failed — so after a per-keystroke `write-tty`
+  error, Reconnect's best-effort `close-console` (which needs the name) was
+  skipped and the node-side PTY leaked. A failed `write-tty` now only
+  prints a transient error line in the terminal; only a failed
+  `open-console` stays fatal. A genuinely dead console is still cleaned via
+  the agent's `EV_TTY_CLOSE`.
+- **fix(gui_treedb): `C_TREEDB_VIEW` subscribes in `mt_start`, symmetric
+  with `mt_stop`.** The `EV_ROUTE_CHANGED` (shell) and `EV_ON_OPEN`
+  (`treedb_links`) subscriptions lived in `mt_create` while the
+  unsubscribes were in `mt_stop`, so a stop+start cycle would lose both —
+  hardening the just-landed transport-rebind wiring. The shell broadcasts
+  `EV_ROUTE_CHANGED` only after `gobj_start`, so behavior is unchanged.
 - **fix(gui_treedb): a mounted treedb tab no longer strands a destroyed
   transport after a connection reopen.** `C_TREEDB_LINKS` RECREATES a
   connection's `C_IEVENT_CLI` on a token-refresh reopen (NAK → silent refresh

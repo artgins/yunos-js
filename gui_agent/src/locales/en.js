@@ -61,6 +61,7 @@ const en = {
         "closed":            "Closed",
         "failed":            "Failed",
         "open console failed": "Could not open the console",
+        "write tty failed":  "Write to the console failed",
 
         /* console domain */
         "console":           "Console",

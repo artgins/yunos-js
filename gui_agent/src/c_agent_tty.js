@@ -42,8 +42,10 @@ import {
     gobj_find_service,
     createElement2,
     refresh_language,
+    msg_iev_get_stack,
     msg_iev_write_key,
     msg_iev_read_key,
+    kw_get_str,
     kw_get_local_storage_value,
     kw_set_local_storage_value,
 } from "@yuneta/gobj-js";
@@ -692,6 +694,23 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return 0;
     }
     if(typeof kw.result === "number" && kw.result < 0) {
+        let stk = msg_iev_get_stack(gobj, kw, "command_stack", false);
+        let command = kw_get_str(gobj, stk, "command", "", 0);
+
+        /*  A failed write-tty is TRANSIENT (per-keystroke): keep
+         *  console_name so a later Reconnect/close still issues
+         *  close-console (close_console needs the name — clearing it here
+         *  orphaned the remote bash). A console that is genuinely gone is
+         *  cleaned via the agent's EV_TTY_CLOSE, not here.  */
+        if(command === "write-tty") {
+            if(gobj.priv.term) {
+                let comment = (kw.comment && String(kw.comment)) || t("write tty failed");
+                gobj.priv.term.writeln("\r\n\x1b[31m" + comment + "\x1b[0m");
+            }
+            return 0;
+        }
+
+        /*  A failed open-console is fatal for the session.  */
         gobj_write_str_attr(gobj, "console_name", "");
         set_status(gobj, "failed", "Failed");
         if(gobj.priv.term) {

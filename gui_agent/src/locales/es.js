@@ -61,6 +61,7 @@ const es = {
         "closed":            "Cerrado",
         "failed":            "Fallo",
         "open console failed": "No se pudo abrir la consola",
+        "write tty failed":  "Fallo al escribir en la consola",
 
         /* dominio consola */
         "console":           "Consola",

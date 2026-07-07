@@ -106,23 +106,12 @@ function mt_create(gobj)
     priv.sel_event = (view_gclass === "C_YUI_TREEDB_GRAPH")
         ? "EV_OPERATION_MODE_CHANGED"
         : "EV_TOPIC_SELECTED";
-    let shell = gobj_parent(gobj);
-    if(shell) {
-        gobj_subscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
-    }
 
     /*
      *  Resolve the live transport by connection id — a pointer cannot be
-     *  passed reliably through the shell's kw path. Watch OUR connection's
-     *  EV_ON_OPEN too: C_TREEDB_LINKS RECREATES the transport on a token
-     *  refresh (treedb_links_reopen) or a coords edit — a mounted view that
-     *  kept the old pointer would talk to a destroyed gobj forever (looks
-     *  connected, never loads). ac_transport_open rebinds it in place.
+     *  passed reliably through the shell's kw path.
      */
     let links = gobj_find_service("treedb_links", false);
-    if(links) {
-        gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
-    }
     let remote = links ? treedb_links_get_iev(links, conn_id) : null;
 
     if(!view_gclass || !remote) {
@@ -146,6 +135,27 @@ function mt_create(gobj)
 function mt_start(gobj)
 {
     let priv = gobj.priv;
+
+    /*
+     *  Subscriptions live in mt_start to stay symmetric with the
+     *  unsubscribes in mt_stop (a stop+start cycle keeps them). The shell
+     *  mounts a view with gobj_create → appendChild → gobj_start and only
+     *  then broadcasts EV_ROUTE_CHANGED, so subscribing here still
+     *  precedes the first broadcast. EV_ON_OPEN watches OUR connection:
+     *  C_TREEDB_LINKS RECREATES the transport on a token refresh
+     *  (treedb_links_reopen) or a coords edit — a mounted view that kept
+     *  the old pointer would talk to a destroyed gobj forever (looks
+     *  connected, never loads). ac_transport_open rebinds it in place.
+     */
+    let shell = gobj_parent(gobj);
+    if(shell) {
+        gobj_subscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
+    }
+    let links = gobj_find_service("treedb_links", false);
+    if(links) {
+        gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
+    }
+
     if(priv.view && !gobj_is_running(priv.view)) {
         gobj_start(priv.view);
     }

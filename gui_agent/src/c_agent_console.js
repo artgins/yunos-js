@@ -1522,9 +1522,15 @@ function ac_mt_command_answer(gobj, event, kw, src)
     let stk = msg_iev_get_stack(gobj, kw, "command_stack", false);
     let command = kw_get_str(gobj, stk, "command", "", 0);
 
-    /*  The Nodes panel's own answer — not ours.  */
+    /*  The Nodes panel's own list-agents fetch — not ours. A list-agents
+     *  the operator TYPED went through send_command, so its answer echoes
+     *  this panel's markers (console_seq/console_node) in __md_iev__; the
+     *  picker's fetch carries none. Swallow only the unmarked ones — the
+     *  node/seq filters below then vet the marked answer as usual.  */
     if(command === "list-agents") {
-        return 0;
+        if(!msg_iev_read_key(kw, "console_seq") || !msg_iev_read_key(kw, "console_node")) {
+            return 0;
+        }
     }
 
     /*  Answers tagged with a non-console purpose (e.g. the Stats view's
