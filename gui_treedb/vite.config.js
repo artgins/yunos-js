@@ -9,15 +9,29 @@ export default defineConfig({
     resolve: {
         preserveSymlinks: true,
         /*
-         *  Force a SINGLE copy of i18next across the bundle. gobj-ui ships its
-         *  own node_modules/i18next (declared dependency), so without dedupe
-         *  Vite bundles two copies: gui_treedb initializes copy A (locales.js)
-         *  while the vendored treedb view (`import {t} from "i18next"`) binds
-         *  copy B, which is never initialized — every column header then
-         *  renders blank (Tabulator's `&nbsp;` placeholder for an empty title).
-         *  Deduping makes both share the one initialized instance.
+         *  WARNING: preserveSymlinks:true makes Vite load DUPLICATE module
+         *  instances for the symlinked `file:` deps (@yuneta/gobj-ui here).
+         *  gobj-ui ships its own node_modules copy of every shared lib below,
+         *  so each must be deduped or the app and the vendored gobj-ui views
+         *  each get their own instance / internal state — hard-to-debug
+         *  failures. Seen: i18next split → col_label's `t()` ran on an
+         *  UNINITIALIZED instance → every treedb column header rendered blank
+         *  (Tabulator's `&nbsp;` placeholder); @antv/g6 split → "extension
+         *  drag-canvas has been registered before" and a broken Graphs view.
+         *  (@yuneta/gobj-js and @yuneta/gobj-ui are already single instances
+         *  via the `src/` aliases below, so they are NOT listed here — unlike
+         *  wattyzer, which consumes them by specifier and must dedupe them.)
+         *  Mirror wattyzer/gui/vite.config.js when adding a shared lib.
          */
-        dedupe: ["i18next"],
+        dedupe: [
+            "i18next",
+            "@antv/g6",
+            "maplibre-gl",
+            "tabulator-tables",
+            "tom-select",
+            "uplot",
+            "vanilla-jsoneditor",
+        ],
         alias: [
             {
                 find: "@yuneta/gobj-js",

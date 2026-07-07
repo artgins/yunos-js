@@ -213,17 +213,23 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   named in the URL as soon as `EV_ON_OPEN` rebuilds it (`restore_tab_from_url`),
   so a refresh lands back on the treedb the operator was on instead of the
   connection manager.
-- **Fixed blank treedb column headers (i18next dedupe).** Every table column
-  rendered with an empty title (Tabulator's `&nbsp;` placeholder) and "0
-  undefined" in the footer. Root cause: `gobj-ui` ships its own
-  `node_modules/i18next`, so without a bundler dedupe Vite bundled TWO copies —
-  gui_treedb initialized copy A (`locales.js`) while the vendored treedb view
-  (`import {t} from "i18next"`) bound copy B, which was never initialized, so
-  `col_label`'s `t(...)` returned "" for every header. Added
-  `resolve.dedupe: ["i18next"]` to `vite.config.js` so both share the one
-  initialized instance. (The app's own menus/toolbar were unaffected because
-  the shell receives `t` injected via `yui_shell_set_translator`.) Diagnosed by
-  driving the live app with Playwright: the backend `descs` answer was correct
-  (proper `cols`/headers), the blank titles were purely client-side.
+- **Fixed blank treedb column headers + duplicated singletons (Vite dedupe).**
+  Every table column rendered with an empty title (Tabulator's `&nbsp;`
+  placeholder) and "0 undefined" in the footer. Root cause: with
+  `preserveSymlinks:true`, `gobj-ui` (a symlinked `file:` dep) ships its own
+  `node_modules` copy of every shared lib, so without a bundler dedupe Vite
+  bundled TWO copies — gui_treedb initialized copy A of i18next (`locales.js`)
+  while the vendored treedb view (`import {t} from "i18next"`) bound copy B,
+  never initialized, so `col_label`'s `t(...)` returned "" for every header.
+  Same split hit `@antv/g6` ("extension drag-canvas has been registered
+  before"). Added `resolve.dedupe` for every shared third-party singleton
+  (`i18next`, `@antv/g6`, `maplibre-gl`, `tabulator-tables`, `tom-select`,
+  `uplot`, `vanilla-jsoneditor`) to `vite.config.js`, mirroring
+  `wattyzer/gui/vite.config.js`. (`@yuneta/gobj-js` / `@yuneta/gobj-ui` are
+  already single instances here via the `src/` aliases; the app's own
+  menus/toolbar were unaffected because the shell receives `t` injected via
+  `yui_shell_set_translator`.) Diagnosed by driving the live app with
+  Playwright: the backend `descs` answer was correct (proper `cols`/headers),
+  the blank titles were purely client-side.
 - (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
   OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).
