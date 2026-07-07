@@ -29,9 +29,13 @@ import {
     gobj_read_attr, gobj_write_attr,
     gobj_create_service,
     gobj_find_service,
+    gobj_parent, gobj_name,
+    gobj_subscribe_event, gobj_unsubscribe_event, gobj_send_event,
     gobj_start, gobj_stop, gobj_destroy, gobj_is_running,
     createElement2,
 } from "@yuneta/gobj-js";
+
+import {yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {treedb_links_get_iev} from "./c_treedb_links.js";
 
@@ -53,12 +57,15 @@ SDATA(data_type_t.DTP_STRING,   "workspace",   0,  "",    "Owning workspace (for
 SDATA(data_type_t.DTP_STRING,   "conn_id",     0,  "",    "Connection id (resolves the live transport)"),
 SDATA(data_type_t.DTP_BOOLEAN,  "system",      0,  false, "System treedb view"),
 SDATA(data_type_t.DTP_STRING,   "title",       0,  "",    "Tab title"),
+SDATA(data_type_t.DTP_STRING,   "base_route",  0,  "",    "This view's declared tab route (for the topic/mode deep link)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,  "Root HTML element (mounted by the shell)"),
 SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    view: null,   /*  the hosted treedb view (a service)  */
+    view:      null,   /*  the hosted treedb view (a service)  */
+    sel_event: null,   /*  child event bridged to the URL subpath  */
+    seg:       null,   /*  last applied/navigated subpath (dedup guard)  */
 };
 
 let __gclass__ = null;
@@ -126,6 +133,26 @@ function mt_create(gobj)
         $c = createElement2(["div", {}, ""]);
     }
     gobj_write_attr(gobj, "$container", $c);
+
+    /*
+     *  Bridge the hosted view's selection <-> the URL subpath so a reload /
+     *  deep link restores it (ported from wattyzer's C_WZ_TREEDB):
+     *    - the view publishes its selection (CHILD model → delivered to us):
+     *      TOPICS → EV_TOPIC_SELECTED (topic), GRAPH → EV_OPERATION_MODE_CHANGED
+     *      (reading/edition/…). We navigate the shell to <base_route>/<seg>.
+     *    - the shell publishes EV_ROUTE_CHANGED {base, subpath}; when `base` is
+     *      OUR tab route we apply the subpath to the view. The `seg` dedup
+     *      breaks the child→navigate→route_changed→child loop.
+     *  The connection is already encoded in base_route (via the sel id), so no
+     *  extra conn_id handling is needed here.
+     */
+    priv.sel_event = (view_gclass === "C_YUI_TREEDB_GRAPH")
+        ? "EV_OPERATION_MODE_CHANGED"
+        : "EV_TOPIC_SELECTED";
+    let shell = gobj_parent(gobj);
+    if(shell) {
+        gobj_subscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
+    }
 }
 
 /***************************************************************
@@ -148,6 +175,11 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     let priv = gobj.priv;
+    /*  Unsubscribe the shell's EV_ROUTE_CHANGED while the parent is alive. */
+    let shell = gobj_parent(gobj);
+    if(shell) {
+        gobj_unsubscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
+    }
     if(priv.view && gobj_is_running(priv.view)) {
         gobj_stop(priv.view);
     }
@@ -205,12 +237,52 @@ function service_name(gobj)
 
 
 /***************************************************************
- *  The hosted view uses the CHILD subscription model, so it publishes
- *  its events to us (its parent). We don't bridge them to the URL yet;
- *  accept them as no-ops so they don't trip "event NOT defined in state".
+ *  Child → selection changed (TOPICS: a topic tab; GRAPH: the operation
+ *  mode). Mirror it into the URL as <base_route>/<seg> so reload / deep
+ *  link restores it. The `seg` dedup skips the navigate when this is just
+ *  the echo of a segment we applied in ac_route_changed.
  ***************************************************************/
-function ac_noop(gobj, event, kw, src)
+function ac_child_selected(gobj, event, kw, src)
 {
+    let priv = gobj.priv;
+    let seg = kw && (kw.topic !== undefined ? kw.topic : kw.operation_mode);
+    if(!seg || seg === priv.seg) {
+        return 0;
+    }
+    let base_route = gobj_read_attr(gobj, "base_route");
+    let shell = gobj_parent(gobj);
+    if(shell && base_route) {
+        priv.seg = seg;
+        yui_shell_navigate(shell, `${base_route}/${seg}`);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  Shell → route changed. Only react when `base` is OUR tab route (several
+ *  treedb views are mounted at once — one per open tab); apply the subpath
+ *  to the hosted view: TOPICS → show that topic; GRAPH → set that operation
+ *  mode. The `seg` dedup skips re-applying a segment the child selected.
+ ***************************************************************/
+function ac_route_changed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let base = (kw && kw.base) || "";
+    if(base !== gobj_read_attr(gobj, "base_route")) {
+        return 0;   /*  not our tab  */
+    }
+    let subpath = kw && kw.subpath;
+    if(!subpath || subpath === priv.seg || !priv.view) {
+        return 0;
+    }
+    priv.seg = subpath;
+    if(priv.sel_event === "EV_OPERATION_MODE_CHANGED") {
+        gobj_send_event(priv.view, "EV_SET_OPERATION_MODE",
+            {operation_mode: subpath}, gobj);
+    } else {
+        gobj_send_event(priv.view, "EV_SHOW",
+            {href: `${gobj_name(priv.view)}?${subpath}`}, gobj);
+    }
     return 0;
 }
 
@@ -240,14 +312,16 @@ function create_gclass(gclass_name)
 
     const states = [
         ["ST_IDLE", [
-            ["EV_TOPIC_SELECTED",         ac_noop, null],
-            ["EV_OPERATION_MODE_CHANGED", ac_noop, null]
+            ["EV_TOPIC_SELECTED",         ac_child_selected, null],
+            ["EV_OPERATION_MODE_CHANGED", ac_child_selected, null],
+            ["EV_ROUTE_CHANGED",          ac_route_changed,  null]
         ]]
     ];
 
     const event_types = [
         ["EV_TOPIC_SELECTED",         0],
-        ["EV_OPERATION_MODE_CHANGED", 0]
+        ["EV_OPERATION_MODE_CHANGED", 0],
+        ["EV_ROUTE_CHANGED",          0]
     ];
 
     __gclass__ = gclass_create(

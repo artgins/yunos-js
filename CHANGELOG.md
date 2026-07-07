@@ -283,5 +283,18 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   event as a no-op (it is a null-subscriber to every links event). Verified live
   with Playwright (a wrong-port connection shows the error; a good one connects
   alongside; no FSM "event not defined" crash).
+- **Deep-link the selected topic / operation mode (audit B4).** `C_TREEDB_VIEW`
+  had the child selection ↔ URL bridge stubbed out as a no-op, so a reload always
+  reset to the first topic (topics) / `reading` (graph). Ported wattyzer's
+  `C_WZ_TREEDB` bridge, adapted to the multi-connection route scheme: the hosted
+  view's `EV_TOPIC_SELECTED` / `EV_OPERATION_MODE_CHANGED` navigates the shell to
+  `<tab-route>/<seg>`, and the shell's `EV_ROUTE_CHANGED` applies the subpath back
+  to the view (`EV_SHOW` / `EV_SET_OPERATION_MODE`). Each mounted view filters on
+  its own `base_route` (several are mounted at once), and a `seg` dedup breaks the
+  child→navigate→route-changed→child loop. `restore_tab_from_url` now navigates to
+  the full deep route so the topic/mode is restored along with the tab. The
+  connection is already encoded in the tab route (via the sel id), so no extra
+  routing was needed. Verified live with Playwright (select `users` →
+  `…/treedb_wattyzer/users`; F5 → the `users` topic is restored, not the first).
 - (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
   OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).

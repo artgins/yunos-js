@@ -368,6 +368,9 @@ function rebuild_workspace_tabs(gobj, ws)
                     treedb_name: sel.treedb_name,
                     workspace:   ws,
                     conn_id:     sel.conn_id,
+                    /*  This tab's route, so the view can deep-link its
+                     *  selected topic / operation mode as <base_route>/<seg>. */
+                    base_route:  db_tab_route(ws, sel.id),
                     system:      false
                 },
                 lifecycle: "keep_alive"
@@ -411,10 +414,13 @@ function restore_tab_from_url(gobj)
         /*  Not a treedb-tab URL (e.g. the picker) — nothing to restore.  */
         return;
     }
-    let sel_id_ = decode_tail(cur.slice(prefix.length));
-    let target = db_tab_route(ws, sel_id_);
-    if(priv.mounted_base === target) {
-        /*  Already resting on the real tab (base resolved to it exactly).  */
+    /*  The tail is <sel>[/<topic-or-mode>]: the tab is keyed by the FIRST
+     *  segment (<sel>); a deeper subpath is the view's selected topic / mode,
+     *  which the treedb view restores itself once we land on the full route. */
+    let sel_id_ = decode_tail(cur.slice(prefix.length).split("/")[0]);
+    let base_route = db_tab_route(ws, sel_id_);
+    if(priv.mounted_base === base_route) {
+        /*  Already resting on this tab (base resolved to it exactly).  */
         return;
     }
     /*  Only jump once the tab actually exists: its treedb must be selected
@@ -429,10 +435,11 @@ function restore_tab_from_url(gobj)
         return;
     }
     /*  Deferred: EV_ON_OPEN is a published event, so navigating synchronously
-     *  would re-enter the shell mid-publish.  */
+     *  would re-enter the shell mid-publish. Navigate to the FULL route so the
+     *  view's selected topic / mode is restored too.  */
     setTimeout(function() {
         if(gobj.priv.shell) {
-            yui_shell_navigate(gobj.priv.shell, target);
+            yui_shell_navigate(gobj.priv.shell, cur);
         }
     }, 0);
 }
