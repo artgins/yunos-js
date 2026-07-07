@@ -221,15 +221,18 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   bundled TWO copies — gui_treedb initialized copy A of i18next (`locales.js`)
   while the vendored treedb view (`import {t} from "i18next"`) bound copy B,
   never initialized, so `col_label`'s `t(...)` returned "" for every header.
-  Same split hit `@antv/g6` ("extension drag-canvas has been registered
-  before"). Added `resolve.dedupe` for every shared third-party singleton
-  (`i18next`, `@antv/g6`, `maplibre-gl`, `tabulator-tables`, `tom-select`,
-  `uplot`, `vanilla-jsoneditor`) to `vite.config.js`, mirroring
-  `wattyzer/gui/vite.config.js`. (`@yuneta/gobj-js` / `@yuneta/gobj-ui` are
-  already single instances here via the `src/` aliases; the app's own
-  menus/toolbar were unaffected because the shell receives `t` injected via
-  `yui_shell_set_translator`.) Diagnosed by driving the live app with
-  Playwright: the backend `descs` answer was correct (proper `cols`/headers),
-  the blank titles were purely client-side.
+  Confirmed fixed live (headers render). The same duplication affected every
+  other shared third-party lib (bundle shrank ~120 KB once deduped), so
+  `resolve.dedupe` now lists them all — `i18next`, `@antv/g6`, `maplibre-gl`,
+  `tabulator-tables`, `tom-select`, `uplot`, `vanilla-jsoneditor` — mirroring
+  `wattyzer/gui/vite.config.js` as preventive hygiene against latent
+  split-singleton bugs in the graph / map / editor views. (`@yuneta/gobj-js` /
+  `@yuneta/gobj-ui` are already single instances here via the `src/` aliases;
+  the app's own menus/toolbar were unaffected because the shell receives `t`
+  injected via `yui_shell_set_translator`. NOTE: the console line "[G6]
+  extension drag-canvas has been registered before" is an INTENTIONAL override
+  in gobj-ui's `g6_drag_canvas_touch.js`, not a duplication symptom.) Diagnosed
+  by driving the live app with Playwright: the backend `descs` answer was
+  correct (proper `cols`/headers), the blank titles were purely client-side.
 - (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
   OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).
