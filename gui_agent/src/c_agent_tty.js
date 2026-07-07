@@ -174,6 +174,10 @@ function mt_stop(gobj)
         priv.vis_obs.disconnect();
         priv.vis_obs = null;
     }
+    if(priv.resize_obs) {
+        priv.resize_obs.disconnect();
+        priv.resize_obs = null;
+    }
     /*  Best-effort: tell the node to close the PTY (frees the bash). */
     close_console(gobj);
     if(priv.touch_teardown) {
@@ -442,6 +446,51 @@ function create_terminal(gobj)
      *  API from touch + shows a Copy bubble. Desktop is unaffected (touch
      *  events never fire). */
     priv.touch_teardown = install_touch_selection(term, priv.$term, {t: t});
+
+    /*  Keep the terminal filling its host across viewport changes.  */
+    install_resize_refit(gobj);
+}
+
+/***************************************************************
+ *  Refit the xterm to its host whenever the host resizes: the Android
+ *  soft keyboard (opening/closing shrinks the layout viewport via
+ *  interactive-widget=resizes-content), rotation, split-screen. Without
+ *  this the xterm stays frozen at its open-time geometry, so after the
+ *  keyboard closes the visible area is left short. Debounced to one fit
+ *  per frame; skipped while the tab is hidden (a fit against a zero-size
+ *  box yields 0 cols/rows). The node PTY geometry is frozen at open (no
+ *  runtime SIGWINCH on the agent side), so only the LOCAL display reflows
+ *  — harmless on a keyboard toggle, where the width (columns) is constant
+ *  and only the row count changes.
+ ***************************************************************/
+function install_resize_refit(gobj)
+{
+    let priv = gobj.priv;
+    if(typeof ResizeObserver === "undefined" || !priv.$term) {
+        return;
+    }
+    let pending = false;
+    priv.resize_obs = new ResizeObserver(function() {
+        if(pending) {
+            return;
+        }
+        pending = true;
+        requestAnimationFrame(function() {
+            pending = false;
+            if(!priv.fit || !priv.term) {
+                return;
+            }
+            if(priv.$term.clientHeight <= 0 || priv.$term.clientWidth <= 0) {
+                return;                     /*  hidden/detached — don't fit to 0  */
+            }
+            try {
+                priv.fit.fit();
+            } catch(e) {
+                /*  transient zero-size — keep geometry  */
+            }
+        });
+    });
+    priv.resize_obs.observe(priv.$term);
 }
 
 /***************************************************************

@@ -34,7 +34,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   the keyboard stays open. The viewport meta now declares
   `interactive-widget=resizes-content` so the on-screen keyboard shrinks the
   layout viewport and the bar reflows **above** it (Android Chrome overlaid the
-  keyboard and hid the bar otherwise). Desktop is unaffected.
+  keyboard and hid the bar otherwise). A `ResizeObserver` refits the xterm to
+  its host on every viewport change (keyboard open/close, rotation), so the
+  terminal fills the space again after the keyboard closes instead of staying
+  short — a keyboard toggle only changes row count (columns are constant), so
+  the local refit stays consistent with the node PTY's frozen geometry (the
+  agent still has no runtime SIGWINCH path). Desktop is unaffected.
 - **feat(gui_treedb): "About" dialog in the account menu.** A new About entry
   (account dropdown, between Developer and Sign out) opens the standardized
   adaptive dialog (desktop X top-right / mobile back sheet) with a product

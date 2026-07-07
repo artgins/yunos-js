@@ -130,10 +130,15 @@ This yuno is JavaScript and deploys independently of the SDK (see
   stays open. To keep the bar **above** the keyboard the viewport meta declares
   `interactive-widget=resizes-content`, so the on-screen keyboard shrinks the
   layout viewport and the app's `height:100%` chain reflows above it (Android
-  Chrome overlaid the keyboard otherwise, hiding the bar). _Follow-up: browsers
-  without `interactive-widget` support (older Android WebViews, current iOS
-  Safari) still overlay; pin the bar to `visualViewport` there if a real device
-  needs it._
+  Chrome overlaid the keyboard otherwise, hiding the bar). A `ResizeObserver`
+  refits the xterm to its host on every viewport change (keyboard open/close,
+  rotation) so the terminal fills the space again after the keyboard closes
+  instead of staying short; a keyboard toggle changes only the row count
+  (columns are constant), so the local refit stays consistent with the node
+  PTY's frozen geometry. _Follow-up: browsers without `interactive-widget`
+  support (older Android WebViews, current iOS Safari) still overlay — pin the
+  bar to `visualViewport` there; and the agent still has no runtime SIGWINCH, so
+  a full-screen TUI opened after a resize sees stale rows._
 - **Terminal touch selection (mobile).** xterm.js selection is mouse-only, so on
   a phone a long-press selected nothing. New `tty_touch_select.js` adds a touch
   gesture driving xterm's public selection API: **long-press** selects the word
