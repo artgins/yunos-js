@@ -308,7 +308,19 @@ function rebind_hosted_view(gobj)
         return;     /*  same transport (plain WS flap) — nothing to rebind  */
     }
 
+    /*
+     *  Remember WHERE the old container is mounted BEFORE destroying the
+     *  old view: the treedb views remove their own $container from the DOM
+     *  in mt_destroy (destroy_ui), so after gobj_destroy $old.parentNode is
+     *  already null and a plain replaceChild would silently never mount the
+     *  new container (its Tabulators attach by #id selector and need to be
+     *  IN the document).
+     */
     let $old = gobj_read_attr(gobj, "$container");
+    let $parent = ($old && $old.parentNode) ? $old.parentNode : null;
+    let $next = $old ? $old.nextSibling : null;
+    let was_hidden = ($old && $old.classList.contains("is-hidden"));
+
     if(priv.view) {
         if(gobj_is_running(priv.view)) {
             gobj_stop(priv.view);
@@ -322,14 +334,22 @@ function rebind_hosted_view(gobj)
         return;     /*  Error already logged  */
     }
 
-    /*  Swap the container where the shell mounted the old one, keeping the
-     *  shell's show/hide state (it toggles is-hidden on the attr it re-reads).  */
+    /*  Mount the new container where the shell had mounted the old one,
+     *  keeping the shell's show/hide state (it toggles is-hidden on the
+     *  attr it re-reads).  */
     let $new = gobj_read_attr(gobj, "$container");
-    if($old && $old.parentNode && $new && $new !== $old) {
-        if($old.classList.contains("is-hidden")) {
+    if($parent && $new && $new !== $old) {
+        if(was_hidden) {
             $new.classList.add("is-hidden");
         }
-        $old.parentNode.replaceChild($new, $old);
+        if($old && $old.parentNode === $parent) {
+            $parent.replaceChild($new, $old);
+        } else {
+            $parent.insertBefore(
+                $new,
+                ($next && $next.parentNode === $parent) ? $next : null
+            );
+        }
     }
 
     if(gobj_is_running(gobj) && !gobj_is_running(view)) {

@@ -22,6 +22,18 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the transport rebind now really mounts the fresh view
+  (editing `treedbs` left a blank/crashed tab).** The treedb views remove
+  their own `$container` from the DOM in `mt_destroy`, so
+  `rebind_hosted_view`'s `replaceChild` — which captured only the old node —
+  found `parentNode === null` after destroying the old view and silently
+  never inserted the new container; the fresh view then built its Tabulators
+  against elements outside the document ("Tabulator Creation Error - no
+  element found" + uncaught `externalEvents is null`). The rebind now
+  remembers the parent and position BEFORE destroying and inserts the new
+  container even when the old one already detached itself. (Root cause pair
+  in the frameworks: gobj-js 7.7.2 stops the `send_iev` TypeError burst on
+  the same reopen; gobj-ui 2.2.5 attaches topic Tabulators by element.)
 - **fix(gui_agent): dedupe i18next in vite config.** gui_agent's
   `vite.config.js` had the `preserveSymlinks` aliases but no
   `resolve.dedupe`, so the vendored gobj-ui's own `node_modules/i18next`
