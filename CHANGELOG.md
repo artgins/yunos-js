@@ -296,5 +296,14 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   connection is already encoded in the tab route (via the sel id), so no extra
   routing was needed. Verified live with Playwright (select `users` →
   `…/treedb_wattyzer/users`; F5 → the `users` topic is restored, not the first).
+- **Avatar initials after a reload.** The logged-in user's initials vanished
+  after F5: `/auth/login` returns the username but `/auth/refresh` (session
+  restore) does not, so the username was empty on restore and `compute_initials`
+  produced nothing. `fetch_and_publish` now falls back to the identity claims
+  (`name` / `preferred_username` / `email`) in the access_token (JWT) it already
+  fetches, so the initials render on restore too. (gui_agent gets the name from
+  the control-center's `EV_ON_OPEN`; gui_treedb has no single equivalent, so the
+  JWT is its authoritative identity.) Verified live with Playwright (initials
+  show on fresh login AND after F5).
 - (superseded) TreeDB table + graph GUI on the legacy GClass GUI stack;
   OAuth2-PKCE + BFF login (`README-KEYCLOAK*.md`).

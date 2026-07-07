@@ -279,7 +279,6 @@ function try_restore_session(gobj)
 function fetch_and_publish(gobj, out_event)
 {
     const bff_url = gobj_read_attr(gobj, "bff_url");
-    const username = gobj_read_attr(gobj, "username");
 
     fetch(build_path(bff_url, "auth", "token"), {
         method:      "POST",
@@ -294,13 +293,53 @@ function fetch_and_publish(gobj, out_event)
                 + "(is expose_access_token enabled on the BFF?)", gobj_short_name(gobj)));
         }
         gobj_write_attr(gobj, "access_token", token);
+        /*
+         *  Resolve the username for the avatar initials. /auth/login returns
+         *  it, but /auth/refresh (session restore on F5) does NOT — so fall
+         *  back to the identity claims in the access_token (the authoritative
+         *  identity; gui_agent gets its name from the control-center's
+         *  EV_ON_OPEN instead, which gui_treedb has no single equivalent of).
+         */
+        let username = gobj_read_attr(gobj, "username");
+        if(!username && token) {
+            username = username_from_jwt(token);
+            if(username) {
+                gobj_write_attr(gobj, "username", username);
+            }
+        }
         gobj_publish_event(gobj, out_event, {username, access_token: token});
     })
     .catch(err => {
         log_warning(`${gobj_short_name(gobj)}: /auth/token fetch failed: ${err.message}`);
         gobj_write_attr(gobj, "access_token", "");
-        gobj_publish_event(gobj, out_event, {username, access_token: ""});
+        gobj_publish_event(gobj, out_event,
+            {username: gobj_read_attr(gobj, "username"), access_token: ""});
     });
+}
+
+/***************************************************************
+ *  Extract a display identity from the access_token (JWT) claims, for the
+ *  avatar initials when the BFF response carried no username (restore path).
+ *  Read-only claim inspection for display — the token was already validated
+ *  by the backend.
+ ***************************************************************/
+function username_from_jwt(token)
+{
+    try {
+        let part = String(token).split(".")[1];
+        if(!part) {
+            return "";
+        }
+        part = part.replace(/-/g, "+").replace(/_/g, "/");
+        while(part.length % 4) {
+            part += "=";
+        }
+        let bytes = Uint8Array.from(atob(part), (c) => c.charCodeAt(0));
+        let claims = JSON.parse(new TextDecoder().decode(bytes));
+        return claims.name || claims.preferred_username || claims.email || "";
+    } catch(e) {
+        return "";
+    }
 }
 
 /***************************************************************
