@@ -1038,11 +1038,11 @@ function ac_on_open(gobj, event, kw, src)
  ***************************************************************/
 function ac_on_close(gobj, event, kw, src)
 {
+    /*  No in-terminal marker: the status line already says Disconnected,
+     *  and the ws can close during a refresh's unload — the marker got
+     *  serialized into the saved screen and reappeared after restore.  */
     gobj_write_str_attr(gobj, "console_name", "");
     set_status(gobj, "disconnected", "Disconnected");
-    if(gobj.priv.term) {
-        gobj.priv.term.writeln("\r\n\x1b[90m[disconnected]\x1b[0m");
-    }
     return 0;
 }
 
