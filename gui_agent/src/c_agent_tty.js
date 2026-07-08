@@ -352,14 +352,16 @@ function build_dom(gobj)
     );
     $c.appendChild(priv.$toolbar);
 
+    /*  Mobile-only soft-key accessory bar (hidden on desktop), on TOP of
+     *  the xterm so it sits at a fixed height under the toolbar instead of
+     *  riding the keyboard-driven reflows at the card bottom.  */
+    $c.appendChild(build_keybar(gobj));
+
     /*  xterm host — fills the card; xterm paints its own background.  */
     priv.$term = createElement2(
         ["div", {class: "TTY_HOST", style: "flex:1; min-height:0; overflow:hidden;"}, []]
     );
     $c.appendChild(priv.$term);
-
-    /*  Mobile-only soft-key accessory bar (hidden on desktop).  */
-    $c.appendChild(build_keybar(gobj));
 
     refresh_language($c, t);
 }
@@ -414,7 +416,7 @@ function build_keybar(gobj)
     priv.$keybar = createElement2(
         ["div", {class: "TTY_KEYBAR is-hidden-tablet",
                  style: "flex:0 0 auto; display:flex; flex-direction:column; " +
-                        "gap:0.25rem; margin-top:0.4rem;"}, rows]
+                        "gap:0.25rem; margin-bottom:0.4rem;"}, rows]
     );
     return priv.$keybar;
 }
