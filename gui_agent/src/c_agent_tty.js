@@ -62,6 +62,7 @@ import {t} from "i18next";
 
 import {Terminal} from "@xterm/xterm";
 import {FitAddon} from "@xterm/addon-fit";
+import {SerializeAddon} from "@xterm/addon-serialize";
 import "@xterm/xterm/css/xterm.css";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
@@ -166,6 +167,13 @@ function mt_start(gobj)
         create_terminal(gobj);
         open_console(gobj);
     }, 0);
+
+    /*  Persist the screen when the page goes away (refresh/close);
+     *  restored on the re-attach's EV_TTY_OPEN (see restore_screen). */
+    gobj.priv.unload_save = () => {
+        save_screen(gobj);
+    };
+    window.addEventListener("pagehide", gobj.priv.unload_save);
 }
 
 /***************************************************************
@@ -186,6 +194,10 @@ function mt_stop(gobj)
         priv.resize_obs.disconnect();
         priv.resize_obs = null;
     }
+    if(priv.unload_save) {
+        window.removeEventListener("pagehide", priv.unload_save);
+        priv.unload_save = null;
+    }
     /*  Best-effort: tell the node to close the PTY (frees the bash). */
     close_console(gobj);
     if(priv.touch_teardown) {
@@ -197,6 +209,7 @@ function mt_stop(gobj)
         priv.term = null;
     }
     priv.fit = null;
+    priv.serializer = null;
     gobj_write_str_attr(gobj, "console_name", "");
 }
 
@@ -281,6 +294,60 @@ function console_name_for(node)
         client_id = Math.random().toString(36).slice(2, 8);
     }
     return `tty_${sani}_${client_id}`;
+}
+
+/***************************************************************
+ *  Screen persistence across a page refresh (sessionStorage,
+ *  keyed by node). On F5 the agent RE-ATTACHES to the live PTY,
+ *  which repaints nothing — the prompt was printed to the previous
+ *  page — so the tab saves its own last screen at pagehide and
+ *  writes it back on EV_TTY_OPEN (the saved blob is xterm-serialize
+ *  output: clean escape sequences, safe to replay into a fresh term).
+ ***************************************************************/
+function screen_key(node)
+{
+    let sani = String(node || "node").replace(/[^A-Za-z0-9_-]/g, "_");
+    return `tty_screen_${sani}`;
+}
+
+function save_screen(gobj)
+{
+    let priv = gobj.priv;
+    let node = gobj_read_attr(gobj, "node") || "";
+    let name = gobj_read_attr(gobj, "console_name") || "";
+    if(!node || !name || !priv.term || !priv.serializer) {
+        return;
+    }
+    try {
+        sessionStorage.setItem(
+            screen_key(node),
+            priv.serializer.serialize({scrollback: 200})
+        );
+    } catch(e) {
+        /*  storage quota — lose the screen, not the session  */
+    }
+}
+
+function restore_screen(gobj)
+{
+    let node = gobj_read_attr(gobj, "node") || "";
+    let saved = "";
+    try {
+        saved = sessionStorage.getItem(screen_key(node)) || "";
+        if(saved) {
+            /*  one-shot: a later EV_TTY_OPEN on this page (Reconnect)
+             *  must not repaint an old screen over the live one  */
+            sessionStorage.removeItem(screen_key(node));
+        }
+    } catch(e) {
+        return;
+    }
+    if(saved && gobj.priv.term) {
+        /*  reset first: coming back from bfcache the term still holds the
+         *  live screen and a bare write would paint the dump on top of it  */
+        gobj.priv.term.reset();
+        gobj.priv.term.write(saved);
+    }
 }
 
 /***************************************************************
@@ -488,6 +555,8 @@ function create_terminal(gobj)
     });
     let fit = new FitAddon();
     term.loadAddon(fit);
+    let serializer = new SerializeAddon();
+    term.loadAddon(serializer);
     term.open(priv.$term);
     try {
         fit.fit();
@@ -498,6 +567,7 @@ function create_terminal(gobj)
     term.onData((d) => tty_input(gobj, d, false));
     priv.term = term;
     priv.fit = fit;
+    priv.serializer = serializer;
 
     /*  Touch scrolling (xterm has none of its own) + native long-press
      *  menu suppression. Desktop is unaffected (touch events never fire). */
@@ -977,6 +1047,7 @@ function ac_tty_open(gobj, event, kw, src)
         return 0;
     }
     set_status(gobj, "connected", "Connected");
+    restore_screen(gobj);
     if(gobj.priv.term) {
         gobj.priv.term.focus();
     }

@@ -22,6 +22,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_agent): Terminal screen survives the refresh too.** On re-attach
+  the live PTY repaints nothing (the prompt was printed to the previous page),
+  so the tab landed "Connected" on a blank xterm. The view now serializes its
+  screen (`@xterm/addon-serialize`, last 200 scrollback lines) to
+  `sessionStorage` on `pagehide` and writes it back (one-shot, after a
+  `term.reset()` so a bfcache resume doesn't double-paint) on the re-attach's
+  `EV_TTY_OPEN` — F5 restores prompt and recent output exactly as they were.
+
 - **fix(gui_agent): stable Terminal console name — a page refresh no longer
   leaks a PTY per reload until the agent's `max_consoles`.** The console name
   was random per open (`tty_<node>_<rand>`), and a refresh never sends
