@@ -22,6 +22,8 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+## 2026-07-08 — shipped with SDK 7.7.2
+
 - **fix(gui_agent): Terminal screen survives the refresh too.** On re-attach
   the live PTY repaints nothing (the prompt was printed to the previous page),
   so the tab landed "Connected" on a blank xterm. The view now serializes its
