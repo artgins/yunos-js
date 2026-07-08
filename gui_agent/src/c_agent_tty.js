@@ -25,15 +25,6 @@
  *      OPEN/CLOSE command-agent calls are tagged console_purpose="tty" so
  *      the Commands/Statistics panels ignore their dispatch acks.
  *
- *      Resize: xterm is fit to its host at open time (cx/cy passed to
- *          open-console) AND refit on every later viewport change (soft
- *          keyboard, rotation — see install_resize_refit). Each geometry
- *          change is pushed to the node with
- *          cmd2agent="resize-console name=<c> cx=<cols> cy=<rows>", which
- *          the agent turns into a TIOCSWINSZ on the pty master (SIGWINCH),
- *          so full-screen programs reflow. Tagged console_purpose="tty_resize"
- *          so ac_mt_command_answer ignores its ack (benign, fire-and-forget).
- *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
@@ -177,10 +168,6 @@ function mt_stop(gobj)
     if(priv.vis_obs) {
         priv.vis_obs.disconnect();
         priv.vis_obs = null;
-    }
-    if(priv.resize_obs) {
-        priv.resize_obs.disconnect();
-        priv.resize_obs = null;
     }
     /*  Best-effort: tell the node to close the PTY (frees the bash). */
     close_console(gobj);
@@ -450,52 +437,6 @@ function create_terminal(gobj)
      *  API from touch + shows a Copy bubble. Desktop is unaffected (touch
      *  events never fire). */
     priv.touch_teardown = install_touch_selection(term, priv.$term, {t: t});
-
-    /*  Keep the terminal filling its host across viewport changes.  */
-    install_resize_refit(gobj);
-}
-
-/***************************************************************
- *  Refit the xterm to its host whenever the host resizes: the Android
- *  soft keyboard (opening/closing shrinks the layout viewport via
- *  interactive-widget=resizes-content), rotation, split-screen. Without
- *  this the xterm stays frozen at its open-time geometry, so after the
- *  keyboard closes the visible area is left short. Debounced to one fit
- *  per frame; skipped while the tab is hidden (a fit against a zero-size
- *  box yields 0 cols/rows). The node PTY geometry is frozen at open (no
- *  runtime SIGWINCH on the agent side), so only the LOCAL display reflows
- *  — harmless on a keyboard toggle, where the width (columns) is constant
- *  and only the row count changes.
- ***************************************************************/
-function install_resize_refit(gobj)
-{
-    let priv = gobj.priv;
-    if(typeof ResizeObserver === "undefined" || !priv.$term) {
-        return;
-    }
-    let pending = false;
-    priv.resize_obs = new ResizeObserver(function() {
-        if(pending) {
-            return;
-        }
-        pending = true;
-        requestAnimationFrame(function() {
-            pending = false;
-            if(!priv.fit || !priv.term) {
-                return;
-            }
-            if(priv.$term.clientHeight <= 0 || priv.$term.clientWidth <= 0) {
-                return;                     /*  hidden/detached — don't fit to 0  */
-            }
-            try {
-                priv.fit.fit();
-            } catch(e) {
-                /*  transient zero-size — keep geometry  */
-            }
-            send_resize(gobj);              /*  push new geometry to the node PTY  */
-        });
-    });
-    priv.resize_obs.observe(priv.$term);
 }
 
 /***************************************************************
@@ -625,9 +566,8 @@ function open_console(gobj)
         return;
     }
 
-    /*  Re-fit now so cx/cy match what the user sees. The session is no
-     *  longer frozen — install_resize_refit keeps it in sync and pushes
-     *  later changes with resize-console (SIGWINCH on the node).  */
+    /*  Re-fit now so cx/cy match what the user sees, then freeze it for
+     *  the session (no runtime resize path on the agent side).  */
     let cols = 80;
     let rows = 24;
     if(priv.fit && priv.term) {
@@ -639,10 +579,6 @@ function open_console(gobj)
         cols = priv.term.cols || cols;
         rows = priv.term.rows || rows;
     }
-    /*  Seed the last-pushed geometry so the first refit doesn't resend
-     *  the size we're opening with.  */
-    priv.sent_cols = cols;
-    priv.sent_rows = rows;
 
     /*  Best-effort close of any console still open under the old name
      *  (e.g. the Reconnect button re-opens while the previous PTY is
@@ -703,38 +639,6 @@ function send_keys(gobj, data)
     }
     let kw = {agent_id: node, cmd2agent: "write-tty", name: name, content64: utf8_to_base64(data)};
     msg_iev_write_key(kw, "console_purpose", "tty");
-    msg_iev_write_key(kw, "console_node", node);
-    agent_link_command(link, "command-agent", kw);
-}
-
-/***************************************************************
- *  Push the live xterm geometry to the node PTY (resize-console ->
- *  TIOCSWINSZ -> SIGWINCH) so full-screen programs reflow after a
- *  viewport change. Sent only when cols/rows actually changed and only
- *  while the console is connected; tagged console_purpose="tty_resize"
- *  so ac_mt_command_answer ignores the ack.
- ***************************************************************/
-function send_resize(gobj)
-{
-    let priv = gobj.priv;
-    let link = gobj_read_attr(gobj, "link_svc");
-    let node = gobj_read_attr(gobj, "node") || "";
-    let name = gobj_read_attr(gobj, "console_name") || "";
-    if(!priv.term || !node || !name || !link || !agent_link_is_connected(link)) {
-        return;
-    }
-    let cols = priv.term.cols;
-    let rows = priv.term.rows;
-    if(!cols || !rows) {
-        return;
-    }
-    if(priv.sent_cols === cols && priv.sent_rows === rows) {
-        return;
-    }
-    priv.sent_cols = cols;
-    priv.sent_rows = rows;
-    let kw = {agent_id: node, cmd2agent: `resize-console name=${name} cx=${cols} cy=${rows}`};
-    msg_iev_write_key(kw, "console_purpose", "tty_resize");
     msg_iev_write_key(kw, "console_node", node);
     agent_link_command(link, "command-agent", kw);
 }
