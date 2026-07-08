@@ -126,9 +126,11 @@ function mt_create(gobj)
 
     /*  Shell-style history recall (Up/Down): hist_idx walks priv.history
      *  (0 = most recent); -1 = editing the live line. hist_draft keeps the
-     *  in-progress text so Down past the newest restores it.  */
+     *  in-progress text so Down past the newest restores it. priv.history
+     *  is DEDUPED: entries {cmd, count, last}, most-recently-used first.  */
     priv.hist_idx = -1;
     priv.hist_draft = "";
+    priv.hist_sort = "time";   /*  history popover order: "time" | "freq"  */
     priv.popovers = {};        /*  {HELP|HIST|SK: {dd, content}} input-row popovers  */
     priv.doc_click = null;     /*  outside-click closer for the popovers  */
 
@@ -319,7 +321,7 @@ function build_ui(gobj)
      *  working copy.  */
     let config0 = gobj_read_attr(gobj, "config_svc");
     if(config0) {
-        priv.history = agent_config_get_history(config0);
+        priv.history = normalize_history(agent_config_get_history(config0));
     }
 
     /*  No native <datalist>: its dropdown hijacks Up/Down to browse command
@@ -476,15 +478,55 @@ function build_ui(gobj)
 }
 
 /***************************************************************
- *  Push a command onto the in-memory history.
+ *  Normalize a persisted history into deduped entries
+ *  {cmd, count, last}, most-recently-used first. Accepts the legacy
+ *  format (plain strings, repetitions allowed): duplicates collapse
+ *  into one entry whose count is the number of occurrences, and the
+ *  original order is preserved via synthetic descending `last`.
+ ***************************************************************/
+function normalize_history(list)
+{
+    let entries = [];
+    let index = {};
+    let now = Date.now();
+    for(let it of (Array.isArray(list) ? list : [])) {
+        let is_entry = it && typeof it === "object";
+        let cmd = is_entry ? it.cmd : it;
+        if(typeof cmd !== "string" || !cmd) {
+            continue;
+        }
+        let count = (is_entry && it.count > 0) ? it.count : 1;
+        if(Object.prototype.hasOwnProperty.call(index, cmd)) {
+            entries[index[cmd]].count += count;
+            continue;
+        }
+        index[cmd] = entries.length;
+        entries.push({
+            cmd:   cmd,
+            count: count,
+            last:  (is_entry && it.last > 0) ? it.last : now - entries.length
+        });
+    }
+    return entries;
+}
+
+/***************************************************************
+ *  Push a command onto the in-memory history: deduped — a re-run
+ *  bumps the entry's count and moves it to the front (most recent).
  ***************************************************************/
 function add_history(gobj, cmd)
 {
     let priv = gobj.priv;
-    if(priv.history[0] === cmd) {
-        return;
+    let idx = priv.history.findIndex((e) => e.cmd === cmd);
+    let entry;
+    if(idx >= 0) {
+        entry = priv.history.splice(idx, 1)[0];
+        entry.count++;
+    } else {
+        entry = {cmd: cmd, count: 1, last: 0};
     }
-    priv.history.unshift(cmd);
+    entry.last = Date.now();
+    priv.history.unshift(entry);
     if(priv.history.length > HISTORY_MAX) {
         priv.history.pop();
     }
@@ -578,7 +620,8 @@ function set_input_value(gobj, text)
 /***************************************************************
  *  Shell-style history recall. dir=+1 older, dir=-1 newer. On the first
  *  Up we stash the live line (hist_draft) so Down past the newest brings
- *  it back. priv.history[0] is the most recent command.
+ *  it back. priv.history[0] is the most recently used entry (deduped, so
+ *  Up never shows the same command twice).
  ***************************************************************/
 function recall_history(gobj, dir)
 {
@@ -599,7 +642,7 @@ function recall_history(gobj, dir)
         text = priv.hist_draft;   /*  back to the live line  */
     } else {
         priv.hist_idx = idx;
-        text = priv.history[idx];
+        text = priv.history[idx].cmd;
     }
     set_input_value(gobj, text);
 }
@@ -745,8 +788,27 @@ function fill_help_popover(gobj)
 }
 
 /***************************************************************
- *  Fill the history popover: recent commands, most-recent first.
- *  Clicking inserts the full command line.
+ *  Preload the input with `add-shortkey key= command="<cmd>"` and
+ *  park the caret right after `key=` so the user just names it and
+ *  hits Enter (the existing local command does the rest). No new
+ *  dialog: same insert-to-edit flow as every popover item.
+ ***************************************************************/
+function insert_add_shortkey(gobj, cmd)
+{
+    let quote = cmd.includes("\"") ? "'" : "\"";
+    let prefix = "add-shortkey key=";
+    insert_command(gobj, `${prefix} command=${quote}${cmd}${quote}`);
+    let priv = gobj.priv;
+    if(priv.$input) {
+        priv.$input.setSelectionRange(prefix.length, prefix.length);
+    }
+}
+
+/***************************************************************
+ *  Fill the history popover: DEDUPED commands with a use counter,
+ *  orderable by recency (default) or by frequency — the header
+ *  toggles priv.hist_sort. Clicking a row inserts the command line;
+ *  its + button preloads add-shortkey for it.
  ***************************************************************/
 function fill_hist_popover(gobj)
 {
@@ -761,13 +823,55 @@ function fill_hist_popover(gobj)
             ["div", {class: "dropdown-item has-text-grey", i18n: "no history yet"}, t("no history yet")]));
         return;
     }
-    for(let cmd of priv.history) {
+
+    /*  Sort header: recency vs frequency.  */
+    let mk_sort_btn = (mode, key, text) => {
+        let $b = createElement2(
+            ["button", {class: "button is-small", type: "button", i18n: key}, text]);
+        if(priv.hist_sort === mode) {
+            $b.classList.add("is-info", "is-selected");
+        }
+        $b.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            priv.hist_sort = mode;
+            fill_hist_popover(gobj);
+        });
+        return $b;
+    };
+    $c.appendChild(createElement2(
+        ["div", {class: "dropdown-item", style: "display:flex; gap:0.5rem;"},
+            [mk_sort_btn("time", "recent", t("recent")),
+             mk_sort_btn("freq", "frequent", t("frequent"))]]));
+    $c.appendChild(createElement2(["hr", {class: "dropdown-divider"}]));
+
+    let entries = priv.history.slice();
+    if(priv.hist_sort === "freq") {
+        entries.sort((a, b) => (b.count - a.count) || (b.last - a.last));
+    }
+    for(let e of entries) {
+        let $add = createElement2(
+            ["button", {class: "button is-small is-ghost", type: "button",
+                        title: t("add to shortkeys"), "aria-label": t("add to shortkeys")},
+                [["span", {class: "icon is-small"}, [["i", {class: "yi-plus"}]]]]]);
+        $add.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            insert_add_shortkey(gobj, e.cmd);
+        });
         let $item = createElement2(
-            ["a", {class: "dropdown-item is-family-monospace", style: "white-space:normal;", title: cmd}, cmd]
+            ["a", {class: "dropdown-item is-family-monospace",
+                   style: "white-space:normal; display:flex; align-items:center; gap:0.5rem;",
+                   title: e.cmd},
+                [
+                    ["span", {style: "flex:1; min-width:0; overflow-wrap:anywhere;"}, e.cmd],
+                    ["span", {class: "is-size-7 has-text-grey"}, `×${e.count}`]
+                ]
+            ]
         );
+        $item.appendChild($add);
         $item.addEventListener("click", (ev) => {
             ev.preventDefault();
-            insert_command(gobj, cmd);
+            insert_command(gobj, e.cmd);
         });
         $c.appendChild($item);
     }

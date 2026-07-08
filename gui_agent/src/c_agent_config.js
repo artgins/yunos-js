@@ -358,9 +358,10 @@ function agent_config_set_active_tab(gobj, workspace, id)
 }
 
 /***************************************************************
- *  Persisted console command history (most-recent first), global
- *  to all nodes. Returns a fresh copy so the caller can mutate it
- *  freely.
+ *  Persisted console command history, global to all nodes: deduped
+ *  entries {cmd, count, last}, most-recently-used first (the console
+ *  normalizes the legacy plain-string format on load). Returns a
+ *  fresh copy so the caller can mutate it freely.
  ***************************************************************/
 function agent_config_get_history(gobj)
 {
