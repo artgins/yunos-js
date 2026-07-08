@@ -385,12 +385,13 @@ function build_keybar(gobj)
             /*  Enter is the most-used key: double flex share.  */
             let grow = (seq === "\r") ? 2 : 1;
             /*  Arrow/Enter glyphs are unreadable at Bulma's is-small size:
-             *  bump them (line-height 1 keeps the button height uniform);
-             *  Enter is THE key — extra large.  */
+             *  bump them (line-height 1 keeps the button height uniform).  */
             let glyph = /^[←↑↓→↵]$/.test(label) ? "font-size:1.15rem; line-height:1; " : "";
-            if(seq === "\r") {
-                glyph = "font-size:1.6rem; line-height:1; ";
-            }
+            /*  Enter is THE key: scale the GLYPH only — transform is purely
+             *  visual (no layout), so the button/row height doesn't grow.  */
+            let content = (seq === "\r")
+                ? [["span", {style: "display:inline-block; transform:scale(1.5);"}, label]]
+                : label;
             let $b = createElement2(
                 ["button", {
                     class: "button is-small is-family-monospace TTY_KEY",
@@ -398,7 +399,7 @@ function build_keybar(gobj)
                     style: `flex:${grow} 1 0; min-width:2.1rem; padding-left:0.3rem; ` +
                            "padding-right:0.3rem; " + glyph,
                     "aria-label": label
-                }, label]
+                }, content]
             );
             $b.addEventListener("pointerdown", function(e) {
                 e.preventDefault();          /*  keep xterm focused / keyboard open  */
