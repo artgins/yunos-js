@@ -169,10 +169,15 @@ function mt_start(gobj)
     }, 0);
 
     /*  Persist the screen when the page goes away (refresh/close);
-     *  restored on the re-attach's EV_TTY_OPEN (see restore_screen). */
+     *  restored on the re-attach's EV_TTY_OPEN (see restore_screen).
+     *  BOTH events: beforeunload fires earliest (desktop refresh, before
+     *  any ws/gobj teardown can touch the term); pagehide covers mobile,
+     *  where beforeunload often doesn't fire (bfcache). Saving twice is
+     *  an idempotent overwrite.  */
     gobj.priv.unload_save = () => {
         save_screen(gobj);
     };
+    window.addEventListener("beforeunload", gobj.priv.unload_save);
     window.addEventListener("pagehide", gobj.priv.unload_save);
 }
 
@@ -195,6 +200,7 @@ function mt_stop(gobj)
         priv.resize_obs = null;
     }
     if(priv.unload_save) {
+        window.removeEventListener("beforeunload", priv.unload_save);
         window.removeEventListener("pagehide", priv.unload_save);
         priv.unload_save = null;
     }
@@ -314,8 +320,10 @@ function save_screen(gobj)
 {
     let priv = gobj.priv;
     let node = gobj_read_attr(gobj, "node") || "";
-    let name = gobj_read_attr(gobj, "console_name") || "";
-    if(!node || !name || !priv.term || !priv.serializer) {
+    /*  Don't require console_name: if the ws onclose managed to run
+     *  during the unload (before this handler), ac_on_close already
+     *  cleared it — the screen is still worth saving.  */
+    if(!node || !priv.term || !priv.serializer) {
         return;
     }
     try {
