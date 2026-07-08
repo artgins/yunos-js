@@ -22,9 +22,16 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+## 0.3.0 — 2026-07-08
+
 - **gui_agent: account menu order now matches gui_treedb** — Developer
   (dev-window toggle) first, then About, then Sign out. Was About before
   Developer.
+
+- **gui_agent + gui_treedb: mobile primary menu matches the desktop rail.**
+  Via gobj-ui 2.2.6: the bottom icon-bar's active/selected item now uses a
+  solid `--bulma-link` background with white text (was low-contrast blue text
+  on a faint blue tint).
 
 ## 2026-07-08 — shipped with SDK 7.7.2
 
