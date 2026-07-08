@@ -382,11 +382,13 @@ function build_keybar(gobj)
         let btns = row.map(function(pair) {
             let label = pair[0];
             let seq = pair[1];
+            /*  Enter is the most-used key: double flex share.  */
+            let grow = (seq === "\r") ? 2 : 1;
             let $b = createElement2(
                 ["button", {
                     class: "button is-small is-family-monospace TTY_KEY",
                     type: "button", tabindex: "-1",
-                    style: "flex:1 1 0; min-width:2.1rem; padding-left:0.3rem; " +
+                    style: `flex:${grow} 1 0; min-width:2.1rem; padding-left:0.3rem; ` +
                            "padding-right:0.3rem;",
                     "aria-label": label
                 }, label]
