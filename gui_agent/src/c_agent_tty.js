@@ -21,7 +21,13 @@
  *
  *      EV_TTY_DATA carries only the console `name`, not the node, and the
  *      one shared link delivers every tab's stream — so each tab owns a
- *      GLOBALLY UNIQUE console name and filters EV_TTY_* by it. The
+ *      GLOBALLY UNIQUE console name and filters EV_TTY_* by it. The name
+ *      is STABLE per tab+node (per-tab sessionStorage id, see
+ *      console_name_for): a page refresh re-opens the SAME console and
+ *      the agent (> 7.7.1) re-attaches to the live PTY — the shell
+ *      survives F5 — instead of leaking a new PTY per refresh until
+ *      max_consoles. Against an older agent the open answers "Console
+ *      already open" and the tab falls back to per-open random names.
  *      OPEN/CLOSE command-agent calls are tagged console_purpose="tty" so
  *      the Commands/Statistics panels ignore their dispatch acks.
  *
@@ -250,16 +256,31 @@ function utf8_to_base64(str)
 }
 
 /***************************************************************
- *  A globally-unique console name for this tab's session. The node
- *  id can carry dots (hostname), which are unsafe as a gobj service
- *  name, so sanitize; a random suffix guarantees uniqueness across
- *  tabs and reconnects (no collision with a stale PTY of the same
- *  name on the node).
+ *  A STABLE, globally-unique console name for this tab+node. The
+ *  node id can carry dots (hostname), which are unsafe as a gobj
+ *  service name, so sanitize. The suffix is a per-tab id persisted
+ *  in sessionStorage: a page refresh re-opens the SAME console and
+ *  the agent re-attaches to the live PTY (the shell survives F5)
+ *  instead of forking a new bash per refresh until max_consoles.
+ *  sessionStorage is per-tab, so the name still discriminates
+ *  tabs/browsers/users on the shared link. (Browser "duplicate tab"
+ *  copies sessionStorage — two twin tabs on the SAME node would
+ *  share the console; accepted quirk.)
  ***************************************************************/
-function new_console_name(node)
+function console_name_for(node)
 {
     let sani = String(node || "node").replace(/[^A-Za-z0-9_-]/g, "_");
-    return `tty_${sani}_${Math.random().toString(36).slice(2, 8)}`;
+    let client_id = "";
+    try {
+        client_id = sessionStorage.getItem("tty_client_id") || "";
+        if(!client_id) {
+            client_id = Math.random().toString(36).slice(2, 8);
+            sessionStorage.setItem("tty_client_id", client_id);
+        }
+    } catch(e) {
+        client_id = Math.random().toString(36).slice(2, 8);
+    }
+    return `tty_${sani}_${client_id}`;
 }
 
 /***************************************************************
@@ -701,10 +722,14 @@ function set_status(gobj, key, text)
 }
 
 /***************************************************************
- *  Open a fresh PTY on the pinned node, sized to the current xterm
- *  geometry. Generates a new unique console name (the session key)
- *  and routes open-console through command-agent (the control center
- *  has no open-console of its own).
+ *  Open (or RE-ATTACH to) the PTY on the pinned node, sized to the
+ *  current xterm geometry. The console name is stable per tab+node
+ *  (see console_name_for): if a PTY of that name is already live on
+ *  the node — page refresh, link drop, Reconnect — the agent
+ *  re-attaches to it instead of forking a new shell, so no close
+ *  is needed (or wanted) before opening. Routed through
+ *  command-agent (the control center has no open-console of its
+ *  own).
  ***************************************************************/
 function open_console(gobj)
 {
@@ -734,12 +759,21 @@ function open_console(gobj)
         rows = priv.term.rows || rows;
     }
 
-    /*  Best-effort close of any console still open under the old name
-     *  (e.g. the Reconnect button re-opens while the previous PTY is
-     *  live) so we don't orphan a bash process on the node.  */
-    close_console(gobj);
+    let name = console_name_for(node);
+    if(priv.fresh_suffix) {
+        /*  Old-agent fallback: unique name per open (see the
+         *  "Console already open" answer in ac_mt_command_answer).  */
+        name = `${name}_${Math.random().toString(36).slice(2, 6)}`;
+    }
 
-    let name = new_console_name(node);
+    /*  A previous console under a DIFFERENT name (old-agent fallback)
+     *  would be orphaned on the node: close it. Same name = the agent
+     *  re-attaches to the live PTY, no close wanted.  */
+    let old_name = gobj_read_attr(gobj, "console_name") || "";
+    if(old_name && old_name !== name) {
+        close_console(gobj);
+    }
+
     gobj_write_str_attr(gobj, "console_name", name);
 
     let kw = {agent_id: node, cmd2agent: `open-console name=${name} cx=${cols} cy=${rows}`};
@@ -1032,6 +1066,22 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 let comment = (kw.comment && String(kw.comment)) || t("write tty failed");
                 gobj.priv.term.writeln("\r\n\x1b[31m" + comment + "\x1b[0m");
             }
+            return 0;
+        }
+
+        /*  OLD agent compat (pre stable-name re-attach, yunetas <= 7.7.1):
+         *  re-opening our stable name after a refresh answers -1 "Console
+         *  already open", and that agent still routes the tty stream to the
+         *  DEAD requester channel — re-attach is impossible. Fall back to
+         *  per-open random names (the old behavior; PTYs leak on the node
+         *  until its agent is upgraded).  */
+        let comment_ = (kw.comment && String(kw.comment)) || "";
+        if(command.indexOf("open-console") === 0
+            && comment_.indexOf("Console already open") >= 0
+            && !gobj.priv.fresh_suffix
+        ) {
+            gobj.priv.fresh_suffix = true;
+            open_console(gobj);
             return 0;
         }
 

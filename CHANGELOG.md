@@ -22,6 +22,21 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_agent): stable Terminal console name — a page refresh no longer
+  leaks a PTY per reload until the agent's `max_consoles`.** The console name
+  was random per open (`tty_<node>_<rand>`), and a refresh never sends
+  `close-console`; behind the controlcenter cascade the agent cannot see the
+  browser disconnect either (the console's route is the controlcenter↔agent
+  channel, which stays up), so every F5 forked a new bash on the node. The
+  name is now STABLE per tab+node (`console_name_for`: per-tab id persisted in
+  `sessionStorage`), so a refresh re-opens the SAME console and an upgraded
+  agent (> 7.7.1) re-attaches to the live PTY — the shell session survives F5.
+  `open_console` no longer closes-before-opening (same name = re-attach; it
+  still closes a previous console under a *different* name). Against an older
+  agent, whose answer is `-1 "Console already open"` and whose tty stream
+  still routes to the dead requester channel, the tab falls back to per-open
+  random names (the old behavior) after closing the stale console.
+
 - **feat(gui_agent): mobile key bar for the Terminal.** A phone's soft keyboard
   has no Esc / Tab / Ctrl / arrow / Home-End keys, so on mobile the xterm PTY
   console couldn't complete (Tab), walk history (↑ ↓), edit the line (← →) or
