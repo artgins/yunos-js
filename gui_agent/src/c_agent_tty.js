@@ -61,7 +61,7 @@ import "@xterm/xterm/css/xterm.css";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {agent_config_remove_selected_node} from "./c_agent_config.js";
 import {current_theme} from "./theme.js";
-import {install_touch_selection} from "./tty_touch_select.js";
+import {install_touch_scroll} from "./tty_touch_scroll.js";
 
 
 /***************************************************************
@@ -274,6 +274,9 @@ function new_console_name(node)
  *  soft keyboard, which is OFF by default (see set_soft_keyboard):
  *  tapping the terminal focuses it but does NOT summon the keyboard,
  *  so the whole screen stays for output; press Kbd to type.
+ *  `"__paste__"` reads the clipboard into the PTY (see
+ *  paste_clipboard) — the native long-press menu is suppressed, this
+ *  key is the mobile paste path.
  ***************************************************************/
 const KEYBAR_ROWS = [
     [
@@ -282,9 +285,9 @@ const KEYBAR_ROWS = [
         ["/",       "/"],
         ["-",       "-"],
         ["_",       "_"],
-        [".",       "."],
         ["Home",    "\x1b[H"],
-        ["End",     "\x1b[F"]
+        ["End",     "\x1b[F"],
+        ["Paste",   "__paste__"]
     ],
     [
         ["Kbd",     "__kb__"],
@@ -383,6 +386,9 @@ function build_keybar(gobj)
         let btns = row.map(function(pair) {
             let label = pair[0];
             let seq = pair[1];
+            if(seq === "__paste__") {
+                label = t("paste");
+            }
             /*  Enter is the most-used key: double flex share.  */
             let grow = (seq === "\r") ? 2 : 1;
             /*  Arrow/Enter glyphs are unreadable at Bulma's is-small size:
@@ -410,6 +416,10 @@ function build_keybar(gobj)
                 }
                 if(seq === "__kb__") {
                     set_soft_keyboard(gobj, !priv.kb_on, true);
+                    return;
+                }
+                if(seq === "__paste__") {
+                    paste_clipboard(gobj, $b);
                     return;
                 }
                 tty_input(gobj, seq, true);
@@ -468,11 +478,9 @@ function create_terminal(gobj)
     priv.term = term;
     priv.fit = fit;
 
-    /*  Touch text-selection (xterm's own selection is mouse-only, so a
-     *  phone long-press selects nothing). Drives xterm's public select
-     *  API from touch + shows a Copy bubble. Desktop is unaffected (touch
-     *  events never fire). */
-    priv.touch_teardown = install_touch_selection(term, priv.$term, {t: t});
+    /*  Touch scrolling (xterm has none of its own) + native long-press
+     *  menu suppression. Desktop is unaffected (touch events never fire). */
+    priv.touch_teardown = install_touch_scroll(term, priv.$term);
 
     /*  Mobile (key bar visible): the browser soft keyboard is OPT-IN —
      *  start suppressed; the Kbd bar key summons it (see set_soft_keyboard). */
@@ -812,6 +820,36 @@ function tty_input(gobj, data, from_bar)
     if(priv.term) {
         priv.term.focus();
     }
+}
+
+/***************************************************************
+ *  Paste key: read the clipboard (needs the user gesture + permission)
+ *  and feed it to the PTY via term.paste() — bracketed-paste aware,
+ *  same onData path as typing. On denial or an unsupported browser
+ *  flash ✗ on the key.
+ ***************************************************************/
+function paste_clipboard(gobj, $b)
+{
+    let priv = gobj.priv;
+    let fail = () => {
+        if($b) {
+            let old = $b.textContent;
+            $b.textContent = "✗";
+            setTimeout(() => {
+                $b.textContent = old;
+            }, 700);
+        }
+    };
+    if(!navigator.clipboard || !navigator.clipboard.readText) {
+        fail();
+        return;
+    }
+    navigator.clipboard.readText().then((text) => {
+        if(text && priv.term) {
+            priv.term.paste(text);
+            priv.term.focus();
+        }
+    }).catch(fail);
 }
 
 /***************************************************************
