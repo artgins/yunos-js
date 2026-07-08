@@ -35,6 +35,8 @@ import {
     msg_iev_write_key,
     msg_iev_read_key,
     kw_get_str,
+    kw_get_local_storage_value,
+    kw_set_local_storage_value,
 } from "@yuneta/gobj-js";
 
 import {t} from "i18next";
@@ -130,7 +132,10 @@ function mt_create(gobj)
      *  is DEDUPED: entries {cmd, count, last}, most-recently-used first.  */
     priv.hist_idx = -1;
     priv.hist_draft = "";
-    priv.hist_sort = "time";   /*  history popover order: "time" | "freq"  */
+    /*  History popover order: "time" | "freq" — a browser-persisted
+     *  preference, remembered across sessions.  */
+    priv.hist_sort = (kw_get_local_storage_value("console_hist_sort", "time", false) === "freq")
+        ? "freq" : "time";
     priv.popovers = {};        /*  {HELP|HIST|SK: {dd, content}} input-row popovers  */
     priv.doc_click = null;     /*  outside-click closer for the popovers  */
 
@@ -853,6 +858,7 @@ function fill_hist_popover(gobj)
         $b.addEventListener("click", (ev) => {
             ev.stopPropagation();
             priv.hist_sort = mode;
+            kw_set_local_storage_value("console_hist_sort", mode);
             fill_hist_popover(gobj);
         });
         return $b;
