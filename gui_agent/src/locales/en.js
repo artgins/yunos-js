@@ -76,6 +76,7 @@ const en = {
         "recent":            "Recent",
         "frequent":          "Frequent",
         "add to shortkeys":  "Add to shortkeys",
+        "remove from history": "Remove from history",
         "shortkeys":         "Shortkeys",
         "shortkeys hint":    "First token of a command; expands to the template with $1 $2 … as args. Shared by all nodes.",
         "command template":  "command (use $1, $2 … for args)",

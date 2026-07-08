@@ -76,6 +76,7 @@ const es = {
         "recent":            "Recientes",
         "frequent":          "Frecuentes",
         "add to shortkeys":  "Añadir a shortkeys",
+        "remove from history": "Borrar del historial",
         "shortkeys":         "Atajos",
         "shortkeys hint":    "Primer token de un comando; se expande a la plantilla con $1 $2 … como argumentos. Compartidos por todos los nodos.",
         "command template":  "comando (usa $1, $2 … para argumentos)",

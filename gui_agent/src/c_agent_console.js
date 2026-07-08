@@ -788,6 +788,24 @@ function fill_help_popover(gobj)
 }
 
 /***************************************************************
+ *  Remove one command from the history (row ✕ button) and persist.
+ ***************************************************************/
+function remove_history(gobj, cmd)
+{
+    let priv = gobj.priv;
+    let idx = priv.history.findIndex((e) => e.cmd === cmd);
+    if(idx < 0) {
+        return;
+    }
+    priv.history.splice(idx, 1);
+    priv.hist_idx = -1;   /*  recall pointer may now be stale  */
+    let config = gobj_read_attr(gobj, "config_svc");
+    if(config) {
+        agent_config_set_history(config, priv.history);
+    }
+}
+
+/***************************************************************
  *  Preload the input with `add-shortkey key= command="<cmd>"` and
  *  park the caret right after `key=` so the user just names it and
  *  hits Enter (the existing local command does the rest). No new
@@ -808,7 +826,8 @@ function insert_add_shortkey(gobj, cmd)
  *  Fill the history popover: DEDUPED commands with a use counter,
  *  orderable by recency (default) or by frequency — the header
  *  toggles priv.hist_sort. Clicking a row inserts the command line;
- *  its + button preloads add-shortkey for it.
+ *  its + button preloads add-shortkey for it; its ✕ button deletes
+ *  the entry from the history (popover stays open and refreshes).
  ***************************************************************/
 function fill_hist_popover(gobj)
 {
@@ -858,6 +877,16 @@ function fill_hist_popover(gobj)
             ev.stopPropagation();
             insert_add_shortkey(gobj, e.cmd);
         });
+        let $del = createElement2(
+            ["button", {class: "button is-small is-ghost", type: "button",
+                        title: t("remove from history"), "aria-label": t("remove from history")},
+                [["span", {class: "icon is-small"}, [["i", {class: "yi-xmark"}]]]]]);
+        $del.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            remove_history(gobj, e.cmd);
+            fill_hist_popover(gobj);
+        });
         let $item = createElement2(
             ["a", {class: "dropdown-item is-family-monospace",
                    style: "white-space:normal; display:flex; align-items:center; gap:0.5rem;",
@@ -869,6 +898,7 @@ function fill_hist_popover(gobj)
             ]
         );
         $item.appendChild($add);
+        $item.appendChild($del);
         $item.addEventListener("click", (ev) => {
             ev.preventDefault();
             insert_command(gobj, e.cmd);
