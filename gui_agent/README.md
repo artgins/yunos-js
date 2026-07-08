@@ -122,35 +122,50 @@ This yuno is JavaScript and deploys independently of the SDK (see
   Ctrl / arrow / Home-End keys, so on mobile the PTY console couldn't complete
   (Tab), walk history (↑ ↓), edit the line (← →) or interrupt (^C) — everything
   works on desktop, where physical keys already reach `onData`. `c_agent_tty.js`
-  now appends a two-row accessory bar (`is-hidden-tablet`, so desktop is
-  unaffected) that injects the exact byte sequences: **Esc Tab Ctrl ← ↑ ↓ →** /
-  **^C ^D ^Z | / - Home End**. **Ctrl** is a sticky modifier — arm it, then the
-  next key (bar or soft keyboard) is sent as its control byte. Buttons fire on
-  `pointerdown` + `preventDefault`, so the xterm keeps focus and the keyboard
-  stays open. To keep the bar **above** the keyboard the viewport meta declares
+  shows a two-row accessory bar (`is-hidden-tablet`, so desktop is unaffected)
+  at the **top** of the card, under the toolbar: **^C | / - _ Home End Paste**
+  over **Kbd Esc Tab Ctrl ← ↑ ↓ → ↵**, each key injecting the exact byte
+  sequences through the same `send_keys` path (Enter ↵ is double-width with an
+  enlarged glyph). **Ctrl** is a sticky modifier — arm it, then the next key
+  (bar or soft keyboard) is sent as its control byte. **Kbd** toggles the
+  browser soft keyboard, which is **opt-in** (`inputmode="none"` on xterm's
+  hidden textarea): tapping the terminal focuses it without summoning the
+  keyboard, so the whole screen stays for output until you ask to type; a
+  tablet rotated past the Bulma breakpoint (bar hidden) restores normal input
+  mode. **Paste** reads the clipboard (user gesture + permission; ✗ on denial)
+  into the PTY via `term.paste()`. Buttons fire on `pointerdown` +
+  `preventDefault`, so the xterm keeps focus. The viewport meta declares
   `interactive-widget=resizes-content`, so the on-screen keyboard shrinks the
-  layout viewport and the app's `height:100%` chain reflows above it (Android
-  Chrome overlaid the keyboard otherwise, hiding the bar). A `ResizeObserver`
-  refits the xterm to its host on every viewport change (keyboard open/close,
-  rotation) so the terminal fills the space again after the keyboard closes
-  instead of staying short; a keyboard toggle changes only the row count
-  (columns are constant). Each refit also pushes the new geometry to the node
-  (`resize-console` → `EV_RESIZE_TTY` → `TIOCSWINSZ`/`SIGWINCH` on the pty
-  master, SDK Unreleased), so full-screen programs reflow instead of the pty
-  staying frozen at its open-time size; needs the node's agent at that SDK build
-  (an older agent answers "command not found", ignored). _Follow-up: browsers
+  layout viewport and the terminal reflows above it. _Follow-up: browsers
   without `interactive-widget` support (older Android WebViews, current iOS
   Safari) still overlay — pin the bar to `visualViewport` there._
-- **Terminal touch selection (mobile).** xterm.js selection is mouse-only, so on
-  a phone a long-press selected nothing. New `tty_touch_select.js` adds a touch
-  gesture driving xterm's public selection API: **long-press** selects the word
-  under the finger (haptic tick), **drag** extends it (char-level within a row,
-  line-level across rows — xterm has no public multi-row char API), **release**
-  shows a floating **Copy** bubble that writes `getSelection()` to the clipboard,
-  and a tap elsewhere dismisses. A quick drag (no long-press) is left to xterm's
-  own viewport scroll. Desktop is unaffected (touch events never fire). Root-caused
-  with headless-browser reproductions of the shipped xterm v6 build. _Follow-up:
-  tune long-press timing / native-callout suppression against real iOS/Android._
+- **Terminal refit on resize (client-only).** The xterm was fit once at open
+  and frozen: resizing the browser window or the devtools pane clipped the
+  prompt out of view (xterm's scroll moves its buffer, not the DOM). A
+  `ResizeObserver` on the host refits on every change — devtools/window
+  resize, keyboard open/close, rotation — re-pinning the viewport to the
+  prompt when it was following the bottom. The node PTY geometry stays
+  **frozen** at `open-console`, the same contract as a native terminal running
+  ycommand (a `resize-console`/SIGWINCH path was built and removed the same
+  cycle in favour of this browser-only fix).
+- **Terminal touch scrolling (mobile).** xterm has no touch scrolling: touches
+  land on `.xterm-screen` (canvas) whose scrollable `.xterm-viewport` is a
+  sibling, not an ancestor, so a finger drag scrolled nothing and Android
+  turned it into pull-to-refresh. `tty_touch_scroll.js` owns the drag
+  (`preventDefault` + `term.scrollLines()`, natural direction, sub-row deltas
+  accumulated) and suppresses the native long-press menu (Translate/Cut/…)
+  while a touch is in flight. An earlier long-press word-selection +
+  Copy/Paste bubble fought that native UI and was removed; mobile paste is
+  the key bar's Paste key, desktop selection/right-click stay native.
+- **Commands input row on top + smart history.** `CONSOLE_INPUT_ROW` (+ its
+  typing hint) moved to the top of the card (popovers open downward now). The
+  history is **deduped** `{cmd, count, last}` (a re-run bumps the counter and
+  moves the entry to the front, so ↑/↓ never repeats; the legacy plain-string
+  format is normalized on load). The history popover sorts by **Recent** or
+  **Frequent** (choice persisted in the browser) and each row shows ×N plus
+  two actions: **+** preloads `add-shortkey key= command="<cmd>"` with the
+  caret on `key=` (name it, Enter — the existing local command creates the
+  shortkey), and **✕** deletes the entry from the persisted history.
 - **Responsive window-manager dock.** `__window_manager__` is created in
   `responsive` mode (gobj-ui 2.1.9): floating bottom-left on desktop, an inline
   taskbar row in the shell's free `bottom-sub` zone on mobile so it sits above the

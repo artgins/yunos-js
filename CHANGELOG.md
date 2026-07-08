@@ -25,27 +25,63 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 - **feat(gui_agent): mobile key bar for the Terminal.** A phone's soft keyboard
   has no Esc / Tab / Ctrl / arrow / Home-End keys, so on mobile the xterm PTY
   console couldn't complete (Tab), walk history (↑ ↓), edit the line (← →) or
-  interrupt (^C) — desktop was fine (physical keys reach `onData`). `c_agent_tty.js`
-  now appends a two-row accessory bar (mobile-only via `is-hidden-tablet`):
-  **Esc Tab Ctrl ← ↑ ↓ →** / **^C ^D ^Z | / - Home End**, each injecting the exact
-  escape/control bytes through the same `send_keys` path. **Ctrl** is a sticky
-  modifier (arm → next key from bar or soft keyboard becomes its control byte).
-  Buttons emit on `pointerdown` + `preventDefault` so the xterm keeps focus and
-  the keyboard stays open. The viewport meta now declares
+  interrupt (^C) — desktop was fine (physical keys reach `onData`).
+  `c_agent_tty.js` now shows a two-row accessory bar (mobile-only via
+  `is-hidden-tablet`) at the TOP of the card, under the toolbar: symbols row
+  **^C | / - _ Home End Paste** over keys row **Kbd Esc Tab Ctrl ← ↑ ↓ → ↵**,
+  each key injecting the exact escape/control bytes through the same
+  `send_keys` path (Enter ↵ is double-width with an enlarged glyph — scaled
+  via transform so the row height stays uniform; arrows render at 1.15rem).
+  **Ctrl** is a sticky modifier (arm → next key from bar or soft keyboard
+  becomes its control byte). **Kbd** toggles the browser soft keyboard, which
+  is OPT-IN: the xterm textarea gets `inputmode="none"`, so tapping the
+  terminal focuses without summoning the keyboard and the whole screen stays
+  for output; a tablet rotated across the Bulma breakpoint (bar hidden)
+  restores normal input mode so the keyboard is never unreachable. **Paste**
+  reads the clipboard (user gesture + permission; ✗ flash on denial) into the
+  PTY via `term.paste()`. Buttons emit on `pointerdown` + `preventDefault` so
+  the xterm keeps focus. The viewport meta declares
   `interactive-widget=resizes-content` so the on-screen keyboard shrinks the
-  layout viewport and the bar reflows **above** it (Android Chrome overlaid the
-  keyboard and hid the bar otherwise). A `ResizeObserver` refits the xterm to
-  its host on every viewport change (keyboard open/close, rotation), so the
-  terminal fills the space again after the keyboard closes instead of staying
-  short. Each refit now also pushes the new geometry to the node with a
-  `resize-console name=<c> cx=<cols> cy=<rows>` command (SDK Unreleased:
-  `resize-console` → `EV_RESIZE_TTY` → `TIOCSWINSZ`/`SIGWINCH` on the pty
-  master), so full-screen programs (vim, less, htop) reflow instead of the pty
-  staying frozen at its open-time size; sent only when cols/rows actually change,
-  tagged `console_purpose="tty_resize"` so its ack is ignored. Needs the node's
-  agent at the SDK build that ships `resize-console` — an older agent just
-  answers "command not found" (ignored), so the terminal still works locally.
-  Desktop is unaffected.
+  layout viewport and the terminal reflows above it.
+- **fix(gui_agent): the Terminal refits on every host resize — CLIENT-ONLY.**
+  The xterm was fit once at open and frozen: resizing the browser window or
+  the devtools pane clipped the bottom rows (the prompt) out of view — xterm's
+  scroll moves its buffer, not the DOM, so the input line was unreachable. A
+  `ResizeObserver` on the host refits (debounced to one fit per frame, skipped
+  while hidden) on every change: devtools/window resize, soft keyboard
+  open/close, rotation. After the refit the viewport re-pins to the prompt if
+  it was following the bottom. The node PTY geometry stays FROZEN at
+  `open-console` — same contract as a native terminal running ycommand; an
+  earlier `resize-console`/`EV_RESIZE_TTY`/SIGWINCH path (SDK + client) was
+  built and then removed the same cycle ("remove resizing c_pty") in favour of
+  this browser-only fix.
+- **feat(gui_agent): touch scrolling for the Terminal (mobile).** xterm has no
+  touch scrolling of its own — touches land on `.xterm-screen` (the canvas)
+  whose scrollable `.xterm-viewport` is a SIBLING, not an ancestor, so a
+  finger drag scrolled nothing and chained up to the page (Android Chrome
+  turned it into pull-to-refresh). `tty_touch_scroll.js` owns the drag:
+  `preventDefault` + `term.scrollLines()` with natural direction, accumulating
+  sub-row deltas; `overscroll-behavior:contain` on the host stops chaining
+  from the scrollbar path too. The native Android long-press menu
+  (Translate/Cut/…, a `contextmenu` aimed at xterm's hidden textarea) is
+  suppressed while a touch is in flight — an earlier long-press
+  word-selection + Copy/Paste bubble (`tty_touch_select.js`) fought that
+  native UI and was removed the same cycle; mobile paste is the key bar's
+  Paste key, and desktop selection/right-click stay native.
+- **fix(gui_agent): Commands console input row on top.** `CONSOLE_INPUT_ROW`
+  (+ its typing hint) moved from the card bottom to the top, above the status
+  row and the response; the help/history popovers dropped `is-up` and open
+  downward.
+- **feat(gui_agent): smart Commands history.** History entries are DEDUPED
+  `{cmd, count, last}` (MRU first): a re-run bumps the counter and moves the
+  entry to the front, so ↑/↓ recall never repeats; the legacy plain-string
+  persisted format is normalized on load (duplicates collapse into counts).
+  The history popover gains a **Recent/Frequent** sort header (persisted in
+  the browser, `console_hist_sort`) and each row shows the command, its ×N
+  use counter, a **+** button that preloads
+  `add-shortkey key= command="<cmd>"` with the caret on `key=` (the existing
+  local command creates the shortkey — no new dialog) and a **✕** button that
+  deletes the entry from the persisted history in place.
 - **feat(gui_treedb): "About" dialog in the account menu.** A new About entry
   (account dropdown, between Developer and Sign out) opens the standardized
   adaptive dialog (desktop X top-right / mobile back sheet) with a product
