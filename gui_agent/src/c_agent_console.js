@@ -441,8 +441,6 @@ function build_ui(gobj)
     let $c = createElement2(
         ["div", {class: "C_AGENT_CONSOLE CONSOLE_CARD view-card", style: "display:flex; flex-direction:column; height:100%; gap:0.5rem;"},
             [
-                $status_row,
-                $data,
                 ["div", {class: "CONSOLE_INPUT_ROW field has-addons mb-0"}, [
                     $input_control,
                     help_pop.control,
@@ -451,6 +449,8 @@ function build_ui(gobj)
                     ["div", {class: "control"}, [$exec]]
                 ]],
                 $hint,
+                $status_row,
+                $data,
                 $comment
             ]
         ]
@@ -651,7 +651,7 @@ function build_popover(gobj, kind, icon, title)
             [["span", {class: "icon"}, [["i", {class: icon}]]]]]
     );
     let $dd = createElement2(
-        ["div", {class: `CONSOLE_${kind}_DD dropdown is-up`}, [
+        ["div", {class: `CONSOLE_${kind}_DD dropdown`}, [
             ["div", {class: "dropdown-trigger"}, [$btn]],
             ["div", {class: "dropdown-menu", role: "menu"}, [$content]]
         ]]
