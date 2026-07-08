@@ -20,8 +20,12 @@
  *                                     copies `term.getSelection()`
  *            - tap elsewhere       -> dismiss bubble + clear selection
  *
- *          A quick drag (no long-press) is left untouched so xterm's
- *          own viewport scroll keeps working.
+ *          A quick drag (no long-press) SCROLLS the buffer: xterm has no
+ *          touch scrolling of its own — touches land on .xterm-screen
+ *          (the canvas) whose scrollable .xterm-viewport is a SIBLING,
+ *          not an ancestor, so native scrolling never engages and the
+ *          gesture chained up to the page (pull-to-refresh). We drive
+ *          term.scrollLines() from the drag and preventDefault it.
  *
  *          `install_touch_selection(term, host, {t})` returns a
  *          teardown function; call it when the terminal is disposed.
@@ -153,6 +157,9 @@ function install_touch_selection(term, host, opts)
 
     let press_timer = null;
     let selecting = false;
+    let scrolling = false;
+    let scroll_last_y = 0;
+    let scroll_acc = 0;
     let anchor = null;
     let start_pt = null;
     let $bubble = null;
@@ -226,6 +233,9 @@ function install_touch_selection(term, host, opts)
         let touch = e.touches[0];
         start_pt = {x: touch.clientX, y: touch.clientY};
         selecting = false;
+        scrolling = false;
+        scroll_last_y = touch.clientY;
+        scroll_acc = 0;
         if(press_timer) {
             clearTimeout(press_timer);
         }
@@ -253,13 +263,35 @@ function install_touch_selection(term, host, opts)
         let touch = e.touches[0];
         if(!selecting) {
             /*  Moved before the long-press fired -> it's a scroll: cancel
-             *  the timer and let xterm's viewport handle it. */
-            let dx = touch.clientX - start_pt.x;
-            let dy = touch.clientY - start_pt.y;
-            if((dx * dx + dy * dy) > (MOVE_CANCEL_PX * MOVE_CANCEL_PX)) {
-                if(press_timer) {
-                    clearTimeout(press_timer);
-                    press_timer = null;
+             *  the timer and OWN the gesture. preventDefault also stops
+             *  the browser's pull-to-refresh (the gesture used to chain
+             *  up to the page because nothing under the finger scrolls). */
+            if(!scrolling) {
+                let dx = touch.clientX - start_pt.x;
+                let dy = touch.clientY - start_pt.y;
+                if((dx * dx + dy * dy) > (MOVE_CANCEL_PX * MOVE_CANCEL_PX)) {
+                    if(press_timer) {
+                        clearTimeout(press_timer);
+                        press_timer = null;
+                    }
+                    scrolling = true;
+                    scroll_last_y = touch.clientY;
+                }
+            }
+            if(scrolling) {
+                e.preventDefault();
+                /*  Natural scrolling: finger up -> buffer scrolls down.
+                 *  Accumulate sub-row deltas so slow drags still move.  */
+                scroll_acc += scroll_last_y - touch.clientY;
+                scroll_last_y = touch.clientY;
+                let rect = $screen.getBoundingClientRect();
+                let ch = rect.height / term.rows;
+                if(ch > 0) {
+                    let lines = Math.trunc(scroll_acc / ch);
+                    if(lines !== 0) {
+                        term.scrollLines(lines);
+                        scroll_acc -= lines * ch;
+                    }
                 }
             }
             return;
@@ -284,6 +316,7 @@ function install_touch_selection(term, host, opts)
                         pt.clientY !== undefined ? pt.clientY : start_pt.y);
         }
         selecting = false;
+        scrolling = false;
         start_pt = null;
     }
 

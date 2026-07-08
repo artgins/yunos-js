@@ -360,7 +360,8 @@ function build_dom(gobj)
 
     /*  xterm host — fills the card; xterm paints its own background.  */
     priv.$term = createElement2(
-        ["div", {class: "TTY_HOST", style: "flex:1; min-height:0; overflow:hidden;"}, []]
+        ["div", {class: "TTY_HOST",
+                 style: "flex:1; min-height:0; overflow:hidden; overscroll-behavior:contain;"}, []]
     );
     $c.appendChild(priv.$term);
 
