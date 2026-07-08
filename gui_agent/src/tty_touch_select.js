@@ -15,10 +15,19 @@
  *                                     within a row, line-level across
  *                                     rows — xterm has no public
  *                                     multi-row char API)
- *            - release             -> a floating "Copy" bubble appears
- *                                     over the selection; tapping it
- *                                     copies `term.getSelection()`
+ *            - release             -> a floating Copy/Paste bubble
+ *                                     appears over the selection: Copy
+ *                                     copies `term.getSelection()`,
+ *                                     Paste reads the clipboard into
+ *                                     the PTY via `term.paste()`
  *            - tap elsewhere       -> dismiss bubble + clear selection
+ *
+ *          The native Android long-press menu (Translate/Cut/…, fired
+ *          as a `contextmenu` aimed at xterm's hidden textarea) is
+ *          suppressed while a touch gesture is in flight — it stole
+ *          the drag (selection couldn't extend) and offered actions
+ *          that make no sense on a terminal. Our bubble is the ONLY
+ *          touch clipboard UI; desktop right-click stays native.
  *
  *          A quick drag (no long-press) SCROLLS the buffer: xterm has no
  *          touch scrolling of its own — touches land on .xterm-screen
@@ -180,47 +189,76 @@ function install_touch_selection(term, host, opts)
         term.clearSelection();
     }
 
+    /*  A bubble action button. Pointer-based so it fires before our
+     *  document dismiss handler and doesn't steal terminal focus. */
+    function bubble_btn(label, onpress)
+    {
+        let $b = document.createElement("button");
+        $b.type = "button";
+        $b.className = "button is-small is-dark";
+        $b.textContent = label;
+        $b.addEventListener("pointerdown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onpress($b);
+        });
+        return $b;
+    }
+
     function show_bubble(clientX, clientY)
     {
         remove_bubble();
         if(!term.hasSelection()) {
             return;
         }
-        $bubble = document.createElement("button");
-        $bubble.type = "button";
-        $bubble.className = "tty-copy-bubble button is-small is-dark";
-        $bubble.textContent = t("copy");
+        $bubble = document.createElement("div");
+        $bubble.className = "tty-copy-bubble";
         /*  Fixed so the host's overflow:hidden can't clip it; clamped to
          *  the viewport. */
         $bubble.style.position = "fixed";
         $bubble.style.zIndex = "3000";
-        let x = Math.max(8, Math.min(window.innerWidth - 76, clientX - 30));
+        $bubble.style.display = "flex";
+        $bubble.style.gap = "0.3rem";
+        let x = Math.max(8, Math.min(window.innerWidth - 150, clientX - 60));
         let y = Math.max(8, clientY - 44);
         $bubble.style.left = x + "px";
         $bubble.style.top = y + "px";
-        /*  Pointer-based so it fires before our document dismiss handler
-         *  and doesn't steal terminal focus. */
-        $bubble.addEventListener("pointerdown", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            let text = term.getSelection();
-            copy_text(text).then(() => {
-                if($bubble) {
-                    $bubble.textContent = t("copied");
-                }
+
+        $bubble.appendChild(bubble_btn(t("copy"), ($b) => {
+            copy_text(term.getSelection()).then(() => {
+                $b.textContent = t("copied");
                 if(navigator.vibrate) {
                     navigator.vibrate(8);
                 }
                 setTimeout(clear_selection, 550);
             });
-        });
+        }));
+        $bubble.appendChild(bubble_btn(t("paste"), ($b) => {
+            /*  Clipboard read needs a user gesture + permission; on denial
+             *  or an unsupported browser flash ✗ and dismiss.  */
+            let fail = () => {
+                $b.textContent = "✗";
+                setTimeout(clear_selection, 700);
+            };
+            if(navigator.clipboard && navigator.clipboard.readText) {
+                navigator.clipboard.readText().then((text) => {
+                    if(text) {
+                        term.paste(text);   /*  -> onData -> PTY (bracketed-paste aware)  */
+                    }
+                    clear_selection();
+                    term.focus();
+                }).catch(fail);
+            } else {
+                fail();
+            }
+        }));
         document.body.appendChild($bubble);
     }
 
     function on_touchstart(e)
     {
-        /*  A tap on the copy bubble is handled by the bubble itself.  */
-        if($bubble && e.target === $bubble) {
+        /*  A tap on the bubble is handled by its own buttons.  */
+        if($bubble && $bubble.contains(e.target)) {
             return;
         }
         /*  Any fresh touch dismisses a pending bubble + selection.  */
@@ -304,6 +342,19 @@ function install_touch_selection(term, host, opts)
         }
     }
 
+    /*  Android fires a native `contextmenu` on long-press (the
+     *  Translate/Cut/Paste popup, aimed at xterm's hidden textarea) and
+     *  its selection UI steals the rest of the gesture — our word
+     *  selection appeared but could not be extended. Suppress it while a
+     *  touch gesture is in flight; desktop right-click (no active touch)
+     *  keeps its normal menu.  */
+    function on_contextmenu(e)
+    {
+        if(start_pt) {
+            e.preventDefault();
+        }
+    }
+
     function on_touchend(e)
     {
         if(press_timer) {
@@ -324,6 +375,7 @@ function install_touch_selection(term, host, opts)
     host.addEventListener("touchmove", on_touchmove, {passive: false});
     host.addEventListener("touchend", on_touchend, {passive: true});
     host.addEventListener("touchcancel", on_touchend, {passive: true});
+    host.addEventListener("contextmenu", on_contextmenu);
 
     return function teardown()
     {
@@ -335,6 +387,7 @@ function install_touch_selection(term, host, opts)
         host.removeEventListener("touchmove", on_touchmove);
         host.removeEventListener("touchend", on_touchend);
         host.removeEventListener("touchcancel", on_touchend);
+        host.removeEventListener("contextmenu", on_contextmenu);
     };
 }
 

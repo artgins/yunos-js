@@ -55,6 +55,7 @@ const en = {
         "reconnect":         "Reconnect",
         "copy":              "Copy",
         "copied":            "Copied",
+        "paste":             "Paste",
         "select text hint":  "Long-press to select, drag to extend",
         "font smaller":      "Smaller font",
         "font larger":       "Larger font",
