@@ -22,6 +22,10 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **gui_agent: account menu order now matches gui_treedb** — Developer
+  (dev-window toggle) first, then About, then Sign out. Was About before
+  Developer.
+
 ## 2026-07-08 — shipped with SDK 7.7.2
 
 - **fix(gui_agent): Terminal screen survives the refresh too.** On re-attach
