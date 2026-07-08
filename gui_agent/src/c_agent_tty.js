@@ -25,6 +25,13 @@
  *      OPEN/CLOSE command-agent calls are tagged console_purpose="tty" so
  *      the Commands/Statistics panels ignore their dispatch acks.
  *
+ *      Resize is CLIENT-ONLY: the node PTY geometry is frozen at open
+ *      (cx/cy passed to open-console; the agent has no runtime resize
+ *      path — same contract as a native terminal running ycommand). The
+ *      xterm refits LOCALLY on every host resize (devtools, window,
+ *      soft keyboard, rotation — see install_resize_refit) so the
+ *      input line stays reachable.
+ *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
@@ -168,6 +175,10 @@ function mt_stop(gobj)
     if(priv.vis_obs) {
         priv.vis_obs.disconnect();
         priv.vis_obs = null;
+    }
+    if(priv.resize_obs) {
+        priv.resize_obs.disconnect();
+        priv.resize_obs = null;
     }
     /*  Best-effort: tell the node to close the PTY (frees the bash). */
     close_console(gobj);
@@ -437,6 +448,60 @@ function create_terminal(gobj)
      *  API from touch + shows a Copy bubble. Desktop is unaffected (touch
      *  events never fire). */
     priv.touch_teardown = install_touch_selection(term, priv.$term, {t: t});
+
+    /*  Keep the terminal filling its host across viewport changes.  */
+    install_resize_refit(gobj);
+}
+
+/***************************************************************
+ *  Refit the xterm to its host whenever the host resizes: desktop window
+ *  or devtools resize, the Android soft keyboard (opening/closing shrinks
+ *  the layout viewport via interactive-widget=resizes-content), rotation,
+ *  split-screen. Without this the xterm stays frozen at its open-time
+ *  geometry with overflow:hidden — the bottom rows (the prompt) get
+ *  clipped out of view and xterm's own scroll can't reach them (it moves
+ *  the buffer, not the DOM). Debounced to one fit per frame; skipped
+ *  while the tab is hidden (a fit against a zero-size box yields
+ *  0 cols/rows). CLIENT-ONLY: the node PTY geometry stays frozen at open
+ *  (no resize command on the agent side), only the LOCAL display reflows.
+ *  If the viewport was following the bottom (the normal shell case),
+ *  keep it pinned to the prompt after the refit; a user scrolled up
+ *  reading history is left where they were.
+ ***************************************************************/
+function install_resize_refit(gobj)
+{
+    let priv = gobj.priv;
+    if(typeof ResizeObserver === "undefined" || !priv.$term) {
+        return;
+    }
+    let pending = false;
+    priv.resize_obs = new ResizeObserver(function() {
+        if(pending) {
+            return;
+        }
+        pending = true;
+        requestAnimationFrame(function() {
+            pending = false;
+            if(!priv.fit || !priv.term) {
+                return;
+            }
+            if(priv.$term.clientHeight <= 0 || priv.$term.clientWidth <= 0) {
+                return;                     /*  hidden/detached — don't fit to 0  */
+            }
+            let buf = priv.term.buffer.active;
+            let at_bottom = (buf.viewportY >= buf.baseY);
+            try {
+                priv.fit.fit();
+            } catch(e) {
+                /*  transient zero-size — keep geometry  */
+                return;
+            }
+            if(at_bottom) {
+                priv.term.scrollToBottom();
+            }
+        });
+    });
+    priv.resize_obs.observe(priv.$term);
 }
 
 /***************************************************************
