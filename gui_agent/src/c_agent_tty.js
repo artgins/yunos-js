@@ -270,10 +270,14 @@ function new_console_name(node)
  *  desktop the bar is hidden (physical keys already produce them, see
  *  onData). `"__ctrl__"` is the sticky modifier (see set_ctrl_armed):
  *  arm it, then the next key — from this bar OR the soft keyboard —
- *  is sent as its control character.
+ *  is sent as its control character. `"__kb__"` toggles the browser
+ *  soft keyboard, which is OFF by default (see set_soft_keyboard):
+ *  tapping the terminal focuses it but does NOT summon the keyboard,
+ *  so the whole screen stays for output; press Kbd to type.
  ***************************************************************/
 const KEYBAR_ROWS = [
     [
+        ["Kbd",     "__kb__"],
         ["Esc",     "\x1b"],
         ["Tab",     "\t"],
         ["Ctrl",    "__ctrl__"],
@@ -390,10 +394,17 @@ function build_keybar(gobj)
                     set_ctrl_armed(gobj, !priv.ctrl_armed);
                     return;
                 }
+                if(seq === "__kb__") {
+                    set_soft_keyboard(gobj, !priv.kb_on, true);
+                    return;
+                }
                 tty_input(gobj, seq, true);
             });
             if(seq === "__ctrl__") {
                 priv.$ctrl = $b;
+            }
+            if(seq === "__kb__") {
+                priv.$kb = $b;
             }
             return $b;
         });
@@ -449,8 +460,57 @@ function create_terminal(gobj)
      *  events never fire). */
     priv.touch_teardown = install_touch_selection(term, priv.$term, {t: t});
 
+    /*  Mobile (key bar visible): the browser soft keyboard is OPT-IN —
+     *  start suppressed; the Kbd bar key summons it (see set_soft_keyboard). */
+    if(!keybar_hidden(priv)) {
+        set_soft_keyboard(gobj, false, false);
+    } else {
+        priv.kb_on = true;
+    }
+
     /*  Keep the terminal filling its host across viewport changes.  */
     install_resize_refit(gobj);
+}
+
+/***************************************************************
+ *  Is the mobile key bar hidden (desktop/tablet ≥ Bulma tablet
+ *  breakpoint)? Computed style, so an is-hidden ancestor (inactive
+ *  keep_alive tab) doesn't fake a "hidden" answer.
+ ***************************************************************/
+function keybar_hidden(priv)
+{
+    if(!priv.$keybar) {
+        return true;
+    }
+    return getComputedStyle(priv.$keybar).display === "none";
+}
+
+/***************************************************************
+ *  Enable/suppress the browser soft keyboard. xterm types through a
+ *  hidden textarea; inputmode="none" tells the browser NOT to summon
+ *  the virtual keyboard on focus (physical keyboards are unaffected),
+ *  so on mobile the whole screen stays for terminal output until the
+ *  user asks to type. `refocus` (the Kbd key) blurs+refocuses so the
+ *  browser re-reads inputmode and shows/hides the keyboard right away;
+ *  silent state syncs (init, rotation) skip it. The Kbd bar key
+ *  reflects the state like the sticky Ctrl.
+ ***************************************************************/
+function set_soft_keyboard(gobj, on, refocus)
+{
+    let priv = gobj.priv;
+    priv.kb_on = !!on;
+    let ta = priv.term && priv.term.textarea;
+    if(ta) {
+        ta.inputMode = priv.kb_on ? "text" : "none";
+        if(refocus) {
+            ta.blur();
+            ta.focus();
+        }
+    }
+    if(priv.$kb) {
+        priv.$kb.classList.toggle("is-info", priv.kb_on);
+        priv.$kb.classList.toggle("is-selected", priv.kb_on);
+    }
 }
 
 /***************************************************************
@@ -498,6 +558,13 @@ function install_resize_refit(gobj)
             }
             if(at_bottom) {
                 priv.term.scrollToBottom();
+            }
+            /*  Escape hatch: a tablet rotated to landscape crosses the
+             *  Bulma breakpoint and HIDES the key bar — the Kbd toggle
+             *  goes with it, so never leave the keyboard suppressed
+             *  with no way to bring it back.  */
+            if(!priv.kb_on && keybar_hidden(priv)) {
+                set_soft_keyboard(gobj, true, false);
             }
         });
     });
