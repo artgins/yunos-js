@@ -11,17 +11,6 @@
  ***********************************************************************/
 
 /* ====================================================================
- *  Secondary-nav tab strip (top-sub zone).
- *  Bulma gives `.tabs:not(:last-child)` a 1.5rem block-spacing
- *  margin-bottom, which steals content height on every view (worst on
- *  mobile). The zone already has its own bottom border for separation,
- *  so drop the margin. Specificity (3 classes) beats Bulma's rule.
- * ==================================================================== */
-.yui-zone-top-sub .yui-nav-tabs.tabs {
-    margin-bottom: 0.25rem;
-}
-
-/* ====================================================================
  *  Per-node connection status on the workspace tabs — a small circle
  *  (the same look as the old global toolbar dot, but one per node tab),
  *  keyed off the tab's connected/disconnected class. This replaces the
