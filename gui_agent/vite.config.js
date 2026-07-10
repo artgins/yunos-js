@@ -47,7 +47,6 @@ export default defineConfig({
             "tabulator-tables",
             "tom-select",
             "uplot",
-            "vanilla-jsoneditor",
         ],
         alias: [
             {
