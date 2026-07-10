@@ -313,7 +313,7 @@ function create_table(gobj)
         index:          "id",
         layout:         "fitColumns",
         maxHeight:      "70vh",
-        placeholder:    t("no connections — click Add connection"),
+        placeholder:    t("no connections - click add connection"),
         columnDefaults: {headerHozAlign: "left", resizable: true},
         columns:        make_columns(gobj)
     };

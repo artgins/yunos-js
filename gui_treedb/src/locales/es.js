@@ -71,6 +71,32 @@ const es = {
         "about description":                  "Explora tus topics TreeDB como tablas y nodos como grafos en cada backend configurado.",
         "documentation":                      "Documentación",
 
+        /* app chrome — nav, connection picker, settings (added 2026-07-10) */
+        "topics": "Temas",
+        "graphs": "Grafos",
+        "settings": "Ajustes",
+        "connections": "Conexiones",
+        "add connection": "Añadir conexión",
+        "manage connections": "Gestionar conexiones",
+        "no connections yet": "Aún no hay conexiones",
+        "no connections - click add connection": "Sin conexiones — pulsa Añadir conexión",
+        "no treedbs declared": "No hay treedbs declarados",
+        "connections help": "Configura los backends a explorar. Cada conexión apunta a un backend Yuneta y lista los treedbs a abrir.",
+        "backend not connected": "Backend no conectado",
+        "connecting": "Conectando…",
+        "connected": "Conectado",
+        "disconnected": "Desconectado",
+        "remove": "Eliminar",
+        "cancel": "Cancelar",
+        "confirm": "Confirmar",
+        "treedbs": "TreeDBs",
+        "role": "Rol",
+        "service": "Servicio",
+        "from": "Desde",
+        "to": "Hasta",
+        "select dates please": "Selecciona fechas por favor",
+        "login failed": "Error de inicio de sesión",
+
         "_xxx":                               "last key — insert new ones above"
     }
 };

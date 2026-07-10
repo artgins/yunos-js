@@ -22,6 +22,19 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the ES/EN toggle now translates the app chrome.** The
+  language switch mechanism worked (it flips i18next + `refresh_language`),
+  but `en.js`/`es.js` only carried login/auth keys — so the nav rail
+  (`topics`/`graphs`/`settings`/`connections`), the connection picker and
+  Settings showed the raw English keys in both languages. Added the
+  app-chrome keys (nav, picker, settings, common toolbar labels) to both
+  locales (`validate-locales` green, 62 keys). Treedb SCHEMA column headers
+  stay in their schema language on purpose — gui_treedb browses arbitrary
+  treedbs and must not bake any one backend's vocabulary; the `col_label`
+  cascade falls back to the schema header. One `t()` key was lowercased to
+  satisfy the ASCII/lower-case key convention (`c_treedb_settings.js`).
+
+
 ## 0.3.0 — 2026-07-08
 
 - **gui_agent: account menu order now matches gui_treedb** — Developer

@@ -71,6 +71,32 @@ const en = {
         "about description":                  "Browse your TreeDB topics as tables and nodes as graphs across every configured backend.",
         "documentation":                      "Documentation",
 
+        /* app chrome — nav, connection picker, settings (added 2026-07-10) */
+        "topics": "Topics",
+        "graphs": "Graphs",
+        "settings": "Settings",
+        "connections": "Connections",
+        "add connection": "Add connection",
+        "manage connections": "Manage connections",
+        "no connections yet": "No connections yet",
+        "no connections - click add connection": "No connections — click Add connection",
+        "no treedbs declared": "No treedbs declared",
+        "connections help": "Configure the backends to browse. Each connection points at a Yuneta backend and lists the treedbs to open.",
+        "backend not connected": "Backend not connected",
+        "connecting": "Connecting…",
+        "connected": "Connected",
+        "disconnected": "Disconnected",
+        "remove": "Remove",
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "treedbs": "TreeDBs",
+        "role": "Role",
+        "service": "Service",
+        "from": "From",
+        "to": "To",
+        "select dates please": "Select dates please",
+        "login failed": "Login failed",
+
         "_xxx":                               "last key — insert new ones above"
     }
 };
