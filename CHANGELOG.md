@@ -22,6 +22,18 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the connection picker tab is translated on initial
+  render.** `refresh_language(document.body)` after `yui_shell_set_submenu`
+  (the submenu is rebuilt after the startup translate pass), so the picker
+  tab shows the localized label immediately instead of the raw key until
+  the first language toggle.
+
+- **chore(deps): `vanilla-jsoneditor` → `^3.12.0`** in gui_treedb (lockstep
+  with gobj-ui 2.3.1, whose `C_YUI_FORM` moved to the `createJSONEditor`
+  factory, absent from 0.23.x). **gui_agent dropped the dependency
+  entirely** — the developer window no longer uses the JSON editor and no
+  gobj-ui component gui_agent imports pulls it (build green without it).
+
 - **fix(gui_treedb): the ES/EN toggle now translates the app chrome.** The
   language switch mechanism worked (it flips i18next + `refresh_language`),
   but `en.js`/`es.js` only carried login/auth keys — so the nav rail
