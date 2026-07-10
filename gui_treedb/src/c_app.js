@@ -384,6 +384,12 @@ function rebuild_workspace_tabs(gobj, ws)
         });
     }
     yui_shell_set_submenu(priv.shell, ws, items);
+
+    /*  The submenu (picker tab + dynamic treedb tabs) is (re)built here,
+     *  after the initial refresh_language, so translate the fresh nav DOM
+     *  or its i18n labels render as the raw English key until the next
+     *  language toggle. */
+    refresh_language(document.body, t);
 }
 
 function rebuild_all_workspaces(gobj)
