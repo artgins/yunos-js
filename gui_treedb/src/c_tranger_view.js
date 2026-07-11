@@ -178,7 +178,7 @@ function build_ui(gobj)
     priv.$tabs = $tabs;
 
     let $refresh = createElement2(
-        ["button", {class: "button is-small TRANGER_REFRESH",
+        ["button", {class: "button TRANGER_REFRESH",
                     title: "Refresh", "aria-label": "Refresh"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
@@ -190,7 +190,7 @@ function build_ui(gobj)
     });
 
     let $more = createElement2(
-        ["button", {class: "button is-small TRANGER_LOAD_MORE",
+        ["button", {class: "button TRANGER_LOAD_MORE",
                     title: "Load more", "aria-label": "Load more"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-plus"}]]],
@@ -223,7 +223,7 @@ function build_ui(gobj)
         ["div", {class: "p-3", gclass: "C_TRANGER_VIEW",
                  style: "height:100%; display:flex; flex-direction:column;"},
             [
-                ["div", {class: "tabs is-small is-boxed mb-2 TRANGER_TOPICS"}, [$tabs]],
+                ["div", {class: "tabs is-boxed mb-2 TRANGER_TOPICS"}, [$tabs]],
                 ["div", {class: "is-flex is-align-items-center mb-2 TRANGER_TOOLBAR"},
                     [$refresh, ["span", {class: "ml-2"}, [$more]], $meta]],
                 $error,
