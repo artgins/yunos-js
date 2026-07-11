@@ -71,6 +71,7 @@ import "./app.css";
 import "./login.css";
 
 import app_config from "./app_config.json";
+import pkg from "../package.json";
 
 
 /************************************************
@@ -78,7 +79,7 @@ import app_config from "./app_config.json";
  ************************************************/
 const yuno_name    = "Yuneta Agent Console";
 const yuno_role    = "gui_agent";
-const yuno_version = "0.2.0";
+const yuno_version = pkg.version;   // single source: package.json
 
 
 /***************************************************************

@@ -87,7 +87,7 @@ And to install the new versions::
 ## Update app version
 
 gui_treedb has its own version line (like gui_agent), not tied to
-`YUNETA_VERSION`. Keep the two in sync:
+`YUNETA_VERSION`. `package.json` is the single source — `main.js`
+(yuno identity) and the About dialog both import `pkg.version`:
 
-    # main.js:      const yuno_version = "0.?.?";
-    # package.json: "version": "0.?.?",
+    npm version 0.?.? --no-git-tag-version

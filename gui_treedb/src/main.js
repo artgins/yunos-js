@@ -82,6 +82,7 @@ import "@yuneta/gobj-ui/src/lib_graph.css";
 import "./login.css";
 
 import app_config from "./app_config.json";
+import pkg from "../package.json";
 
 
 /************************************************
@@ -89,7 +90,7 @@ import app_config from "./app_config.json";
  ************************************************/
 const yuno_name    = "TreeDB GUI";
 const yuno_role    = "gui_treedb";
-const yuno_version = "0.2.0";
+const yuno_version = pkg.version;   // single source: package.json
 
 
 /***************************************************************

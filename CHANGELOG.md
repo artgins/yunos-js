@@ -22,6 +22,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_agent, gui_treedb): `yuno_version` derives from `package.json`.**
+  The 0.3.0 release bumped `package.json` but not the hand-written
+  `yuno_version` const in each `main.js`, so the yuno identity still said
+  0.2.0 (the About dialogs were unaffected — they already read
+  `pkg.version`). Both `main.js` now import `pkg.version` — one source, the
+  mismatch class is gone. `npm version x.y.z --no-git-tag-version` is the
+  whole bump now (gui_treedb README updated).
+
 - **feat(gui_treedb): the treedb confirm dialogs are translated.** gobj-ui
   2.6.0 migrated the treedb gclasses to the shell confirm helpers, which keep
   the historical i18n keys — added `yes` / `no` / `accept` / `are you sure` /
