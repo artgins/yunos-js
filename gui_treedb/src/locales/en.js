@@ -97,6 +97,12 @@ const en = {
         "select dates please": "Select dates please",
         "login failed": "Login failed",
 
+        "yes": "Yes",
+        "no": "No",
+        "accept": "Accept",
+        "are you sure": "Are you sure?",
+        "please select some row": "Please select some row",
+
         "_xxx":                               "last key — insert new ones above"
     }
 };

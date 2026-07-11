@@ -97,6 +97,12 @@ const es = {
         "select dates please": "Selecciona fechas por favor",
         "login failed": "Error de inicio de sesión",
 
+        "yes": "Sí",
+        "no": "No",
+        "accept": "Aceptar",
+        "are you sure": "¿Está seguro?",
+        "please select some row": "Seleccione alguna fila",
+
         "_xxx":                               "last key — insert new ones above"
     }
 };

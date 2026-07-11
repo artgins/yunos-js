@@ -22,6 +22,15 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): the treedb confirm dialogs are translated.** gobj-ui
+  2.6.0 migrated the treedb gclasses to the shell confirm helpers, which keep
+  the historical i18n keys — added `yes` / `no` / `accept` / `are you sure` /
+  `please select some row` to both locales (validate-locales green, 67 keys),
+  so the delete-row and select-something dialogs render in Spanish too. The
+  dirty-guard sentence ("All changes will be lost…") stays untranslated: its
+  canonical key is a capitalized sentence, which the locale convention
+  (ASCII lower-case keys) rejects — same behavior as before.
+
 - **fix(gui_treedb): the connection picker tab is translated on initial
   render.** `refresh_language(document.body)` after `yui_shell_set_submenu`
   (the submenu is rebuilt after the startup translate pass), so the picker
