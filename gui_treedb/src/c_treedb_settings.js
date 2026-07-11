@@ -13,14 +13,19 @@
  *      each workspace only SELECTS which services to open — connection
  *      management lives here.
  *
- *      Each connection points at a node's AGENT. The scan button of a row
- *      asks C_TREEDB_LINKS to discover, via that agent (list-yunos +
- *      command-yuno services), the C_NODE / C_TRANGER services of every
- *      running yuno of the node. The discovered services render as
- *      dataTree SUB-ROWS with a checkbox; checked services persist in the
- *      connection's `services` and become browsable in the picker
- *      ("connections" tab). Scan results themselves are ephemeral — only
- *      the checked services survive a reload.
+ *      Each connection is the C_IEVENT_CLI entry to ONE yuno: its public
+ *      wss url + remote role + service. Transports open ONLY from the
+ *      connect/disconnect button of a row (the persisted `enabled`
+ *      intent) — editing a row's coordinates never auto-connects; it
+ *      DISABLES the connection until the user reconnects. On the first
+ *      connect C_TREEDB_LINKS discovers that yuno's C_NODE / C_TRANGER
+ *      services automatically (`services` command) and persists the
+ *      WHOLE found list in the connection's `services`; the refresh
+ *      button of a row re-runs the discovery. The services render as
+ *      dataTree SUB-ROWS with a checkbox editing each service's
+ *      `selected` flag — selected services are the ones offered in the
+ *      workspace pickers ("connections" tab of Topics / Graphs).
+ *      Deleting a row asks for confirmation (shell yes/no dialog).
  *
  *      A view: builds its own `$container` for the shell to mount.
  *
@@ -33,6 +38,7 @@ import {
     gobj_read_attr, gobj_write_attr,
     gobj_subscribe_event,
     gobj_find_service,
+    gobj_parent,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
 
@@ -40,13 +46,15 @@ import {t} from "i18next";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
+import {yui_shell_confirm_yesno} from "@yuneta/gobj-ui/src/shell_modals.js";
+
 import {
     treedb_config_get_connections,
     treedb_config_get_connection,
     treedb_config_set_connections,
     treedb_config_set_conn_services,
+    treedb_config_set_conn_enabled,
     treedb_config_conn_services,
-    treedb_config_service_key,
 } from "./c_treedb_config.js";
 
 import {
@@ -78,8 +86,7 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    scan_results: null,   /*  conn_id -> last scan's yunos [{yuno_role,yuno_name,services}]  */
-    $scan_errors: null,   /*  scan failure report area  */
+    $scan_errors: null,   /*  refresh failure report area  */
 };
 let __gclass__ = null;
 
@@ -98,16 +105,14 @@ let __gclass__ = null;
  ***************************************************************/
 function mt_create(gobj)
 {
-    let priv = gobj.priv;
-    priv.scan_results = {};
-
     gobj_write_attr(gobj, "table_id", "treedb_settings_table");
     build_ui(gobj);
 
     /*  Refresh the status column when a connection goes up/down, and
-     *  reload the tree when a scan finishes. NOT subscribed to
-     *  EV_CONNECTIONS_CHANGED: the table is the source of those changes,
-     *  so reloading from them would fight the editor.  */
+     *  reload the tree when a discovery finishes (auto on first connect,
+     *  or the refresh button). NOT subscribed to EV_CONNECTIONS_CHANGED:
+     *  the table is the source of those changes, so reloading from them
+     *  would fight the editor.  */
     let links = gobj_find_service("treedb_links", false);
     if(links) {
         gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
@@ -209,8 +214,10 @@ function build_ui(gobj)
                     ["div", {class: "level-right"}, [$add]]
                 ]],
                 ["p", {class: "is-size-7 has-text-grey mb-3 SETTINGS_HELP", i18n: "connections help"},
-                    "Edit cells inline. Each URL points at a node's agent; " +
-                    "scan a row to pick the node services to browse."],
+                    "Edit cells inline. Each URL is a yuno's public wss endpoint " +
+                    "(plus its role and service). Connect with the plug button — " +
+                    "services are discovered on the first connect; check the ones " +
+                    "to browse."],
                 $scan_errors,
                 ["div", {id: table_id}, []]
             ]
@@ -222,12 +229,11 @@ function build_ui(gobj)
 }
 
 /***************************************************************
- *  Connection rows for the table (treedbs array -> string), with the
- *  discovered/selected node services as dataTree children.
+ *  Connection rows for the table, with the discovered services as
+ *  dataTree children.
  ***************************************************************/
 function rows_from_config(gobj)
 {
-    let priv = gobj.priv;
     let config = gobj_find_service("treedb_config", false);
     let conns = config ? treedb_config_get_connections(config) : [];
     return conns.map((c) => {
@@ -236,10 +242,9 @@ function rows_from_config(gobj)
             label:               c.label || "",
             url:                 c.url || "",
             remote_yuno_role:    c.remote_yuno_role || "",
-            remote_yuno_service: c.remote_yuno_service || "",
-            treedbs:             Array.isArray(c.treedbs) ? c.treedbs.join(", ") : ""
+            remote_yuno_service: c.remote_yuno_service || ""
         };
-        let children = service_children(gobj, c);
+        let children = service_children(c);
         if(children.length) {
             row._children = children;
         }
@@ -248,64 +253,29 @@ function rows_from_config(gobj)
 }
 
 /***************************************************************
- *  The service sub-rows of a connection: the last scan's discoveries
- *  (checked state = persisted in conn.services) plus any persisted
- *  service the scan didn't (re)find — kept visible and checked.
+ *  The service sub-rows of a connection: the WHOLE persisted
+ *  discovered list (checked state = each service's `selected` flag).
  ***************************************************************/
-function service_children(gobj, conn)
+function service_children(conn)
 {
-    let priv = gobj.priv;
-
-    /*  Persisted (checked) services, keyed. Only scanned entries
-     *  (yuno_role set) render as sub-rows: manual `treedbs` names keep
-     *  living in the treedbs column.  */
-    let checked = {};
-    for(let e of treedb_config_conn_services(conn)) {
-        if(e.yuno_role) {
-            checked[e.key] = e;
-        }
-    }
-
     let children = [];
-    let seen = {};
-    let scanned = priv.scan_results[conn.id];
-    for(let y of (scanned || [])) {
-        for(let s of (y.services || [])) {
-            let svc = {
-                yuno_role: y.yuno_role || "",
-                yuno_name: y.yuno_name || "",
-                service:   s.service,
-                gclass:    s.gclass
-            };
-            svc.key = treedb_config_service_key(svc);
-            seen[svc.key] = true;
-            children.push(child_row(conn, svc, !!checked[svc.key]));
-        }
-    }
-    for(let key in checked) {
-        if(!seen[key]) {
-            children.push(child_row(conn, checked[key], true));
-        }
+    for(let svc of treedb_config_conn_services(conn)) {
+        children.push({
+            id:       conn.id + CHILD_SEP + svc.key,
+            _child:   true,
+            _conn_id: conn.id,
+            _svc:     svc,
+            _checked: !!svc.selected
+        });
     }
     return children;
 }
 
-function child_row(conn, svc, is_checked)
-{
-    return {
-        id:       conn.id + CHILD_SEP + svc.key,
-        _child:   true,
-        _conn_id: conn.id,
-        _svc:     svc,
-        _checked: is_checked
-    };
-}
-
 /***************************************************************
  *  Write the whole table back to C_TREEDB_CONFIG (persist +
- *  reconcile links), treedbs string -> array. Only parent rows are
- *  connections; each keeps its persisted scanned `services` (the
- *  checkbox column edits those separately).
+ *  reconcile links). Only parent rows are connections; each keeps its
+ *  persisted discovered `services` (the checkbox column edits those
+ *  separately).
  ***************************************************************/
 function persist(gobj)
 {
@@ -316,13 +286,27 @@ function persist(gobj)
     let config = gobj_find_service("treedb_config", false);
     let list = table.getData().filter((r) => r && !r._child).map((r) => {
         let prev = config ? treedb_config_get_connection(config, r.id) : null;
+        let url     = (r.url || "").trim();
+        let role    = (r.remote_yuno_role || "").trim();
+        let service = (r.remote_yuno_service || "").trim();
+        /*
+         *  Editing the entry coordinates NEVER auto-connects: the edited
+         *  row comes back disabled and stays down until the user clicks
+         *  its connect button.
+         */
+        let enabled = !!(prev && prev.enabled);
+        if(prev && (url !== (prev.url || "")
+                || role !== (prev.remote_yuno_role || "")
+                || service !== (prev.remote_yuno_service || ""))) {
+            enabled = false;
+        }
         return {
             id:                  r.id || new_id(),
-            label:               (r.label || "").trim() || (r.url || "").trim(),
-            url:                 (r.url || "").trim(),
-            remote_yuno_role:    (r.remote_yuno_role || "").trim(),
-            remote_yuno_service: (r.remote_yuno_service || "").trim(),
-            treedbs:             String(r.treedbs || "").split(",").map((s) => s.trim()).filter(Boolean),
+            label:               (r.label || "").trim() || url,
+            url:                 url,
+            remote_yuno_role:    role,
+            remote_yuno_service: service,
+            enabled:             enabled,
             services:            (prev && Array.isArray(prev.services)) ? prev.services : []
         };
     });
@@ -342,15 +326,15 @@ function add_row(gobj)
     }
     table.addRow({
         id: new_id(), label: "", url: "",
-        remote_yuno_role: "", remote_yuno_service: "", treedbs: ""
+        remote_yuno_role: "", remote_yuno_service: ""
     }, false).then(() => {
         persist(gobj);
     });
 }
 
 /***************************************************************
- *  Toggle a service sub-row's checkbox: add/remove it from the
- *  connection's persisted `services`.
+ *  Toggle a service sub-row's checkbox: flip that service's
+ *  `selected` flag in the connection's persisted `services`.
  ***************************************************************/
 function toggle_service(gobj, row)
 {
@@ -360,26 +344,24 @@ function toggle_service(gobj, row)
     if(!conn || !d._svc) {
         return;
     }
-    let list = (Array.isArray(conn.services) ? conn.services : []).slice();
-    let idx = list.findIndex((s) => s && treedb_config_service_key(s) === d._svc.key);
-    if(idx >= 0) {
-        list.splice(idx, 1);
-    } else {
-        list.push({
-            yuno_role: d._svc.yuno_role,
-            yuno_name: d._svc.yuno_name,
-            service:   d._svc.service,
-            gclass:    d._svc.gclass
-        });
-    }
+    let now_checked = false;
+    let list = treedb_config_conn_services(conn).map((s) => {
+        let selected = s.selected;
+        if(s.key === d._svc.key) {
+            selected = !selected;
+            now_checked = selected;
+        }
+        return {service: s.service, gclass: s.gclass, selected: selected};
+    });
     treedb_config_set_conn_services(config, d._conn_id, list);
-    row.update({_checked: idx < 0});
+    row.update({_checked: now_checked});
 }
 
 /***************************************************************
- *  Launch the node scan of a connection row.
+ *  Refresh the discovered services of a connection row (re-runs the
+ *  discovery done automatically on the first connect).
  ***************************************************************/
-function scan_connection(gobj, row)
+function refresh_services(gobj, row)
 {
     let d = row.getData();
     if(d._child) {
@@ -448,11 +430,7 @@ function make_columns(gobj)
         let $svc = document.createElement("span");
         $svc.textContent = d._svc.service;
         $svc.classList.add("has-text-weight-semibold");
-        let $yuno = document.createElement("span");
-        $yuno.textContent = `  ·  ${d._svc.yuno_role}` + (d._svc.yuno_name ? `^${d._svc.yuno_name}` : "");
-        $yuno.classList.add("has-text-grey", "is-size-7");
         $span.appendChild($svc);
-        $span.appendChild($yuno);
         return $span;
     }
 
@@ -492,7 +470,7 @@ function make_columns(gobj)
         toggle_service(gobj, cell.getRow());
     }
 
-    function scan_formatter(cell)
+    function refresh_formatter(cell)
     {
         let d = cell.getData();
         if(d._child) {
@@ -501,14 +479,13 @@ function make_columns(gobj)
         let links = gobj_find_service("treedb_links", false);
         let scanning = links ? treedb_links_is_scanning(links, d.id) : false;
         let connected = links ? treedb_links_is_connected(links, d.id) : false;
-        let icon = scanning ? "yi-arrows-rotate" : "yi-magnifying-glass";
-        let cls = connected ? "" : " has-text-grey-light";
-        let title = scanning ? t("scanning") : t("scan node services");
-        return `<span class="icon SETTINGS_SCAN${cls}" title="${title}" `
-             + `aria-label="${title}"><i class="${icon}"></i></span>`;
+        let cls = (connected && !scanning) ? "" : " has-text-grey-light";
+        let title = scanning ? t("refreshing services") : t("refresh services");
+        return `<span class="icon SETTINGS_REFRESH${cls}" title="${title}" `
+             + `aria-label="${title}"><i class="yi-arrows-rotate"></i></span>`;
     }
 
-    function scan_click(e, cell)
+    function refresh_click(e, cell)
     {
         let d = cell.getData();
         if(d._child) {
@@ -518,7 +495,42 @@ function make_columns(gobj)
         if(links && treedb_links_is_scanning(links, d.id)) {
             return;
         }
-        scan_connection(gobj, cell.getRow());
+        refresh_services(gobj, cell.getRow());
+    }
+
+    function connect_formatter(cell)
+    {
+        let d = cell.getData();
+        if(d._child) {
+            return "";
+        }
+        let config = gobj_find_service("treedb_config", false);
+        let conn = config ? treedb_config_get_connection(config, d.id) : null;
+        let enabled = !!(conn && conn.enabled);
+        let icon = enabled ? "yi-plug-slash" : "yi-plug";
+        let cls = enabled ? " has-text-danger" : " has-text-success";
+        let title = enabled ? t("disconnect") : t("connect");
+        return `<span class="icon SETTINGS_CONNECT${cls}" title="${title}" `
+             + `aria-label="${title}"><i class="${icon}"></i></span>`;
+    }
+
+    function connect_click(e, cell)
+    {
+        let d = cell.getData();
+        if(d._child) {
+            return;
+        }
+        let config = gobj_find_service("treedb_config", false);
+        let conn = config ? treedb_config_get_connection(config, d.id) : null;
+        if(!conn) {
+            return;
+        }
+        treedb_config_set_conn_enabled(config, d.id, !conn.enabled);
+        try {
+            cell.getRow().reformat();
+        } catch(err) {
+            /*  table mid-rebuild  */
+        }
     }
 
     function status_formatter(cell)
@@ -550,8 +562,20 @@ function make_columns(gobj)
             return;
         }
         let row = cell.getRow();
-        row.delete().then(() => {
-            persist(gobj);
+        let shell = gobj_parent(gobj);
+        yui_shell_confirm_yesno(shell, "are you sure", {
+            title:     "remove",
+            type:      "danger",
+            yes_label: "yes",
+            no_label:  "no",
+            t:         t
+        }).then((yes) => {
+            if(!yes) {
+                return;
+            }
+            row.delete().then(() => {
+                persist(gobj);
+            });
         });
     }
 
@@ -570,14 +594,14 @@ function make_columns(gobj)
             minWidth: 120, widthGrow: 1},
         {title: t("service"), field: "remote_yuno_service", editor: "input", editable: is_parent,
             minWidth: 120, widthGrow: 1},
-        {title: t("treedbs"), field: "treedbs",             editor: "input", editable: is_parent,
-            minWidth: 150, widthGrow: 2},
         {title: "", field: "_gclass", width: 110, minWidth: 110, headerSort: false,
             formatter: gclass_formatter},
         {title: "", field: "_checked", width: 48, minWidth: 48, headerSort: false, hozAlign: "center",
             formatter: check_formatter, cellClick: check_click},
-        {title: "", field: "_scan", width: 48, minWidth: 48, headerSort: false, hozAlign: "center",
-            formatter: scan_formatter, cellClick: scan_click},
+        {title: "", field: "_refresh", width: 48, minWidth: 48, headerSort: false, hozAlign: "center",
+            formatter: refresh_formatter, cellClick: refresh_click},
+        {title: "", field: "_connect", width: 48, minWidth: 48, headerSort: false, hozAlign: "center",
+            formatter: connect_formatter, cellClick: connect_click},
         {title: "", field: "_status", width: 56, minWidth: 56, headerSort: false, hozAlign: "center",
             formatter: status_formatter},
         {title: "", field: "_del", width: 48, minWidth: 48, headerSort: false, hozAlign: "center",
@@ -677,25 +701,23 @@ function ac_conn_status(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Scan finished: remember its results (children of that row) and
- *  reload the tree. Failures (per-yuno or global) are reported above
- *  the table — never swallowed.
+ *  Discovery finished: the found list is already persisted in the
+ *  connection (C_TREEDB_LINKS stores it), so just reload the tree.
+ *  Failures are reported above the table — never swallowed.
  ***************************************************************/
 function ac_scan_done(gobj, event, kw, src)
 {
-    let priv = gobj.priv;
     let conn_id = (kw && kw.conn_id) || "";
     if(!conn_id) {
         return 0;
     }
-    priv.scan_results[conn_id] = (kw && kw.yunos) || [];
     show_scan_errors(gobj, (kw && kw.errors) || []);
     reload_table(gobj);
     return 0;
 }
 
 /***************************************************************
- *  Scan could not start (backend not connected).
+ *  Discovery could not start (backend not connected).
  ***************************************************************/
 function ac_scan_error(gobj, event, kw, src)
 {

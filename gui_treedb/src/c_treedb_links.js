@@ -6,9 +6,11 @@
  *
  *      Unlike gui_agent's single-link model (one control center), the
  *      TreeDB browser opens a direct WebSocket to each backend the user
- *      configured, on OTHER hosts. Each transport carries the forwarded
- *      access_token in its identity_card `jwt` (the BFF cookie cannot
- *      travel cross-origin — see c_login.js / YUNO_AUTH.md §2.2).
+ *      configured, on OTHER hosts. Each connection is the C_IEVENT_CLI
+ *      entry to ONE yuno (public wss url + remote role + service). Each
+ *      transport carries the forwarded access_token in its identity_card
+ *      `jwt` (the BFF cookie cannot travel cross-origin — see c_login.js /
+ *      YUNO_AUTH.md §2.2).
  *
  *      Responsibilities:
  *        - lifecycle of the per-connection C_IEVENT_CLIs (create/start/
@@ -19,6 +21,12 @@
  *        - re-publish the CONNECTION-level events (EV_ON_OPEN / EV_ON_CLOSE
  *          / EV_ON_ID_NAK) to its subscriber (the app root), tagged with
  *          `conn_id`, so the app can drive the picker + token recovery;
+ *        - discover the connected yuno's C_NODE / C_TRANGER services
+ *          (`services` command): automatically on the first EV_ON_OPEN of a
+ *          connection with no stored services, on demand from the Settings
+ *          refresh button. The WHOLE found list is persisted in the
+ *          connection's `services` (C_TREEDB_CONFIG), preserving the
+ *          user's `selected` flags;
  *        - keep every live transport's `jwt` fresh so a reconnect after a
  *          token refresh re-sends a valid identity_card.
  *
@@ -40,11 +48,13 @@ import {
     gobj_is_running,
     gobj_current_state,
     gobj_command,
-    msg_iev_write_key, msg_iev_read_key,
-    kw_get_str,
 } from "@yuneta/gobj-js";
 
-import {treedb_config_conn_services} from "./c_treedb_config.js";
+import {
+    treedb_config_conn_services,
+    treedb_config_get_connection,
+    treedb_config_store_scanned_services,
+} from "./c_treedb_config.js";
 
 
 /***************************************************************
@@ -207,38 +217,42 @@ function treedb_links_ensure(gobj, conn)
 
 /***************************************************************
  *  The connection coordinates that, when changed, require recreating
- *  the transport (C_IEVENT_CLI bakes them at mt_create). Label / treedbs
- *  are NOT here — they are display/selection only.
+ *  the transport (C_IEVENT_CLI bakes them at mt_create). Label is NOT
+ *  here — it is display only.
  ***************************************************************/
 function conn_coords(conn)
 {
-    /*  treedbs and the DIRECT scanned services are included so editing them
-     *  reopens the connection: they feed the yuno's required_services, which
-     *  is baked into the identity_card the backend uses to authorize
-     *  per-service command access.  */
-    let direct_scanned = treedb_config_conn_services(conn)
-        .filter((s) => s.direct && s.yuno_role)
+    /*  The SELECTED services are included so (de)selecting one reopens
+     *  the connection: they feed the yuno's required_services, which is
+     *  baked into the identity_card the backend uses to authorize
+     *  per-service command access. The rest of the discovered list is
+     *  informative only — a refresh that preserves the selection must
+     *  NOT bounce the transport.  */
+    let selected = treedb_config_conn_services(conn)
+        .filter((s) => s.selected)
         .map((s) => s.service)
         .sort()
         .join(",");
     return (conn.url || "") + "|" + (conn.remote_yuno_role || "")
         + "|" + (conn.remote_yuno_service || "")
-        + "|" + (Array.isArray(conn.treedbs) ? conn.treedbs.join(",") : "")
-        + "|" + direct_scanned;
+        + "|" + selected;
 }
 
 /***************************************************************
  *  Reconcile the live transports with the configured connections:
- *  create missing ones, recreate those whose coordinates changed, and
- *  close those no longer configured. Unchanged connections keep their
- *  live session (open tabs undisturbed).
+ *  open ENABLED ones (create missing, recreate those whose coordinates
+ *  changed) and close the disabled / removed ones. Unchanged enabled
+ *  connections keep their live session (open tabs undisturbed).
+ *  `enabled` is the user's connect intent (the Settings button) — a
+ *  configured-but-disabled connection never opens a transport, so
+ *  editing a row never auto-connects.
  ***************************************************************/
 function treedb_links_sync(gobj, connections)
 {
     let priv = gobj.priv;
     let wanted = {};
     for(let conn of (connections || [])) {
-        if(!conn || !conn.id || !conn.url) {
+        if(!conn || !conn.id || !conn.url || !conn.enabled) {
             continue;
         }
         wanted[conn.id] = true;
@@ -297,14 +311,19 @@ function treedb_links_is_connected(gobj, conn_id)
 }
 
 /***************************************************************
- *  Scan the node behind a connection: which C_NODE / C_TRANGER services
- *  each running yuno exposes. The connection must point at the node's
- *  AGENT: the scan runs `list-yunos` there, then one
- *  `command-yuno command=services service=__yuno__` per running yuno
- *  (plus a direct `services` for the agent yuno itself). Results are
- *  published as EV_TREEDB_SCAN_DONE {conn_id, yunos, errors}; a scan
- *  that cannot start (or times out) ends in the same event with the
- *  failure in `errors` (EV_TREEDB_SCAN_ERROR when it cannot even start).
+ *  Discover the C_NODE / C_TRANGER services of the yuno behind a
+ *  connection: ONE `services` command to its C_YUNO
+ *  (service=__yuno__). The wss API gives no view beyond the connected
+ *  yuno (there is no cross-yuno listing), so the scan is exactly that
+ *  yuno's own services. On success the WHOLE found list is persisted
+ *  in the connection's `services` (preserving `selected` flags) and
+ *  the result is published as EV_TREEDB_SCAN_DONE {conn_id, services,
+ *  errors}; a scan that cannot start (or times out) ends in the same
+ *  event with the failure in `errors` (EV_TREEDB_SCAN_ERROR when it
+ *  cannot even start).
+ *
+ *  Runs automatically on the first EV_ON_OPEN of a connection with no
+ *  stored services; the Settings refresh button re-runs it.
  *
  *  This service is the requester (not the Settings view) because command
  *  answers are routed back by service name and the shell mounts views as
@@ -324,27 +343,14 @@ function treedb_links_scan(gobj, conn_id)
         return 0;   /*  scan already in progress  */
     }
     priv.scans[conn_id] = {
-        pending: 0,
-        yunos:   [],
-        errors:  [],
-        timer:   setTimeout(function() {
+        services: null,   /*  found list; null = no successful answer yet  */
+        errors:   [],
+        timer:    setTimeout(function() {
             finish_scan(gobj, conn_id, "scan timeout");
         }, SCAN_TIMEOUT_MS)
     };
 
-    /*  The connected yuno itself (the agent): its own services. Direct
-     *  `services` command to the agent's C_YUNO (dst_service=__yuno__).  */
-    priv.scans[conn_id].pending++;
-    let kw_self = {service: "__yuno__"};
-    msg_iev_write_key(kw_self, "scan_step", "services-self");
-    gobj_command(iev, "services", kw_self, gobj);
-
-    /*  The yunos the agent manages (C_AGENT.list-yunos; no service so
-     *  dst_service falls back to the connection's agent service).  */
-    priv.scans[conn_id].pending++;
-    let kw_list = {};
-    msg_iev_write_key(kw_list, "scan_step", "list-yunos");
-    gobj_command(iev, "list-yunos", kw_list, gobj);
+    gobj_command(iev, "services", {service: "__yuno__"}, gobj);
     return 0;
 }
 
@@ -357,7 +363,9 @@ function treedb_links_is_scanning(gobj, conn_id)
 }
 
 /***************************************************************
- *  Close a scan and publish its (possibly partial) result.
+ *  Close a scan: persist the found list (only on a successful answer
+ *  — a failure must not wipe the stored services) and publish the
+ *  result.
  ***************************************************************/
 function finish_scan(gobj, conn_id, error)
 {
@@ -374,11 +382,40 @@ function finish_scan(gobj, conn_id, error)
     if(error) {
         scan.errors.push({yuno: "", error: error});
     }
-    gobj_publish_event(gobj, "EV_TREEDB_SCAN_DONE", {
-        conn_id: conn_id,
-        yunos:   scan.yunos,
-        errors:  scan.errors
-    });
+
+    if(scan.services === null) {
+        /*  Failure / close: nothing to store — report immediately.  */
+        gobj_publish_event(gobj, "EV_TREEDB_SCAN_DONE", {
+            conn_id:  conn_id,
+            services: [],
+            errors:   scan.errors
+        });
+        return;
+    }
+
+    /*
+     *  Success: store + report DEFERRED. We are inside the transport's
+     *  command-answer dispatch, and storing publishes
+     *  EV_CONNECTIONS_CHANGED, whose sync path may REOPEN this very
+     *  transport (a refresh that dropped a selected service changes the
+     *  connection coords) — destroying the publisher inside its own
+     *  dispatch is forbidden. The is_running guard only skips the
+     *  teardown race (service stopping while the timer is pending).
+     */
+    setTimeout(function() {
+        if(!gobj_is_running(gobj)) {
+            return;
+        }
+        let config = gobj_find_service("treedb_config", false);
+        if(config) {
+            treedb_config_store_scanned_services(config, conn_id, scan.services);
+        }
+        gobj_publish_event(gobj, "EV_TREEDB_SCAN_DONE", {
+            conn_id:  conn_id,
+            services: scan.services,
+            errors:   scan.errors
+        });
+    }, 0);
 }
 
 /***************************************************************
@@ -476,7 +513,18 @@ function ac_on_open(gobj, event, kw, src)
     if(conn_id) {
         delete priv.open_errors[conn_id];
     }
-    return republish(gobj, src, "EV_ON_OPEN", kw);
+    let ret = republish(gobj, src, "EV_ON_OPEN", kw);
+
+    /*  First session of a never-scanned connection → discover its
+     *  services automatically (the Settings refresh re-runs it later).  */
+    if(conn_id) {
+        let config = gobj_find_service("treedb_config", false);
+        let conn = config ? treedb_config_get_connection(config, conn_id) : null;
+        if(conn && !treedb_config_conn_services(conn).length) {
+            treedb_links_scan(gobj, conn_id);
+        }
+    }
+    return ret;
 }
 
 function ac_on_close(gobj, event, kw, src)
@@ -494,8 +542,9 @@ function ac_on_close(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Answer to a scan command (we only send commands while scanning,
- *  so any answer routed to this service belongs to a scan).
+ *  Answer to the scan's `services` command (we only send commands
+ *  while scanning, so any answer routed to this service belongs to a
+ *  scan).
  ***************************************************************/
 function ac_mt_command_answer(gobj, event, kw, src)
 {
@@ -512,93 +561,19 @@ function ac_mt_command_answer(gobj, event, kw, src)
     let comment = (kw && kw.comment) || "";
     let data = kw ? kw.data : null;
 
-    /*
-     *  Which scan step is this the answer to? A wrapped per-yuno `services`
-     *  (via command-yuno) echoes the INNER command name "services" in the
-     *  command_stack, so it cannot be told apart from the agent's own direct
-     *  `services` by the stack. Instead each scan command tags __md_iev__
-     *  with `scan_step`, which round-trips through command-yuno and back
-     *  (the same mechanism gui_agent uses for console_node). list-yunos is
-     *  the only step without a tag.
-     */
-    let step      = msg_iev_read_key(kw, "scan_step") || "";
-    let yuno_role = msg_iev_read_key(kw, "scan_yuno_role") || "";
-    let yuno_name = msg_iev_read_key(kw, "scan_yuno_name") || "";
-
-    if(step === "list-yunos") {
-        scan.pending--;
-        if(result < 0) {
-            scan.errors.push({yuno: "", error: String(comment || "list-yunos failed")});
-        } else {
-            let rows = Array.isArray(data) ? data : [];
-            let iev = treedb_links_get_iev(gobj, conn_id);
-            for(let y of rows) {
-                if(!y || y.yuno_disabled === true || y.yuno_running !== true) {
-                    continue;
-                }
-                scan.pending++;
-                /*
-                 *  "services" is a C_YUNO command; command-yuno forwards it to
-                 *  the target yuno's __yuno__. Put `service=__yuno__` in the
-                 *  COMMAND STRING (not the kw): the kw `service` field is what
-                 *  C_IEVENT_CLI uses as the ievent dst_service, so a
-                 *  kw.service="__yuno__" would route command-yuno itself to the
-                 *  agent's C_YUNO (which has no command-yuno). With it in the
-                 *  string, dst_service falls back to the connection's service
-                 *  (the agent's C_AGENT), and command-yuno parses
-                 *  service=__yuno__ from the string — same as ycommand.
-                 */
-                let kw_svc = {
-                    command:   "services",
-                    yuno_role: y.yuno_role || "",
-                    yuno_name: y.yuno_name || ""
-                };
-                msg_iev_write_key(kw_svc, "scan_step", "services");
-                msg_iev_write_key(kw_svc, "scan_yuno_role", y.yuno_role || "");
-                msg_iev_write_key(kw_svc, "scan_yuno_name", y.yuno_name || "");
-                gobj_command(iev, "command-yuno service=__yuno__", kw_svc, gobj);
-            }
-        }
-    } else if(step === "services") {
-        scan.pending--;
-        if(result < 0) {
-            scan.errors.push({
-                yuno:  yuno_name ? `${yuno_role}^${yuno_name}` : yuno_role,
-                error: String(comment || "services failed")
-            });
-        } else {
-            let rows = Array.isArray(data) ? data : [];
-            let services = rows
-                .filter((r) => r && (r.gclass === "C_NODE" || r.gclass === "C_TRANGER"))
-                .map((r) => ({service: r.service, gclass: r.gclass}));
-            scan.yunos.push({
-                yuno_role: yuno_role,
-                yuno_name: yuno_name,
-                services:  services
-            });
-        }
-    } else if(step === "services-self") {
-        /*  the connected yuno itself (the agent)  */
-        scan.pending--;
+    if(result < 0) {
         let e = priv.conns[conn_id];
-        let self_role = (e && e.role) || "";
-        if(result < 0) {
-            scan.errors.push({yuno: self_role, error: String(comment || "services failed")});
-        } else {
-            let rows = Array.isArray(data) ? data : [];
-            let services = rows
-                .filter((r) => r && (r.gclass === "C_NODE" || r.gclass === "C_TRANGER"))
-                .map((r) => ({service: r.service, gclass: r.gclass}));
-            scan.yunos.push({yuno_role: self_role, yuno_name: "", services: services});
-        }
+        scan.errors.push({
+            yuno:  (e && e.role) || "",
+            error: String(comment || "services failed")
+        });
     } else {
-        log_error(`${GCLASS_NAME}: scan answer without a known step tag`);
-        return 0;
+        let rows = Array.isArray(data) ? data : [];
+        scan.services = rows
+            .filter((r) => r && (r.gclass === "C_NODE" || r.gclass === "C_TRANGER"))
+            .map((r) => ({service: r.service, gclass: r.gclass}));
     }
-
-    if(scan.pending <= 0) {
-        finish_scan(gobj, conn_id, null);
-    }
+    finish_scan(gobj, conn_id, null);
     return 0;
 }
 

@@ -9,46 +9,48 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 - **Shell:** the declarative shell drives the nav; `src/app_config.json` declares
   the rail (Topics / Graphs / Settings). Views are mounted by gclass name.
 - **Connections:** the user configures backends at runtime in **Settings** (an
-  editable Tabulator table: `url`, `remote_yuno_role`, `remote_yuno_service`,
-  `treedbs`), persisted in browser localStorage (`C_TREEDB_CONFIG`). Each URL
-  points at a node's **agent**. The picker (tab 0 of Topics/Graphs) selects
-  which services to open per workspace.
-- **Node scan:** the scan button of a Settings row discovers, via that agent
-  (`list-yunos` + `command-yuno command=services service=__yuno__` per running
-  yuno, plus the agent's own `services`), every **`C_NODE` / `C_TRANGER`**
-  service of the node; they render as dataTree sub-rows with a checkbox and
-  the checked ones persist in the connection (`services`) and show up in the
-  picker next to the manual `treedbs` list. Scan failures are reported above
-  the table.
+  editable Tabulator table: `url`, `remote_yuno_role`, `remote_yuno_service`),
+  persisted in browser localStorage (`C_TREEDB_CONFIG`). Each connection is
+  the `C_IEVENT_CLI` entry to **one yuno** (its public wss endpoint — the wss
+  API offers no cross-yuno listing). Lifecycle is explicit: transports open
+  only from the row's **connect/disconnect button** (persisted `enabled`
+  intent) — editing a row's coordinates disables it until reconnected, so
+  typing never auto-connects — and deleting a row asks for confirmation.
+  The picker (tab 0 of Topics/Graphs) selects which services to open per
+  workspace.
+- **Service discovery:** on the first connect of a never-scanned connection,
+  `C_TREEDB_LINKS` discovers the yuno's **`C_NODE` / `C_TRANGER`** services
+  automatically (one `services` command to `__yuno__`) and persists the WHOLE
+  found list in the connection (`services`); the row's refresh button re-runs
+  it, preserving the selection. The services render as dataTree sub-rows
+  whose checkbox edits each service's `selected` flag — only selected
+  services are offered in the pickers (Topics: `C_NODE` + `C_TRANGER`;
+  Graphs: `C_NODE` only). Discovery failures are reported above the table.
 - **Transport:** `C_TREEDB_LINKS` owns one `C_IEVENT_CLI` per connection (and
-  runs the scans — it is a named service, so command answers route back to
-  it). Services of the **connected yuno** are addressed directly
-  (`kw.service`); services of **another yuno of the node** go through
-  `C_TREEDB_PROXY`, which wraps each command in the agent's `command-yuno`
-  and re-injects the answer with the inner command's `command_stack`, so the
-  hosted views keep their normal `gobj_command(gobj_remote_yuno, …)` contract
-  (no realtime `EV_TREEDB_NODE_*` cross-yuno — those views refresh on
-  demand).
+  runs the discovery — it is a named service, so command answers route back
+  to it). Every discovered service lives in the connected yuno and is
+  addressed directly (`kw.service`).
 - **Tranger browser:** selected `C_TRANGER` services (Topics workspace only)
   open the read-only `C_TRANGER_VIEW`: topic tabs + a records table fed by
   one-shot `open-list return_data=1 from_rowid=-N` reads (requires a backend
   with the restored c_tranger read commands), full record JSON in the shell
   dialog, Refresh / Load-more buttons (no polling).
-- **Authorization note:** the scan and every wrapped (cross-yuno) command
-  address `dst_service`s beyond the connected agent service (`__yuno__`, the
-  scanned service names), and `C_IEVENT_SRV` only routes them for channels
-  whose user is a **superuser** (a role with `service="*"`) or has roles in
-  those services — the same model as the gui_agent control plane. A
-  non-authorized user sees the rejection in the scan error panel / view
-  banner; nothing fails silently.
+- **Authorization note:** the discovery addresses `__yuno__` (a `dst_service`
+  beyond the connected service), and `C_IEVENT_SRV` only routes that for
+  channels whose user is a **superuser** (a role with `service="*"`) or has
+  roles in the target services — the same model as the gui_agent control
+  plane. A non-authorized user sees the rejection in the Settings error
+  panel / view banner; nothing fails silently.
 - **Auth (multi-backend):** the SPA logs in once at the co-located **auth_bff**
   (BFF httpOnly cookie, same origin). Because that cookie cannot travel to a
   backend on another host, the SPA fetches the access_token from the BFF
   (`POST /auth/token`, opt-in — see yunetas `c_auth_bff.c` + `YUNO_AUTH.md §2.2`)
   and **forwards it in each `C_IEVENT_CLI` identity_card**. The connection's
-  `treedbs` are advertised in the identity_card's `required_services`, which the
-  backend's `C_AUTHZ` needs to authorize the treedb commands (else the `descs` is
-  silently dropped). Each remote backend must have the issuer JWKS provisioned.
+  SELECTED services are advertised in the identity_card's `required_services`,
+  which the backend's `C_AUTHZ` needs to authorize the treedb commands (else
+  the `descs` is silently dropped); a selection change reopens the connection
+  to re-send the card. Each remote backend must have the issuer JWKS
+  provisioned.
 - **View adapter:** `C_TREEDB_VIEW` hosts the gobj-ui `C_YUI_TREEDB_TOPICS` /
   `C_YUI_TREEDB_GRAPH` as a **named service** (so `C_IEVENT_CLI` can route their
   command answers back) and resolves the live transport by `conn_id`.

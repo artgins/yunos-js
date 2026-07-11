@@ -5,9 +5,8 @@
  *      service: its topics and, per topic, the stored records.
  *
  *      Hosted by C_TREEDB_VIEW exactly like the treedb editors (same
- *      contract: `gobj_remote_yuno` is the live transport — or a
- *      C_TREEDB_PROXY when the service lives in another yuno of the
- *      node — and `treedb_name` is the remote service name). Data flow:
+ *      contract: `gobj_remote_yuno` is the live transport and
+ *      `treedb_name` is the remote service name). Data flow:
  *
  *        - mt_start → `topics` command → one Bulma tab per topic;
  *        - selecting a topic → one-shot `open-list` (return_data=1,
@@ -16,8 +15,7 @@
  *          (t / key / rowid + the record's own fields);
  *        - a row click opens the full record as JSON in the shell's
  *          adaptive dialog; "Load more" grows N and reloads; "Refresh"
- *          reloads on demand (no realtime events cross-yuno, and no
- *          polling — Yuneta rule).
+ *          reloads on demand (no polling — Yuneta rule).
  *
  *      Publishes EV_TOPIC_SELECTED (CHILD model → C_TREEDB_VIEW) so the
  *      selected topic deep-links into the URL, and honours EV_SHOW to
@@ -66,7 +64,7 @@ const MAX_FIELD_COLUMNS = 8;
  ***************************************************************/
 const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",       0,  null,  "Subscriber of output events"),
-SDATA(data_type_t.DTP_POINTER,  "gobj_remote_yuno", 0,  null,  "Live transport (or C_TREEDB_PROXY)"),
+SDATA(data_type_t.DTP_POINTER,  "gobj_remote_yuno", 0,  null,  "Live transport (C_IEVENT_CLI)"),
 SDATA(data_type_t.DTP_STRING,   "treedb_name",      0,  "",    "Remote C_TRANGER service name"),
 SDATA(data_type_t.DTP_BOOLEAN,  "system",           0,  false, "Unused (hosting contract symmetry)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",       0,  null,  "Root HTML element (mounted by the shell)"),

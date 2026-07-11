@@ -9,7 +9,17 @@
  *      persisted in browser localStorage:
  *
  *        - connections: the list of backend endpoints the user added
- *            [{id, label, url, remote_yuno_role, remote_yuno_service}, ...]
+ *            [{id, label, url, remote_yuno_role, remote_yuno_service,
+ *              enabled, services}, ...]
+ *          url/role/service are the C_IEVENT_CLI entry coordinates of ONE
+ *          yuno (its public wss endpoint). `enabled` is the user's connect
+ *          INTENT: transports open only for enabled connections (the
+ *          connect/disconnect button in Settings toggles it — editing a
+ *          row never auto-connects). `services` is the FULL list of
+ *          C_NODE / C_TRANGER services discovered in that yuno on the first
+ *          connect (refreshed on demand from Settings), each flagged
+ *          `selected` when the user picked it for browsing — only selected
+ *          services are offered in the workspace pickers.
  *          The access_token forwarded in each C_IEVENT_CLI identity_card is
  *          NOT stored here (it is fetched from the BFF per session — see
  *          c_login.js); only the non-secret connection coordinates are.
@@ -50,7 +60,7 @@ const SEL_SEP = "\x1f";
  ***************************************************************/
 const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",       0,                        null, "Subscriber of output events"),
-SDATA(data_type_t.DTP_JSON,     "connections",      sdata_flag_t.SDF_PERSIST, "[]", "Configured backends: [{id,label,url,remote_yuno_role,remote_yuno_service,treedbs,services}]"),
+SDATA(data_type_t.DTP_JSON,     "connections",      sdata_flag_t.SDF_PERSIST, "[]", "Configured backends: [{id,label,url,remote_yuno_role,remote_yuno_service,enabled,services}]"),
 SDATA(data_type_t.DTP_JSON,     "selected_treedbs", sdata_flag_t.SDF_PERSIST, "{}", "Open (conn,treedb) tabs per workspace: {workspace: [{id,conn_id,treedb_name,label}]}"),
 SDATA(data_type_t.DTP_JSON,     "active_tabs",      sdata_flag_t.SDF_PERSIST, "{}", "Last-active tab per workspace: {workspace: sel_id}"),
 SDATA(data_type_t.DTP_STRING,   "display_mode",     sdata_flag_t.SDF_PERSIST, "table", "Record display: table | form (raw JSON)"),
@@ -144,8 +154,8 @@ function connection_id(conn)
 }
 
 /***************************************************************
- *  Sanitize a scanned-services list:
- *  [{yuno_role, yuno_name, service, gclass}] (gclass C_NODE | C_TRANGER).
+ *  Sanitize a discovered-services list:
+ *  [{service, gclass, selected}] (gclass C_NODE | C_TRANGER).
  ***************************************************************/
 function sanitize_services(list)
 {
@@ -153,73 +163,43 @@ function sanitize_services(list)
         return [];
     }
     return list.filter((s) => s && s.service && s.gclass).map((s) => ({
-        yuno_role: s.yuno_role || "",
-        yuno_name: s.yuno_name || "",
-        service:   s.service,
-        gclass:    s.gclass
+        service:  s.service,
+        gclass:   s.gclass,
+        selected: !!s.selected
     }));
 }
 
 /***************************************************************
- *  A stable per-connection key for a browsable service. Legacy manual
- *  treedbs use the bare service name (so persisted selections survive);
- *  scanned services are qualified by their owning yuno.
+ *  A stable per-connection key for a browsable service: the service
+ *  name (every discovered service lives in the connected yuno).
  ***************************************************************/
 function treedb_config_service_key(svc)
 {
-    if(!svc.yuno_role) {
-        return svc.service;
-    }
-    return `${svc.yuno_role}^${svc.yuno_name || ""}:${svc.service}`;
+    return svc.service;
 }
 
 /***************************************************************
- *  The browsable services of a connection, normalized:
- *  [{key, yuno_role, yuno_name, service, gclass, direct}]
- *    - legacy `treedbs` names → direct C_NODE services of the
- *      connected yuno (addressed with a plain `service` kw);
- *    - scanned `services` → direct only when they live in the yuno
- *      the transport is connected to; else commands must be wrapped
- *      in command-yuno (see c_treedb_proxy.js).
+ *  The discovered services of a connection, normalized:
+ *  [{key, service, gclass, selected}]. All of them live in the yuno
+ *  the transport is connected to (addressed with a plain `service`
+ *  kw); only `selected` ones are offered in the workspace pickers.
  ***************************************************************/
 function treedb_config_conn_services(conn)
 {
-    let out = [];
     if(!conn) {
-        return out;
+        return [];
     }
-    for(let name of (Array.isArray(conn.treedbs) ? conn.treedbs : [])) {
-        out.push({
-            key:       name,
-            yuno_role: "",
-            yuno_name: "",
-            service:   name,
-            gclass:    "C_NODE",
-            direct:    true
-        });
-    }
-    for(let svc of sanitize_services(conn.services)) {
-        let direct = !svc.yuno_role || svc.yuno_role === (conn.remote_yuno_role || "");
-        let entry = {
-            key:       treedb_config_service_key(svc),
-            yuno_role: svc.yuno_role,
-            yuno_name: svc.yuno_name,
-            service:   svc.service,
-            gclass:    svc.gclass,
-            direct:    direct
-        };
-        /*  A scanned direct C_NODE duplicates a manual treedb name.  */
-        if(!out.some((e) => e.key === entry.key ||
-                (direct && e.direct && e.service === entry.service))) {
-            out.push(entry);
-        }
-    }
-    return out;
+    return sanitize_services(conn.services).map((svc) => ({
+        key:      treedb_config_service_key(svc),
+        service:  svc.service,
+        gclass:   svc.gclass,
+        selected: svc.selected
+    }));
 }
 
 /***************************************************************
- *  Replace ONE connection's scanned services (the Settings scan
- *  checkboxes edit this), persist, notify.
+ *  Replace ONE connection's services (the Settings checkboxes edit
+ *  the `selected` flags through this), persist, notify.
  ***************************************************************/
 function treedb_config_set_conn_services(gobj, conn_id, services)
 {
@@ -229,6 +209,54 @@ function treedb_config_set_conn_services(gobj, conn_id, services)
         return;
     }
     list[idx] = Object.assign({}, list[idx], {services: sanitize_services(services)});
+    gobj_write_attr(gobj, "connections", list);
+    gobj_save_persistent_attrs(gobj, "connections");
+    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list, conn: list[idx]});
+}
+
+/***************************************************************
+ *  Store a service-discovery result (first connect, or a Settings
+ *  refresh): the WHOLE found list replaces the connection's services,
+ *  keeping the `selected` flag of every service that survived the
+ *  refresh. Persist + notify.
+ ***************************************************************/
+function treedb_config_store_scanned_services(gobj, conn_id, found)
+{
+    let list = treedb_config_get_connections(gobj);
+    let idx = list.findIndex((c) => c && c.id === conn_id);
+    if(idx < 0) {
+        return;
+    }
+    let prev_selected = {};
+    for(let svc of sanitize_services(list[idx].services)) {
+        if(svc.selected) {
+            prev_selected[svc.service] = true;
+        }
+    }
+    let services = sanitize_services(found).map((svc) => ({
+        service:  svc.service,
+        gclass:   svc.gclass,
+        selected: !!prev_selected[svc.service]
+    }));
+    list[idx] = Object.assign({}, list[idx], {services: services});
+    gobj_write_attr(gobj, "connections", list);
+    gobj_save_persistent_attrs(gobj, "connections");
+    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list, conn: list[idx]});
+}
+
+/***************************************************************
+ *  Set a connection's connect INTENT (the Settings connect/disconnect
+ *  button), persist, notify. The app root reacts by opening/closing
+ *  its transport (treedb_links_sync).
+ ***************************************************************/
+function treedb_config_set_conn_enabled(gobj, conn_id, enabled)
+{
+    let list = treedb_config_get_connections(gobj);
+    let idx = list.findIndex((c) => c && c.id === conn_id);
+    if(idx < 0) {
+        return;
+    }
+    list[idx] = Object.assign({}, list[idx], {enabled: !!enabled});
     gobj_write_attr(gobj, "connections", list);
     gobj_save_persistent_attrs(gobj, "connections");
     gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list, conn: list[idx]});
@@ -266,17 +294,10 @@ function treedb_config_upsert_connection(gobj, conn)
         url:                 conn.url,
         remote_yuno_role:    conn.remote_yuno_role || "",
         remote_yuno_service: conn.remote_yuno_service || "",
+        enabled:             !!conn.enabled,
         /*
-         *  The treedb names to browse on this backend. Required for backends
-         *  whose identity ack's services_roles lists only the connected
-         *  service (e.g. db_history_wz), not the treedbs. When empty the
-         *  picker falls back to services_roles (works for controlcenter-style
-         *  backends that DO list their treedbs there).
-         */
-        treedbs:             Array.isArray(conn.treedbs) ? conn.treedbs : [],
-        /*
-         *  The node services (C_NODE/C_TRANGER of any yuno of the node)
-         *  selected from a Settings scan (see c_treedb_links scan).
+         *  The C_NODE/C_TRANGER services discovered in the connected yuno
+         *  (see c_treedb_links scan), each with its `selected` flag.
          */
         services:            sanitize_services(conn.services)
     };
@@ -410,7 +431,7 @@ function treedb_config_set_selected(gobj, workspace, list)
  *  Add or remove a service from a workspace's selection (toggle),
  *  preserving order for the remaining tabs. `sel` carries the
  *  normalized service entry (treedb_config_conn_services):
- *  {conn_id, svc: {key, service, gclass, yuno_role, yuno_name}, label}.
+ *  {conn_id, svc: {key, service, gclass}, label}.
  *  Legacy persisted entries only have treedb_name — normalize on read.
  ***************************************************************/
 function treedb_config_toggle_selected(gobj, workspace, sel)
@@ -430,8 +451,6 @@ function treedb_config_toggle_selected(gobj, workspace, sel)
             svc_key:     sel.svc.key,
             service:     sel.svc.service,
             gclass:      sel.svc.gclass,
-            yuno_role:   sel.svc.yuno_role || "",
-            yuno_name:   sel.svc.yuno_name || "",
             /*  legacy field name, still read by older selections  */
             treedb_name: sel.svc.service,
             label:       sel.label || sel.svc.service
@@ -453,11 +472,9 @@ function treedb_config_normalize_sel(s)
         return s;
     }
     return Object.assign({}, s, {
-        svc_key:   s.treedb_name || "",
-        service:   s.treedb_name || "",
-        gclass:    "C_NODE",
-        yuno_role: "",
-        yuno_name: ""
+        svc_key: s.treedb_name || "",
+        service: s.treedb_name || "",
+        gclass:  "C_NODE"
     });
 }
 
@@ -600,6 +617,8 @@ export {
     connection_id,
     treedb_config_conn_services,
     treedb_config_set_conn_services,
+    treedb_config_store_scanned_services,
+    treedb_config_set_conn_enabled,
     treedb_config_service_key,
     treedb_config_normalize_sel,
     treedb_config_get_connections,

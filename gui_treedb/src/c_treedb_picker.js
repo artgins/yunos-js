@@ -6,9 +6,8 @@
  *
  *        - lists the configured backend connections (read-only here —
  *          connections are added / edited / removed in Settings);
- *        - shows each connection's live status and its declared treedbs
- *          (or, as a fallback, the treedbs discovered from the identity
- *          ack's services_roles);
+ *        - shows each connection's live status and the services SELECTED
+ *          in Settings (discovered on connect, `selected` flag);
  *        - a checkbox per treedb opens/closes it as a tab in THIS
  *          workspace (per-workspace selection in C_TREEDB_CONFIG); the app
  *          root rebuilds the workspace tabs on the change.
@@ -187,15 +186,14 @@ function status_dot(connected)
 }
 
 /***************************************************************
- *  The services to browse for a connection: the curated `treedbs` list
- *  plus the node services checked after a Settings scan — both
- *  normalized by treedb_config_conn_services.
+ *  The services to browse for a connection: the ones SELECTED in
+ *  Settings among the discovered list (treedb_config_conn_services).
  *
  *  This is the contract — like wattyzer's static route table. We do NOT
  *  fall back to enumerating every `services_roles` key: that offered
  *  NON-treedb services, and sending a treedb `descs` to a ranger fails
- *  with "command not available". When none are configured, the card
- *  shows the "add them in Settings" hint (render_connection).
+ *  with "command not available". When none are selected, the card
+ *  shows the "select them in Settings" hint (render_connection).
  *
  *  C_TRANGER services (raw record stores) only make sense in the Topics
  *  workspace; Graphs keeps to C_NODE (a raw tranger has no hooks/fkeys
@@ -203,7 +201,7 @@ function status_dot(connected)
  ***************************************************************/
 function connection_services(conn, workspace)
 {
-    let list = treedb_config_conn_services(conn);
+    let list = treedb_config_conn_services(conn).filter((s) => s.selected);
     if(workspace !== "topics") {
         list = list.filter((s) => s.gclass !== "C_TRANGER");
     }
@@ -242,10 +240,6 @@ function render_connection(gobj, conn)
                 $svc_label.push(["span",
                     {class: "tag is-warning is-light is-size-7 ml-2"}, "C_TRANGER"]);
             }
-            if(svc.yuno_role) {
-                $svc_label.push(["span", {class: "has-text-grey is-size-7 ml-2"},
-                    svc.yuno_role + (svc.yuno_name ? `^${svc.yuno_name}` : "")]);
-            }
             $treedb_list.appendChild(createElement2(
                 ["label", {class: "checkbox is-block mb-1 PICKER_SERVICE"},
                     [$cb, ...$svc_label]]
@@ -253,8 +247,14 @@ function render_connection(gobj, conn)
         }
     } else if(connected) {
         $treedb_list.appendChild(createElement2(
-            ["p", {class: "is-size-7 has-text-grey", i18n: "no services declared"},
-                "No services declared — add or scan them in Settings."]));
+            ["p", {class: "is-size-7 has-text-grey", i18n: "no services selected"},
+                "No services selected — pick them in Settings."]));
+    } else if(!conn.enabled) {
+        /*  Configured but not enabled: transports only open from the
+         *  Settings connect button.  */
+        $treedb_list.appendChild(createElement2(
+            ["p", {class: "is-size-7 has-text-grey", i18n: "disconnected - connect in settings"},
+                "Disconnected — connect it in Settings."]));
     } else if(!open_error) {
         /*  Only "connecting" while there is no connect failure; a failure is
          *  shown at card level below (independent of the treedbs branch). */

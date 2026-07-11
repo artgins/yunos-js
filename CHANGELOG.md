@@ -22,45 +22,41 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
-- **feat(gui_treedb): node scan + C_TRANGER records browser.** Each Settings
-  connection now points at a node's AGENT and gains a scan button: the scan
-  (owned by `C_TREEDB_LINKS`: `list-yunos` + one
-  `command-yuno service=__yuno__ command=services` per running yuno, plus the
-  agent's own `services`) discovers every `C_NODE` / `C_TRANGER` service of
-  the node and renders them as Tabulator dataTree SUB-ROWS with a checkbox;
-  checked services persist in the connection (`services`) and appear in the
-  picker ("connections" tab) next to the manual `treedbs`. Per-yuno scan
-  failures are reported above the table, never swallowed. Selected services
-  open as workspace tabs:
-    - `C_NODE` → the treedb editors, as before; services living in ANOTHER
-      yuno of the node are reached through the new `C_TREEDB_PROXY` (a named
-      service registered as the hosted view's `gobj_remote_yuno`; its
-      `mt_command_parser` wraps each command in the agent's `command-yuno`
-      and carries the inner command + the view's `__md_command__` in
-      `__md_iev__` — which round-trips the multi-hop forward, unlike the
-      per-hop `command_stack` — then rebuilds the frame the view expects on
-      the answer. The hosted view keeps its normal
-      `gobj_command(gobj_remote_yuno, …)` contract; no realtime
-      `EV_TREEDB_NODE_*` cross-yuno, views refresh on demand);
+- **feat(gui_treedb): per-yuno service discovery, explicit connection
+  lifecycle + C_TRANGER records browser.** Each Settings connection is the
+  `C_IEVENT_CLI` entry to ONE yuno — its public wss url + remote role +
+  service (the wss API offers no cross-yuno listing, so there is no agent
+  scan and no `TreeDBs` column). Lifecycle is explicit: transports open only
+  from the row's connect/disconnect button (persisted `enabled` intent) —
+  editing a row's coordinates DISABLES it until reconnected, so typing in
+  the table never auto-connects — and deleting a row asks for confirmation
+  (shell yes/no dialog). On the first connect of a never-scanned connection
+  `C_TREEDB_LINKS` discovers the yuno's `C_NODE` / `C_TRANGER` services
+  automatically (one `services` command to `__yuno__`) and persists the
+  WHOLE found list in the connection (`services`, each with a `selected`
+  flag); the row's refresh button re-runs the discovery preserving the
+  selection, and failures are reported above the table, never swallowed.
+  The services render as Tabulator dataTree sub-rows whose checkbox edits
+  `selected`; only selected services are offered in the workspace pickers
+  (Topics: `C_NODE` + `C_TRANGER`; Graphs: `C_NODE` only) and open as tabs:
+    - `C_NODE` → the treedb editors, as before;
     - `C_TRANGER` → the new read-only `C_TRANGER_VIEW` (Topics workspace
       only): topic tabs + records table (one-shot `open-list return_data=1
       from_rowid=-N`, needs a backend ≥ the yunetas release restoring the
       c_tranger read commands), generic columns derived from the records,
       full record JSON in the shell dialog, Refresh / Load-more (no polling).
-  The inner service travels in the `command-yuno` COMMAND STRING (not the kw):
-  `kw.service` is what `C_IEVENT_CLI` uses as the ievent `dst_service`, so it
-  must stay the agent's C_AGENT for `command-yuno` to resolve — same
-  mechanism ycommand uses. Selections persist with yuno coordinates
-  (`svc_key`); legacy persisted treedb selections keep working (normalized as
-  direct `C_NODE`). Verified end-to-end against a live local agent (BFF login,
-  cross-yuno scan with correct per-yuno labels, tranger records + JSON dialog,
-  wrapped C_NODE `descs` through the proxy). Authz: scan and wrapped commands
-  address `dst_service`s beyond the connected agent service, which
-  `C_IEVENT_SRV` only routes for superusers (`service="*"`) or users with
-  roles in those services; the per-command authz of the TARGET yuno still
-  governs each command (a wrapped `nodes` read surfaces "No permission to
-  'read'" when the user lacks the role) — rejections surface in the scan error
-  panel, nothing fails silently.
+  The union of every connection's SELECTED services is advertised in the
+  identity_card's `required_services` (a selection change reopens the
+  connection to re-send the card); `C_IEVENT_SRV`/`C_AUTHZ` on the backend
+  still govern each command — rejections surface in the Settings error
+  panel / view banner, nothing fails silently. The manual `treedbs` field is
+  gone (discovery replaces it) and `C_TREEDB_PROXY` — the cross-yuno
+  `command-yuno` wrapper of the earlier agent-scan design — was removed with
+  it (every discovered service lives in the connected yuno and is addressed
+  directly). gobj-ui gains the `yi-plug` / `yi-plug-slash` mask icons for
+  the connect button. Connections persisted by the earlier design come back
+  disabled (no `enabled` flag) with their services re-discovered on the
+  next connect.
 
 - **chore(gui_treedb): dropped the dead `ytable.css` import** — a v1-era
   leftover; nothing in gui_treedb (or the gobj-ui gclasses it hosts) uses its

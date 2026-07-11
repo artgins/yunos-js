@@ -57,7 +57,6 @@ import {register_c_login}           from "./c_login.js";
 import {register_c_treedb_picker}   from "./c_treedb_picker.js";
 import {register_c_treedb_settings} from "./c_treedb_settings.js";
 import {register_c_treedb_view}     from "./c_treedb_view.js";
-import {register_c_treedb_proxy}    from "./c_treedb_proxy.js";
 import {register_c_tranger_view}    from "./c_tranger_view.js";
 import {register_c_app}             from "./c_app.js";
 
@@ -134,7 +133,6 @@ function main()
     register_c_treedb_picker();
     register_c_treedb_settings();
     register_c_treedb_view();
-    register_c_treedb_proxy();
     register_c_tranger_view();
     register_c_app();
 

@@ -361,12 +361,6 @@ function rebuild_workspace_tabs(gobj, ws)
              *  connecting; the tab appears on its first EV_ON_OPEN.  */
             continue;
         }
-        /*  A scanned service of ANOTHER yuno of the node needs its commands
-         *  wrapped in command-yuno (C_TREEDB_PROXY); services of the
-         *  connected yuno (the agent) are addressed directly.  */
-        let conn = config ? treedb_config_get_connection(config, sel.conn_id) : null;
-        let wrapped = !!sel.yuno_role &&
-            sel.yuno_role !== ((conn && conn.remote_yuno_role) || "");
         /*  C_TRANGER services open the raw-records browser (Topics only —
          *  the picker doesn't offer them in Graphs).  */
         let view_gclass = (sel.gclass === "C_TRANGER") ? "C_TRANGER_VIEW" : spec.view;
@@ -389,9 +383,6 @@ function rebuild_workspace_tabs(gobj, ws)
                     treedb_name: sel.service || sel.treedb_name,
                     workspace:   ws,
                     conn_id:     sel.conn_id,
-                    yuno_role:   sel.yuno_role || "",
-                    yuno_name:   sel.yuno_name || "",
-                    wrapped:     wrapped,
                     /*  This tab's route, so the view can deep-link its
                      *  selected topic / operation mode as <base_route>/<seg>. */
                     base_route:  db_tab_route(ws, sel.id),
@@ -525,16 +516,15 @@ function sync_connections(gobj)
      *  from the yuno). The backend's C_AUTHZ only authorizes commands to
      *  the treedb services listed there — with an empty list it grants only
      *  the connected service and silently DROPS a `descs` to treedb_wattyzer.
-     *  Advertise the union of every connection's treedbs so each backend
-     *  grants the subset it hosts. (conn_coords includes treedbs, so a
-     *  treedbs edit reopens that connection to re-send the identity card.)
+     *  Advertise the union of every connection's SELECTED services so each
+     *  backend grants the subset it hosts. (conn_coords includes the
+     *  selection, so a selection change reopens that connection to re-send
+     *  the identity card.)
      */
     let req = {};
     for(let c of conns) {
         for(let svc of treedb_config_conn_services(c)) {
-            /*  Only DIRECT services enter the identity card: wrapped ones
-             *  travel inside command-yuno, gated by the agent itself.  */
-            if(svc.direct) {
+            if(svc.selected) {
                 req[svc.service] = true;
             }
         }
