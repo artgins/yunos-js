@@ -20,7 +20,11 @@ dependencies (`../../../kernel/js/…`) that resolve within the yunetas
 superproject, where this repo is mounted at `yunos/js`. (A standalone clone of
 this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
-## Unreleased
+## 0.4.0 — 2026-07-11
+
+Rides gobj-ui **2.6.0**: the treedb gclasses and `C_YUI_WINDOW` moved to the
+shell confirm/notification helpers, so both SPAs stop bundling the legacy
+`c_yui_main.js` stack (see gobj-ui's CHANGELOG).
 
 - **fix(gui_agent, gui_treedb): `yuno_version` derives from `package.json`.**
   The 0.3.0 release bumped `package.json` but not the hand-written
@@ -62,6 +66,10 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   treedbs and must not bake any one backend's vocabulary; the `col_label`
   cascade falls back to the schema header. One `t()` key was lowercased to
   satisfy the ASCII/lower-case key convention (`c_treedb_settings.js`).
+
+- **style(gui_agent): dropped the top-sub tab-strip margin override** — the
+  `.yui-zone-top-sub .yui-nav-tabs.tabs` fix moved into the shared shell CSS
+  (gobj-ui), so the redundant app-level copy is gone.
 
 
 ## 0.3.0 — 2026-07-08
