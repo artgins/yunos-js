@@ -56,7 +56,19 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   directly). gobj-ui gains the `yi-plug` / `yi-plug-slash` mask icons for
   the connect button. Connections persisted by the earlier design come back
   disabled (no `enabled` flag) with their services re-discovered on the
-  next connect.
+  next connect. Deleting a connection removes it in `C_TREEDB_CONFIG` and
+  reloads the Settings table via `setData` — NOT Tabulator's `row.delete()`,
+  which crashes in `styleRow` ("classList undefined") when the deleted row
+  is a dataTree PARENT (a connection with service sub-rows) and then
+  re-fires on every resize/redraw observer tick.
+
+- **style(gui_treedb): default-size C_TRANGER_VIEW topic tabs + toolbar
+  buttons** — dropped Bulma `is-small` from the `TRANGER_TOPICS` tabs and
+  the Refresh / Load-more buttons (too small to read/tap).
+
+- **chore: untracked the `gui_agent` / `gui_treedb` `deploy-com.sh`
+  scripts** — local operator tooling carrying deploy node names; the files
+  stay on disk, git-ignored from now on.
 
 - **chore(gui_treedb): dropped the dead `ytable.css` import** — a v1-era
   leftover; nothing in gui_treedb (or the gobj-ui gclasses it hosts) uses its
