@@ -558,10 +558,10 @@ function make_columns(gobj)
 
     function del_click(e, cell)
     {
-        if(cell.getData()._child) {
+        let d = cell.getData();
+        if(d._child) {
             return;
         }
-        let row = cell.getRow();
         let shell = gobj_parent(gobj);
         yui_shell_confirm_yesno(shell, "are you sure", {
             title:     "remove",
@@ -573,9 +573,20 @@ function make_columns(gobj)
             if(!yes) {
                 return;
             }
-            row.delete().then(() => {
-                persist(gobj);
-            });
+            /*
+             *  Remove in config + reload via setData — NOT Tabulator's
+             *  row.delete(): deleting a dataTree PARENT row (a connection
+             *  with service sub-rows) crashes Tabulator in styleRow
+             *  ("classList undefined") while it re-renders the orphaned
+             *  child elements.
+             */
+            let config = gobj_find_service("treedb_config", false);
+            if(config) {
+                let list = treedb_config_get_connections(config)
+                    .filter((c) => c && c.id !== d.id);
+                treedb_config_set_connections(config, list);
+            }
+            reload_table(gobj);
         });
     }
 
