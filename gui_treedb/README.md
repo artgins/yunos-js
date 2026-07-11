@@ -10,9 +10,37 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   the rail (Topics / Graphs / Settings). Views are mounted by gclass name.
 - **Connections:** the user configures backends at runtime in **Settings** (an
   editable Tabulator table: `url`, `remote_yuno_role`, `remote_yuno_service`,
-  `treedbs`), persisted in browser localStorage (`C_TREEDB_CONFIG`). The picker
-  (tab 0 of Topics/Graphs) selects which treedbs to open per workspace.
-- **Transport:** `C_TREEDB_LINKS` owns one `C_IEVENT_CLI` per connection.
+  `treedbs`), persisted in browser localStorage (`C_TREEDB_CONFIG`). Each URL
+  points at a node's **agent**. The picker (tab 0 of Topics/Graphs) selects
+  which services to open per workspace.
+- **Node scan:** the scan button of a Settings row discovers, via that agent
+  (`list-yunos` + `command-yuno command=services service=__yuno__` per running
+  yuno, plus the agent's own `services`), every **`C_NODE` / `C_TRANGER`**
+  service of the node; they render as dataTree sub-rows with a checkbox and
+  the checked ones persist in the connection (`services`) and show up in the
+  picker next to the manual `treedbs` list. Scan failures are reported above
+  the table.
+- **Transport:** `C_TREEDB_LINKS` owns one `C_IEVENT_CLI` per connection (and
+  runs the scans — it is a named service, so command answers route back to
+  it). Services of the **connected yuno** are addressed directly
+  (`kw.service`); services of **another yuno of the node** go through
+  `C_TREEDB_PROXY`, which wraps each command in the agent's `command-yuno`
+  and re-injects the answer with the inner command's `command_stack`, so the
+  hosted views keep their normal `gobj_command(gobj_remote_yuno, …)` contract
+  (no realtime `EV_TREEDB_NODE_*` cross-yuno — those views refresh on
+  demand).
+- **Tranger browser:** selected `C_TRANGER` services (Topics workspace only)
+  open the read-only `C_TRANGER_VIEW`: topic tabs + a records table fed by
+  one-shot `open-list return_data=1 from_rowid=-N` reads (requires a backend
+  with the restored c_tranger read commands), full record JSON in the shell
+  dialog, Refresh / Load-more buttons (no polling).
+- **Authorization note:** the scan and every wrapped (cross-yuno) command
+  address `dst_service`s beyond the connected agent service (`__yuno__`, the
+  scanned service names), and `C_IEVENT_SRV` only routes them for channels
+  whose user is a **superuser** (a role with `service="*"`) or has roles in
+  those services — the same model as the gui_agent control plane. A
+  non-authorized user sees the rejection in the scan error panel / view
+  banner; nothing fails silently.
 - **Auth (multi-backend):** the SPA logs in once at the co-located **auth_bff**
   (BFF httpOnly cookie, same origin). Because that cookie cannot travel to a
   backend on another host, the SPA fetches the access_token from the BFF

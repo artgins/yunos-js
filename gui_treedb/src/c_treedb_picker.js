@@ -31,6 +31,7 @@ import {t} from "i18next";
 
 import {
     treedb_config_get_connections,
+    treedb_config_conn_services,
     treedb_config_is_selected,
     treedb_config_toggle_selected,
     sel_id,
@@ -186,20 +187,27 @@ function status_dot(connected)
 }
 
 /***************************************************************
- *  The treedbs to browse for a connection: the curated `treedbs` list
- *  configured per connection in Settings.
+ *  The services to browse for a connection: the curated `treedbs` list
+ *  plus the node services checked after a Settings scan — both
+ *  normalized by treedb_config_conn_services.
  *
  *  This is the contract — like wattyzer's static route table. We do NOT
  *  fall back to enumerating every `services_roles` key: that offered
- *  NON-treedb services (e.g. the raw `tranger_authz` C_TRANGER that backs
- *  `treedb_authzs`), and sending a treedb `descs` to a ranger fails with
- *  "command not available". When none are configured, the card shows the
- *  "add them in Settings" hint (render_connection). A future enhancement
- *  could discover real treedbs via the backend `treedbs` command (C_NODE).
+ *  NON-treedb services, and sending a treedb `descs` to a ranger fails
+ *  with "command not available". When none are configured, the card
+ *  shows the "add them in Settings" hint (render_connection).
+ *
+ *  C_TRANGER services (raw record stores) only make sense in the Topics
+ *  workspace; Graphs keeps to C_NODE (a raw tranger has no hooks/fkeys
+ *  to draw).
  ***************************************************************/
-function connection_treedbs(conn)
+function connection_services(conn, workspace)
 {
-    return (Array.isArray(conn.treedbs) ? conn.treedbs.slice() : []).sort();
+    let list = treedb_config_conn_services(conn);
+    if(workspace !== "topics") {
+        list = list.filter((s) => s.gclass !== "C_TRANGER");
+    }
+    return list.sort((a, b) => a.key.localeCompare(b.key));
 }
 
 /***************************************************************
@@ -212,29 +220,41 @@ function render_connection(gobj, conn)
     let config = gobj_find_service("treedb_config", false);
     let connected = links ? treedb_links_is_connected(links, conn.id) : false;
     let open_error = (links && !connected) ? treedb_links_get_open_error(links, conn.id) : null;
-    let treedbs = connection_treedbs(conn);
+    let services = connection_services(conn, workspace);
 
-    let $treedb_list = createElement2(["div", {class: "ytreedb-treedbs mt-2"}, []]);
-    if(treedbs.length) {
-        for(let name of treedbs) {
-            let id = sel_id(conn.id, name);
+    let $treedb_list = createElement2(["div", {class: "ytreedb-treedbs mt-2 PICKER_SERVICES"}, []]);
+    if(services.length) {
+        for(let svc of services) {
+            let id = sel_id(conn.id, svc.key);
             let checked = treedb_config_is_selected(config, workspace, id);
             let $cb = createElement2(["input", {type: "checkbox"}]);
             $cb.checked = !!checked;
             $cb.disabled = !connected;
             $cb.addEventListener("change", () => {
-                treedb_config_toggle_selected(config, workspace,
-                    {conn_id: conn.id, treedb_name: name, label: `${name} · ${conn.label}`});
+                treedb_config_toggle_selected(config, workspace, {
+                    conn_id: conn.id,
+                    svc:     svc,
+                    label:   `${svc.service} · ${conn.label}`
+                });
             });
+            let $svc_label = [["span", {class: "ml-2"}, svc.service]];
+            if(svc.gclass === "C_TRANGER") {
+                $svc_label.push(["span",
+                    {class: "tag is-warning is-light is-size-7 ml-2"}, "C_TRANGER"]);
+            }
+            if(svc.yuno_role) {
+                $svc_label.push(["span", {class: "has-text-grey is-size-7 ml-2"},
+                    svc.yuno_role + (svc.yuno_name ? `^${svc.yuno_name}` : "")]);
+            }
             $treedb_list.appendChild(createElement2(
-                ["label", {class: "checkbox is-block mb-1"},
-                    [$cb, ["span", {class: "ml-2"}, name]]]
+                ["label", {class: "checkbox is-block mb-1 PICKER_SERVICE"},
+                    [$cb, ...$svc_label]]
             ));
         }
     } else if(connected) {
         $treedb_list.appendChild(createElement2(
-            ["p", {class: "is-size-7 has-text-grey", i18n: "no treedbs declared"},
-                "No treedbs declared — add them in Settings."]));
+            ["p", {class: "is-size-7 has-text-grey", i18n: "no services declared"},
+                "No services declared — add or scan them in Settings."]));
     } else if(!open_error) {
         /*  Only "connecting" while there is no connect failure; a failure is
          *  shown at card level below (independent of the treedbs branch). */

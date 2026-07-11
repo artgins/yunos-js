@@ -51,10 +51,13 @@ const GCLASS_NAME = "C_TREEDB_VIEW";
  ***************************************************************/
 const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",  0,  null,  "Subscriber of output events"),
-SDATA(data_type_t.DTP_STRING,   "view_gclass", 0,  "",    "Treedb view gclass to host (C_YUI_TREEDB_TOPICS | C_YUI_TREEDB_GRAPH)"),
-SDATA(data_type_t.DTP_STRING,   "treedb_name", 0,  "",    "TreeDB to browse"),
+SDATA(data_type_t.DTP_STRING,   "view_gclass", 0,  "",    "View gclass to host (C_YUI_TREEDB_TOPICS | C_YUI_TREEDB_GRAPH | C_TRANGER_VIEW)"),
+SDATA(data_type_t.DTP_STRING,   "treedb_name", 0,  "",    "Remote service to browse (treedb/tranger service name)"),
 SDATA(data_type_t.DTP_STRING,   "workspace",   0,  "",    "Owning workspace (for a unique service name)"),
 SDATA(data_type_t.DTP_STRING,   "conn_id",     0,  "",    "Connection id (resolves the live transport)"),
+SDATA(data_type_t.DTP_STRING,   "yuno_role",   0,  "",    "Owning yuno role (scanned services)"),
+SDATA(data_type_t.DTP_STRING,   "yuno_name",   0,  "",    "Owning yuno name (scanned services)"),
+SDATA(data_type_t.DTP_BOOLEAN,  "wrapped",     0,  false, "Service lives in ANOTHER yuno: wrap commands via C_TREEDB_PROXY"),
 SDATA(data_type_t.DTP_BOOLEAN,  "system",      0,  false, "System treedb view"),
 SDATA(data_type_t.DTP_STRING,   "title",       0,  "",    "Tab title"),
 SDATA(data_type_t.DTP_STRING,   "base_route",  0,  "",    "This view's declared tab route (for the topic/mode deep link)"),
@@ -64,6 +67,7 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     view:         null,   /*  the hosted treedb view (a service)  */
+    proxy:        null,   /*  command-yuno proxy (wrapped services only)  */
     sel_event:    null,   /*  child event bridged to the URL subpath  */
     seg:          null,   /*  last applied/navigated subpath (dedup guard)  */
     rebind_timer: null,   /*  pending deferred transport rebind  */
@@ -156,6 +160,9 @@ function mt_start(gobj)
         gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
     }
 
+    if(priv.proxy && !gobj_is_running(priv.proxy)) {
+        gobj_start(priv.proxy);
+    }
     if(priv.view && !gobj_is_running(priv.view)) {
         gobj_start(priv.view);
     }
@@ -183,6 +190,9 @@ function mt_stop(gobj)
     if(priv.view && gobj_is_running(priv.view)) {
         gobj_stop(priv.view);
     }
+    if(priv.proxy && gobj_is_running(priv.proxy)) {
+        gobj_stop(priv.proxy);
+    }
 }
 
 /***************************************************************
@@ -197,6 +207,7 @@ function mt_destroy(gobj)
 {
     let priv = gobj.priv;
     priv.view = null;
+    priv.proxy = null;
     let $c = gobj_read_attr(gobj, "$container");
     if($c && $c.parentNode) {
         $c.parentNode.removeChild($c);
@@ -215,22 +226,29 @@ function mt_destroy(gobj)
 
 
 /***************************************************************
- *  A unique, lower-case service name for the hosted view.
+ *  A unique, lower-case service name for the hosted view. The owning
+ *  yuno is part of the name: two yunos of the node may expose a
+ *  service with the same name.
  ***************************************************************/
 function service_name(gobj)
 {
     let ws      = gobj_read_attr(gobj, "workspace")   || "ws";
     let conn_id = gobj_read_attr(gobj, "conn_id")     || "conn";
     let treedb  = gobj_read_attr(gobj, "treedb_name") || "db";
-    let raw = `tv_${ws}_${conn_id}_${treedb}`;
+    let role    = gobj_read_attr(gobj, "yuno_role")   || "";
+    let name    = gobj_read_attr(gobj, "yuno_name")   || "";
+    let raw = `tv_${ws}_${conn_id}_${role}_${name}_${treedb}`;
     return raw.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
 }
 
 /***************************************************************
  *  Create the real treedb view as a NAMED SERVICE so C_IEVENT_CLI can
  *  route its command answers / EV_TREEDB_NODE_* back (gobj_find_service).
- *  Unique, lower-case name per (workspace, connection, treedb). Writes
- *  the hosted view's $container as ours so the shell mounts/toggles the
+ *  Unique, lower-case name per (workspace, connection, yuno, service).
+ *  A `wrapped` service (living in another yuno of the node) gets a
+ *  C_TREEDB_PROXY as its gobj_remote_yuno: same command contract, each
+ *  command travels wrapped in the agent's command-yuno. Writes the
+ *  hosted view's $container as ours so the shell mounts/toggles the
  *  same DOM. Returns the view (or null — error already logged).
  ***************************************************************/
 function build_hosted_view(gobj, remote)
@@ -238,11 +256,31 @@ function build_hosted_view(gobj, remote)
     let priv = gobj.priv;
     let view_gclass = gobj_read_attr(gobj, "view_gclass");
 
+    let remote_for_view = remote;
+    if(gobj_read_attr(gobj, "wrapped")) {
+        let proxy = gobj_create_service(
+            service_name(gobj) + "_px",
+            "C_TREEDB_PROXY",
+            {
+                iev:       remote,
+                yuno_role: gobj_read_attr(gobj, "yuno_role"),
+                yuno_name: gobj_read_attr(gobj, "yuno_name")
+            },
+            gobj
+        );
+        priv.proxy = proxy;
+        if(!proxy) {
+            log_error(`${GCLASS_NAME}: cannot create command proxy`);
+            return null;
+        }
+        remote_for_view = proxy;
+    }
+
     let view = gobj_create_service(
         service_name(gobj),
         view_gclass,
         {
-            gobj_remote_yuno: remote,
+            gobj_remote_yuno: remote_for_view,
             treedb_name:      gobj_read_attr(gobj, "treedb_name"),
             system:           gobj_read_attr(gobj, "system")
         },
@@ -252,6 +290,9 @@ function build_hosted_view(gobj, remote)
     if(!view) {
         log_error(`${GCLASS_NAME}: cannot create hosted view '${view_gclass}'`);
         return null;
+    }
+    if(priv.proxy) {
+        gobj_write_attr(priv.proxy, "view", view);
     }
 
     /*  The treedb view builds its own $container in ITS mt_create; expose
@@ -285,12 +326,26 @@ function apply_seg(gobj, seg)
 }
 
 /***************************************************************
+ *  The live transport the hosted view is effectively bound to: the
+ *  proxy's iev when wrapped, else the view's own gobj_remote_yuno.
+ ***************************************************************/
+function bound_transport(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.proxy) {
+        return gobj_read_attr(priv.proxy, "iev");
+    }
+    return priv.view ? gobj_read_attr(priv.view, "gobj_remote_yuno") : null;
+}
+
+/***************************************************************
  *  The connection's transport was RECREATED (token-refresh reopen or a
  *  coords edit): the hosted view holds a pointer to the DESTROYED iev
  *  (baked as its gobj_remote_yuno at create, plus its EV_TREEDB_NODE_*
  *  subscriptions). Rebuild it in place against the new transport: destroy
- *  the old service, create a fresh one (it resolves + subscribes the new
- *  iev in its mt_create) and swap the $container in the mounted DOM.
+ *  the old service (and proxy), create fresh ones (they resolve +
+ *  subscribe the new iev in their mt_create) and swap the $container in
+ *  the mounted DOM.
  ***************************************************************/
 function rebind_hosted_view(gobj)
 {
@@ -304,7 +359,7 @@ function rebind_hosted_view(gobj)
     if(!remote) {
         return;     /*  connection gone meanwhile; the app prunes the tab  */
     }
-    if(priv.view && gobj_read_attr(priv.view, "gobj_remote_yuno") === remote) {
+    if(priv.view && bound_transport(gobj) === remote) {
         return;     /*  same transport (plain WS flap) — nothing to rebind  */
     }
 
@@ -327,6 +382,13 @@ function rebind_hosted_view(gobj)
         }
         gobj_destroy(priv.view);
         priv.view = null;
+    }
+    if(priv.proxy) {
+        if(gobj_is_running(priv.proxy)) {
+            gobj_stop(priv.proxy);
+        }
+        gobj_destroy(priv.proxy);
+        priv.proxy = null;
     }
 
     let view = build_hosted_view(gobj, remote);
@@ -352,8 +414,13 @@ function rebind_hosted_view(gobj)
         }
     }
 
-    if(gobj_is_running(gobj) && !gobj_is_running(view)) {
-        gobj_start(view);
+    if(gobj_is_running(gobj)) {
+        if(priv.proxy && !gobj_is_running(priv.proxy)) {
+            gobj_start(priv.proxy);
+        }
+        if(!gobj_is_running(view)) {
+            gobj_start(view);
+        }
     }
 
     /*  Restore the URL-selected topic / operation mode on the fresh view.  */
@@ -434,7 +501,7 @@ function ac_transport_open(gobj, event, kw, src)
     if(!remote) {
         return 0;
     }
-    if(priv.view && gobj_read_attr(priv.view, "gobj_remote_yuno") === remote) {
+    if(priv.view && bound_transport(gobj) === remote) {
         return 0;   /*  same transport — subscriptions resend on their own  */
     }
     if(priv.rebind_timer) {

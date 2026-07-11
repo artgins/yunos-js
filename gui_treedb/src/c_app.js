@@ -55,6 +55,8 @@ import {
     treedb_config_remove_selected,
     treedb_config_get_active_tab,
     treedb_config_set_active_tab,
+    treedb_config_normalize_sel,
+    treedb_config_conn_services,
     sel_parse,
 } from "./c_treedb_config.js";
 
@@ -346,7 +348,11 @@ function rebuild_workspace_tabs(gobj, ws)
     let selected = config ? treedb_config_get_selected(config, ws) : [];
     let items = [picker_item(ws)];
 
-    for(let sel of selected) {
+    for(let raw_sel of selected) {
+        let sel = treedb_config_normalize_sel(raw_sel);
+        if(!sel) {
+            continue;
+        }
         let iev = links ? treedb_links_get_iev(links, sel.conn_id) : null;
         let connected = links ? treedb_links_is_connected(links, sel.conn_id) : false;
         let ever = !!priv.ever_connected[sel.conn_id];
@@ -355,10 +361,19 @@ function rebuild_workspace_tabs(gobj, ws)
              *  connecting; the tab appears on its first EV_ON_OPEN.  */
             continue;
         }
+        /*  A scanned service of ANOTHER yuno of the node needs its commands
+         *  wrapped in command-yuno (C_TREEDB_PROXY); services of the
+         *  connected yuno (the agent) are addressed directly.  */
+        let conn = config ? treedb_config_get_connection(config, sel.conn_id) : null;
+        let wrapped = !!sel.yuno_role &&
+            sel.yuno_role !== ((conn && conn.remote_yuno_role) || "");
+        /*  C_TRANGER services open the raw-records browser (Topics only —
+         *  the picker doesn't offer them in Graphs).  */
+        let view_gclass = (sel.gclass === "C_TRANGER") ? "C_TRANGER_VIEW" : spec.view;
         items.push({
             id:       "db-" + sel.id,
-            name:     sel.label || sel.treedb_name,
-            icon:     spec.icon,
+            name:     sel.label || sel.service || sel.treedb_name,
+            icon:     (sel.gclass === "C_TRANGER") ? "yi-floppy-disk" : spec.icon,
             route:    db_tab_route(ws, sel.id),
             /*  Red label while the backend is dropped; the view stays mounted. */
             class:    connected ? "" : "yui-nav-disconnected",
@@ -370,10 +385,13 @@ function rebuild_workspace_tabs(gobj, ws)
                  *  shell child is not findable by gobj_find_service).  */
                 gclass:    "C_TREEDB_VIEW",
                 kw: {
-                    view_gclass: spec.view,
-                    treedb_name: sel.treedb_name,
+                    view_gclass: view_gclass,
+                    treedb_name: sel.service || sel.treedb_name,
                     workspace:   ws,
                     conn_id:     sel.conn_id,
+                    yuno_role:   sel.yuno_role || "",
+                    yuno_name:   sel.yuno_name || "",
+                    wrapped:     wrapped,
                     /*  This tab's route, so the view can deep-link its
                      *  selected topic / operation mode as <base_route>/<seg>. */
                     base_route:  db_tab_route(ws, sel.id),
@@ -513,8 +531,12 @@ function sync_connections(gobj)
      */
     let req = {};
     for(let c of conns) {
-        for(let db of (c.treedbs || [])) {
-            req[db] = true;
+        for(let svc of treedb_config_conn_services(c)) {
+            /*  Only DIRECT services enter the identity card: wrapped ones
+             *  travel inside command-yuno, gated by the agent itself.  */
+            if(svc.direct) {
+                req[svc.service] = true;
+            }
         }
     }
     gobj_write_attr(gobj_yuno(), "required_services", Object.keys(req));

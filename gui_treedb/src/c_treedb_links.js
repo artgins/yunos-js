@@ -39,13 +39,21 @@ import {
     gobj_start_tree, gobj_stop_tree, gobj_destroy,
     gobj_is_running,
     gobj_current_state,
+    gobj_command,
+    msg_iev_get_stack,
+    kw_get_str, kw_get_dict,
 } from "@yuneta/gobj-js";
+
+import {treedb_config_conn_services} from "./c_treedb_config.js";
 
 
 /***************************************************************
  *              Constants
  ***************************************************************/
 const GCLASS_NAME = "C_TREEDB_LINKS";
+
+/*  A scan that gets no full answer set gives up after this.  */
+const SCAN_TIMEOUT_MS = 15000;
 
 
 /***************************************************************
@@ -57,9 +65,10 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    conns:       null,  /*  conn_id  -> { iev, name }      */
+    conns:       null,  /*  conn_id  -> { iev, name, role }  */
     by_name:     null,  /*  iev name -> conn_id            */
     open_errors: null,  /*  conn_id  -> { url, reason }  (last connect failure)  */
+    scans:       null,  /*  conn_id  -> in-flight node scan state  */
     token:       "",    /*  forwarded access_token (jwt)   */
     seq:         0,     /*  monotonic iev-name counter     */
 };
@@ -85,6 +94,7 @@ function mt_create(gobj)
     priv.conns = {};
     priv.by_name = {};
     priv.open_errors = {};
+    priv.scans = {};
     priv.token = "";
     priv.seq = 0;
 
@@ -183,7 +193,12 @@ function treedb_links_ensure(gobj, conn)
         subscriber:          gobj
     }, gobj_yuno());
 
-    priv.conns[conn.id] = {iev: iev, name: name, coords: conn_coords(conn)};
+    priv.conns[conn.id] = {
+        iev: iev,
+        name: name,
+        coords: conn_coords(conn),
+        role: conn.remote_yuno_role || ""
+    };
     priv.by_name[name] = conn.id;
 
     gobj_start_tree(iev);
@@ -197,12 +212,19 @@ function treedb_links_ensure(gobj, conn)
  ***************************************************************/
 function conn_coords(conn)
 {
-    /*  treedbs is included so editing it reopens the connection: it feeds
-     *  the yuno's required_services, which is baked into the identity_card
-     *  the backend uses to authorize per-treedb command access.  */
+    /*  treedbs and the DIRECT scanned services are included so editing them
+     *  reopens the connection: they feed the yuno's required_services, which
+     *  is baked into the identity_card the backend uses to authorize
+     *  per-service command access.  */
+    let direct_scanned = treedb_config_conn_services(conn)
+        .filter((s) => s.direct && s.yuno_role)
+        .map((s) => s.service)
+        .sort()
+        .join(",");
     return (conn.url || "") + "|" + (conn.remote_yuno_role || "")
         + "|" + (conn.remote_yuno_service || "")
-        + "|" + (Array.isArray(conn.treedbs) ? conn.treedbs.join(",") : "");
+        + "|" + (Array.isArray(conn.treedbs) ? conn.treedbs.join(",") : "")
+        + "|" + direct_scanned;
 }
 
 /***************************************************************
@@ -275,12 +297,94 @@ function treedb_links_is_connected(gobj, conn_id)
 }
 
 /***************************************************************
+ *  Scan the node behind a connection: which C_NODE / C_TRANGER services
+ *  each running yuno exposes. The connection must point at the node's
+ *  AGENT: the scan runs `list-yunos` there, then one
+ *  `command-yuno command=services service=__yuno__` per running yuno
+ *  (plus a direct `services` for the agent yuno itself). Results are
+ *  published as EV_TREEDB_SCAN_DONE {conn_id, yunos, errors}; a scan
+ *  that cannot start (or times out) ends in the same event with the
+ *  failure in `errors` (EV_TREEDB_SCAN_ERROR when it cannot even start).
+ *
+ *  This service is the requester (not the Settings view) because command
+ *  answers are routed back by service name and the shell mounts views as
+ *  pure children.
+ ***************************************************************/
+function treedb_links_scan(gobj, conn_id)
+{
+    let priv = gobj.priv;
+    let e = priv.conns[conn_id];
+    let iev = (e && e.iev) ? e.iev : null;
+    if(!iev || gobj_current_state(iev) !== "ST_SESSION") {
+        gobj_publish_event(gobj, "EV_TREEDB_SCAN_ERROR",
+            {conn_id: conn_id, error: "backend not connected"});
+        return -1;
+    }
+    if(priv.scans[conn_id]) {
+        return 0;   /*  scan already in progress  */
+    }
+    priv.scans[conn_id] = {
+        pending: 0,
+        yunos:   [],
+        errors:  [],
+        timer:   setTimeout(function() {
+            finish_scan(gobj, conn_id, "scan timeout");
+        }, SCAN_TIMEOUT_MS)
+    };
+
+    /*  The connected yuno itself (the agent): its own services.  */
+    priv.scans[conn_id].pending++;
+    gobj_command(iev, "services", {service: "__yuno__"}, gobj);
+
+    /*  The yunos the agent manages.  */
+    priv.scans[conn_id].pending++;
+    gobj_command(iev, "list-yunos", {}, gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  True while a connection's scan is in flight.
+ ***************************************************************/
+function treedb_links_is_scanning(gobj, conn_id)
+{
+    return !!gobj.priv.scans[conn_id];
+}
+
+/***************************************************************
+ *  Close a scan and publish its (possibly partial) result.
+ ***************************************************************/
+function finish_scan(gobj, conn_id, error)
+{
+    let priv = gobj.priv;
+    let scan = priv.scans[conn_id];
+    if(!scan) {
+        return;
+    }
+    delete priv.scans[conn_id];
+    if(scan.timer) {
+        clearTimeout(scan.timer);
+        scan.timer = null;
+    }
+    if(error) {
+        scan.errors.push({yuno: "", error: error});
+    }
+    gobj_publish_event(gobj, "EV_TREEDB_SCAN_DONE", {
+        conn_id: conn_id,
+        yunos:   scan.yunos,
+        errors:  scan.errors
+    });
+}
+
+/***************************************************************
  *  Tear down one connection's transport.
  ***************************************************************/
 function treedb_links_close(gobj, conn_id)
 {
     let priv = gobj.priv;
     delete priv.open_errors[conn_id];
+    if(priv.scans[conn_id]) {
+        finish_scan(gobj, conn_id, "connection closed");
+    }
     let e = priv.conns[conn_id];
     if(!e) {
         return;
@@ -377,7 +481,103 @@ function ac_on_close(gobj, event, kw, src)
     if(conn_id && priv.conns[conn_id]) {
         priv.conns[conn_id].services_roles = {};
     }
+    if(conn_id && priv.scans[conn_id]) {
+        finish_scan(gobj, conn_id, "connection closed");
+    }
     return republish(gobj, src, "EV_ON_CLOSE", kw);
+}
+
+/***************************************************************
+ *  Answer to a scan command (we only send commands while scanning,
+ *  so any answer routed to this service belongs to a scan).
+ ***************************************************************/
+function ac_mt_command_answer(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let conn_id = priv.by_name[gobj_name(src)] || "";
+    let scan = conn_id ? priv.scans[conn_id] : null;
+
+    let stack = msg_iev_get_stack(gobj, kw, "command_stack", true);
+    let command = kw_get_str(gobj, stack, "command", "", 0);
+    let kw_command = kw_get_dict(gobj, stack, "kw", {}, 0);
+
+    if(!scan) {
+        /*  Late answer of a finished/timed-out scan.  */
+        return 0;
+    }
+
+    let result = (kw && kw.result !== undefined) ? kw.result : -1;
+    let comment = (kw && kw.comment) || "";
+    let data = kw ? kw.data : null;
+
+    switch(command) {
+        case "list-yunos":
+            scan.pending--;
+            if(result < 0) {
+                scan.errors.push({yuno: "", error: String(comment || "list-yunos failed")});
+            } else {
+                let rows = Array.isArray(data) ? data : [];
+                let iev = treedb_links_get_iev(gobj, conn_id);
+                for(let y of rows) {
+                    if(!y || y.yuno_disabled === true || y.yuno_running !== true) {
+                        continue;
+                    }
+                    scan.pending++;
+                    gobj_command(iev, "command-yuno", {
+                        yuno_role: y.yuno_role || "",
+                        yuno_name: y.yuno_name || "",
+                        command:   "services",
+                        service:   "__yuno__",
+                        __md_command__: {
+                            yuno_role: y.yuno_role || "",
+                            yuno_name: y.yuno_name || ""
+                        }
+                    }, gobj);
+                }
+            }
+            break;
+
+        case "services":
+        case "command-yuno": {
+            scan.pending--;
+            let e = priv.conns[conn_id];
+            let yuno_role, yuno_name;
+            if(command === "services") {
+                /*  the connected yuno itself (the agent)  */
+                yuno_role = (e && e.role) || "";
+                yuno_name = "";
+            } else {
+                yuno_role = kw_get_str(gobj, kw_command, "yuno_role", "", 0);
+                yuno_name = kw_get_str(gobj, kw_command, "yuno_name", "", 0);
+            }
+            if(result < 0) {
+                scan.errors.push({
+                    yuno:  yuno_name ? `${yuno_role}^${yuno_name}` : yuno_role,
+                    error: String(comment || "services failed")
+                });
+            } else {
+                let rows = Array.isArray(data) ? data : [];
+                let services = rows
+                    .filter((r) => r && (r.gclass === "C_NODE" || r.gclass === "C_TRANGER"))
+                    .map((r) => ({service: r.service, gclass: r.gclass}));
+                scan.yunos.push({
+                    yuno_role: yuno_role,
+                    yuno_name: yuno_name,
+                    services:  services
+                });
+            }
+            break;
+        }
+
+        default:
+            log_error(`${GCLASS_NAME}: unexpected command answer: '${command}'`);
+            return 0;
+    }
+
+    if(scan.pending <= 0) {
+        finish_scan(gobj, conn_id, null);
+    }
+    return 0;
 }
 
 function ac_on_id_nak(gobj, event, kw, src)
@@ -442,23 +642,29 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const states = [
         ["ST_IDLE", [
-            ["EV_ON_OPEN",       ac_on_open,       null],
-            ["EV_ON_CLOSE",      ac_on_close,      null],
-            ["EV_ON_ID_NAK",     ac_on_id_nak,     null],
-            ["EV_ON_OPEN_ERROR", ac_on_open_error, null]
+            ["EV_ON_OPEN",            ac_on_open,            null],
+            ["EV_ON_CLOSE",           ac_on_close,           null],
+            ["EV_ON_ID_NAK",          ac_on_id_nak,          null],
+            ["EV_ON_OPEN_ERROR",      ac_on_open_error,      null],
+            ["EV_MT_COMMAND_ANSWER",  ac_mt_command_answer,  null]
         ]]
     ];
 
     /*---------------------------------------------*
      *          Events
      *  Re-published to the app root (optional subscriber).
+     *  EV_MT_COMMAND_ANSWER must be PUBLIC: C_IEVENT_CLI routes command
+     *  answers back to this service by name and checks that flag.
      *---------------------------------------------*/
     const out = event_flag_t.EVF_OUTPUT_EVENT | event_flag_t.EVF_NO_WARN_SUBS;
     const event_types = [
-        ["EV_ON_OPEN",       out],
-        ["EV_ON_CLOSE",      out],
-        ["EV_ON_ID_NAK",     out],
-        ["EV_ON_OPEN_ERROR", out]
+        ["EV_ON_OPEN",            out],
+        ["EV_ON_CLOSE",           out],
+        ["EV_ON_ID_NAK",          out],
+        ["EV_ON_OPEN_ERROR",      out],
+        ["EV_TREEDB_SCAN_DONE",   out],
+        ["EV_TREEDB_SCAN_ERROR",  out],
+        ["EV_MT_COMMAND_ANSWER",  event_flag_t.EVF_PUBLIC_EVENT]
     ];
 
     __gclass__ = gclass_create(
@@ -499,6 +705,8 @@ export {
     treedb_links_get_services_roles,
     treedb_links_get_open_error,
     treedb_links_is_connected,
+    treedb_links_scan,
+    treedb_links_is_scanning,
     treedb_links_close,
     treedb_links_close_all,
     treedb_links_reopen,

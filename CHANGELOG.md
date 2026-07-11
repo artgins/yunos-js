@@ -22,6 +22,34 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): node scan + C_TRANGER records browser.** Each Settings
+  connection now points at a node's AGENT and gains a scan button: the scan
+  (owned by `C_TREEDB_LINKS`: `list-yunos` + one
+  `command-yuno command=services service=__yuno__` per running yuno, plus the
+  agent's own `services`) discovers every `C_NODE` / `C_TRANGER` service of
+  the node and renders them as Tabulator dataTree SUB-ROWS with a checkbox;
+  checked services persist in the connection (`services`) and appear in the
+  picker ("connections" tab) next to the manual `treedbs`. Per-yuno scan
+  failures are reported above the table, never swallowed. Selected services
+  open as workspace tabs:
+    - `C_NODE` → the treedb editors, as before; services living in ANOTHER
+      yuno of the node are reached through the new `C_TREEDB_PROXY` (a named
+      service that wraps each command in the agent's `command-yuno` and
+      rewrites the echoed `command_stack` before re-injecting
+      `EV_MT_COMMAND_ANSWER` — the hosted view keeps its normal contract; no
+      realtime `EV_TREEDB_NODE_*` cross-yuno, views refresh on demand);
+    - `C_TRANGER` → the new read-only `C_TRANGER_VIEW` (Topics workspace
+      only): topic tabs + records table (one-shot `open-list return_data=1
+      from_rowid=-N`, needs a backend ≥ the yunetas release restoring the
+      c_tranger read commands), generic columns derived from the records,
+      full record JSON in the shell dialog, Refresh / Load-more (no polling).
+  Selections persist with yuno coordinates (`svc_key`); legacy persisted
+  treedb selections keep working (normalized as direct `C_NODE`). Authz: scan
+  and wrapped commands address `dst_service`s beyond the connected agent
+  service, which `C_IEVENT_SRV` only routes for superusers (`service="*"`) or
+  users with roles in those services — rejections surface in the scan error
+  panel, nothing fails silently.
+
 - **chore(gui_treedb): dropped the dead `ytable.css` import** — a v1-era
   leftover; nothing in gui_treedb (or the gobj-ui gclasses it hosts) uses its
   classes, and gobj-ui 3.0.0 removed the file with the rest of the legacy
