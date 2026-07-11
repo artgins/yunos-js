@@ -40,8 +40,8 @@ import {
     gobj_is_running,
     gobj_current_state,
     gobj_command,
-    msg_iev_get_stack,
-    kw_get_str, kw_get_dict,
+    msg_iev_write_key, msg_iev_read_key,
+    kw_get_str,
 } from "@yuneta/gobj-js";
 
 import {treedb_config_conn_services} from "./c_treedb_config.js";
@@ -332,13 +332,19 @@ function treedb_links_scan(gobj, conn_id)
         }, SCAN_TIMEOUT_MS)
     };
 
-    /*  The connected yuno itself (the agent): its own services.  */
+    /*  The connected yuno itself (the agent): its own services. Direct
+     *  `services` command to the agent's C_YUNO (dst_service=__yuno__).  */
     priv.scans[conn_id].pending++;
-    gobj_command(iev, "services", {service: "__yuno__"}, gobj);
+    let kw_self = {service: "__yuno__"};
+    msg_iev_write_key(kw_self, "scan_step", "services-self");
+    gobj_command(iev, "services", kw_self, gobj);
 
-    /*  The yunos the agent manages.  */
+    /*  The yunos the agent manages (C_AGENT.list-yunos; no service so
+     *  dst_service falls back to the connection's agent service).  */
     priv.scans[conn_id].pending++;
-    gobj_command(iev, "list-yunos", {}, gobj);
+    let kw_list = {};
+    msg_iev_write_key(kw_list, "scan_step", "list-yunos");
+    gobj_command(iev, "list-yunos", kw_list, gobj);
     return 0;
 }
 
@@ -497,10 +503,6 @@ function ac_mt_command_answer(gobj, event, kw, src)
     let conn_id = priv.by_name[gobj_name(src)] || "";
     let scan = conn_id ? priv.scans[conn_id] : null;
 
-    let stack = msg_iev_get_stack(gobj, kw, "command_stack", true);
-    let command = kw_get_str(gobj, stack, "command", "", 0);
-    let kw_command = kw_get_dict(gobj, stack, "kw", {}, 0);
-
     if(!scan) {
         /*  Late answer of a finished/timed-out scan.  */
         return 0;
@@ -510,68 +512,88 @@ function ac_mt_command_answer(gobj, event, kw, src)
     let comment = (kw && kw.comment) || "";
     let data = kw ? kw.data : null;
 
-    switch(command) {
-        case "list-yunos":
-            scan.pending--;
-            if(result < 0) {
-                scan.errors.push({yuno: "", error: String(comment || "list-yunos failed")});
-            } else {
-                let rows = Array.isArray(data) ? data : [];
-                let iev = treedb_links_get_iev(gobj, conn_id);
-                for(let y of rows) {
-                    if(!y || y.yuno_disabled === true || y.yuno_running !== true) {
-                        continue;
-                    }
-                    scan.pending++;
-                    gobj_command(iev, "command-yuno", {
-                        yuno_role: y.yuno_role || "",
-                        yuno_name: y.yuno_name || "",
-                        command:   "services",
-                        service:   "__yuno__",
-                        __md_command__: {
-                            yuno_role: y.yuno_role || "",
-                            yuno_name: y.yuno_name || ""
-                        }
-                    }, gobj);
+    /*
+     *  Which scan step is this the answer to? A wrapped per-yuno `services`
+     *  (via command-yuno) echoes the INNER command name "services" in the
+     *  command_stack, so it cannot be told apart from the agent's own direct
+     *  `services` by the stack. Instead each scan command tags __md_iev__
+     *  with `scan_step`, which round-trips through command-yuno and back
+     *  (the same mechanism gui_agent uses for console_node). list-yunos is
+     *  the only step without a tag.
+     */
+    let step      = msg_iev_read_key(kw, "scan_step") || "";
+    let yuno_role = msg_iev_read_key(kw, "scan_yuno_role") || "";
+    let yuno_name = msg_iev_read_key(kw, "scan_yuno_name") || "";
+
+    if(step === "list-yunos") {
+        scan.pending--;
+        if(result < 0) {
+            scan.errors.push({yuno: "", error: String(comment || "list-yunos failed")});
+        } else {
+            let rows = Array.isArray(data) ? data : [];
+            let iev = treedb_links_get_iev(gobj, conn_id);
+            for(let y of rows) {
+                if(!y || y.yuno_disabled === true || y.yuno_running !== true) {
+                    continue;
                 }
+                scan.pending++;
+                /*
+                 *  "services" is a C_YUNO command; command-yuno forwards it to
+                 *  the target yuno's __yuno__. Put `service=__yuno__` in the
+                 *  COMMAND STRING (not the kw): the kw `service` field is what
+                 *  C_IEVENT_CLI uses as the ievent dst_service, so a
+                 *  kw.service="__yuno__" would route command-yuno itself to the
+                 *  agent's C_YUNO (which has no command-yuno). With it in the
+                 *  string, dst_service falls back to the connection's service
+                 *  (the agent's C_AGENT), and command-yuno parses
+                 *  service=__yuno__ from the string — same as ycommand.
+                 */
+                let kw_svc = {
+                    command:   "services",
+                    yuno_role: y.yuno_role || "",
+                    yuno_name: y.yuno_name || ""
+                };
+                msg_iev_write_key(kw_svc, "scan_step", "services");
+                msg_iev_write_key(kw_svc, "scan_yuno_role", y.yuno_role || "");
+                msg_iev_write_key(kw_svc, "scan_yuno_name", y.yuno_name || "");
+                gobj_command(iev, "command-yuno service=__yuno__", kw_svc, gobj);
             }
-            break;
-
-        case "services":
-        case "command-yuno": {
-            scan.pending--;
-            let e = priv.conns[conn_id];
-            let yuno_role, yuno_name;
-            if(command === "services") {
-                /*  the connected yuno itself (the agent)  */
-                yuno_role = (e && e.role) || "";
-                yuno_name = "";
-            } else {
-                yuno_role = kw_get_str(gobj, kw_command, "yuno_role", "", 0);
-                yuno_name = kw_get_str(gobj, kw_command, "yuno_name", "", 0);
-            }
-            if(result < 0) {
-                scan.errors.push({
-                    yuno:  yuno_name ? `${yuno_role}^${yuno_name}` : yuno_role,
-                    error: String(comment || "services failed")
-                });
-            } else {
-                let rows = Array.isArray(data) ? data : [];
-                let services = rows
-                    .filter((r) => r && (r.gclass === "C_NODE" || r.gclass === "C_TRANGER"))
-                    .map((r) => ({service: r.service, gclass: r.gclass}));
-                scan.yunos.push({
-                    yuno_role: yuno_role,
-                    yuno_name: yuno_name,
-                    services:  services
-                });
-            }
-            break;
         }
-
-        default:
-            log_error(`${GCLASS_NAME}: unexpected command answer: '${command}'`);
-            return 0;
+    } else if(step === "services") {
+        scan.pending--;
+        if(result < 0) {
+            scan.errors.push({
+                yuno:  yuno_name ? `${yuno_role}^${yuno_name}` : yuno_role,
+                error: String(comment || "services failed")
+            });
+        } else {
+            let rows = Array.isArray(data) ? data : [];
+            let services = rows
+                .filter((r) => r && (r.gclass === "C_NODE" || r.gclass === "C_TRANGER"))
+                .map((r) => ({service: r.service, gclass: r.gclass}));
+            scan.yunos.push({
+                yuno_role: yuno_role,
+                yuno_name: yuno_name,
+                services:  services
+            });
+        }
+    } else if(step === "services-self") {
+        /*  the connected yuno itself (the agent)  */
+        scan.pending--;
+        let e = priv.conns[conn_id];
+        let self_role = (e && e.role) || "";
+        if(result < 0) {
+            scan.errors.push({yuno: self_role, error: String(comment || "services failed")});
+        } else {
+            let rows = Array.isArray(data) ? data : [];
+            let services = rows
+                .filter((r) => r && (r.gclass === "C_NODE" || r.gclass === "C_TRANGER"))
+                .map((r) => ({service: r.service, gclass: r.gclass}));
+            scan.yunos.push({yuno_role: self_role, yuno_name: "", services: services});
+        }
+    } else {
+        log_error(`${GCLASS_NAME}: scan answer without a known step tag`);
+        return 0;
     }
 
     if(scan.pending <= 0) {

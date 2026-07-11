@@ -716,6 +716,16 @@ function ac_on_open_error(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Scan lifecycle events (C_TREEDB_LINKS). The app is a
+ *  null-subscriber to every links event, so declare them — no-ops —
+ *  to keep the FSM happy; C_TREEDB_SETTINGS is the consumer.
+ ***************************************************************/
+function ac_scan_event(gobj, event, kw, src)
+{
+    return 0;
+}
+
+/***************************************************************
  *  No valid session on load — show the login form (no error).
  ***************************************************************/
 function ac_restore_failed(gobj, event, kw, src)
@@ -1059,6 +1069,8 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",         ac_on_close,        null],
             ["EV_ON_ID_NAK",        ac_on_id_nak,       null],
             ["EV_ON_OPEN_ERROR",    ac_on_open_error,   null],
+            ["EV_TREEDB_SCAN_DONE",  ac_scan_event,     null],
+            ["EV_TREEDB_SCAN_ERROR", ac_scan_event,     null],
             /*  shell chrome  */
             ["EV_LOGOUT",           ac_logout,          null],
             ["EV_TOGGLE_THEME",     ac_toggle_theme,    null],
@@ -1083,6 +1095,8 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",         0],
         ["EV_ON_ID_NAK",        0],
         ["EV_ON_OPEN_ERROR",    0],
+        ["EV_TREEDB_SCAN_DONE",  0],
+        ["EV_TREEDB_SCAN_ERROR", 0],
         ["EV_LOGOUT",           0],
         ["EV_TOGGLE_THEME",     0],
         ["EV_TOGGLE_LANGUAGE",  0],

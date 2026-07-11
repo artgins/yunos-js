@@ -35,8 +35,8 @@ import {
     gobj_send_event,
     gobj_command,
     gobj_short_name,
-    msg_iev_get_stack, msg_iev_push_stack,
-    kw_get_str, kw_get_dict,
+    msg_iev_push_stack,
+    msg_iev_write_key, msg_iev_read_key,
 } from "@yuneta/gobj-js";
 
 
@@ -99,15 +99,17 @@ function mt_destroy(gobj)
 }
 
 /***************************************************************
- *          Framework Method: Command
+ *          Framework Method: Command parser
  *
- *  Wrap the view's command into command-yuno on the live transport.
- *  `kw.service` (the target service inside the yuno) is exactly the
- *  parameter command-yuno forwards, so it rides along untouched; the
- *  view's __md_command__ echo is preserved inside OUR echo and
- *  restored in ac_mt_command_answer.
+ *  gobj_command dispatches to mt_command_parser (C_IEVENT_CLI registers
+ *  its own mt_command under this same key); a gclass WITHOUT it and
+ *  without a command_table answers "command table not available". We
+ *  intercept every command here and wrap it into command-yuno on the
+ *  live transport. `kw.service` (the target service inside the yuno) is
+ *  moved into the command string (see below); the view's __md_command__
+ *  echo is preserved inside OUR echo and restored in ac_mt_command_answer.
  ***************************************************************/
-function mt_command(gobj, command, kw, src)
+function mt_command_parser(gobj, command, kw, src)
 {
     let iev = gobj_read_pointer_attr(gobj, "iev");
     if(!iev) {
@@ -118,16 +120,37 @@ function mt_command(gobj, command, kw, src)
     let inner_md = kw.__md_command__ || {};
     delete kw.__md_command__;
 
+    /*
+     *  The hosted view addresses its service via kw.service (the target
+     *  service INSIDE the remote yuno). That field must NOT reach
+     *  C_IEVENT_CLI as-is: it is what the transport uses as the ievent
+     *  dst_service, and a kw.service="treedb_x" would route command-yuno
+     *  itself to a non-existent "treedb_x" service of the AGENT. So move
+     *  it into the command STRING (`command-yuno service=<svc>`): the kw
+     *  then carries no `service`, dst_service falls back to the agent's
+     *  C_AGENT, and command-yuno parses the inner service from the string
+     *  (same mechanism as ycommand).
+     */
+    let inner_service = kw.service || "";
+    delete kw.service;
+
     let kw2 = Object.assign({}, kw, {
         command:   command,
         yuno_role: gobj_read_attr(gobj, "yuno_role"),
-        yuno_name: gobj_read_attr(gobj, "yuno_name"),
-        __md_command__: {
-            __inner_command__: command,
-            __inner_md__:      inner_md
-        }
+        yuno_name: gobj_read_attr(gobj, "yuno_name")
     });
-    return gobj_command(iev, "command-yuno", kw2, gobj);
+    /*
+     *  Carry the inner command + the view's __md_command__ in __md_iev__,
+     *  not the command_stack: command-yuno is a multi-hop forward, and each
+     *  hop pushes/pops its OWN command_stack frame, so the view's frame does
+     *  not survive to the answer. __md_iev__ round-trips end-to-end (the
+     *  same channel the scan uses); ac_mt_command_answer rebuilds the
+     *  command_stack frame the hosted view expects.
+     */
+    msg_iev_write_key(kw2, "proxy_cmd", command);
+    msg_iev_write_key(kw2, "proxy_md", inner_md);
+    let wrapped = "command-yuno" + (inner_service ? ` service=${inner_service}` : "");
+    return gobj_command(iev, wrapped, kw2, gobj);
 }
 
 
@@ -151,16 +174,20 @@ function ac_mt_command_answer(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: no hosted view to answer to`);
         return 0;
     }
-    let stack = msg_iev_get_stack(gobj, kw, "command_stack", true);
-    let md = kw_get_dict(gobj, stack, "kw", {}, 0);
-    let inner_command = kw_get_str(gobj, md, "__inner_command__", "", 0);
+    let inner_command = msg_iev_read_key(kw, "proxy_cmd") || "";
+    let inner_md = msg_iev_read_key(kw, "proxy_md") || {};
     if(!inner_command) {
         log_error(`${gobj_short_name(gobj)}: answer without inner command echo`);
         return 0;
     }
+    /*
+     *  Rebuild the command_stack frame the hosted view reads
+     *  (msg_iev_get_stack "command" + "kw"), so the view dispatches the
+     *  answer exactly as if its own C_IEVENT_CLI had answered directly.
+     */
     msg_iev_push_stack(gobj, kw, "command_stack", {
         command: inner_command,
-        kw:      md.__inner_md__ || {}
+        kw:      inner_md
     });
     gobj_send_event(view, "EV_MT_COMMAND_ANSWER", kw, gobj);
     return 0;
@@ -177,11 +204,11 @@ function ac_mt_command_answer(gobj, event, kw, src)
 
 
 const gmt = {
-    mt_create:  mt_create,
-    mt_start:   mt_start,
-    mt_stop:    mt_stop,
-    mt_destroy: mt_destroy,
-    mt_command: mt_command
+    mt_create:         mt_create,
+    mt_start:          mt_start,
+    mt_stop:           mt_stop,
+    mt_destroy:        mt_destroy,
+    mt_command_parser: mt_command_parser
 };
 
 function create_gclass(gclass_name)
