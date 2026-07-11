@@ -20,6 +20,13 @@ dependencies (`../../../kernel/js/…`) that resolve within the yunetas
 superproject, where this repo is mounted at `yunos/js`. (A standalone clone of
 this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
+## Unreleased
+
+- **chore(gui_treedb): dropped the dead `ytable.css` import** — a v1-era
+  leftover; nothing in gui_treedb (or the gobj-ui gclasses it hosts) uses its
+  classes, and gobj-ui 3.0.0 removed the file with the rest of the legacy
+  GClass GUI stack (both SPAs verified building green against 3.0.0).
+
 ## 0.4.0 — 2026-07-11
 
 Rides gobj-ui **2.6.0**: the treedb gclasses and `C_YUI_WINDOW` moved to the

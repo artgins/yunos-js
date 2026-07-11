@@ -76,7 +76,6 @@ import "tom-select/dist/css/tom-select.css";
 import "bulma-switch-control/css/main.css";
 
 import "@yuneta/gobj-ui/src/c_yui_map.css";
-import "@yuneta/gobj-ui/src/ytable.css";
 import "@yuneta/gobj-ui/src/yui_toolbar.css";
 import "@yuneta/gobj-ui/src/lib_graph.css";
 import "./login.css";
