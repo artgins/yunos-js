@@ -5,3 +5,7 @@ package-lock.json
 
 # gui_treedb bundled FontAwesome distributions (large, fetched locally)
 gui_treedb/assets/
+
+# Deploy scripts (local operator tooling, carry node names — not for the repo)
+gui_agent/deploy-com.sh
+gui_treedb/deploy-com.sh
