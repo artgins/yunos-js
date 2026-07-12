@@ -22,33 +22,58 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
-- **feat(gui_treedb): C_TRANGER_VIEW becomes a two-level keys→records
-  browser with real cursor pagination.** Replaces the earlier flat table
+- **fix(gui_treedb): the Developer window docks on minimize.** gui_treedb
+  registered `C_YUI_WINDOW` but never `C_YUI_WINDOW_MANAGER` nor created the
+  `__window_manager__` service, so `yui_dev.js` opened the monitor with
+  `manager: null` and minimizing shaded it in place (an empty floating
+  rectangle) instead of rolling it to a dock. Mirror gui_agent: register the
+  manager and create the `__window_manager__` service (`dock_mode:
+  "responsive"`, floating bottom-left on desktop, an inline taskbar in the
+  shell's `bottom-sub` zone on mobile). Also import `gobj_create_service`
+  (was missing — a latent `ReferenceError` esbuild does not flag).
+
+- **feat(gui_treedb): C_TRANGER_VIEW becomes a card-dashboard control panel
+  with Tabulator-native cursor pagination.** Replaces the earlier flat table
   (one-shot `open-list return_data=1 from_rowid=-N` + "Load more ×4" that
-  re-read a growing snapshot) with a proper control panel over the new
-  c_tranger command surface (needs a backend with `list-keys` /
-  `open-iterator` / `get-page` / `close-iterator`):
-    - selecting a topic issues `list-keys` → a left **keys pane**, each key
-      with its record count, filtered client-side by a keys search box,
-      auto-selecting the first key;
-    - selecting a key opens a server-side per-key iterator and reads its
-      first page (`open-iterator` + `get-page` sent back-to-back — the
-      remote processes commands FIFO over the one connection, so the
-      iterator exists by the time the page read runs), rendering the records
-      Tabulator plus a page navigator (◀ `page N/M` ▶ over `total_rows`);
-    - paging issues `get-page from_rowid=(n-1)*limit+1` (100/page); the
-      iterator is closed (`close-iterator`) on key/topic change and on stop;
-    - answers are correlated by the echoed `iterator_id` / `topic_name` /
-      `page` so stale answers of a previous key are dropped; a row click
-      still opens the full record JSON in the shell dialog; Refresh reloads
-      the current page. No polling (Yuneta rule). Topic deep-link
-      (`EV_TOPIC_SELECTED` / `EV_SHOW`) is unchanged.
-  Adds the `page` / `previous page` / `next page` / `filter keys` /
-  `filter the loaded keys` / `no keys` / `loading` locale keys (en + es).
-  Known limitation (backend follow-up): an iterator opened by the SPA is not
-  tied to the ievent session, so an unclean disconnect (tab closed, network
-  drop) leaks it until the C_TRANGER yuno's own destroy — the view closes
-  diligently on every transition, capping the leak at ≤1 per view instance.
+  re-read a growing snapshot) with a dashboard over the c_tranger command
+  surface (needs a backend with `list-keys` / `open-iterator` / `get-page` /
+  `close-iterator`):
+    - selecting a topic issues `list-keys` (kept for the picker); the toolbar
+      **Keys** button opens a modal sheet with a Tabulator of the topic's
+      keys — sortable (default by record count desc), header-filtered — each
+      row offering **Rows** (and a disabled **Live**, backend Phase C);
+    - picking Rows adds a **card** to a vertical dashboard. Each card is a
+      records Tabulator driven by Tabulator's **native remote pagination**:
+      `open-iterator` builds the per-key row index and Tabulator's
+      `ajaxRequestFunc` pulls each page via `get-page`, bridged to the async
+      `gobj_command` answer by a per-request Promise. First/Prev/Next/Last,
+      the page-size selector and the row counter are Tabulator's own;
+    - columns are auto-generated from the records (metadata `t`/`rowid`
+      first; the full record kept hidden for the row-click JSON dialog).
+      Each card has a head **search** that filters the loaded page and
+      **persists across page changes** (re-applied on Tabulator's
+      `dataLoaded`), plus Refresh and Close (icon+label on desktop,
+      icon-only on mobile);
+    - the iterator is closed (`close-iterator`) on card/topic change and on
+      stop. `iterator_id` carries a per-view random token so it never
+      collides with an iterator a previous session leaked on the backend
+      (which returned the wrong key's data — "already open" reuse).
+  Correlation rides `__md_command__` (a command's params are NOT echoed —
+  only `__md_command__` round-trips as `command_stack[].kw`), so `get-page`
+  answers resolve the right Promise and `list-keys` the right topic. The keys
+  picker redraws on `tableBuilt` (measure against the modal box, not the
+  full-width layer). Adds the `keys` / `rows` / `live` / `actions` / `views`
+  / `close` / `open a key view` / `realtime coming soon` (+ earlier `no keys`
+  etc.) locale keys (en + es).
+  Known limitations (backend follow-ups): (1) a SPA iterator is not tied to
+  the ievent session, so an unclean disconnect (tab closed, network drop)
+  leaks it until the C_TRANGER yuno's own destroy — the view closes
+  diligently on every transition and the per-view token neutralises the
+  collision; (2) the head search is client-side over the loaded page —
+  whole-key content search would need a server scan (the C_TRANGER yuno is
+  single-threaded), deferred; metadata filters (time range) are the cheap
+  path when needed. Live realtime awaits `EVF_PUBLIC_EVENT` on
+  `EV_TRANGER_RECORD_ADDED` (backend Phase C).
 
 - **feat(gui_treedb): per-yuno service discovery, explicit connection
   lifecycle + C_TRANGER records browser.** Each Settings connection is the
