@@ -39,6 +39,7 @@ import {
     gobj_read_pointer_attr, gobj_read_str_attr,
     gobj_parent, gobj_short_name,
     gobj_subscribe_event,
+    gobj_unsubscribe_event,
     gobj_publish_event,
     gobj_command,
     createElement2, refresh_language,
@@ -62,6 +63,9 @@ const GCLASS_NAME = "C_TRANGER_VIEW";
 /*  Records per page in a Rows card (Tabulator's paginationSize).  */
 const PAGE_SIZE = 100;
 
+/*  Max rows kept in a Live card's rolling buffer (newest on top).  */
+const LIVE_MAX = 500;
+
 /*  Fixed table height inside a card (its own pager sits below).  */
 const CARD_TABLE_HEIGHT = "320px";
 
@@ -81,6 +85,10 @@ const STYLE_CSS = `
     white-space: nowrap; font-weight: 600;
 }
 .C_TRANGER_VIEW .TRANGER_CARD_SEARCH { flex: 1 1 auto; min-width: 80px; }
+.TRANGER_LIVE_DOT {
+    display: inline-block; width: 0.55em; height: 0.55em;
+    border-radius: 50%; background: #48c774; vertical-align: middle;
+}
 `;
 
 function inject_style()
@@ -493,25 +501,36 @@ function build_key_actions(gobj, cell, modal)
 
     let $live = createElement2(
         ["button", {class: "button is-small ml-1 TRANGER_KEY_LIVE", type: "button",
-                    disabled: true,
-                    title: t("realtime coming soon"),
-                    "aria-label": t("realtime coming soon")},
-            [["span", {i18n: "live"}, t("live")]]
+                    title: t("live"), "aria-label": t("live")},
+            [
+                ["span", {class: "TRANGER_LIVE_DOT mr-1"}, ""],
+                ["span", {i18n: "live"}, t("live")]
+            ]
         ]);
+    $live.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        add_card(gobj, key, "live");
+        if(modal && typeof modal.close === "function") {
+            modal.close();
+        }
+    });
 
     return createElement2(
         ["div", {class: "is-flex TRANGER_KEY_ACTIONS"}, [$rows, $live]]);
 }
 
 /***************************************************************
- *  Add a card to the dashboard for `key` in `mode` ("rows"). Opens a
- *  server-side iterator and mounts a records Tabulator with native
- *  remote pagination (get-page).
+ *  Add a card to the dashboard for `key` in `mode`:
+ *    - "rows": records Tabulator with native remote pagination
+ *      (open-iterator + get-page).
+ *    - "live": a rolling Tabulator fed by a realtime feed (open-rt +
+ *      subscribe to EV_TRANGER_RECORD_ADDED), newest on top.
+ *  One card per (key, mode); a duplicate request is ignored.
  ***************************************************************/
 function add_card(gobj, key, mode)
 {
     let priv = gobj.priv;
-    if(!priv.cur_topic || mode !== "rows") {
+    if(!priv.cur_topic || (mode !== "rows" && mode !== "live")) {
         return;
     }
     let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
@@ -519,55 +538,20 @@ function add_card(gobj, key, mode)
         log_error(`${gobj_short_name(gobj)}: No gobj_remote_yuno defined`);
         return;
     }
-    let service = gobj_read_str_attr(gobj, "treedb_name");
-    let iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
-
-    /*
-     *  Arm the iterator FIRST; the Tabulator's first get-page (fired on
-     *  build) is processed after it by the remote's FIFO command order.
-     */
-    let ret = gobj_command(remote, "open-iterator",
-        {
-            service:     service,
-            iterator_id: iterator_id,
-            topic_name:  priv.cur_topic,
-            key:         key
-        }, gobj);
-    if(ret) {
-        log_error(ret);
+    for(let c of priv.cards) {
+        if(c.key === key && c.mode === mode) {
+            return;
+        }
     }
 
-    let card = {key: key, mode: mode, iterator_id: iterator_id,
-                tabulator: null, $el: null, search: ""};
+    let card = {
+        key: key, mode: mode, topic: priv.cur_topic,
+        tabulator: null, $el: null, search: "",
+        iterator_id: null, rt_id: null, subscribed: false,
+        built: false, seeded: false, pending: []
+    };
 
-    let $table = createElement2(
-        ["div", {class: "TRANGER_CARD_TABLE"}, []]);
-
-    let $refresh = createElement2(
-        ["button", {class: "button is-small TRANGER_CARD_REFRESH",
-                    title: t("refresh"), "aria-label": t("refresh")},
-            [
-                ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
-                ["span", {class: "is-hidden-mobile", i18n: "refresh"}, t("refresh")]
-            ]
-        ]);
-    $refresh.addEventListener("click", () => {
-        if(card.tabulator) {
-            card.tabulator.replaceData();   /*  reload the current page  */
-        }
-    });
-
-    let $close = createElement2(
-        ["button", {class: "button is-small TRANGER_CARD_CLOSE",
-                    title: t("close"), "aria-label": t("close")},
-            [
-                ["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]],
-                ["span", {class: "is-hidden-mobile", i18n: "close"}, t("close")]
-            ]
-        ]);
-    $close.addEventListener("click", () => {
-        close_card(gobj, card);
-    });
+    let $table = createElement2(["div", {class: "TRANGER_CARD_TABLE"}, []]);
 
     let $search = createElement2(
         ["input", {class: "input is-small TRANGER_CARD_SEARCH_INPUT",
@@ -587,19 +571,105 @@ function add_card(gobj, key, mode)
             ]
         ]);
 
-    let $head = createElement2(
-        ["div", {class: "TRANGER_CARD_HEAD is-flex is-align-items-center p-2"},
+    let $close = createElement2(
+        ["button", {class: "button is-small TRANGER_CARD_CLOSE",
+                    title: t("close"), "aria-label": t("close")},
             [
-                ["span", {class: "TRANGER_CARD_TITLE"}, `${key} · ${t(mode)}`],
-                $search_control,
-                ["span", {class: "ml-2 is-flex-shrink-0"}, [$refresh]],
-                ["span", {class: "ml-2 is-flex-shrink-0"}, [$close]]
+                ["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "close"}, t("close")]
             ]
         ]);
+    $close.addEventListener("click", () => {
+        close_card(gobj, card);
+    });
+
+    /*  mode-specific action: Rows -> Refresh (reload page), Live -> Clear.  */
+    let $action;
+    if(mode === "rows") {
+        $action = createElement2(
+            ["button", {class: "button is-small TRANGER_CARD_REFRESH",
+                        title: t("refresh"), "aria-label": t("refresh")},
+                [
+                    ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
+                    ["span", {class: "is-hidden-mobile", i18n: "refresh"}, t("refresh")]
+                ]
+            ]);
+        $action.addEventListener("click", () => {
+            if(card.tabulator) {
+                card.tabulator.replaceData();
+            }
+        });
+    } else {
+        $action = createElement2(
+            ["button", {class: "button is-small TRANGER_CARD_CLEAR",
+                        title: t("clear"), "aria-label": t("clear")},
+                [
+                    ["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]],
+                    ["span", {class: "is-hidden-mobile", i18n: "clear"}, t("clear")]
+                ]
+            ]);
+        $action.addEventListener("click", () => {
+            if(card.tabulator) {
+                card.tabulator.clearData();
+            }
+        });
+    }
+
+    let head_children = [];
+    if(mode === "live") {
+        head_children.push(
+            ["span", {class: "TRANGER_LIVE_DOT ml-1 mr-2 is-flex-shrink-0",
+                      title: t("live")}, ""]);
+    }
+    head_children.push(["span", {class: "TRANGER_CARD_TITLE"}, `${key} · ${t(mode)}`]);
+    head_children.push($search_control);
+    head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$action]]);
+    head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$close]]);
+    let $head = createElement2(
+        ["div", {class: "TRANGER_CARD_HEAD is-flex is-align-items-center p-2"},
+            head_children]);
 
     let $el = createElement2(
         ["div", {class: "box p-0 TRANGER_CARD"}, [$head, $table]]);
     card.$el = $el;
+
+    priv.cards.push(card);
+    if(priv.$empty) {
+        priv.$empty.classList.add("is-hidden");
+    }
+    priv.$dashboard.appendChild($el);
+    update_meta(gobj);
+
+    if(mode === "rows") {
+        mount_rows_table(gobj, card, $table);
+    } else {
+        mount_live_table(gobj, card, $table);
+    }
+}
+
+/***************************************************************
+ *  Rows card: open a per-key iterator and mount a records Tabulator with
+ *  native remote pagination (get-page bridged to gobj_command).
+ ***************************************************************/
+function mount_rows_table(gobj, card, $table)
+{
+    let priv = gobj.priv;
+    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let service = gobj_read_str_attr(gobj, "treedb_name");
+    card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
+
+    /*  Arm the iterator FIRST; the Tabulator's first get-page (fired on
+     *  build) is processed after it by the remote's FIFO command order.  */
+    let ret = gobj_command(remote, "open-iterator",
+        {
+            service:     service,
+            iterator_id: card.iterator_id,
+            topic_name:  card.topic,
+            key:         card.key
+        }, gobj);
+    if(ret) {
+        log_error(ret);
+    }
 
     let table = new Tabulator($table, {
         height:         CARD_TABLE_HEIGHT,
@@ -617,22 +687,7 @@ function add_card(gobj, key, mode)
             return request_page(gobj, card, params.page || 1, params.size || PAGE_SIZE);
         },
         autoColumns:    true,
-        autoColumnsDefinitions: function(defs) {
-            return defs
-                .filter((d) => d.field !== "__rec")
-                .map((d) => {
-                    d.headerSort = false;
-                    d.minWidth = 90;
-                    if(d.field === "rowid") {
-                        d.width = 80;
-                        d.hozAlign = "right";
-                    }
-                    if(d.field === "t") {
-                        d.minWidth = 150;
-                    }
-                    return d;
-                });
-        }
+        autoColumnsDefinitions: tune_columns
     });
     table.on("rowClick", function(e, row) {
         show_record_dialog(gobj, row.getData().__rec, card.key);
@@ -654,13 +709,153 @@ function add_card(gobj, key, mode)
         });
     });
     card.tabulator = table;
+}
 
-    priv.cards.push(card);
-    if(priv.$empty) {
-        priv.$empty.classList.add("is-hidden");
+/***************************************************************
+ *  Live card: mount an empty rolling Tabulator, arm the backend realtime
+ *  feed (open-rt) and subscribe to its pushes. New records prepend
+ *  (newest on top), capped at LIVE_MAX; columns are seeded from the first
+ *  record (the feed loads no history).
+ ***************************************************************/
+function mount_live_table(gobj, card, $table)
+{
+    let priv = gobj.priv;
+    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let service = gobj_read_str_attr(gobj, "treedb_name");
+    card.rt_id = `spa-${priv.tok}-rt-${++priv.iter_seq}`;
+
+    let table = new Tabulator($table, {
+        height:         CARD_TABLE_HEIGHT,
+        layout:         "fitDataFill",
+        placeholder:    t("waiting for records"),
+        columnDefaults: {headerHozAlign: "left", headerSort: false, resizable: true},
+        columns:        [],
+        data:           []
+    });
+    table.on("rowClick", function(e, row) {
+        show_record_dialog(gobj, row.getData().__rec, card.key);
+    });
+    table.on("tableBuilt", function() {
+        card.built = true;
+        let pend = card.pending;
+        card.pending = [];
+        for(let row of pend) {
+            push_live_row(card, row);
+        }
+        requestAnimationFrame(function() {
+            try {
+                table.redraw(true);
+            } catch(e) {
+                /*  destroyed before the frame  */
+            }
+        });
+    });
+    card.tabulator = table;
+
+    /*  Arm the feed, then subscribe to its pushes.  */
+    let ret = gobj_command(remote, "open-rt",
+        {
+            service:    service,
+            rt_id:      card.rt_id,
+            topic_name: card.topic,
+            key:        card.key
+        }, gobj);
+    if(ret) {
+        log_error(ret);
     }
-    priv.$dashboard.appendChild($el);
-    update_meta(gobj);
+    gobj_subscribe_event(remote, "EV_TRANGER_RECORD_ADDED",
+        {__service__: service, __filter__: {topic_name: card.topic, key: card.key}},
+        gobj);
+    card.subscribed = true;
+}
+
+/***************************************************************
+ *  Shared column tuning for the auto/seeded columns (drop __rec, no
+ *  header sort, tidy the metadata columns).
+ ***************************************************************/
+function tune_columns(defs)
+{
+    return defs
+        .filter((d) => d.field !== "__rec")
+        .map((d) => {
+            d.headerSort = false;
+            d.minWidth = 90;
+            if(d.field === "rowid") {
+                d.width = 80;
+                d.hozAlign = "right";
+            }
+            if(d.field === "t") {
+                d.minWidth = 150;
+            }
+            return d;
+        });
+}
+
+/***************************************************************
+ *  Build column defs from a flattened row (Live: autoColumns can't
+ *  generate from an initially-empty table, so seed them on first record).
+ ***************************************************************/
+function columns_from_row(row)
+{
+    let defs = [];
+    for(let k in row) {
+        if(k === "__rec") {
+            continue;
+        }
+        defs.push({title: k, field: k});
+    }
+    return tune_columns(defs);
+}
+
+/***************************************************************
+ *  Feed a live record into a card: buffer until the table is built, then
+ *  prepend (newest on top) and trim to LIVE_MAX.
+ ***************************************************************/
+function push_live_record(card, record)
+{
+    if(!card.tabulator) {
+        return;
+    }
+    let row = flatten_record(record);
+    if(!card.built) {
+        card.pending.push(row);
+        return;
+    }
+    push_live_row(card, row);
+}
+
+function push_live_row(card, row)
+{
+    let table = card.tabulator;
+    if(!table) {
+        return;
+    }
+    if(!card.seeded) {
+        card.seeded = true;
+        try {
+            table.setColumns(columns_from_row(row));
+        } catch(e) {
+            /*  table gone  */
+        }
+    }
+    Promise.resolve(table.addData([row], true)).then(function() {
+        let over = table.getDataCount() - LIVE_MAX;
+        if(over > 0) {
+            let rows = table.getRows();
+            for(let i = 0; i < over; i++) {
+                let r = rows[rows.length - 1 - i];
+                if(r) {
+                    try {
+                        r.delete();
+                    } catch(e) {
+                        /*  gone  */
+                    }
+                }
+            }
+        }
+    }).catch(function() {
+        /*  table torn down mid-append  */
+    });
 }
 
 /***************************************************************
@@ -684,7 +879,20 @@ function close_card(gobj, card)
     if(card.$el && card.$el.parentNode) {
         card.$el.parentNode.removeChild(card.$el);
     }
-    close_iterator(gobj, card.iterator_id);
+    if(card.mode === "live") {
+        if(card.subscribed) {
+            let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+            if(remote) {
+                gobj_unsubscribe_event(remote, "EV_TRANGER_RECORD_ADDED",
+                    {__service__: gobj_read_str_attr(gobj, "treedb_name"),
+                     __filter__: {topic_name: card.topic, key: card.key}}, gobj);
+            }
+            card.subscribed = false;
+        }
+        close_rt(gobj, card.rt_id);
+    } else {
+        close_iterator(gobj, card.iterator_id);
+    }
     if(priv.cards.length === 0 && priv.$empty) {
         priv.$empty.classList.remove("is-hidden");
     }
@@ -718,6 +926,23 @@ function close_iterator(gobj, iterator_id)
     let service = gobj_read_str_attr(gobj, "treedb_name");
     gobj_command(remote, "close-iterator",
         {service: service, iterator_id: iterator_id}, gobj);
+}
+
+/***************************************************************
+ *  Fire-and-forget close of a server-side realtime feed.
+ ***************************************************************/
+function close_rt(gobj, rt_id)
+{
+    if(!rt_id) {
+        return;
+    }
+    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    if(!remote) {
+        return;
+    }
+    let service = gobj_read_str_attr(gobj, "treedb_name");
+    gobj_command(remote, "close-rt",
+        {service: service, rt_id: rt_id}, gobj);
 }
 
 /***************************************************************
@@ -959,6 +1184,27 @@ function ac_show(gobj, event, kw, src)
     return 0;
 }
 
+/************************************************************
+ *  A remote realtime record arrived (subscribed by a Live card): route
+ *  it to the matching live card(s) — newest on top.
+ ************************************************************/
+function ac_tranger_record_added(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let topic = (kw && kw.topic_name) || "";
+    let key = (kw && kw.key) || "";
+    let record = kw ? kw.record : null;
+    if(!record) {
+        return 0;
+    }
+    for(let card of priv.cards) {
+        if(card.mode === "live" && card.topic === topic && card.key === key) {
+            push_live_record(card, record);
+        }
+    }
+    return 0;
+}
+
 
 
 
@@ -985,15 +1231,17 @@ function create_gclass(gclass_name)
 
     const states = [
         ["ST_IDLE", [
-            ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
-            ["EV_SHOW",              ac_show,              null]
+            ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
+            ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
+            ["EV_SHOW",                 ac_show,                  null]
         ]]
     ];
 
     const event_types = [
-        ["EV_MT_COMMAND_ANSWER", event_flag_t.EVF_PUBLIC_EVENT],
-        ["EV_TOPIC_SELECTED",    event_flag_t.EVF_OUTPUT_EVENT],
-        ["EV_SHOW",              0]
+        ["EV_MT_COMMAND_ANSWER",    event_flag_t.EVF_PUBLIC_EVENT],
+        ["EV_TRANGER_RECORD_ADDED", event_flag_t.EVF_PUBLIC_EVENT],
+        ["EV_TOPIC_SELECTED",       event_flag_t.EVF_OUTPUT_EVENT],
+        ["EV_SHOW",                 0]
     ];
 
     __gclass__ = gclass_create(

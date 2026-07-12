@@ -120,6 +120,8 @@ const en = {
         "close": "Close",
         "realtime coming soon": "Realtime — coming soon",
         "open a key view": "Open a key view from Keys",
+        "clear": "Clear",
+        "waiting for records": "Waiting for records…",
         "no topics": "No topics",
         "connecting": "Connecting…",
         "connected": "Connected",

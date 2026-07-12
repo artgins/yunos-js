@@ -22,6 +22,21 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): Live records card in C_TRANGER_VIEW (realtime).** The
+  keys picker's **Live** action (previously disabled) now opens a streaming
+  card: it arms a backend realtime feed (`open-rt {rt_id, topic_name, key}`)
+  and subscribes to `EV_TRANGER_RECORD_ADDED` filtered by `{topic_name, key}`
+  over the ievent gate. New appends **prepend** (newest on top) into a rolling
+  Tabulator capped at 500 rows; columns are seeded from the first record (the
+  feed loads no history — pair a Rows card for history). The head search
+  filters the buffer, Clear empties it, and closing the card unsubscribes and
+  `close-rt`s the feed. `EV_TRANGER_RECORD_ADDED` is declared `EVF_PUBLIC_EVENT`
+  in the gclass and routed to matching cards by `ac_tranger_record_added`. A
+  green dot marks live cards; one card per (key, mode). Needs a backend with
+  the c_tranger `open-rt`/`close-rt` commands and `EV_TRANGER_RECORD_ADDED`
+  made public (SDK Phase C). Adds the `clear` / `waiting for records` locale
+  keys (en + es).
+
 - **fix(gui_treedb): the Developer window docks on minimize.** gui_treedb
   registered `C_YUI_WINDOW` but never `C_YUI_WINDOW_MANAGER` nor created the
   `__window_manager__` service, so `yui_dev.js` opened the monitor with

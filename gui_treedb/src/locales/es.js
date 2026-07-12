@@ -120,6 +120,8 @@ const es = {
         "close": "Cerrar",
         "realtime coming soon": "Tiempo real — próximamente",
         "open a key view": "Abre una vista de clave desde Claves",
+        "clear": "Limpiar",
+        "waiting for records": "Esperando registros…",
         "no topics": "Sin topics",
         "connecting": "Conectando…",
         "connected": "Conectado",
