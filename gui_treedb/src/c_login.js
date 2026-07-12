@@ -418,6 +418,7 @@ function ac_login_refreshed(gobj, event, kw, src)
 
 function ac_login_denied(gobj, event, kw, src)
 {
+    clear_timeout(gobj.priv.gobj_timer);    // session dead: no dangling refresh timer into ST_LOGOUT
     gobj_write_attr(gobj, "username", "");
     gobj_write_attr(gobj, "access_token", "");
     gobj_publish_event(gobj, "EV_LOGIN_DENIED", kw);
@@ -426,6 +427,7 @@ function ac_login_denied(gobj, event, kw, src)
 
 function ac_logout_done(gobj, event, kw, src)
 {
+    clear_timeout(gobj.priv.gobj_timer);    // session dead: no dangling refresh timer into ST_LOGOUT
     gobj_write_attr(gobj, "username", "");
     gobj_write_attr(gobj, "access_token", "");
     gobj_publish_event(gobj, "EV_LOGOUT_DONE", kw);

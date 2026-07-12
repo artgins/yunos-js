@@ -33,6 +33,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   wattyzer. gui_agent is the most exposed (single-link: it logs out on the 2nd
   NAK while the 1st refresh may still be in flight).
 
+- **fix(gui_treedb): clear the refresh timer on session end.**
+  `ac_login_denied` / `ac_logout_done` now `clear_timeout(gobj_timer)` so the
+  refresh timer armed at login does not survive into ST_LOGOUT and fire a
+  stray `EV_TIMEOUT` there (*"Event NOT DEFINED in state"*). gui_agent already
+  did this; gui_treedb was the odd one out. Mirrors the wattyzer fix.
+
 - **feat(gui_treedb): Live records card in C_TRANGER_VIEW (realtime).** The
   keys picker's **Live** action (previously disabled) now opens a streaming
   card: it arms a backend realtime feed (`open-rt {rt_id, topic_name, key}`)
