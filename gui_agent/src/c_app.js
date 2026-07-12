@@ -142,6 +142,7 @@ function mt_create(gobj)
     let link = gobj_create_service("agent_link", "C_AGENT_LINK", {}, gobj_yuno());
     gobj.priv.link = link;
     gobj_subscribe_event(link, "EV_ON_OPEN", {}, gobj);
+    gobj_subscribe_event(link, "EV_ON_OPEN_ERROR", {}, gobj);
     gobj_subscribe_event(link, "EV_ON_ID_NAK", {}, gobj);
     /*  EV_ON_CLOSE (a plain socket drop, not a NAK): blank the live-node set
      *  so every node tab goes red instead of showing a stale "connected". */
@@ -623,6 +624,40 @@ function ac_on_close(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Control-center link could not open (backend down / TLS / port),
+ *  or a reconnect attempt failed to re-open. Backend connection is
+ *  orthogonal to the session: NO logout — C_IEVENT_CLI keeps
+ *  retrying and the next EV_ON_OPEN restores normal operation.
+ *
+ *  If the shell is up, blank the live-node set so every node tab
+ *  shows red (the per-node "disconnected" glyph; by design there is
+ *  no global connection dot — see app_config).  If we are still in
+ *  the pre-shell window (the first open after login has not landed
+ *  yet, ac_login_accepted already hid the login form), bring the
+ *  login screen back with a non-destructive "reconnecting" notice
+ *  instead of a blank page; EV_ON_OPEN then builds the shell.
+ ***************************************************************/
+function ac_on_open_error(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.shell) {
+        priv.live_hosts = {};
+        rebuild_all_workspaces(gobj);
+        return 0;
+    }
+    show_login_screen(gobj);
+    if(priv.login_ui) {
+        let url = (kw && kw.url) || "";
+        priv.login_ui.set_busy(false);
+        priv.login_ui.set_error(
+            url ? `${t("cannot connect")} (${url}) — ${t("reconnecting")}`
+                : `${t("cannot connect")} — ${t("reconnecting")}`
+        );
+    }
+    return 0;
+}
+
+/***************************************************************
  *  Login refused / refresh failed. If a shell is up, the session
  *  expired mid-use → tear down + back to login; else paint the error.
  ***************************************************************/
@@ -1004,6 +1039,7 @@ function create_gclass(gclass_name)
             ["EV_LOGOUT_DONE",      ac_logout_done,     null],
             ["EV_ON_OPEN",          ac_on_open,         null],
             ["EV_ON_CLOSE",         ac_on_close,        null],
+            ["EV_ON_OPEN_ERROR",    ac_on_open_error,   null],
             ["EV_ON_ID_NAK",        ac_on_id_nak,       null],
             /*  shell chrome  */
             ["EV_LOGOUT",           ac_logout,          null],
@@ -1031,6 +1067,7 @@ function create_gclass(gclass_name)
         ["EV_LOGOUT_DONE",      0],
         ["EV_ON_OPEN",          0],
         ["EV_ON_CLOSE",         0],
+        ["EV_ON_OPEN_ERROR",    0],
         ["EV_ON_ID_NAK",        0],
         ["EV_LOGOUT",           0],
         ["EV_TOGGLE_THEME",     0],

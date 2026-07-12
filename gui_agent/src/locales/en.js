@@ -131,6 +131,7 @@ const en = {
         "no active agent":   "No active agent — add one in Settings",
         "not connected to an agent": "Not connected to an agent",
         "cannot connect":    "Cannot connect",
+        "reconnecting":      "Reconnecting…",
         "authentication required": "Authentication required",
         "identity card refused": "Identity card refused",
 
