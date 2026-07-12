@@ -244,6 +244,7 @@ function build_hosted_view(gobj, remote)
         {
             gobj_remote_yuno: remote,
             treedb_name:      gobj_read_attr(gobj, "treedb_name"),
+            conn_id:          gobj_read_attr(gobj, "conn_id"),
             system:           gobj_read_attr(gobj, "system")
         },
         gobj

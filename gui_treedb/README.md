@@ -31,12 +31,20 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   to it). Every discovered service lives in the connected yuno and is
   addressed directly (`kw.service`).
 - **Tranger browser:** selected `C_TRANGER` services (Topics workspace only)
-  open the read-only `C_TRANGER_VIEW`: topic tabs + a records table fed by
-  one-shot `open-list return_data=1 from_rowid=-N` reads (requires a backend
-  with the restored c_tranger read commands), full record JSON in the shell
-  dialog, Refresh / Load-more buttons (no polling), and a live search box
-  that client-side filters the loaded rows (substring match over the whole
-  record, remembered per topic).
+  open the read-only `C_TRANGER_VIEW`: topic tabs and a per-topic Keys picker
+  (responsive — a moveable, non-modal window on desktop, an adaptive modal sheet
+  on mobile; each key's Rows/Live button is colored only while that view is open
+  and toggles it; the open/closed set is persisted per connection and cleared
+  when the connection is removed). A key opens a **Rows** card — a records
+  table with native remote pagination
+  (`open-iterator` + `get-page`), optionally pre-filtered at open time by
+  server-side **match conditions** (time / rowid range, user_flag masks) chosen
+  in an options form — or a **Live** card that streams new appends (`open-rt` +
+  `EV_TRANGER_RECORD_ADDED`, newest on top, no history). Per-column header
+  filters accept a comparison operator (`>200`, `<=5`, `=ok`) or a plain
+  substring and filter the loaded rows client-side (no polling). A row opens the
+  full record JSON in the shell dialog. Requires a backend whose `c_tranger`
+  exposes the iterator/rt read commands with `open-iterator` match conditions.
 - **Authorization note:** the discovery addresses `__yuno__` (a `dst_service`
   beyond the connected service), and `C_IEVENT_SRV` only routes that for
   channels whose user is a **superuser** (a role with `service="*"`) or has

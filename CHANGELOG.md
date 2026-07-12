@@ -22,6 +22,33 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): Rows request options + per-column operator filters +
+  responsive Keys picker in the Tranger browser.** The Keys picker is presented
+  responsively — a **moveable, non-modal `C_YUI_WINDOW`** (drag / resize / dock,
+  mounted in the shell's popup layer so modals opened from it still stack on
+  top) on desktop, and the shell's **adaptive modal sheet** on mobile (a window
+  is awkward on a phone) — and persists while views are opened/closed. Each key
+  row's
+  **Rows** / **Live** button is colored (active) **only** while that view is
+  open for the key, and clicking an active button **closes** that view (toggle).
+  A key's **Rows** opens an options form with server-side match conditions
+  forwarded to `open-iterator`: time range (`from_t`/`to_t`), rowid range
+  (`from_rowid`/`to_rowid`) and user_flag masks (`user_flag_mask_set` /
+  `user_flag_mask_notset`) — all optional, blank = the full key. The backend
+  pre-filters the index, so the card's pagination reflects the filtered set.
+  **Live** cards open directly (the realtime feed filters only by key). The
+  free-text search box is replaced by **per-column header filters** that accept
+  a leading comparison operator (`>200`, `<=5`, `=ok`, `!=err`) or a plain
+  substring; they filter the **loaded page** client-side (labeled as such on the
+  card). The open/closed set of key-views is **persisted per connection** (new
+  `tranger_views` attr on `C_TREEDB_CONFIG`, localStorage): views are restored
+  when the user returns to a topic (a deliberate close forgets a view; a topic
+  switch / teardown keeps it), and the whole set is dropped when that connection
+  is removed. Requires a backend with the `open-iterator` match-condition params
+  (yunetas c_tranger, same release). New i18n keys for the options-form labels.
+  (Backend counterpart: `feat(c_tranger): open-iterator accepts metadata match
+  conditions`.)
+
 - **feat(gui_agent): control-center link status in the shell + "reconnecting"
   feedback.** `c_app` now handles `EV_ON_OPEN_ERROR` (backend down / TLS / port,
   or a failed reconnect) — orthogonal to the session, so **no logout**; the link

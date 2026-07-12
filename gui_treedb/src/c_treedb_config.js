@@ -64,6 +64,7 @@ SDATA(data_type_t.DTP_JSON,     "connections",      sdata_flag_t.SDF_PERSIST, "[
 SDATA(data_type_t.DTP_JSON,     "selected_treedbs", sdata_flag_t.SDF_PERSIST, "{}", "Open (conn,treedb) tabs per workspace: {workspace: [{id,conn_id,treedb_name,label}]}"),
 SDATA(data_type_t.DTP_JSON,     "active_tabs",      sdata_flag_t.SDF_PERSIST, "{}", "Last-active tab per workspace: {workspace: sel_id}"),
 SDATA(data_type_t.DTP_STRING,   "display_mode",     sdata_flag_t.SDF_PERSIST, "table", "Record display: table | form (raw JSON)"),
+SDATA(data_type_t.DTP_JSON,     "tranger_views",    sdata_flag_t.SDF_PERSIST, "{}", "Open Tranger key-views per connection: {conn_id: [{treedb_name,topic,key,mode,match_cond}]}"),
 SDATA_END()
 ];
 
@@ -374,7 +375,102 @@ function treedb_config_remove_connection(gobj, id)
         write_selection_map(gobj, map);
     }
 
+    /*  Drop that connection's saved Tranger key-views (the wss endpoint is
+     *  gone, so its open/closed state goes with it).  */
+    let tv = read_tranger_views(gobj);
+    if(Object.prototype.hasOwnProperty.call(tv, id)) {
+        delete tv[id];
+        write_tranger_views(gobj, tv);
+    }
+
     gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list});
+}
+
+/***************************************************************
+ *  Open Tranger key-views, persisted PER CONNECTION so they survive
+ *  reloads and are restored when the user returns to a topic; the whole
+ *  set for a connection is dropped when that connection is removed.
+ *  Shape: {conn_id: [{treedb_name, topic, key, mode, match_cond}]}.
+ ***************************************************************/
+function read_tranger_views(gobj)
+{
+    let raw = gobj_read_attr(gobj, "tranger_views");
+    if(raw && typeof raw === "object" && !Array.isArray(raw)) {
+        return raw;
+    }
+    return {};
+}
+
+function write_tranger_views(gobj, map)
+{
+    gobj_write_attr(gobj, "tranger_views", map);
+    gobj_save_persistent_attrs(gobj, "tranger_views");
+}
+
+/***************************************************************
+ *  The saved views for one (conn_id, treedb_name, topic) scope.
+ ***************************************************************/
+function treedb_config_get_tranger_views(gobj, conn_id, treedb_name, topic)
+{
+    if(!conn_id) {
+        return [];
+    }
+    let list = read_tranger_views(gobj)[conn_id] || [];
+    return list.filter((v) =>
+        v && v.treedb_name === treedb_name && v.topic === topic
+    );
+}
+
+/***************************************************************
+ *  Persist a view as open (idempotent per conn/treedb/topic/key/mode;
+ *  a re-add refreshes its match_cond).
+ ***************************************************************/
+function treedb_config_add_tranger_view(gobj, conn_id, treedb_name, topic, key, mode, match_cond)
+{
+    if(!conn_id) {
+        return;
+    }
+    let map = read_tranger_views(gobj);
+    let list = map[conn_id] || [];
+    list = list.filter((v) => !(v &&
+        v.treedb_name === treedb_name && v.topic === topic &&
+        v.key === key && v.mode === mode));
+    list.push({
+        treedb_name: treedb_name,
+        topic:       topic,
+        key:         key,
+        mode:        mode,
+        match_cond:  match_cond || {}
+    });
+    map[conn_id] = list;
+    write_tranger_views(gobj, map);
+}
+
+/***************************************************************
+ *  Mark a view as closed (drop it from persistence).
+ ***************************************************************/
+function treedb_config_remove_tranger_view(gobj, conn_id, treedb_name, topic, key, mode)
+{
+    if(!conn_id) {
+        return;
+    }
+    let map = read_tranger_views(gobj);
+    let list = map[conn_id];
+    if(!Array.isArray(list)) {
+        return;
+    }
+    let kept = list.filter((v) => !(v &&
+        v.treedb_name === treedb_name && v.topic === topic &&
+        v.key === key && v.mode === mode));
+    if(kept.length === list.length) {
+        return;
+    }
+    if(kept.length > 0) {
+        map[conn_id] = kept;
+    } else {
+        delete map[conn_id];
+    }
+    write_tranger_views(gobj, map);
 }
 
 /***************************************************************
@@ -635,4 +731,7 @@ export {
     treedb_config_set_active_tab,
     treedb_config_get_display_mode,
     treedb_config_set_display_mode,
+    treedb_config_get_tranger_views,
+    treedb_config_add_tranger_view,
+    treedb_config_remove_tranger_view,
 };

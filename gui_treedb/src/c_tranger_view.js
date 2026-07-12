@@ -11,19 +11,27 @@
  *        - mt_start → `topics` command → one Bulma tab per topic;
  *        - selecting a topic → `list-keys` (keys + record counts, kept
  *          for the picker) and an empty card dashboard;
- *        - the toolbar "Keys" button opens a modal sheet with a Tabulator
- *          of the topic's keys (sortable by record count, header-filter),
- *          each row offering "Rows" (and, later, "Live") — picking one
- *          adds a card to the dashboard and closes the picker;
+ *        - the toolbar "Keys" button opens a Tabulator of the topic's keys
+ *          (sortable by record count, header-filter), presented responsively:
+ *          a moveable C_YUI_WINDOW on desktop, the shell's adaptive modal
+ *          sheet on mobile. It persists while views are opened/closed; each
+ *          row's "Rows"/"Live" button is colored ONLY while that view is
+ *          open for the key and toggles it. A key's "Rows" opens an options
+ *          form (server-side match conditions: time / rowid range, user_flag
+ *          masks) and then a Rows card; "Live" opens a Live card directly;
  *        - a "Rows" card is a records Tabulator using its NATIVE remote
  *          pagination: `open-iterator` builds the key's server-side row
- *          index and Tabulator's `ajaxRequestFunc` pulls each page via
- *          `get-page` (bridged to the async gobj_command answer with a
- *          per-request Promise). The iterator is closed (`close-iterator`)
- *          when the card, topic or view goes away;
+ *          index (pre-filtered by the chosen match conditions) and
+ *          Tabulator's `ajaxRequestFunc` pulls each page via `get-page`
+ *          (bridged to the async gobj_command answer with a per-request
+ *          Promise). The iterator is closed (`close-iterator`) when the
+ *          card, topic or view goes away;
+ *        - a "Live" card streams new appends (`open-rt` +
+ *          EV_TRANGER_RECORD_ADDED), newest on top, no history;
+ *        - per-column header filters (client-side, over the LOADED page)
+ *          replace a global search box: type `>200`, `<=5`, `=ok` or a
+ *          plain substring. No polling (Yuneta rule);
  *        - a row click opens the full record JSON in the shell dialog.
- *          No polling (Yuneta rule). "Live" (realtime push) is deferred
- *          to backend Phase C (EVF_PUBLIC_EVENT on EV_TRANGER_RECORD_ADDED).
  *
  *      Publishes EV_TOPIC_SELECTED (CHILD model → C_TREEDB_VIEW) so the
  *      selected topic deep-links into the URL, and honours EV_SHOW to
@@ -42,6 +50,7 @@ import {
     gobj_unsubscribe_event,
     gobj_publish_event,
     gobj_command,
+    gobj_create_service, gobj_find_service, gobj_destroy, is_gobj,
     createElement2, refresh_language,
     msg_iev_get_stack,
     kw_get_str, kw_get_dict,
@@ -51,8 +60,14 @@ import {t} from "i18next";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
-import {yui_shell_show_modal} from "@yuneta/gobj-ui/src/shell_modals.js";
+import {yui_shell_show_modal, yui_shell_popup_layer} from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+
+import {
+    treedb_config_get_tranger_views,
+    treedb_config_add_tranger_view,
+    treedb_config_remove_tranger_view,
+} from "./c_treedb_config.js";
 
 
 /***************************************************************
@@ -84,10 +99,43 @@ const STYLE_CSS = `
     flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis;
     white-space: nowrap; font-weight: 600;
 }
-.C_TRANGER_VIEW .TRANGER_CARD_SEARCH { flex: 1 1 auto; min-width: 80px; }
 .TRANGER_LIVE_DOT {
     display: inline-block; width: 0.55em; height: 0.55em;
     border-radius: 50%; background: #48c774; vertical-align: middle;
+}
+/*  In the Keys picker the Live dot follows the button state: neutral
+ *  (colorless) while the Live view is CLOSED, and only green/visible once
+ *  it is OPEN (button turns is-success). The card-header dot keeps the
+ *  base green — that card is always an active live view.  */
+.TRANGER_KEY_LIVE .TRANGER_LIVE_DOT {
+    background: currentColor; opacity: 0.4;
+}
+.TRANGER_KEY_LIVE.is-success .TRANGER_LIVE_DOT {
+    background: #fff; opacity: 1;
+}
+/*  Tabulator's footer is one nowrap flex row: counter + paginator (flex:1,
+    basis 0). On a narrow (mobile) width the paginator just shrinks and its
+    page-size + First/Prev/Next/Last clip off the right — flex-wrap can't
+    save it (basis 0 never wraps to a new line). So on mobile STACK the
+    footer vertically: counter on one line, the full pager (left-aligned,
+    wrapping) below. Scoped to the tranger tables (cards + Keys picker).  */
+.C_TRANGER_VIEW .tabulator .tabulator-footer,
+.TRANGER_KEYS_TABLE .tabulator .tabulator-footer {
+    white-space: normal;
+}
+@media (max-width: 768px) {
+    .C_TRANGER_VIEW .tabulator .tabulator-footer .tabulator-footer-contents,
+    .TRANGER_KEYS_TABLE .tabulator .tabulator-footer .tabulator-footer-contents {
+        flex-direction: column; align-items: flex-start; gap: 0.3rem;
+    }
+    .C_TRANGER_VIEW .tabulator .tabulator-footer .tabulator-paginator,
+    .TRANGER_KEYS_TABLE .tabulator .tabulator-footer .tabulator-paginator {
+        flex: none; width: 100%; text-align: left;
+    }
+    .C_TRANGER_VIEW .tabulator .tabulator-footer .tabulator-page-counter,
+    .TRANGER_KEYS_TABLE .tabulator .tabulator-footer .tabulator-page-counter {
+        margin-left: 0;
+    }
 }
 `;
 
@@ -110,6 +158,7 @@ const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",       0,  null,  "Subscriber of output events"),
 SDATA(data_type_t.DTP_POINTER,  "gobj_remote_yuno", 0,  null,  "Live transport (C_IEVENT_CLI)"),
 SDATA(data_type_t.DTP_STRING,   "treedb_name",      0,  "",    "Remote C_TRANGER service name"),
+SDATA(data_type_t.DTP_STRING,   "conn_id",          0,  "",    "Connection id (scopes persisted open key-views)"),
 SDATA(data_type_t.DTP_BOOLEAN,  "system",           0,  false, "Unused (hosting contract symmetry)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",       0,  null,  "Root HTML element (mounted by the shell)"),
 SDATA_END()
@@ -127,6 +176,9 @@ let PRIVATE_DATA = {
     iter_seq:    0,      /*  iterator_id uniquifier  */
     req_seq:     0,      /*  get-page request uniquifier  */
     pending:     null,   /*  req_id -> {resolve, reject} (get-page Promise bridge)  */
+    picker_win:  null,   /*  C_YUI_WINDOW hosting the Keys picker, desktop (or null)  */
+    picker_modal: null,  /*  shell modal hosting the Keys picker, mobile (or null)  */
+    picker_tbl:  null,   /*  the picker's Tabulator (or null)  */
     $tabs:       null,
     $meta:       null,
     $error:      null,
@@ -161,6 +213,9 @@ function mt_create(gobj)
     priv.iter_seq = 0;
     priv.req_seq = 0;
     priv.pending = {};
+    priv.picker_win = null;
+    priv.picker_modal = null;
+    priv.picker_tbl = null;
 
     build_ui(gobj);
 
@@ -188,6 +243,7 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     close_all_cards(gobj);
+    close_picker(gobj);
 }
 
 /***************************************************************
@@ -368,6 +424,7 @@ function select_topic(gobj, topic_name)
         return;
     }
     close_all_cards(gobj);
+    close_picker(gobj);     /*  keys are per-topic; reopen for the new one  */
     priv.cur_topic = topic_name;
     priv.keys = null;
     render_tabs(gobj);
@@ -399,9 +456,21 @@ function update_meta(gobj)
 }
 
 /***************************************************************
- *  Keys picker: a modal sheet with a Tabulator of the topic's keys
- *  (sorted by record count, header-filtered). Each row offers "Rows"
- *  (opens a card) and a disabled "Live" (backend Phase C).
+ *  True on a phone-width viewport (Bulma's mobile breakpoint).
+ ***************************************************************/
+function is_mobile()
+{
+    return typeof window !== "undefined" && window.innerWidth <= 768;
+}
+
+/***************************************************************
+ *  Keys picker: a Tabulator of the topic's keys (sorted by record count,
+ *  header-filtered). Each row's "Rows" / "Live" buttons are colored ONLY
+ *  while that view is open for the key (they toggle it off on click).
+ *  Presentation is responsive: a moveable C_YUI_WINDOW on desktop, the
+ *  shell's adaptive modal sheet on mobile (a window is awkward on a
+ *  phone). Either way it persists while cards are opened/closed, and a
+ *  second "Keys" click is a no-op while it is up.
  ***************************************************************/
 function open_keys_picker(gobj)
 {
@@ -409,39 +478,94 @@ function open_keys_picker(gobj)
     if(!priv.cur_topic) {
         return;
     }
-    let shell = yui_shell_of(gobj);
-    if(!shell) {
-        return;
+    if(priv.picker_win || priv.picker_modal) {
+        return;     /*  already open  */
     }
+
+    let mobile = is_mobile();
+    let shell = yui_shell_of(gobj);
 
     let $tbl = createElement2(["div", {class: "TRANGER_KEYS_TABLE"}, []]);
     let $box = createElement2(
         ["div", {class: "TRANGER_KEYS_PICKER",
-                 style: "width:min(92vw, 640px); max-width:100%;"}, [$tbl]]);
+                 style: mobile ? "" : "height:100%; display:flex; flex-direction:column;"},
+            [$tbl]]);
 
-    /*  on_close fires on every dismiss path (button, X, background,
-     *  escape) — release the picker table there so it never leaks.  */
-    let picker = null;
-    let modal = yui_shell_show_modal(shell, $box, {
-        dialog: true,
-        title:  `${priv.cur_topic} · ${t("keys")}`,
-        t:      t,
-        on_close: () => {
-            if(picker) {
-                try {
-                    picker.destroy();
-                } catch(e) {
-                    /*  already gone  */
-                }
-                picker = null;
-            }
+    /*  on_close (both paths) releases the table and clears the refs so
+     *  nothing leaks on any dismiss (X / dock / Escape / back).  */
+    if(mobile) {
+        if(!shell) {
+            return;
         }
-    });
+        priv.picker_modal = yui_shell_show_modal(shell, $box, {
+            dialog: true,
+            title:  `${priv.cur_topic} · ${t("keys")}`,
+            t:      t,
+            on_close: () => {
+                if(priv.picker_tbl) {
+                    try {
+                        priv.picker_tbl.destroy();
+                    } catch(e) {
+                        /*  already gone  */
+                    }
+                    priv.picker_tbl = null;
+                }
+                priv.picker_modal = null;
+            }
+        });
+    } else {
+        /*  Mount the window in the shell's popup layer (z-index 20), NOT on
+         *  document.body: a body-level window lands in the root stacking
+         *  context above the shell's modal layer (z-index 99) and would hide
+         *  every modal opened from it (the Rows-options form, record
+         *  dialogs). Inside the popup layer, the modal layer — a higher
+         *  sibling — always renders above the window.  */
+        let $win_parent = (shell && yui_shell_popup_layer(shell)) ||
+            (typeof document !== "undefined" && document.getElementById("top-layer")) ||
+            null;
 
-    /*  The modal content is mounted synchronously, so the Tabulator can
-     *  build against a live element right away.  */
-    picker = new Tabulator($tbl, {
-        height:         "min(60vh, 460px)",
+        priv.picker_win = gobj_create_service(
+            `tranger-keys-${priv.tok}`,
+            "C_YUI_WINDOW",
+            {
+                $parent: $win_parent,
+                subscriber: null,
+                modal:      false,
+                showMax:    true,
+                showFooter: false,
+                resizable:  true,
+                center:     true,
+                auto_save_size_and_position: true,
+                width:      560,
+                height:     520,
+                title:      `${priv.cur_topic} · ${t("keys")}`,
+                icon:       "yi-table",
+                body:       $box,
+                manager:    gobj_find_service("__window_manager__", false) || null,
+                on_close: () => {
+                    if(priv.picker_tbl) {
+                        try {
+                            priv.picker_tbl.destroy();
+                        } catch(e) {
+                            /*  already gone  */
+                        }
+                        priv.picker_tbl = null;
+                    }
+                    priv.picker_win = null;
+                }
+            },
+            gobj
+        );
+        if(!priv.picker_win) {
+            log_error(`${gobj_short_name(gobj)}: cannot create Keys window`);
+            return;
+        }
+    }
+
+    /*  The host (window body / modal sheet) is mounted synchronously, so
+     *  the Tabulator can build against a live element right away.  */
+    let picker = new Tabulator($tbl, {
+        height:         mobile ? "min(60vh, 460px)" : "100%",
         layout:         "fitColumns",
         placeholder:    t("no keys"),
         pagination:     true,
@@ -455,15 +579,16 @@ function open_keys_picker(gobj)
             {title: t("records"), field: "records", width: 110, hozAlign: "right",
                 sorter: "number"},
             {title: t("actions"), field: "_act", headerSort: false, width: 160,
-                formatter: (cell) => build_key_actions(gobj, cell, modal)}
+                formatter: (cell) => build_key_actions(gobj, cell)}
         ]
     });
+    priv.picker_tbl = picker;
 
     /*
-     *  The modal lays out AFTER this synchronous build, so Tabulator's
-     *  first width measurement can be the full-width layer, not the box —
-     *  fitColumns then overshoots (a too-wide `key` column + horizontal
-     *  scroll). Re-measure once the table is initialized AND laid out.
+     *  The host lays out AFTER this synchronous build, so Tabulator's first
+     *  width measurement can be off — fitColumns then overshoots (a too-wide
+     *  `key` column + horizontal scroll). Re-measure once the table is
+     *  initialized AND laid out.
      */
     picker.on("tableBuilt", () => {
         requestAnimationFrame(() => {
@@ -477,15 +602,145 @@ function open_keys_picker(gobj)
 }
 
 /***************************************************************
- *  The per-row action buttons of the Keys picker.
+ *  Close the Keys picker window (topic switch / stop). on_close releases
+ *  the table and clears the refs.
  ***************************************************************/
-function build_key_actions(gobj, cell, modal)
+function close_picker(gobj)
 {
+    let priv = gobj.priv;
+    let win = priv.picker_win;
+    let modal = priv.picker_modal;
+    /*  Own the teardown here (topic switch / stop): destroy the table and
+     *  clear the refs, then dismiss whichever presenter is up. gobj_destroy
+     *  on the window fires its mt_destroy (DOM + dock unregister); the
+     *  modal's close() fires its on_close — both now no-ops on the table
+     *  (already gone) and refs (already null).  */
+    if(priv.picker_tbl) {
+        try {
+            priv.picker_tbl.destroy();
+        } catch(e) {
+            /*  already gone  */
+        }
+        priv.picker_tbl = null;
+    }
+    priv.picker_win = null;
+    priv.picker_modal = null;
+    if(win && is_gobj(win)) {
+        try {
+            gobj_destroy(win);
+        } catch(e) {
+            /*  already gone  */
+        }
+    }
+    if(modal && typeof modal.close === "function") {
+        try {
+            modal.close();
+        } catch(e) {
+            /*  already gone  */
+        }
+    }
+}
+
+/***************************************************************
+ *  Re-run the picker's per-row action formatters so the Rows/Live buttons
+ *  reflect the current open-card set (called after a card opens/closes).
+ ***************************************************************/
+function refresh_picker_actions(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.picker_tbl) {
+        return;
+    }
+    try {
+        priv.picker_tbl.getRows().forEach((r) => r.reformat());
+    } catch(e) {
+        /*  table gone  */
+    }
+}
+
+/***************************************************************
+ *  The config service that owns the persisted open key-views (per
+ *  connection). null if unavailable — persistence then no-ops.
+ ***************************************************************/
+function config_service()
+{
+    return gobj_find_service("treedb_config", false) || null;
+}
+
+/***************************************************************
+ *  Persist / unpersist an open key-view (scoped by conn_id + treedb +
+ *  topic). No-op without a conn_id or the config service.
+ ***************************************************************/
+function persist_view(gobj, card)
+{
+    let cfg = config_service();
+    let conn_id = gobj_read_str_attr(gobj, "conn_id");
+    if(!cfg || !conn_id) {
+        return;
+    }
+    treedb_config_add_tranger_view(cfg, conn_id,
+        gobj_read_str_attr(gobj, "treedb_name"),
+        card.topic, card.key, card.mode, card.match_cond || {});
+}
+
+function unpersist_view(gobj, card)
+{
+    let cfg = config_service();
+    let conn_id = gobj_read_str_attr(gobj, "conn_id");
+    if(!cfg || !conn_id) {
+        return;
+    }
+    treedb_config_remove_tranger_view(cfg, conn_id,
+        gobj_read_str_attr(gobj, "treedb_name"),
+        card.topic, card.key, card.mode);
+}
+
+/***************************************************************
+ *  Reopen the saved key-views for the current topic (called once its
+ *  keys are loaded). Only keys that still exist are restored; a restore
+ *  does NOT re-persist (already saved) and add_card skips duplicates.
+ ***************************************************************/
+function restore_saved_views(gobj)
+{
+    let priv = gobj.priv;
+    let cfg = config_service();
+    let conn_id = gobj_read_str_attr(gobj, "conn_id");
+    if(!cfg || !conn_id || !priv.cur_topic) {
+        return;
+    }
+    let saved = treedb_config_get_tranger_views(cfg, conn_id,
+        gobj_read_str_attr(gobj, "treedb_name"), priv.cur_topic);
+    if(!saved.length) {
+        return;
+    }
+    let present = {};
+    for(let k of (priv.keys || [])) {
+        present[String(k.key)] = true;
+    }
+    for(let v of saved) {
+        if(!present[String(v.key)]) {
+            continue;   /*  key no longer exists; skip the stale restore  */
+        }
+        add_card(gobj, String(v.key), v.mode, v.match_cond || {}, true);
+    }
+}
+
+/***************************************************************
+ *  The per-row action buttons of the Keys picker. A button is colored
+ *  (active) ONLY while its view is open for the key; clicking an active
+ *  button closes that view, an inactive one opens it.
+ ***************************************************************/
+function build_key_actions(gobj, cell)
+{
+    let priv = gobj.priv;
     let key = String(cell.getRow().getData().key);
+    let rows_open = priv.cards.some((c) => c.key === key && c.mode === "rows");
+    let live_open = priv.cards.some((c) => c.key === key && c.mode === "live");
 
     let $rows = createElement2(
-        ["button", {class: "button is-small is-link TRANGER_KEY_ROWS", type: "button",
-                    title: t("rows"), "aria-label": t("rows")},
+        ["button", {class: "button is-small TRANGER_KEY_ROWS" +
+                           (rows_open ? " is-link is-selected" : ""),
+                    type: "button", title: t("rows"), "aria-label": t("rows")},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-eye"}]]],
                 ["span", {i18n: "rows"}, t("rows")]
@@ -493,15 +748,20 @@ function build_key_actions(gobj, cell, modal)
         ]);
     $rows.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        add_card(gobj, key, "rows");
-        if(modal && typeof modal.close === "function") {
-            modal.close();
+        if(rows_open) {
+            let card = priv.cards.find((c) => c.key === key && c.mode === "rows");
+            if(card) {
+                close_card(gobj, card);
+            }
+            return;
         }
+        open_rows_options(gobj, key);
     });
 
     let $live = createElement2(
-        ["button", {class: "button is-small ml-1 TRANGER_KEY_LIVE", type: "button",
-                    title: t("live"), "aria-label": t("live")},
+        ["button", {class: "button is-small ml-1 TRANGER_KEY_LIVE" +
+                           (live_open ? " is-success is-selected" : ""),
+                    type: "button", title: t("live"), "aria-label": t("live")},
             [
                 ["span", {class: "TRANGER_LIVE_DOT mr-1"}, ""],
                 ["span", {i18n: "live"}, t("live")]
@@ -509,14 +769,151 @@ function build_key_actions(gobj, cell, modal)
         ]);
     $live.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        add_card(gobj, key, "live");
-        if(modal && typeof modal.close === "function") {
-            modal.close();
+        if(live_open) {
+            let card = priv.cards.find((c) => c.key === key && c.mode === "live");
+            if(card) {
+                close_card(gobj, card);
+            }
+            return;
         }
+        add_card(gobj, key, "live");
     });
 
     return createElement2(
         ["div", {class: "is-flex TRANGER_KEY_ACTIONS"}, [$rows, $live]]);
+}
+
+/***************************************************************
+ *  Parse a "datetime-local" input value into epoch seconds (the tranger
+ *  `t` unit). Empty / unparseable → 0 (unset).
+ ***************************************************************/
+function to_epoch_secs(v)
+{
+    if(!v) {
+        return 0;
+    }
+    let ms = Date.parse(v);
+    if(Number.isNaN(ms)) {
+        return 0;
+    }
+    return Math.floor(ms / 1000);
+}
+
+/***************************************************************
+ *  Build the Rows-options form: the server-side match conditions
+ *  forwarded to `open-iterator` (all optional; blank = the full key).
+ *  Returns {$box, inputs, $open}.
+ ***************************************************************/
+function build_rows_options_form()
+{
+    let mk_input = (cls, type, ph) => createElement2(
+        ["input", {class: `input is-small ${cls}`, type: type, placeholder: ph || ""}]);
+
+    let inputs = {
+        from_t:      mk_input("TRANGER_OPT_FROM_T",      "datetime-local", ""),
+        to_t:        mk_input("TRANGER_OPT_TO_T",        "datetime-local", ""),
+        from_rowid:  mk_input("TRANGER_OPT_FROM_ROWID",  "number", t("1-based; negative = from end")),
+        to_rowid:    mk_input("TRANGER_OPT_TO_ROWID",    "number", t("0 = last")),
+        mask_set:    mk_input("TRANGER_OPT_MASK_SET",    "number", t("user_flag bits")),
+        mask_notset: mk_input("TRANGER_OPT_MASK_NOTSET", "number", t("user_flag bits"))
+    };
+
+    let field = (label, input) => ["div", {class: "field TRANGER_OPT_FIELD"},
+        [
+            ["label", {class: "label is-small mb-1", i18n: label}, t(label)],
+            ["div", {class: "control"}, [input]]
+        ]];
+
+    let $open = createElement2(
+        ["button", {class: "button is-small is-link TRANGER_OPT_OPEN", type: "button"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-eye"}]]],
+                ["span", {i18n: "open rows"}, t("open rows")]
+            ]
+        ]);
+
+    let $box = createElement2(
+        ["div", {class: "TRANGER_ROWS_OPTIONS",
+                 style: "width:min(92vw, 460px); max-width:100%;"},
+            [
+                ["p", {class: "is-size-7 has-text-grey mb-3", i18n: "leave blank for the full key"},
+                    t("leave blank for the full key")],
+                ["div", {class: "columns is-mobile is-multiline"},
+                    [
+                        ["div", {class: "column is-half"}, [field("from time", inputs.from_t)]],
+                        ["div", {class: "column is-half"}, [field("to time", inputs.to_t)]],
+                        ["div", {class: "column is-half"}, [field("from rowid", inputs.from_rowid)]],
+                        ["div", {class: "column is-half"}, [field("to rowid", inputs.to_rowid)]],
+                        ["div", {class: "column is-half"}, [field("user-flag mask set", inputs.mask_set)]],
+                        ["div", {class: "column is-half"}, [field("user-flag mask clear", inputs.mask_notset)]]
+                    ]
+                ],
+                ["div", {class: "has-text-right mt-2 TRANGER_OPT_ACTIONS"}, [$open]]
+            ]
+        ]);
+
+    return {$box: $box, inputs: inputs, $open: $open};
+}
+
+/***************************************************************
+ *  Collect a match_cond from the Rows-options form: only fields the
+ *  user actually set (0/blank = unset), so the iterator applies exactly
+ *  what was asked.
+ ***************************************************************/
+function collect_rows_match_cond(inputs)
+{
+    let mc = {};
+    let ft = to_epoch_secs(inputs.from_t.value);
+    if(ft) {
+        mc.from_t = ft;
+    }
+    let tt = to_epoch_secs(inputs.to_t.value);
+    if(tt) {
+        mc.to_t = tt;
+    }
+    let fr = parseInt(inputs.from_rowid.value, 10);
+    if(!Number.isNaN(fr) && fr !== 0) {
+        mc.from_rowid = fr;
+    }
+    let tr = parseInt(inputs.to_rowid.value, 10);
+    if(!Number.isNaN(tr) && tr !== 0) {
+        mc.to_rowid = tr;
+    }
+    let ms = parseInt(inputs.mask_set.value, 10);
+    if(!Number.isNaN(ms) && ms !== 0) {
+        mc.user_flag_mask_set = ms;
+    }
+    let mn = parseInt(inputs.mask_notset.value, 10);
+    if(!Number.isNaN(mn) && mn !== 0) {
+        mc.user_flag_mask_notset = mn;
+    }
+    return mc;
+}
+
+/***************************************************************
+ *  Open the Rows-options dialog for `key`. Confirming closes the options
+ *  dialog and opens the Rows card with the chosen match_cond; the Keys
+ *  picker window stays open (its Rows button turns active).
+ ***************************************************************/
+function open_rows_options(gobj, key)
+{
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        return;
+    }
+    let form = build_rows_options_form();
+    let opt_modal = yui_shell_show_modal(shell, form.$box, {
+        dialog: true,
+        title:  `${key} · ${t("rows")}`,
+        t:      t
+    });
+    form.$open.addEventListener("click", () => {
+        let match_cond = collect_rows_match_cond(form.inputs);
+        if(opt_modal && typeof opt_modal.close === "function") {
+            opt_modal.close();
+        }
+        add_card(gobj, key, "rows", match_cond);
+    });
 }
 
 /***************************************************************
@@ -527,7 +924,7 @@ function build_key_actions(gobj, cell, modal)
  *      subscribe to EV_TRANGER_RECORD_ADDED), newest on top.
  *  One card per (key, mode); a duplicate request is ignored.
  ***************************************************************/
-function add_card(gobj, key, mode)
+function add_card(gobj, key, mode, match_cond, restoring)
 {
     let priv = gobj.priv;
     if(!priv.cur_topic || (mode !== "rows" && mode !== "live")) {
@@ -546,30 +943,12 @@ function add_card(gobj, key, mode)
 
     let card = {
         key: key, mode: mode, topic: priv.cur_topic,
-        tabulator: null, $el: null, search: "",
+        tabulator: null, $el: null, match_cond: match_cond || {},
         iterator_id: null, rt_id: null, subscribed: false,
         built: false, seeded: false, pending: []
     };
 
     let $table = createElement2(["div", {class: "TRANGER_CARD_TABLE"}, []]);
-
-    let $search = createElement2(
-        ["input", {class: "input is-small TRANGER_CARD_SEARCH_INPUT",
-                   type: "search", placeholder: t("search records"),
-                   title: t("search in the loaded records"),
-                   "aria-label": t("search in the loaded records")}]);
-    $search.addEventListener("input", () => {
-        card.search = $search.value || "";
-        apply_card_filter(card);
-    });
-    let $search_control = createElement2(
-        ["div", {class: "control has-icons-left ml-2 TRANGER_CARD_SEARCH"},
-            [
-                $search,
-                ["span", {class: "icon is-small is-left"},
-                    [["i", {class: "yi-magnifying-glass"}]]]
-            ]
-        ]);
 
     let $close = createElement2(
         ["button", {class: "button is-small TRANGER_CARD_CLOSE",
@@ -622,7 +1001,11 @@ function add_card(gobj, key, mode)
                       title: t("live")}, ""]);
     }
     head_children.push(["span", {class: "TRANGER_CARD_TITLE"}, `${key} · ${t(mode)}`]);
-    head_children.push($search_control);
+    head_children.push(
+        ["span", {class: "TRANGER_CARD_FILTERHINT is-size-7 has-text-grey ml-2 is-hidden-mobile",
+                  title: t("column filters apply to the loaded rows only")},
+            t("filters loaded rows")]);
+    head_children.push(["span", {class: "TRANGER_CARD_SPACER", style: "flex:1 1 auto;"}, ""]);
     head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$action]]);
     head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$close]]);
     let $head = createElement2(
@@ -639,6 +1022,10 @@ function add_card(gobj, key, mode)
     }
     priv.$dashboard.appendChild($el);
     update_meta(gobj);
+    refresh_picker_actions(gobj);
+    if(!restoring) {
+        persist_view(gobj, card);
+    }
 
     if(mode === "rows") {
         mount_rows_table(gobj, card, $table);
@@ -659,14 +1046,17 @@ function mount_rows_table(gobj, card, $table)
     card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
 
     /*  Arm the iterator FIRST; the Tabulator's first get-page (fired on
-     *  build) is processed after it by the remote's FIFO command order.  */
-    let ret = gobj_command(remote, "open-iterator",
-        {
-            service:     service,
-            iterator_id: card.iterator_id,
-            topic_name:  card.topic,
-            key:         card.key
-        }, gobj);
+     *  build) is processed after it by the remote's FIFO command order.
+     *  The chosen match_cond pre-filters the index, so total_rows / paging
+     *  already reflect it.  */
+    let iter_kw = {
+        service:     service,
+        iterator_id: card.iterator_id,
+        topic_name:  card.topic,
+        key:         card.key
+    };
+    Object.assign(iter_kw, card.match_cond || {});
+    let ret = gobj_command(remote, "open-iterator", iter_kw, gobj);
     if(ret) {
         log_error(ret);
     }
@@ -691,11 +1081,6 @@ function mount_rows_table(gobj, card, $table)
     });
     table.on("rowClick", function(e, row) {
         show_record_dialog(gobj, row.getData().__rec, card.key);
-    });
-    /*  Re-apply the head search to every page as it loads, so the filter
-     *  persists while paging (remote pagination replaces the page data).  */
-    table.on("dataLoaded", function() {
-        apply_card_filter(card);
     });
     /*  Re-measure once built + laid out (autoResize handles later window
      *  resizes), so the columns fit the card instead of a stale width.  */
@@ -770,8 +1155,55 @@ function mount_live_table(gobj, card, $table)
 }
 
 /***************************************************************
+ *  Custom Tabulator header-filter: parse a leading comparison operator
+ *  from the typed term (`>=`, `<=`, `!=`, `>`, `<`, `=`) and compare —
+ *  numeric when both sides parse as numbers (so `Voltage  >200` works),
+ *  else string. No operator ⇒ case-insensitive substring match. Empty
+ *  term ⇒ no filtering. Runs client-side over the LOADED page.
+ ***************************************************************/
+function op_filter(headerValue, rowValue)
+{
+    let term = String(headerValue === null || headerValue === undefined ? "" : headerValue).trim();
+    if(!term) {
+        return true;
+    }
+    let cell = (rowValue === null || rowValue === undefined) ? "" : rowValue;
+    let m = term.match(/^(>=|<=|!=|>|<|=)\s*(.*)$/);
+    if(m) {
+        let op = m[1];
+        let rhs = m[2].trim();
+        let a = Number(cell);
+        let b = Number(rhs);
+        if(rhs !== "" && !Number.isNaN(a) && !Number.isNaN(b)) {
+            switch(op) {
+                case ">":  return a > b;
+                case "<":  return a < b;
+                case ">=": return a >= b;
+                case "<=": return a <= b;
+                case "=":  return a === b;
+                case "!=": return a !== b;
+                default:   return true;
+            }
+        }
+        let s = String(cell).toLowerCase();
+        let r = rhs.toLowerCase();
+        switch(op) {
+            case ">":  return s > r;
+            case "<":  return s < r;
+            case ">=": return s >= r;
+            case "<=": return s <= r;
+            case "=":  return s === r;
+            case "!=": return s !== r;
+            default:   return true;
+        }
+    }
+    return String(cell).toLowerCase().indexOf(term.toLowerCase()) !== -1;
+}
+
+/***************************************************************
  *  Shared column tuning for the auto/seeded columns (drop __rec, no
- *  header sort, tidy the metadata columns).
+ *  header sort, per-column operator header filter, tidy the metadata
+ *  columns).
  ***************************************************************/
 function tune_columns(defs)
 {
@@ -780,6 +1212,10 @@ function tune_columns(defs)
         .map((d) => {
             d.headerSort = false;
             d.minWidth = 90;
+            d.headerFilter = "input";
+            d.headerFilterFunc = op_filter;
+            d.headerFilterLiveFilter = true;
+            d.headerFilterPlaceholder = "= < >";
             if(d.field === "rowid") {
                 d.width = 80;
                 d.hozAlign = "right";
@@ -860,10 +1296,16 @@ function push_live_row(card, row)
 
 /***************************************************************
  *  Close a card: close its iterator, destroy the table, unmount.
+ *  `forget` (default true) drops it from the persisted open-views set —
+ *  a deliberate user close. A teardown close (topic switch / stop) passes
+ *  false so the view is restored on return.
  ***************************************************************/
-function close_card(gobj, card)
+function close_card(gobj, card, forget)
 {
     let priv = gobj.priv;
+    if(forget !== false) {
+        unpersist_view(gobj, card);
+    }
     let i = priv.cards.indexOf(card);
     if(i >= 0) {
         priv.cards.splice(i, 1);
@@ -897,6 +1339,7 @@ function close_card(gobj, card)
         priv.$empty.classList.remove("is-hidden");
     }
     update_meta(gobj);
+    refresh_picker_actions(gobj);
 }
 
 /***************************************************************
@@ -907,7 +1350,7 @@ function close_all_cards(gobj)
     let priv = gobj.priv;
     let cards = (priv.cards || []).slice();
     for(let card of cards) {
-        close_card(gobj, card);
+        close_card(gobj, card, false);   /*  teardown: keep them persisted  */
     }
 }
 
@@ -943,37 +1386,6 @@ function close_rt(gobj, rt_id)
     let service = gobj_read_str_attr(gobj, "treedb_name");
     gobj_command(remote, "close-rt",
         {service: service, rt_id: rt_id}, gobj);
-}
-
-/***************************************************************
- *  Filter a card's records table client-side over the LOADED page
- *  (remote pagination holds one page in memory): match `card.search`
- *  against every displayed field. Empty term clears the filter. Re-run
- *  on every page load so the filter persists as you page.
- ***************************************************************/
-function apply_card_filter(card)
-{
-    if(!card.tabulator) {
-        return;
-    }
-    let term = (card.search || "").trim().toLowerCase();
-    if(!term) {
-        card.tabulator.clearFilter(true);
-        return;
-    }
-    card.tabulator.setFilter(function(data) {
-        for(let k in data) {
-            if(k === "__rec") {
-                continue;
-            }
-            let v = data[k];
-            if(v !== null && v !== undefined &&
-                String(v).toLowerCase().indexOf(term) !== -1) {
-                return true;
-            }
-        }
-        return false;
-    });
 }
 
 /***************************************************************
@@ -1148,6 +1560,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
             }
             priv.keys = Array.isArray(data) ? data : [];
             update_meta(gobj);
+            restore_saved_views(gobj);
             break;
         }
 
