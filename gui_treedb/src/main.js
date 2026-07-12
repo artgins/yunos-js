@@ -27,6 +27,7 @@ import {
     db_list_persistent_attrs,
     gobj_create_yuno,
     gobj_create_default_service,
+    gobj_create_service,
     gobj_start,
     gobj_play,
     register_c_yuno,
@@ -44,6 +45,7 @@ import {
 import {register_c_yui_shell}  from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {register_c_yui_nav}    from "@yuneta/gobj-ui/src/c_yui_nav.js";
 import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
+import {register_c_yui_window_manager} from "@yuneta/gobj-ui/src/c_yui_window_manager.js";
 
 import {register_c_yui_treedb_topics}          from "@yuneta/gobj-ui/src/c_yui_treedb_topics.js";
 import {register_c_yui_treedb_topic_with_form} from "@yuneta/gobj-ui/src/c_yui_treedb_topic_with_form.js";
@@ -118,6 +120,7 @@ function main()
     register_c_yui_shell();
     register_c_yui_nav();
     register_c_yui_window();     /*  host for the developer panel  */
+    register_c_yui_window_manager(); /*  dock/taskbar for windows (Developer monitor)  */
 
     /*  TreeDB editor gclasses (from gobj-ui)  */
     register_c_yui_treedb_topics();
@@ -176,6 +179,27 @@ function main()
         {
             config:   app_config,
             use_hash: true
+        },
+        yuno
+    );
+
+    /*------------------------------------------------*
+     *      Window manager (dock/taskbar). A named service so
+     *      C_YUI_WINDOW hosts (the Developer monitor) can opt in via
+     *      gobj_find_service("__window_manager__") — without it a
+     *      minimized window shades in place instead of rolling to a dock.
+     *
+     *      Responsive placement: a floating bar pinned bottom-left on
+     *      desktop, an inline taskbar row in the shell's free `bottom-sub`
+     *      zone on mobile (above the primary menu, which owns `bottom`).
+     *------------------------------------------------*/
+    gobj_create_service(
+        "__window_manager__",
+        "C_YUI_WINDOW_MANAGER",
+        {
+            dock_mode:       "responsive",
+            dock_corner:     "bottom-left",
+            inline_selector: '[data-zone="bottom-sub"]'
         },
         yuno
     );
