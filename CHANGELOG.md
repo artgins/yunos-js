@@ -22,6 +22,34 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): C_TRANGER_VIEW becomes a two-level keys→records
+  browser with real cursor pagination.** Replaces the earlier flat table
+  (one-shot `open-list return_data=1 from_rowid=-N` + "Load more ×4" that
+  re-read a growing snapshot) with a proper control panel over the new
+  c_tranger command surface (needs a backend with `list-keys` /
+  `open-iterator` / `get-page` / `close-iterator`):
+    - selecting a topic issues `list-keys` → a left **keys pane**, each key
+      with its record count, filtered client-side by a keys search box,
+      auto-selecting the first key;
+    - selecting a key opens a server-side per-key iterator and reads its
+      first page (`open-iterator` + `get-page` sent back-to-back — the
+      remote processes commands FIFO over the one connection, so the
+      iterator exists by the time the page read runs), rendering the records
+      Tabulator plus a page navigator (◀ `page N/M` ▶ over `total_rows`);
+    - paging issues `get-page from_rowid=(n-1)*limit+1` (100/page); the
+      iterator is closed (`close-iterator`) on key/topic change and on stop;
+    - answers are correlated by the echoed `iterator_id` / `topic_name` /
+      `page` so stale answers of a previous key are dropped; a row click
+      still opens the full record JSON in the shell dialog; Refresh reloads
+      the current page. No polling (Yuneta rule). Topic deep-link
+      (`EV_TOPIC_SELECTED` / `EV_SHOW`) is unchanged.
+  Adds the `page` / `previous page` / `next page` / `filter keys` /
+  `filter the loaded keys` / `no keys` / `loading` locale keys (en + es).
+  Known limitation (backend follow-up): an iterator opened by the SPA is not
+  tied to the ievent session, so an unclean disconnect (tab closed, network
+  drop) leaks it until the C_TRANGER yuno's own destroy — the view closes
+  diligently on every transition, capping the leak at ≤1 per view instance.
+
 - **feat(gui_treedb): per-yuno service discovery, explicit connection
   lifecycle + C_TRANGER records browser.** Each Settings connection is the
   `C_IEVENT_CLI` entry to ONE yuno — its public wss url + remote role +
