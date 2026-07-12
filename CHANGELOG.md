@@ -22,6 +22,17 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_agent, gui_treedb): close the EV_LOGIN_REFRESHED gap in ST_LOGOUT.**
+  A token refresh is only ever initiated from ST_LOGIN (NAK recovery), but its
+  async result can resolve after a concurrent logout has moved the login FSM to
+  ST_LOGOUT — a stale `EV_LOGIN_REFRESHED` success then raised *"Event NOT
+  DEFINED in state"*. Both logins now handle it in ST_LOGOUT by discarding it
+  (`ac_clear_session`, we are logged out on purpose). gui_agent also drops the
+  dead `EV_DO_REFRESH` entry from ST_LOGOUT (its only sender, the NAK path,
+  operates in ST_LOGIN); gui_treedb never had it. Mirrors the same fix in
+  wattyzer. gui_agent is the most exposed (single-link: it logs out on the 2nd
+  NAK while the 1st refresh may still be in flight).
+
 - **feat(gui_treedb): Live records card in C_TRANGER_VIEW (realtime).** The
   keys picker's **Live** action (previously disabled) now opens a streaming
   card: it arms a backend realtime feed (`open-rt {rt_id, topic_name, key}`)

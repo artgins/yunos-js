@@ -404,10 +404,18 @@ function create_gclass(gclass_name)
     const states = [
         ["ST_LOGOUT", [
             ["EV_DO_LOGIN",        ac_do_login,        "ST_WAIT_TOKEN"],
-            ["EV_DO_REFRESH",      ac_do_refresh,      null],
             ["EV_LOGIN_DENIED",    ac_login_denied,    null],
             ["EV_DO_LOGOUT",       ac_clear_session,   null],
-            ["EV_LOGOUT_DONE",     ac_clear_session,   null]
+            ["EV_LOGOUT_DONE",     ac_clear_session,   null],
+            /*
+             *  A refresh is only ever initiated from ST_LOGIN (NAK recovery),
+             *  but its async result can resolve after a concurrent logout has
+             *  moved us here (single-link agent logs out on the 2nd NAK):
+             *  EV_LOGIN_DENIED is already handled above, and a stale
+             *  EV_LOGIN_REFRESHED success is discarded (we are logged out on
+             *  purpose) instead of raising "event not defined".
+             */
+            ["EV_LOGIN_REFRESHED", ac_clear_session,   null]
         ]],
         ["ST_WAIT_TOKEN", [
             ["EV_DO_LOGIN",        ac_do_login,        null],
