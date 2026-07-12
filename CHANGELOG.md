@@ -62,6 +62,15 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   is a dataTree PARENT (a connection with service sub-rows) and then
   re-fires on every resize/redraw observer tick.
 
+- **feat(gui_treedb): row search in C_TRANGER_VIEW.** The toolbar gains a
+  search box that live-filters the records ALREADY loaded in the table
+  (client-side Tabulator `setFilter` over a per-row haystack — formatted
+  time + rowid + the full record JSON, so hidden fields match too). It is a
+  case-insensitive substring match, remembered per topic, that never hits
+  the backend (grow the window with "Load more" first if a match is outside
+  the loaded page); the ✕ clears it, and the record-count line shows the
+  matching/total split while a filter is active.
+
 - **style(gui_treedb): default-size C_TRANGER_VIEW topic tabs + toolbar
   buttons** — dropped Bulma `is-small` from the `TRANGER_TOPICS` tabs and
   the Refresh / Load-more buttons (too small to read/tap).

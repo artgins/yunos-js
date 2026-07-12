@@ -34,7 +34,9 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   open the read-only `C_TRANGER_VIEW`: topic tabs + a records table fed by
   one-shot `open-list return_data=1 from_rowid=-N` reads (requires a backend
   with the restored c_tranger read commands), full record JSON in the shell
-  dialog, Refresh / Load-more buttons (no polling).
+  dialog, Refresh / Load-more buttons (no polling), and a live search box
+  that client-side filters the loaded rows (substring match over the whole
+  record, remembered per topic).
 - **Authorization note:** the discovery addresses `__yuno__` (a `dst_service`
   beyond the connected service), and `C_IEVENT_SRV` only routes that for
   channels whose user is a **superuser** (a role with `service="*"`) or has

@@ -13,6 +13,12 @@
  *          from_rowid=-N: the LAST N records per key) → Tabulator with
  *          generic columns derived from the records themselves
  *          (t / key / rowid + the record's own fields);
+ *        - Search filters the ALREADY-LOADED rows client-side (Tabulator
+ *          setFilter over a precomputed per-row haystack: the formatted t,
+ *          rowid and the full record JSON — hidden fields included). It is a
+ *          live, as-you-type substring match, remembered per topic, that
+ *          never hits the backend (grow the window with "Load more" first if
+ *          a match is outside the loaded page);
  *        - a row click opens the full record as JSON in the shell's
  *          adaptive dialog; "Load more" grows N and reloads; "Refresh"
  *          reloads on demand (no polling — Yuneta rule).
@@ -76,12 +82,14 @@ let PRIVATE_DATA = {
     cur_topic:   "",     /*  selected topic  */
     pending_seg: "",     /*  topic asked via EV_SHOW before topics loaded  */
     limits:      null,   /*  topic -> current per-key fetch limit  */
+    searches:    null,   /*  topic -> current client-side row filter term  */
     seq:         0,      /*  one-shot list_id uniquifier  */
     tabulator:   null,
     $tabs:       null,
     $meta:       null,   /*  record-count line  */
     $error:      null,   /*  inline load-error banner  */
     $table:      null,   /*  Tabulator mount point  */
+    $search:     null,   /*  key search input  */
 };
 
 let __gclass__ = null;
@@ -106,6 +114,7 @@ function mt_create(gobj)
     priv.cur_topic = "";
     priv.pending_seg = "";
     priv.limits = {};
+    priv.searches = {};
     priv.seq = 0;
 
     build_ui(gobj);
@@ -211,6 +220,46 @@ function build_ui(gobj)
         ["span", {class: "is-size-7 has-text-grey ml-2 TRANGER_META"}, ""]);
     priv.$meta = $meta;
 
+    /*
+     *  Row search: a live, as-you-type substring filter over the records
+     *  ALREADY loaded in the table (client-side Tabulator setFilter — never
+     *  hits the backend). The ✕ clears it; remembered per topic.
+     */
+    let $search = createElement2(
+        ["input", {class: "input TRANGER_SEARCH_INPUT",
+                   type: "search", placeholder: t("search records"),
+                   title: t("search in the loaded records"),
+                   "aria-label": t("search in the loaded records")}]);
+    priv.$search = $search;
+    $search.addEventListener("input", () => {
+        run_search(gobj);
+    });
+
+    let $search_clear = createElement2(
+        ["button", {class: "button TRANGER_SEARCH_CLEAR",
+                    title: "Clear search", "aria-label": "Clear search",
+                    "data-i18n-title": "clear search",
+                    "data-i18n-aria-label": "clear search"},
+            [["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]]]
+        ]);
+    $search_clear.addEventListener("click", () => {
+        clear_search(gobj);
+    });
+
+    let $search_group = createElement2(
+        ["div", {class: "field has-addons mb-0 ml-auto TRANGER_SEARCH"},
+            [
+                ["div", {class: "control has-icons-left is-expanded"},
+                    [
+                        $search,
+                        ["span", {class: "icon is-left"},
+                            [["i", {class: "yi-magnifying-glass"}]]]
+                    ]
+                ],
+                ["div", {class: "control"}, [$search_clear]]
+            ]
+        ]);
+
     let $error = createElement2(
         ["div", {class: "notification is-danger is-light is-hidden TRANGER_ERROR"}, ""]);
     priv.$error = $error;
@@ -225,7 +274,7 @@ function build_ui(gobj)
             [
                 ["div", {class: "tabs is-boxed mb-2 TRANGER_TOPICS"}, [$tabs]],
                 ["div", {class: "is-flex is-align-items-center mb-2 TRANGER_TOOLBAR"},
-                    [$refresh, ["span", {class: "ml-2"}, [$more]], $meta]],
+                    [$refresh, ["span", {class: "ml-2"}, [$more]], $meta, $search_group]],
                 $error,
                 $table
             ]
@@ -343,9 +392,101 @@ function select_topic(gobj, topic_name)
     }
     priv.cur_topic = topic_name;
     render_tabs(gobj);
+    sync_search_input(gobj);
     show_error(gobj, "");
     load_records(gobj, topic_name);
     gobj_publish_event(gobj, "EV_TOPIC_SELECTED", {topic: topic_name});
+}
+
+/***************************************************************
+ *  Remember the current topic's search term (from the input) and re-apply
+ *  the client-side filter. No backend round trip — just the loaded rows.
+ ***************************************************************/
+function run_search(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.cur_topic) {
+        return;
+    }
+    priv.searches[priv.cur_topic] = priv.$search ? priv.$search.value : "";
+    apply_table_filter(gobj);
+}
+
+/***************************************************************
+ *  Clear the current topic's filter (empty the input, drop the filter).
+ ***************************************************************/
+function clear_search(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.$search) {
+        priv.$search.value = "";
+    }
+    if(!priv.cur_topic) {
+        return;
+    }
+    priv.searches[priv.cur_topic] = "";
+    apply_table_filter(gobj);
+}
+
+/***************************************************************
+ *  Reflect the current topic's remembered filter in the input (topics
+ *  keep independent search terms).
+ ***************************************************************/
+function sync_search_input(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.$search) {
+        priv.$search.value = priv.searches[priv.cur_topic] || "";
+    }
+}
+
+/***************************************************************
+ *  Apply the current topic's term as a Tabulator filter over each row's
+ *  precomputed `_hay` haystack (see render_records). Empty term = no
+ *  filter. Refreshes the record-count line with the filtered/total split.
+ ***************************************************************/
+function apply_table_filter(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.tabulator) {
+        return;
+    }
+    let term = (priv.searches[priv.cur_topic] || "").trim().toLowerCase();
+    if(!term) {
+        priv.tabulator.clearFilter(true);
+    } else {
+        priv.tabulator.setFilter(function(data) {
+            return data._hay ? data._hay.indexOf(term) !== -1 : false;
+        });
+    }
+    update_meta(gobj);
+}
+
+/***************************************************************
+ *  Record-count line: total loaded, the per-key window, and — when a
+ *  filter is active — the matching/total split plus the term.
+ ***************************************************************/
+function update_meta(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.$meta) {
+        return;
+    }
+    let total = priv.tabulator ? priv.tabulator.getData().length : 0;
+    let term = (priv.searches[priv.cur_topic] || "").trim();
+    let text;
+    if(term && priv.tabulator) {
+        let shown = priv.tabulator.getDataCount("active");
+        text = `${shown}/${total} ${t("records")}`;
+    } else {
+        text = `${total} ${t("records")}`;
+    }
+    text += ` · ${t("last")} ` +
+        `${priv.limits[priv.cur_topic] || FIRST_PAGE}/${t("key")}`;
+    if(term) {
+        text += ` · ${t("filter")}: ${term}`;
+    }
+    priv.$meta.textContent = text;
 }
 
 /***************************************************************
@@ -405,6 +546,16 @@ function render_records(gobj, records)
                 ? JSON.stringify(v)
                 : v;
         }
+        /*  Lowercased search haystack: formatted time + rowid + the whole
+         *  record JSON (so the client-side filter also matches fields that
+         *  didn't make it into a column).  */
+        let hay = `${fmt_ts(row._t)} ${row._rowid} `;
+        try {
+            hay += JSON.stringify(r);
+        } catch(e) {
+            /*  non-serialisable record: columns already cover it  */
+        }
+        row._hay = hay.toLowerCase();
         return row;
     });
 
@@ -437,13 +588,15 @@ function render_records(gobj, records)
     table.on("rowClick", function(e, row) {
         show_record_dialog(gobj, row.getData()._rec);
     });
+    /*  Re-apply the topic's live filter once the fresh table is built and
+     *  keep the count line in sync as rows are filtered.  */
+    table.on("tableBuilt", function() {
+        apply_table_filter(gobj);
+    });
+    table.on("dataFiltered", function() {
+        update_meta(gobj);
+    });
     priv.tabulator = table;
-
-    if(priv.$meta) {
-        priv.$meta.textContent =
-            `${records.length} ${t("records")} · ${t("last")} ` +
-            `${priv.limits[priv.cur_topic] || FIRST_PAGE}/${t("key")}`;
-    }
 }
 
 /***************************************************************
