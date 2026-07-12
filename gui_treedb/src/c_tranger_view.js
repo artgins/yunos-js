@@ -1152,7 +1152,9 @@ function ac_mt_command_answer(gobj, event, kw, src)
         }
 
         case "open-iterator":
-        case "close-iterator": {
+        case "close-iterator":
+        case "open-rt":
+        case "close-rt": {
             break;      /*  fire and forget  */
         }
 
