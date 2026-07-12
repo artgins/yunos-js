@@ -22,14 +22,17 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
-- **feat(gui_agent): "reconnecting" feedback while the control-center link is
-  down.** `c_app` now handles `EV_ON_OPEN_ERROR` (backend down / TLS / port, or
-  a failed reconnect) — orthogonal to the session, so **no logout**; the link
-  keeps retrying. With the shell up, node tabs go red (the per-node glyph; by
-  design there is no global connection dot). In the pre-shell window (the first
-  open after login has not landed, which left a blank page), the login screen
-  returns with a non-destructive *"Cannot connect … Reconnecting…"* notice;
-  `EV_ON_OPEN` then builds the shell. New i18n key `reconnecting` (en/es).
+- **feat(gui_agent): control-center link status in the shell + "reconnecting"
+  feedback.** `c_app` now handles `EV_ON_OPEN_ERROR` (backend down / TLS / port,
+  or a failed reconnect) — orthogonal to the session, so **no logout**; the link
+  keeps retrying. A global connection dot (`type:"connection"` toolbar item)
+  reflects the control-center link (green up / red down) — a different layer
+  from per-node reachability, which keeps its per-tab glyph. Driven from
+  `ac_on_open` (up) / `ac_on_close` / `ac_on_open_error` (down). In the pre-shell
+  window (the first open after login has not landed, which left a blank page),
+  the login screen returns with a non-destructive *"Cannot connect …
+  Reconnecting…"* notice; `EV_ON_OPEN` then builds the shell. New i18n keys
+  `reconnecting`, `backend connection` (en/es).
 
 - **fix(gui_agent, gui_treedb): close the EV_LOGIN_REFRESHED gap in ST_LOGOUT.**
   A token refresh is only ever initiated from ST_LOGIN (NAK recovery), but its

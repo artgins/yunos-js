@@ -39,6 +39,7 @@ import {
     yui_shell_refresh_avatars,
     yui_shell_set_translator,
     yui_shell_set_toolbar_item_icon,
+    yui_shell_set_connection_state,
     yui_shell_set_submenu,
     yui_shell_navigate,
 } from "@yuneta/gobj-ui/src/c_yui_shell.js";
@@ -598,6 +599,7 @@ function ac_on_open(gobj, event, kw, src)
     }
     let shell = build_shell(gobj);
     yui_shell_refresh_avatars(shell);
+    yui_shell_set_connection_state(shell, true);    // control-center link up
 
     /*  Per-node workspaces: paint each workspace's fixed picker + per-node
      *  tabs from the persisted selection, then seed the live-node set (tab
@@ -619,6 +621,9 @@ function ac_on_open(gobj, event, kw, src)
 function ac_on_close(gobj, event, kw, src)
 {
     gobj.priv.live_hosts = {};
+    if(gobj.priv.shell) {
+        yui_shell_set_connection_state(gobj.priv.shell, false);    // control-center link down
+    }
     rebuild_all_workspaces(gobj);
     return 0;
 }
@@ -642,6 +647,7 @@ function ac_on_open_error(gobj, event, kw, src)
     let priv = gobj.priv;
     if(priv.shell) {
         priv.live_hosts = {};
+        yui_shell_set_connection_state(priv.shell, false);    // control-center link down
         rebuild_all_workspaces(gobj);
         return 0;
     }

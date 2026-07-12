@@ -1,5 +1,5 @@
 {
-    "_comment": "Agent Console shell config — mobile-app style: an always-on top toolbar with a left brand + right-aligned actions (language, theme, user avatar); per-node connection status is a coloured glyph on each node tab, not a global dot. Primary nav (Console / Nodes / Stats) is the left rail on desktop and the bottom icon-bar on mobile; submenus render as top tabs. The toolbar user avatar shows the logged-in user's initials and navigates to /settings/auth (login form when signed out). TreeDB lives in the separate gui_treedb SPA.",
+    "_comment": "Agent Console shell config — mobile-app style: an always-on top toolbar with a left brand + right-aligned actions (language, theme, user avatar); a global connection dot on the toolbar reflects the CONTROL-CENTER LINK (the single session transport: green up / red down), which is a different layer from per-node reachability — each node tab keeps its own coloured glyph. Primary nav (Console / Nodes / Stats) is the left rail on desktop and the bottom icon-bar on mobile; submenus render as top tabs. The toolbar user avatar shows the logged-in user's initials and navigates to /settings/auth (login form when signed out). TreeDB lives in the separate gui_treedb SPA.",
 
     "shell": {
         "breakpoints": "bulma",
@@ -67,6 +67,13 @@
                 "align": "end",
                 "aria_label": "Toggle dark theme",
                 "action": { "type": "event", "event": "EV_TOGGLE_THEME" }
+            },
+            {
+                "id": "conn",
+                "type": "connection",
+                "align": "end",
+                "aria_label": "backend connection",
+                "tooltip": "backend connection"
             },
             {
                 "id": "user",

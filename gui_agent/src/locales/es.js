@@ -132,6 +132,7 @@ const es = {
         "not connected to an agent": "Sin conexión con un agente",
         "cannot connect":    "No se puede conectar",
         "reconnecting":      "Reconectando…",
+        "backend connection": "Conexión con el backend",
         "authentication required": "Autenticación requerida",
         "identity card refused": "Tarjeta de identidad rechazada",
 

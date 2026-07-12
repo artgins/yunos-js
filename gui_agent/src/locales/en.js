@@ -132,6 +132,7 @@ const en = {
         "not connected to an agent": "Not connected to an agent",
         "cannot connect":    "Cannot connect",
         "reconnecting":      "Reconnecting…",
+        "backend connection": "Backend connection",
         "authentication required": "Authentication required",
         "identity card refused": "Identity card refused",
 
