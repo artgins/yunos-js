@@ -81,6 +81,10 @@ const PAGE_SIZE = 100;
 /*  Max rows kept in a Live card's rolling buffer (newest on top).  */
 const LIVE_MAX = 500;
 
+/*  Columns a card shows on a phone; the rest are hidden (the full record
+ *  is one row-click away, as JSON).  */
+const MOBILE_COLS = 3;
+
 /*  Table height inside a card (its own pager sits below): follows the
  *  viewport, capped — a short screen must not be eaten by one card.  */
 const CARD_TABLE_HEIGHT = "min(60vh, 560px)";
@@ -103,10 +107,25 @@ const STYLE_CSS = `
         0 0 0 1px rgba(0, 0, 0, 0.22),
         0 0 0.6rem 0.1rem rgba(0, 0, 0, 0.42),
         0 0 1.2rem 0.2rem rgba(0, 0, 0, 0.25);
+    /*  Bulma's .box radius knob (its radius-large = 0.75rem reads rectangular
+        at this card size). Same reason as the shadow above: no helper exists,
+        so use the component's own variable, never a raw border-radius.  */
+    --bulma-box-radius: 0.9rem;
 }
+/*  The head band is the card's top edge and the table is its bottom edge:
+    both have their own background and square corners, so they must be
+    rounded WITH the box or they poke out of it and flatten the curve. The
+    table sits inside the p-2 gutter, hence the slightly tighter radius.  */
 .C_TRANGER_VIEW .TRANGER_CARD_HEAD {
     background: var(--bulma-scheme-main-bis, #fafafa);
     border-bottom: 1px solid var(--bulma-border, #dbdbdb);
+    border-top-left-radius: var(--bulma-box-radius);
+    border-top-right-radius: var(--bulma-box-radius);
+}
+.C_TRANGER_VIEW .TRANGER_CARD_TABLE .tabulator {
+    border-bottom-left-radius: calc(var(--bulma-box-radius) - 0.25rem);
+    border-bottom-right-radius: calc(var(--bulma-box-radius) - 0.25rem);
+    overflow: hidden;
 }
 .C_TRANGER_VIEW .TRANGER_CARD_TITLE {
     flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis;
@@ -342,11 +361,14 @@ function build_ui(gobj)
             t("open a key view")]);
     priv.$empty = $empty;
 
-    /*  px-3: the scrolling column clips horizontally (overflow-y:auto forces
-     *  overflow-x to auto), so a full-width card has NO room for its lateral
-     *  shadow — it gets cut at the edge. The padding is that room.  */
+    /*  Padding = the room the card shadows need: the scrolling column clips
+     *  horizontally (overflow-y:auto forces overflow-x to auto), so a
+     *  full-width card would get its lateral shadow cut at the edge. pt-3 so
+     *  the FIRST card is not flush against the toolbar; asymmetric sides
+     *  (pl-2 / pr-5) leave the wider gutter on the right, where the scrollbar
+     *  and the thumb live.  */
     let $dashboard = createElement2(
-        ["div", {class: "TRANGER_DASHBOARD px-3"}, [$empty]]);
+        ["div", {class: "TRANGER_DASHBOARD pt-3 pl-2 pr-5"}, [$empty]]);
     priv.$dashboard = $dashboard;
 
     let $container = createElement2(
@@ -1104,7 +1126,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
 
     let card = {
         key: key, mode: mode, topic: priv.cur_topic,
-        tabulator: null, $el: null, match_cond: match_cond || {},
+        tabulator: null, $el: null, $count: null, match_cond: match_cond || {},
         iterator_id: null, rt_id: null, subscribed: false,
         built: false, seeded: false, pending: []
     };
@@ -1170,6 +1192,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
         $action.addEventListener("click", () => {
             if(card.tabulator) {
                 card.tabulator.clearData();
+                update_live_count(card);
             }
         });
     }
@@ -1181,10 +1204,30 @@ function add_card(gobj, key, mode, match_cond, restoring)
                       title: t("live")}, ""]);
     }
     head_children.push(["span", {class: "TRANGER_CARD_TITLE"}, `${key} · ${t(mode)}`]);
+
+    /*  Live has no pager, so no "Showing x of N" footer: without this the
+     *  rolling buffer is a black box (is it 12 rows or the 500 cap?).  */
+    if(mode === "live") {
+        card.$count = createElement2(
+            ["span", {class: "TRANGER_CARD_COUNT tag is-light ml-2 is-flex-shrink-0",
+                      title: t("rows buffered - oldest are dropped at the cap")},
+                `0 / ${LIVE_MAX}`]);
+        head_children.push(card.$count);
+    }
+
+    /*  The filter hint does not fit a phone header as text — there it is the
+     *  same message behind an info icon (title/aria-label), so a mobile user
+     *  is not left with column filters and no idea of their scope.  */
     head_children.push(
         ["span", {class: "TRANGER_CARD_FILTERHINT is-size-7 has-text-grey ml-2 is-hidden-mobile",
                   title: t("column filters apply to the loaded rows only")},
             t("filters loaded rows")]);
+    head_children.push(
+        ["span", {class: "TRANGER_CARD_FILTERHINT_ICON icon is-small has-text-grey ml-2 " +
+                         "is-flex-shrink-0 is-hidden-tablet",
+                  title: t("column filters apply to the loaded rows only"),
+                  "aria-label": t("column filters apply to the loaded rows only")},
+            [["i", {class: "yi-circle-info"}]]]);
     head_children.push(["span", {class: "TRANGER_CARD_SPACER", style: "flex:1 1 auto;"}, ""]);
     if($options) {
         head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$options]]);
@@ -1387,9 +1430,17 @@ function op_filter(headerValue, rowValue)
  *  Shared column tuning for the auto/seeded columns (drop __rec, no
  *  header sort, per-column operator header filter, tidy the metadata
  *  columns).
+ *
+ *  On a phone only the first MOBILE_COLS columns are shown: a record with
+ *  a dozen fields, each at minWidth 90, is 1000+px wide and the card just
+ *  scrolls sideways. Nothing is lost — a row click opens the FULL record
+ *  as JSON, which is the way to read a wide record on a phone anyway.
  ***************************************************************/
 function tune_columns(defs)
 {
+    let mobile = is_mobile();
+    let shown = 0;
+
     return defs
         .filter((d) => d.field !== "__rec")
         .map((d) => {
@@ -1405,6 +1456,12 @@ function tune_columns(defs)
             }
             if(d.field === "t") {
                 d.minWidth = 150;
+            }
+            if(mobile) {
+                shown++;
+                if(shown > MOBILE_COLS) {
+                    d.visible = false;
+                }
             }
             return d;
         });
@@ -1472,9 +1529,28 @@ function push_live_row(card, row)
                 }
             }
         }
+        update_live_count(card);
     }).catch(function() {
         /*  table torn down mid-append  */
     });
+}
+
+/***************************************************************
+ *  Refresh a Live card's row counter: what the rolling buffer holds and
+ *  the cap it is trimmed to.
+ ***************************************************************/
+function update_live_count(card)
+{
+    if(!card.$count || !card.tabulator) {
+        return;
+    }
+    let n = 0;
+    try {
+        n = card.tabulator.getDataCount();
+    } catch(e) {
+        return;     /*  table gone  */
+    }
+    card.$count.textContent = `${n} / ${LIVE_MAX}`;
 }
 
 /***************************************************************

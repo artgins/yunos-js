@@ -22,6 +22,24 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): Tranger cards on a phone — row counter, fewer columns,
+  reachable hint.** A **Live** card now shows a `N / 500` counter
+  (`TRANGER_CARD_COUNT`) next to its dot: it has no pager, so without it the
+  rolling buffer was a black box (12 rows, or the cap?). On mobile a card shows
+  only its first 3 columns (`MOBILE_COLS`) — a dozen fields at 90px each is
+  1000+px and the card just scrolled sideways; the FULL record is one row-click
+  away as JSON. The desktop-only *"filters loaded rows"* hint becomes an info
+  icon on mobile (same message in `title`/`aria-label`), so column filters are
+  no longer offered there without stating their scope.
+
+- **style(gui_treedb): Tranger dashboard spacing and card corners.** Dashboard
+  padding `pt-3 pl-2 pr-5` (the first card is no longer flush against the
+  toolbar; the wider gutter is on the right, where the scrollbar and the thumb
+  are). Card corners softened via Bulma's own `--bulma-box-radius` knob
+  (0.9rem), with the header band and the Tabulator rounded along with the box —
+  both have their own background and square corners, and were flattening the
+  curve.
+
 - **feat(gui_treedb): a Rows card can edit its match conditions.** New
   **Options** button (`TRANGER_CARD_OPTIONS`) in the card header reopens the
   `TRANGER_ROWS_OPTIONS` dialog **preloaded with that card's current

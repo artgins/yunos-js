@@ -112,6 +112,7 @@ const es = {
         "filter the loaded keys": "Filtrar las claves cargadas",
         "options": "Opciones",
         "apply": "Aplicar",
+        "rows buffered - oldest are dropped at the cap": "Filas en el búfer — al llegar al tope se descartan las más antiguas",
         "no keys": "Sin claves",
         "showing rows": "Mostrando {{from}}-{{to}} de {{total}} filas",
         "loading": "Cargando…",

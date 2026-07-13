@@ -112,6 +112,7 @@ const en = {
         "filter the loaded keys": "Filter the loaded keys",
         "options": "Options",
         "apply": "Apply",
+        "rows buffered - oldest are dropped at the cap": "Rows buffered — the oldest are dropped at the cap",
         "no keys": "No keys",
         "showing rows": "Showing {{from}}-{{to}} of {{total}} rows",
         "loading": "Loading…",
