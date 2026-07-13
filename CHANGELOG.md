@@ -22,11 +22,22 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the Tranger view's scoped CSS was dead.** Its root element
+  carried the gclass name as an inert HTML **attribute** (`gclass="…"`, read by
+  nobody) instead of a **class**, so every `.C_TRANGER_VIEW …` rule of the
+  injected stylesheet never matched. Visible symptom: on mobile the Tabulator
+  footer stayed a single nowrap row and clipped the page-size select and the
+  First/Prev/Next/Last buttons off the right edge (the mobile rule stacks the
+  counter over the full pager). Also restores the card chrome (scrollable
+  dashboard column, card border/title ellipsis). Card spacing bumped
+  0.75rem → 1.5rem.
+
 - **feat(gui_treedb): Rows request options + per-column operator filters +
   responsive Keys picker in the Tranger browser.** The Keys picker is presented
-  responsively — a **moveable, non-modal `C_YUI_WINDOW`** (drag / resize / dock,
-  mounted in the shell's popup layer so modals opened from it still stack on
-  top) on desktop, and the shell's **adaptive modal sheet** on mobile (a window
+  responsively — a **moveable, non-modal `C_YUI_WINDOW`** (drag / resize, no
+  window manager: it is a helper of the view, not a dockable app window; mounted
+  in the shell's popup layer so modals opened from it still stack on top) on
+  desktop, and the shell's **adaptive modal sheet** on mobile (a window
   is awkward on a phone) — and persists while views are opened/closed. Each key
   row's
   **Rows** / **Live** button is colored (active) **only** while that view is

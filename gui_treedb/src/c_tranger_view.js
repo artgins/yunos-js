@@ -91,7 +91,7 @@ const STYLE_CSS = `
 .C_TRANGER_VIEW .TRANGER_DASHBOARD {
     flex: 1 1 auto; min-height: 0; overflow-y: auto;
 }
-.C_TRANGER_VIEW .TRANGER_CARD { margin-bottom: 0.75rem; }
+.C_TRANGER_VIEW .TRANGER_CARD { margin-bottom: 1.5rem; }
 .C_TRANGER_VIEW .TRANGER_CARD_HEAD {
     border-bottom: 1px solid var(--bulma-border, #dbdbdb);
 }
@@ -312,7 +312,7 @@ function build_ui(gobj)
     priv.$dashboard = $dashboard;
 
     let $container = createElement2(
-        ["div", {class: "p-3", gclass: "C_TRANGER_VIEW",
+        ["div", {class: "C_TRANGER_VIEW p-3",
                  style: "height:100%; display:flex; flex-direction:column;"},
             [
                 ["div", {class: "tabs is-boxed mb-2 TRANGER_TOPICS"}, [$tabs]],
@@ -541,7 +541,11 @@ function open_keys_picker(gobj)
                 title:      `${priv.cur_topic} · ${t("keys")}`,
                 icon:       "yi-table",
                 body:       $box,
-                manager:    gobj_find_service("__window_manager__", false) || null,
+                /*  No window manager: the Keys picker is a helper of THIS
+                 *  view, not a first-class app window — it must not land in
+                 *  the dock/taskbar, nor outlive the topic it belongs to.
+                 *  Without a manager, minimize collapses it in place.  */
+                manager:    null,
                 on_close: () => {
                     if(priv.picker_tbl) {
                         try {
@@ -807,7 +811,7 @@ function to_epoch_secs(v)
 function build_rows_options_form()
 {
     let mk_input = (cls, type, ph) => createElement2(
-        ["input", {class: `input is-small ${cls}`, type: type, placeholder: ph || ""}]);
+        ["input", {class: `input ${cls}`, type: type, placeholder: ph || ""}]);
 
     let inputs = {
         from_t:      mk_input("TRANGER_OPT_FROM_T",      "datetime-local", ""),
@@ -820,12 +824,12 @@ function build_rows_options_form()
 
     let field = (label, input) => ["div", {class: "field TRANGER_OPT_FIELD"},
         [
-            ["label", {class: "label is-small mb-1", i18n: label}, t(label)],
+            ["label", {class: "label mb-1", i18n: label}, t(label)],
             ["div", {class: "control"}, [input]]
         ]];
 
     let $open = createElement2(
-        ["button", {class: "button is-small is-link TRANGER_OPT_OPEN", type: "button"},
+        ["button", {class: "button is-link TRANGER_OPT_OPEN", type: "button"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-eye"}]]],
                 ["span", {i18n: "open rows"}, t("open rows")]
@@ -951,7 +955,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
     let $table = createElement2(["div", {class: "TRANGER_CARD_TABLE"}, []]);
 
     let $close = createElement2(
-        ["button", {class: "button is-small TRANGER_CARD_CLOSE",
+        ["button", {class: "button TRANGER_CARD_CLOSE",
                     title: t("close"), "aria-label": t("close")},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]],
@@ -966,7 +970,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
     let $action;
     if(mode === "rows") {
         $action = createElement2(
-            ["button", {class: "button is-small TRANGER_CARD_REFRESH",
+            ["button", {class: "button TRANGER_CARD_REFRESH",
                         title: t("refresh"), "aria-label": t("refresh")},
                 [
                     ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
@@ -980,7 +984,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
         });
     } else {
         $action = createElement2(
-            ["button", {class: "button is-small TRANGER_CARD_CLEAR",
+            ["button", {class: "button TRANGER_CARD_CLEAR",
                         title: t("clear"), "aria-label": t("clear")},
                 [
                     ["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]],
