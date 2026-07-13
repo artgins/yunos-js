@@ -41,7 +41,13 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   (responsive — a moveable, non-modal window on desktop, an adaptive modal sheet
   on mobile; each key's Rows/Live button is colored only while that view is open
   and toggles it; the open/closed set is persisted per connection and cleared
-  when the connection is removed). A key opens a **Rows** card — a records
+  when the connection is removed). The picker **searches, sorts and pages in the
+  BACKEND** (`list-keys` with `rkey` / `order` / `desc` / `from` / `limit`): a
+  topic with a hundred thousand keys is never transferred whole to show 15 rows.
+  The search term is a plain substring, escaped into the regex the backend
+  matches. Against a backend older than the paged `list-keys`, the picker falls
+  back to the whole list as one page and warns that its search and paging are not
+  there. A key opens a **Rows** card — a records
   table with native remote pagination
   (`open-iterator` + `get-page`), optionally pre-filtered at open time by
   server-side **match conditions** (time / rowid range, user_flag masks, and

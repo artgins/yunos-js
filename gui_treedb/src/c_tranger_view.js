@@ -311,8 +311,11 @@ let PRIVATE_DATA = {
     cur_topic:   "",     /*  selected topic  */
     pending_seg: "",     /*  topic asked via EV_SHOW before topics loaded  */
     pending_card: null,  /*  card carried by a shared link, until its keys land  */
-    keys:        null,   /*  [{key, records, fr_t, to_t, fr_tm, to_tm}] of
-                             cur_topic (from list-keys): count + time span  */
+    keys:        null,   /*  the picker's CURRENT PAGE: [{key, records, fr_t,
+                             to_t, fr_tm, to_tm}]. NOT every key of the topic —
+                             the backend filters/sorts/pages them  */
+    keys_total:  0,      /*  how many keys the topic has (list-keys total_rows)  */
+    wanted_views: null,  /*  views waiting for their keys to be confirmed  */
     cards:       null,   /*  [{key, mode, iterator_id, tabulator, $el}]  */
     tok:         "",     /*  per-view token: keeps iterator_ids unique across
                              reloads so they never collide with iterators a
@@ -356,6 +359,8 @@ function mt_create(gobj)
     priv.pending_seg = "";
     priv.pending_card = null;
     priv.keys = null;
+    priv.keys_total = 0;
+    priv.wanted_views = null;
     priv.cards = [];
     priv.tok = Math.random().toString(36).slice(2, 10);
     priv.iter_seq = 0;
@@ -433,6 +438,8 @@ function mt_stop(gobj)
     priv.topics = null;
     priv.topic_flags = {};
     priv.keys = null;
+    priv.keys_total = 0;
+    priv.wanted_views = null;
     priv.cur_topic = "";
     priv.pending_seg = "";
     priv.pending_card = null;
@@ -675,25 +682,106 @@ function request_topics(gobj)
 }
 
 /***************************************************************
- *  Command to remote service: list the keys of a topic (with their
- *  record counts and their time span) for the Keys picker.
+ *  What the user typed in the Keys search, as a regex the backend can
+ *  match: the term is a plain SUBSTRING, so every regex metacharacter in
+ *  it is escaped. `rkey` is matched unanchored, so an escaped term is
+ *  exactly a substring search — no anchors needed.
  ***************************************************************/
-function request_keys(gobj, topic_name)
+function rx_escape(s)
 {
-    if(!topic_name) {
-        return;
-    }
+    return String(s === null || s === undefined ? "" : s)
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/***************************************************************
+ *  Command to remote service: ONE PAGE of the topic's keys.
+ *
+ *  The keys used to be asked for in full, always: a topic with a hundred
+ *  thousand keys was transferred whole into the browser and filtered
+ *  there. The backend filters, sorts and pages them now (`list-keys` with
+ *  rkey / order / desc / from / limit), and the picker is a remote-paginated
+ *  table like the records one — same Promise bridge, same envelope
+ *  ({total_rows, pages, data}).
+ ***************************************************************/
+function request_keys_page(gobj, page, size, rkey, order, desc)
+{
+    let priv = gobj.priv;
+    return new Promise(function(resolve, reject) {
+        let remote = live_transport(gobj);
+        if(!remote) {
+            let msg = `${gobj_short_name(gobj)}: no session, cannot list keys of ` +
+                      `'${priv.cur_topic}'`;
+            log_error(msg);
+            reject(new Error(msg));
+            return;
+        }
+        let req_id = `k${++priv.req_seq}`;
+        let timer = setTimeout(function() {
+            gobj_send_event(gobj, "EV_PAGE_TIMEOUT", {req_id: req_id}, gobj);
+        }, PAGE_TIMEOUT_MS);
+
+        priv.pending[req_id] = {
+            resolve: resolve, reject: reject, card: null, timer: timer
+        };
+
+        gobj_command(remote, "list-keys",
+            {
+                service:    gobj_read_str_attr(gobj, "treedb_name"),
+                topic_name: priv.cur_topic,
+                rkey:       rkey || "",
+                order:      order || "key",
+                desc:       desc ? 1 : 0,
+                from:       (page - 1) * size + 1,
+                limit:      size,
+                __md_command__: {req_id: req_id, purpose: "page"}
+            }, gobj);
+    });
+}
+
+/***************************************************************
+ *  Command to remote service: how many keys the topic has (the toolbar
+ *  count). `limit=1` so the answer is one row plus the total — the count
+ *  must not cost a transfer of every key.
+ ***************************************************************/
+function request_keys_count(gobj, topic_name)
+{
     let remote = live_transport(gobj);
     if(!remote) {
-        log_error(`${gobj_short_name(gobj)}: no session, cannot list keys of '${topic_name}'`);
+        log_error(`${gobj_short_name(gobj)}: no session, cannot count the keys of ` +
+                  `'${topic_name}'`);
         return;
     }
-    let service = gobj_read_str_attr(gobj, "treedb_name");
     gobj_command(remote, "list-keys",
         {
-            service:    service,
+            service:    gobj_read_str_attr(gobj, "treedb_name"),
             topic_name: topic_name,
-            __md_command__: {topic_name: topic_name}   /*  echoed back for correlation  */
+            from:       1,
+            limit:      1,
+            __md_command__: {topic_name: topic_name, purpose: "count"}
+        }, gobj);
+}
+
+/***************************************************************
+ *  Command to remote service: do these saved key-views still point at keys
+ *  that EXIST? One bounded query (`rkey` = the alternation of the saved
+ *  keys) instead of the full key list the presence check used to be read
+ *  from.
+ ***************************************************************/
+function request_saved_keys(gobj, topic_name, keys)
+{
+    let remote = live_transport(gobj);
+    if(!remote) {
+        log_error(`${gobj_short_name(gobj)}: no session, cannot check the saved views of ` +
+                  `'${topic_name}'`);
+        return;
+    }
+    let rkey = "^(" + keys.map(rx_escape).join("|") + ")$";
+    gobj_command(remote, "list-keys",
+        {
+            service:    gobj_read_str_attr(gobj, "treedb_name"),
+            topic_name: topic_name,
+            rkey:       rkey,
+            __md_command__: {topic_name: topic_name, purpose: "restore"}
         }, gobj);
 }
 
@@ -732,10 +820,17 @@ function do_select_topic(gobj, topic_name)
     close_picker(gobj);     /*  keys are per-topic; reopen for the new one  */
     priv.cur_topic = topic_name;
     priv.keys = null;
+    priv.keys_total = 0;
     render_tabs(gobj);
     show_error(gobj, "");
     update_meta(gobj);
-    request_keys(gobj, topic_name);
+
+    /*  Two bounded queries instead of the whole key list: how many keys the
+     *  topic has (the toolbar count), and which of the SAVED views still point
+     *  at a key that exists. The picker asks for its own page when it opens.  */
+    request_keys_count(gobj, topic_name);
+    ask_saved_views(gobj, topic_name);
+
     gobj_publish_event(gobj, "EV_TOPIC_SELECTED", {topic: topic_name});
 }
 
@@ -752,8 +847,9 @@ function update_meta(gobj)
         priv.$meta.textContent = "";
         return;
     }
-    let n_keys = priv.keys ? priv.keys.length : 0;
-    let text = `${n_keys} ${t("keys")}`;
+    /*  The TOTAL the backend reports, not what the picker's page happens to
+     *  hold — the page is 15 rows of however many the topic has.  */
+    let text = `${priv.keys_total || 0} ${t("keys")}`;
     if(priv.cards.length > 0) {
         text += ` · ${priv.cards.length} ${t("views")}`;
     }
@@ -790,12 +886,11 @@ function open_keys_picker(gobj)
     let mobile = is_mobile();
     let shell = yui_shell_of(gobj);
 
-    /*  The record counts come from `list-keys`, a snapshot taken when the
-     *  topic was selected — they go stale as the backend appends. No polling
-     *  (Yuneta rule): ask again HERE, every time the picker is opened (the
-     *  answer repaints the table if it is already up), and let live records
-     *  bump the count of their key (see ac_tranger_record_added).  */
-    request_keys(gobj, priv.cur_topic);
+    /*  No explicit key request here any more: the picker's Tabulator asks for
+     *  its own page on build (ajaxRequestFunc), so opening it is what refreshes
+     *  the counts — they go stale as the backend appends, and there is no
+     *  polling (Yuneta rule). A live record still bumps the count of its key
+     *  while the picker is up (see ac_tranger_record_added).  */
 
     let $tbl = createElement2(["div", {class: "TRANGER_KEYS_TABLE"}, []]);
     let $box = createElement2(
@@ -876,17 +971,37 @@ function open_keys_picker(gobj)
 
     /*  The host (window body / modal sheet) is mounted synchronously, so
      *  the Tabulator can build against a live element right away.  */
+    /*  Remote everything — pagination, sort AND filter. The picker used to be
+     *  handed every key of the topic and do all three in the browser; a topic
+     *  with a hundred thousand keys made that a transfer of the whole index and
+     *  a sort of it on the main thread. The backend does it (list-keys with
+     *  rkey / order / desc / from / limit) and the browser holds one page.  */
     let picker = new Tabulator($tbl, {
         height:         mobile ? "min(60vh, 460px)" : "100%",
         index:          "key",     /*  row identity: updateData() finds by it  */
         layout:         "fitColumns",
         placeholder:    t("no keys"),
         pagination:     true,
+        paginationMode: "remote",
+        sortMode:       "remote",
+        filterMode:     "remote",
         paginationSize: 15,
         paginationSizeSelector: [15, 30, 50, 100],
         paginationCounter: rows_counter(),
         initialSort:    [{column: "records", dir: "desc"}],
-        data:           priv.keys || [],
+        ajaxURL:        "list-keys",    /*  dummy: only triggers ajaxRequestFunc  */
+        ajaxRequestFunc: function(url, config, params) {
+            let sorter = (params.sort && params.sort[0]) || null;
+            let filter = (params.filter || []).find((f) => f.field === "key");
+            return request_keys_page(
+                gobj,
+                params.page || 1,
+                params.size || 15,
+                filter ? rx_escape(filter.value) : "",
+                sorter ? sorter.field : "records",
+                sorter ? sorter.dir === "desc" : true
+            );
+        },
         /*  Compact widths on a phone: fitColumns cannot shrink a column below
          *  its minWidth/width, so the desktop set (150+110+160) overflows a
          *  ~300px sheet and Tabulator adds a horizontal scrollbar — two-axis
@@ -896,7 +1011,7 @@ function open_keys_picker(gobj)
             {title: t("key"), field: "key", minWidth: mobile ? 100 : 150,
                 headerFilter: "input"},
             {title: t("records"), field: "records", width: mobile ? 70 : 110,
-                hozAlign: "right", sorter: "number"},
+                hozAlign: "right"},
             {title: t("actions"), field: "_act", headerSort: false,
                 width: mobile ? 96 : 160,
                 formatter: (cell) => build_key_actions(gobj, cell)}
@@ -1045,56 +1160,87 @@ function unpersist_view(gobj, card)
 }
 
 /***************************************************************
- *  Reopen the saved key-views for the current topic (called once its
- *  keys are loaded). Only keys that still exist are restored; a restore
- *  does NOT re-persist (already saved) and add_card skips duplicates.
+ *  The key-views to reopen for the current topic: the persisted ones, plus
+ *  the card a shared link asked for.
+ *
+ *  A view bound to a KEY can only be restored if the key still exists, and
+ *  the browser no longer holds the topic's key list to check that against —
+ *  so ask, with one bounded query (see request_saved_keys). The whole-topic
+ *  Live card is bound to no key, so it opens straight away.
  ***************************************************************/
-function restore_saved_views(gobj)
+function ask_saved_views(gobj, topic_name)
 {
     let priv = gobj.priv;
     let cfg = config_service();
     let conn_id = gobj_read_str_attr(gobj, "conn_id");
 
+    let wanted = [];
+    if(cfg && conn_id && topic_name) {
+        for(let v of treedb_config_get_tranger_views(cfg, conn_id,
+                gobj_read_str_attr(gobj, "treedb_name"), topic_name)) {
+            wanted.push({key: String(v.key), mode: v.mode,
+                         match_cond: v.match_cond || {}, restoring: true});
+        }
+    }
+    if(priv.pending_card) {
+        /*  A linked card is a deliberate open, so it IS persisted (no
+         *  `restoring`) — it must survive the next visit like one opened by
+         *  hand.  */
+        wanted.push({key: String(priv.pending_card.key),
+                     mode: priv.pending_card.mode,
+                     match_cond: priv.pending_card.match_cond || {},
+                     restoring: false});
+        priv.pending_card = null;
+    }
+    if(!wanted.length) {
+        return;
+    }
+
+    priv.wanted_views = wanted;
+
+    let keyed = wanted.filter((v) => v.key !== ALL_KEYS);
+    for(let v of wanted) {
+        if(v.key === ALL_KEYS) {
+            gobj_send_event(gobj, "EV_OPEN_CARD", v, gobj);
+        }
+    }
+    if(!keyed.length) {
+        priv.wanted_views = null;
+        return;
+    }
+    request_saved_keys(gobj, topic_name, keyed.map((v) => v.key));
+}
+
+/***************************************************************
+ *  The answer: open the wanted views whose key still exists, and say so
+ *  when one does not (a stale saved view is silent — the user never asked
+ *  for it today — but a SHARED LINK pointing nowhere must be reported: the
+ *  user is looking for exactly that).
+ ***************************************************************/
+function restore_saved_views(gobj, existing_keys)
+{
+    let priv = gobj.priv;
+    let wanted = priv.wanted_views || [];
+    priv.wanted_views = null;
+
     let present = {};
-    for(let k of (priv.keys || [])) {
+    for(let k of (existing_keys || [])) {
         present[String(k.key)] = true;
     }
 
-    /*  The card a shared link asked for. It opens like any other (add_card
-     *  dedups it against an already-open one) and IS persisted: arriving by
-     *  link is a deliberate open, and it must survive the next visit like a
-     *  card opened by hand.  */
-    let linked = priv.pending_card;
-    priv.pending_card = null;
-    if(linked && priv.cur_topic) {
-        if(String(linked.key) === ALL_KEYS || present[String(linked.key)]) {
-            gobj_send_event(gobj, "EV_OPEN_CARD",
-                {key: String(linked.key), mode: linked.mode,
-                 match_cond: linked.match_cond || {}}, gobj);
-        } else {
-            log_error(`${gobj_short_name(gobj)}: the shared link points at ` +
-                      `key '${linked.key}', which '${priv.cur_topic}' does not have`);
-            show_error(gobj, "the link points at a key this topic does not have");
+    for(let v of wanted) {
+        if(v.key === ALL_KEYS) {
+            continue;   /*  already opened: it is bound to no key  */
         }
-    }
-
-    if(!cfg || !conn_id || !priv.cur_topic) {
-        return;
-    }
-    let saved = treedb_config_get_tranger_views(cfg, conn_id,
-        gobj_read_str_attr(gobj, "treedb_name"), priv.cur_topic);
-    if(!saved.length) {
-        return;
-    }
-    for(let v of saved) {
-        /*  A whole-topic Live card is not bound to any key, so it is always
-         *  restorable — `present` only vets the per-key ones.  */
-        if(String(v.key) !== ALL_KEYS && !present[String(v.key)]) {
-            continue;   /*  key no longer exists; skip the stale restore  */
+        if(!present[v.key]) {
+            if(!v.restoring) {
+                log_error(`${gobj_short_name(gobj)}: the shared link points at ` +
+                          `key '${v.key}', which '${priv.cur_topic}' does not have`);
+                show_error(gobj, "the link points at a key this topic does not have");
+            }
+            continue;   /*  stale saved view: skip it  */
         }
-        gobj_send_event(gobj, "EV_OPEN_CARD",
-            {key: String(v.key), mode: v.mode, match_cond: v.match_cond || {},
-             restoring: true}, gobj);
+        gobj_send_event(gobj, "EV_OPEN_CARD", v, gobj);
     }
 }
 
@@ -2362,6 +2508,54 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return 0;
     }
 
+    /*
+     *  The Keys picker is remote-paginated too, so its page comes back through
+     *  the same Promise bridge — the rows are key descriptors, not records, so
+     *  they travel as they are.
+     */
+    if(command === "list-keys" && kw_command && kw_command.purpose === "page") {
+        let req_id = kw_command.req_id || null;
+        let pend = take_pending(gobj, req_id);
+        if(!pend) {
+            log_error(`${gobj_short_name(gobj)}: list-keys answer for an ` +
+                      `unknown request '${req_id}' (already settled?)`);
+            return 0;
+        }
+        if(result < 0) {
+            log_error(`${gobj_short_name(gobj)}: list-keys failed: ` +
+                      `${comment || "(no comment)"}`);
+            pend.reject(new Error(comment || "list-keys failed"));
+            return 0;
+        }
+        if(Array.isArray(data)) {
+            /*  A backend older than the paged list-keys ignores from/limit and
+             *  answers the whole key list, as it always did. Do not leave the
+             *  picker empty for that: show the lot as a single page. The search
+             *  and the sort are then the backend's `order`-less answer — i.e.
+             *  gone — so say so once, LOUDLY, instead of silently pretending
+             *  the filter did something.  */
+            log_warning(`${GCLASS_NAME}: this backend answers list-keys with the ` +
+                        `whole key list (no rkey/from/limit): no server-side key ` +
+                        `search or paging`);
+            priv.keys = data;
+            priv.keys_total = data.length;
+            update_meta(gobj);
+            pend.resolve({data: priv.keys, last_page: 1, last_row: priv.keys_total});
+            return 0;
+        }
+
+        let page = data || {};
+        priv.keys = Array.isArray(page.data) ? page.data : [];
+        priv.keys_total = Math.max(0, page.total_rows || 0);
+        update_meta(gobj);
+        pend.resolve({
+            data:      priv.keys,
+            last_page: Math.max(1, page.pages || 1),
+            last_row:  priv.keys_total
+        });
+        return 0;
+    }
+
     if(result < 0) {
         show_error(gobj, comment || `${command} failed`);
         return 0;
@@ -2402,22 +2596,33 @@ function ac_mt_command_answer(gobj, event, kw, src)
         }
 
         case "list-keys": {
+            /*  Three different questions come back here, and the purpose says
+             *  which: a PAGE for the picker (bridged to its Promise, above),
+             *  the topic's key COUNT, or which saved views still point at a key
+             *  that exists.  */
+            let purpose = kw_get_str(gobj, kw_command, "purpose", "", 0);
             let topic = kw_get_str(gobj, kw_command, "topic_name", "", 0);
             if(topic !== priv.cur_topic) {
                 break;      /*  stale answer of a previous topic  */
             }
-            priv.keys = Array.isArray(data) ? data : [];
-            update_meta(gobj);
-            /*  The picker asks for a fresh list every time it opens, so an
-             *  answer that lands while it is up must repaint it.  */
-            if(priv.picker_tbl) {
-                try {
-                    priv.picker_tbl.replaceData(priv.keys);
-                } catch(e) {
-                    log_warning(`${GCLASS_NAME}: table gone: ${e}`);
-                }
+
+            if(purpose === "count") {
+                /*  `limit=1` was asked, so the answer is the paged envelope —
+                 *  unless the backend is older than it, in which case it is the
+                 *  whole key list and its length IS the count.  */
+                priv.keys_total = Array.isArray(data)
+                    ? data.length
+                    : ((data && data.total_rows) || 0);
+                update_meta(gobj);
+                break;
             }
-            restore_saved_views(gobj);
+            if(purpose === "restore") {
+                restore_saved_views(gobj, Array.isArray(data) ? data : []);
+                break;
+            }
+
+            log_error(`${gobj_short_name(gobj)}: list-keys answer with no purpose ` +
+                      `('${purpose}')`);
             break;
         }
 
@@ -2480,7 +2685,16 @@ function ac_transport_open(gobj, event, kw, src)
     }
 
     if(priv.cur_topic) {
-        request_keys(gobj, priv.cur_topic);
+        request_keys_count(gobj, priv.cur_topic);
+        if(priv.picker_tbl) {
+            /*  The picker's rows belong to the session that just died: make it
+             *  re-ask for its page (it is remote-paginated now).  */
+            try {
+                priv.picker_tbl.setPage(priv.picker_tbl.getPage() || 1);
+            } catch(e) {
+                log_warning(`${GCLASS_NAME}: picker refetch failed: ${e}`);
+            }
+        }
     }
     for(let card of priv.cards) {
         if(card.mode === "rows") {

@@ -72,6 +72,25 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   you almost always want, and it was previously unreachable without paging by
   hand to the end of 400k rows.
 
+- **feat(gui_treedb): the Keys picker searches, sorts and pages IN THE BACKEND.**
+  It was handed every key of the topic and did all three in the browser: a topic
+  with a hundred thousand keys meant transferring the whole index, holding it in
+  memory and sorting it on the main thread — to show 15 rows. The picker is a
+  remote-paginated table now (`list-keys` with `rkey` / `order` / `desc` /
+  `from` / `limit` — see the SDK changelog), like the records table, through the
+  same Promise bridge. What the user types in the key search is a plain
+  SUBSTRING, escaped into the regex the backend matches (`rkey` is unanchored, so
+  an escaped term IS a substring search).
+
+  Two things stopped being derivable from a list the browser no longer holds, and
+  each became its own bounded question: the toolbar's key COUNT (`limit=1` — the
+  count must not cost a transfer of every key) and whether a saved key-view still
+  points at a key that EXISTS (one query whose `rkey` is the alternation of the
+  saved keys). **Requires the SDK's paged `list-keys`**; against an older backend
+  the picker shows the whole list as a single page and warns, loudly, that its
+  search and paging are not there — it does not silently pretend the filter did
+  something.
+
 - **feat(gui_treedb): the connection set can leave the browser, and a card can
   choose its columns.** Connections live in this browser's localStorage, so
   moving them to another browser (or to another operator's machine) meant
