@@ -64,6 +64,25 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 - **View adapter:** `C_TREEDB_VIEW` hosts the gobj-ui `C_YUI_TREEDB_TOPICS` /
   `C_YUI_TREEDB_GRAPH` as a **named service** (so `C_IEVENT_CLI` can route their
   command answers back) and resolves the live transport by `conn_id`.
+- **Graphs follow other operators' links** (`EV_TREEDB_NODE_LINKED` /
+  `EV_TREEDB_NODE_UNLINKED`) — but **only if the backend publishes them**: its
+  `C_NODE` service must be configured with `with_link_events` (default
+  **false**). Careful, it is an either/or in the backend: with link events ON,
+  a link/unlink stops publishing the parent's `EV_TREEDB_NODE_UPDATED`, so
+  enabling it on a treedb that also serves a **v1** SPA changes what that SPA
+  receives. With the flag off, an open Graph shows stale edges until reloaded.
+- **The runtime is auditable — every action crosses an FSM.** This is a
+  contract of this SPA, not an accident: a DOM click, a modal `on_close`, a
+  resolved `fetch` do nothing but `gobj_send_event`; the work lives in the FSM
+  action, so the `machine` trace IS the execution log. `C_TRANGER_VIEW` models
+  its life as states (`ST_DISCONNECTED` → `ST_LOADING_TOPICS` →
+  `ST_TOPIC_SELECTED`), so an action arriving with no topic fails LOUDLY naming
+  its sender instead of no-opping a button; `C_TREEDB_CONFIG`'s **mutations are
+  events** (its reads stay plain functions). Two consequences worth keeping in
+  mind when extending it: a `kw` must be **plain JSON** (the trace serializes
+  it — pass `{key, mode}`, never a widget or a DOM node), and widget plumbing
+  that is not an action stays a plain call (Tabulator's `ajaxRequestFunc` must
+  RETURN a Promise — it is a data source, not an event).
 
 Reference implementation for the treedb-view adapter: wattyzer's `C_WZ_TREEDB`.
 
