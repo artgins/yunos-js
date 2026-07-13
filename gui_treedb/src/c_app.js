@@ -24,11 +24,11 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t,
-    gclass_create, log_error, gobj_short_name,
-    gobj_read_attr, gobj_write_attr, gobj_write_str_attr,
+    gclass_create, log_error, log_warning, gobj_short_name,
+    gobj_read_attr, gobj_write_str_attr,
     gobj_create_service, gobj_create_pure_child,
     gobj_subscribe_event, gobj_send_event,
-    gobj_find_service, gobj_yuno,
+    gobj_find_service,
     gobj_start_tree, gobj_stop_tree, gobj_destroy, gobj_is_running,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
@@ -512,24 +512,18 @@ function sync_connections(gobj)
     let conns = treedb_config_get_connections(config);
 
     /*
-     *  The C_IEVENT_CLI identity_card advertises `required_services` (read
-     *  from the yuno). The backend's C_AUTHZ only authorizes commands to
-     *  the treedb services listed there — with an empty list it grants only
-     *  the connected service and silently DROPS a `descs` to treedb_wattyzer.
-     *  Advertise the union of every connection's SELECTED services so each
-     *  backend grants the subset it hosts. (conn_coords includes the
-     *  selection, so a selection change reopens that connection to re-send
-     *  the identity card.)
+     *  The C_IEVENT_CLI identity_card advertises `required_services`. The
+     *  backend's C_AUTHZ only authorizes commands to the treedb services
+     *  listed there — with an empty list it grants only the connected service
+     *  and silently DROPS a `descs` to treedb_wattyzer.
+     *
+     *  treedb_links sets it PER CONNECTION now (C_IEVENT_CLI's own attr, which
+     *  falls back to the yuno's when empty). The yuno-wide attr is necessarily
+     *  the UNION of every configured backend's selection, so using it told each
+     *  backend the service names of all the others — and handed it a card
+     *  listing services it does not host. (conn_coords includes the selection,
+     *  so a selection change recreates that transport and re-sends its card.)
      */
-    let req = {};
-    for(let c of conns) {
-        for(let svc of treedb_config_conn_services(c)) {
-            if(svc.selected) {
-                req[svc.service] = true;
-            }
-        }
-    }
-    gobj_write_attr(gobj_yuno(), "required_services", Object.keys(req));
 
     /*  Forget per-connection state for connections no longer configured. */
     let alive = {};
@@ -745,6 +739,28 @@ function ac_login_denied(gobj, event, kw, src)
         priv.login_ui.set_busy(false);
         priv.login_ui.set_error(`${t("login failed")}: ${msg}`);
     }
+    return 0;
+}
+
+/***************************************************************
+ *  A token refresh could not be MADE (network down, BFF unreachable). The
+ *  session is alive — the login service is already retrying with backoff —
+ *  so change NOTHING: the shell, the links and the open cards stay. But say
+ *  so, because until it succeeds the links are running on a token that will
+ *  expire, and a NAK afterwards must not read as a mystery.
+ *
+ *  `refreshing` is cleared: it dedupes concurrent NAKs into ONE refresh, and
+ *  leaving it set after a failed one would swallow the next NAK's recovery.
+ ***************************************************************/
+function ac_refresh_failed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    priv.refreshing = false;
+
+    let secs = Math.round(((kw && kw.retry_ms) || 0) / 1000);
+    log_warning(`${gobj_short_name(gobj)}: token refresh failed ` +
+                `(${(kw && kw.error) || "?"}) — retrying in ${secs}s, ` +
+                `session kept`);
     return 0;
 }
 
@@ -1057,6 +1073,7 @@ function create_gclass(gclass_name)
         ["ST_IDLE", [
             ["EV_LOGIN_ACCEPTED",   ac_login_accepted,  null],
             ["EV_LOGIN_REFRESHED",  ac_login_refreshed, null],
+            ["EV_REFRESH_FAILED",   ac_refresh_failed,  null],
             ["EV_LOGIN_DENIED",     ac_login_denied,    null],
             ["EV_RESTORE_FAILED",   ac_restore_failed,  null],
             ["EV_LOGOUT_DONE",      ac_logout_done,     null],
@@ -1080,6 +1097,7 @@ function create_gclass(gclass_name)
     const event_types = [
         ["EV_LOGIN_ACCEPTED",   0],
         ["EV_LOGIN_REFRESHED",  0],
+        ["EV_REFRESH_FAILED",   0],
         ["EV_LOGIN_DENIED",     0],
         ["EV_RESTORE_FAILED",   0],
         ["EV_LOGOUT_DONE",      0],

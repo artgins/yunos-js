@@ -192,6 +192,17 @@ function treedb_links_ensure(gobj, conn)
         remote_yuno_name:    "",
         jwt:                 priv.token,
         /*
+         *  THIS backend's services, not the union of every configured one. The
+         *  identity_card falls back to the yuno's `required_services` when this
+         *  is empty — and that list is necessarily the union, so each backend
+         *  was told the service names of all the others and got a card naming
+         *  services it does not host. conn_coords includes the selection, so
+         *  changing it recreates the transport and the card is re-sent.
+         */
+        required_services:   treedb_config_conn_services(conn)
+                                 .filter((s) => s.selected)
+                                 .map((s) => s.service),
+        /*
          *  The `subscriber` attr makes the iev deliver its LOCAL published
          *  events (EV_ON_OPEN/CLOSE/ID_NAK/OPEN_ERROR) to us via a null (all)
          *  subscription, which stays LOCAL. Subscribing to SPECIFIC events on

@@ -38,6 +38,7 @@ import {
     gobj_write_attr,
     sprintf,
     gobj_change_state,
+    gobj_current_state,
     gobj_read_pointer_attr,
     gobj_short_name,
     gobj_publish_event,
@@ -58,6 +59,19 @@ import {deploy_info} from "./conf/deploy.js";
  ***************************************************************/
 const GCLASS_NAME = "C_TREEDB_LOGIN";
 
+/*  A BFF call that never answers must not hang the session: without a
+ *  deadline a stalled /auth/refresh simply never resolved, so the refresh
+ *  timer was never re-armed and the session drifted to expiry with nothing
+ *  ever retrying.  */
+const BFF_TIMEOUT_MS = 15000;
+
+/*  Backoff for a refresh that failed for a TRANSIENT reason (the network
+ *  went, the BFF answered 502). The session is NOT dead — the refresh token
+ *  in the httpOnly cookie is still there — so retry instead of logging the
+ *  user out, and back off so a BFF that is down is not hammered.  */
+const REFRESH_RETRY_MIN_MS = 5000;
+const REFRESH_RETRY_MAX_MS = 60000;
+
 
 /***************************************************************
  *              Data
@@ -76,6 +90,9 @@ SDATA_END()
 let PRIVATE_DATA = {
     timeout_refresh:    0,
     gobj_timer:         null,
+    refresh_at:         0,      /*  epoch ms the refresh timer is due at  */
+    retry_ms:           0,      /*  current transient-failure backoff (0 = none)  */
+    on_wake:            null,   /*  visibilitychange / online listener  */
 };
 
 let __gclass__ = null;
@@ -117,6 +134,23 @@ function mt_start(gobj)
     gobj_start(priv.gobj_timer);
 
     /*
+     *  Coming back from a sleeping laptop / a dead network is an OS
+     *  notification like any other: its handler's only job is to make it an
+     *  event. Background tabs get their timers throttled, so the refresh timer
+     *  fires LATE — often after the access_token is already dead, which the
+     *  backend answers with a NAK and the user experiences as "it logged me
+     *  out while I was away". The action checks the deadline on wake.
+     */
+    priv.on_wake = function() {
+        if(document.visibilityState !== "visible") {
+            return;
+        }
+        gobj_send_event(gobj, "EV_WAKEUP", {}, gobj);
+    };
+    document.addEventListener("visibilitychange", priv.on_wake);
+    window.addEventListener("online", priv.on_wake);
+
+    /*
      *  Try to restore the session from httpOnly cookies on page load
      *  (e.g. after F5). If the BFF refresh succeeds, fire
      *  EV_LOGIN_ACCEPTED; if not, publish EV_RESTORE_FAILED so the app
@@ -132,6 +166,11 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     let priv = gobj.priv;
+    if(priv.on_wake) {
+        document.removeEventListener("visibilitychange", priv.on_wake);
+        window.removeEventListener("online", priv.on_wake);
+        priv.on_wake = null;
+    }
     clear_timeout(priv.gobj_timer);
     gobj_stop(priv.gobj_timer);
 }
@@ -154,17 +193,69 @@ function mt_destroy(gobj)
 
 
 /***************************************************************
+ *  POST to a BFF /auth/<segment> endpoint, with a deadline, and always
+ *  resolve to the same shape: {ok, status, data, transient}.
+ *
+ *  `transient` is the distinction the whole session hangs on: a failure of
+ *  the TRANSPORT (the network went, the request timed out, the BFF answered
+ *  5xx, the body was not JSON — a proxy error page) says NOTHING about the
+ *  user's credentials. Reading `resp.json()` unguarded made a 502 throw and
+ *  land in the same catch as a real rejection, so a blink of the network
+ *  logged the user out and tore down every open card. Only the BFF ANSWERING
+ *  "no" is a denial.
+ ***************************************************************/
+function post_bff(gobj, segment)
+{
+    const bff_url = gobj_read_attr(gobj, "bff_url");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), BFF_TIMEOUT_MS);
+
+    return fetch(build_path(bff_url, "auth", segment), {
+        method:      "POST",
+        credentials: "include",
+        headers:     {"Content-Type": "application/json"},
+        signal:      controller.signal
+    })
+    .then((resp) => resp.json()
+        .then((data) => ({
+            ok:        resp.ok,
+            status:    resp.status,
+            data:      data || {},
+            transient: !resp.ok && resp.status >= 500
+        }))
+        .catch(() => ({
+            /*  A body that is not JSON is never a verdict on the user: it is a
+             *  gateway/proxy page. 4xx keeps its meaning (denied), 5xx and the
+             *  rest are transport noise.  */
+            ok:        false,
+            status:    resp.status,
+            data:      {},
+            transient: !(resp.status >= 400 && resp.status < 500)
+        })))
+    .catch((err) => ({
+        ok:        false,
+        status:    0,
+        data:      {error: err && err.message ? err.message : String(err)},
+        transient: true    /*  fetch rejected: offline, DNS, TLS, or our abort  */
+    }))
+    .finally(() => clearTimeout(timer));
+}
+
+/***************************************************************
  *  POST username/password to the BFF /auth/login endpoint.
  ***************************************************************/
 function do_bff_login(gobj, username, password)
 {
     const bff_url = gobj_read_attr(gobj, "bff_url");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), BFF_TIMEOUT_MS);
 
     fetch(build_path(bff_url, "auth", "login"), {
         method:      "POST",
         credentials: "include",
         headers:     {"Content-Type": "application/json"},
-        body:        JSON.stringify({username, password})
+        body:        JSON.stringify({username, password}),
+        signal:      controller.signal
     })
     .then(resp => resp.json().then(data => ({ok: resp.ok, status: resp.status, data})))
     .then(({ok, status, data}) => {
@@ -183,84 +274,69 @@ function do_bff_login(gobj, username, password)
         log_error(`${gobj_short_name(gobj)}: BFF login fetch failed: ${err.message}`);
         gobj_send_event(gobj, "EV_LOGIN_DENIED",
             {error_code: "network_error", error: "Network error during login"}, gobj);
-    });
+    })
+    .finally(() => clearTimeout(timer));
 }
 
 /***************************************************************
- *  Call the BFF /auth/logout endpoint.
+ *  Call the BFF /auth/logout endpoint. A logout the BFF never confirmed is
+ *  still a logout HERE: the local session is dropped either way.
  ***************************************************************/
 function do_bff_logout(gobj)
 {
-    const bff_url = gobj_read_attr(gobj, "bff_url");
-
-    fetch(build_path(bff_url, "auth", "logout"), {
-        method:      "POST",
-        credentials: "include",
-        headers:     {"Content-Type": "application/json"}
-    })
-    .then(resp => resp.json().catch(() => ({})))
-    .then(() => {
+    post_bff(gobj, "logout").then(({ok, data}) => {
+        if(!ok) {
+            log_warning(sprintf("%s: BFF logout failed (%s) — dropping the local session anyway",
+                gobj_short_name(gobj), data.error || "?"));
+        }
         gobj_send_event(gobj, "EV_LOGOUT_DONE", {}, gobj);
-    })
-    .catch(err => {
-        log_error(`${gobj_short_name(gobj)}: BFF logout error: ${err.message}`);
-        gobj_send_event(gobj, "EV_LOGOUT_DONE", {error: err.message}, gobj);
     });
 }
 
 /***************************************************************
  *  Call the BFF /auth/refresh endpoint.
+ *
+ *  A TRANSIENT failure does not end the session: it becomes
+ *  EV_REFRESH_FAILED, which retries with backoff and leaves the shell, the
+ *  links and the open cards exactly as they are. Only the BFF answering
+ *  "no" is EV_LOGIN_DENIED.
  ***************************************************************/
 function do_bff_refresh(gobj)
 {
-    const bff_url = gobj_read_attr(gobj, "bff_url");
-
-    fetch(build_path(bff_url, "auth", "refresh"), {
-        method:      "POST",
-        credentials: "include",
-        headers:     {"Content-Type": "application/json"}
-    })
-    .then(resp => resp.json())
-    .then(data => {
-        if(data.success) {
-            gobj_send_event(gobj, "EV_LOGIN_REFRESHED", data, gobj);
-        } else {
-            const error_code = data.error_code || "refresh_denied";
-            const error      = data.error || "Refresh denied";
-            log_info(sprintf("%s: BFF refresh denied: %s (%s)",
-                gobj_short_name(gobj), error_code, error));
-            gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error}, gobj);
+    post_bff(gobj, "refresh").then(({ok, status, data, transient}) => {
+        if(transient) {
+            let reason = data.error || `HTTP ${status}`;
+            log_warning(sprintf("%s: BFF refresh could not be made (%s) — retrying",
+                gobj_short_name(gobj), reason));
+            gobj_send_event(gobj, "EV_REFRESH_FAILED", {error: reason}, gobj);
+            return;
         }
-    })
-    .catch(err => {
-        log_error(`${gobj_short_name(gobj)}: BFF refresh failed: ${err.message}`);
-        gobj_send_event(gobj, "EV_LOGIN_DENIED",
-            {error_code: "network_error", error: "Network error during refresh"}, gobj);
+        if(ok && data.success) {
+            gobj_send_event(gobj, "EV_LOGIN_REFRESHED", data, gobj);
+            return;
+        }
+        const error_code = data.error_code || `http_${status}`;
+        const error      = data.error || "Refresh denied";
+        log_info(sprintf("%s: BFF refresh denied: %s (%s)",
+            gobj_short_name(gobj), error_code, error));
+        gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error}, gobj);
     });
 }
 
 /***************************************************************
  *  Try to restore the session from httpOnly cookies on page load.
+ *  Anything short of a success shows the login form — on a cold load there
+ *  is no session to protect, so a transient failure is not worth a retry
+ *  loop the user cannot see.
  ***************************************************************/
 function try_restore_session(gobj)
 {
-    const bff_url = gobj_read_attr(gobj, "bff_url");
-
-    fetch(build_path(bff_url, "auth", "refresh"), {
-        method:      "POST",
-        credentials: "include",
-        headers:     {"Content-Type": "application/json"}
-    })
-    .then(resp => resp.json())
-    .then(data => {
-        if(data.success) {
+    post_bff(gobj, "refresh").then(({ok, data}) => {
+        if(ok && data.success) {
             gobj_write_attr(gobj, "username", data.username || data.email || "");
             gobj_send_event(gobj, "EV_LOGIN_ACCEPTED", data, gobj);
-        } else {
-            gobj_send_event(gobj, "EV_RESTORE_FAILED", {}, gobj);
+            return;
         }
-    })
-    .catch(() => {
         gobj_send_event(gobj, "EV_RESTORE_FAILED", {}, gobj);
     });
 }
@@ -358,7 +434,21 @@ function save_session_info(gobj, data)
     if(priv.timeout_refresh <= 0) {
         priv.timeout_refresh = 2;
     }
-    set_timeout(priv.gobj_timer, priv.timeout_refresh * 1000);
+    priv.retry_ms = 0;      /*  a refresh landed: the backoff starts over  */
+    arm_refresh(gobj, priv.timeout_refresh * 1000);
+}
+
+/***************************************************************
+ *  Arm the refresh timer and REMEMBER when it is due. The deadline is what
+ *  the wake-up path consults: a laptop that slept through the timer wakes
+ *  with a browser-throttled timer that fires late (or after the token is
+ *  already dead), and nothing else in the SPA would notice.
+ ***************************************************************/
+function arm_refresh(gobj, ms)
+{
+    let priv = gobj.priv;
+    priv.refresh_at = Date.now() + ms;
+    set_timeout(priv.gobj_timer, ms);
 }
 
 
@@ -481,6 +571,52 @@ function ac_timeout(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  The refresh could not be MADE (network down, BFF 502, request timed
+ *  out). The session is not denied — the refresh cookie is untouched — so
+ *  keep it, back off, and try again. Tearing the SPA down to the login
+ *  form on a blink of the network destroyed the shell, closed every link
+ *  and lost every open card, for a failure that heals itself.
+ ***************************************************************/
+function ac_refresh_failed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    priv.retry_ms = priv.retry_ms
+        ? Math.min(priv.retry_ms * 2, REFRESH_RETRY_MAX_MS)
+        : REFRESH_RETRY_MIN_MS;
+    arm_refresh(gobj, priv.retry_ms);
+
+    gobj_publish_event(gobj, "EV_REFRESH_FAILED", {
+        error:    (kw && kw.error) || "",
+        retry_ms: priv.retry_ms
+    });
+    return 0;
+}
+
+/***************************************************************
+ *  The tab came back to the foreground, or the network came back. A
+ *  background tab's timers are throttled, so the refresh may be overdue by
+ *  minutes: if its deadline has passed, refresh NOW instead of waiting for
+ *  a timer the browser is holding back.
+ ***************************************************************/
+function ac_wakeup(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    if(gobj_current_state(gobj) !== "ST_LOGIN") {
+        return 0;       /*  no session to keep alive  */
+    }
+    if(!priv.refresh_at || Date.now() < priv.refresh_at) {
+        return 0;       /*  the timer is still ahead of us: let it fire  */
+    }
+    log_info(sprintf("%s: back from sleep with the refresh overdue — refreshing now",
+        gobj_short_name(gobj)));
+    clear_timeout(priv.gobj_timer);
+    do_bff_refresh(gobj);
+    return 0;
+}
+
 
 
 
@@ -505,10 +641,17 @@ function create_gclass(gclass_name)
         return -1;
     }
 
+    /*
+     *  EV_WAKEUP is declared in EVERY state: it is an OS notification (the tab
+     *  came to the foreground, the network came back), not a user action — it
+     *  lands whenever the OS decides, session or no session. Its action is the
+     *  one that knows there is nothing to do without one.
+     */
     const states = [
         ["ST_LOGOUT", [
             ["EV_DO_LOGIN",        ac_do_login,        "ST_WAIT_TOKEN"],
             ["EV_LOGIN_DENIED",    ac_login_denied,    null],
+            ["EV_WAKEUP",          ac_wakeup,          null],
             ["EV_DO_LOGOUT",       ac_clear_session,   null],
             ["EV_LOGOUT_DONE",     ac_clear_session,   null],
             /*
@@ -523,24 +666,33 @@ function create_gclass(gclass_name)
              *  Same shape: the /auth/token fetch of a session that was logged
              *  out while it was in flight. The token is stale — drop it.
              */
-            ["EV_TOKEN_FETCHED",   ac_clear_session,   null]
+            ["EV_TOKEN_FETCHED",   ac_clear_session,   null],
+            /*
+             *  And the transient failure of a refresh that was in flight when
+             *  the user logged out: there is no session left to keep alive, so
+             *  it must NOT re-arm the retry timer.
+             */
+            ["EV_REFRESH_FAILED",  ac_clear_session,   null]
         ]],
 
         ["ST_WAIT_TOKEN", [
             ["EV_DO_LOGIN",        ac_do_login,        null],
             ["EV_LOGIN_ACCEPTED",  ac_login_accepted,  "ST_LOGIN"],
             ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"],
-            ["EV_RESTORE_FAILED",  ac_restore_failed,  "ST_LOGOUT"]
+            ["EV_RESTORE_FAILED",  ac_restore_failed,  "ST_LOGOUT"],
+            ["EV_WAKEUP",          ac_wakeup,          null]
         ]],
 
         ["ST_LOGIN", [
             ["EV_DO_LOGOUT",       ac_do_logout,       null],
             ["EV_DO_REFRESH",      ac_do_refresh,      null],
             ["EV_LOGIN_REFRESHED", ac_login_refreshed, null],
+            ["EV_REFRESH_FAILED",  ac_refresh_failed,  null],
             ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"],
             ["EV_LOGOUT_DONE",     ac_logout_done,     "ST_LOGOUT"],
             ["EV_TOKEN_FETCHED",   ac_token_fetched,   null],
-            ["EV_TIMEOUT",         ac_timeout,         null]
+            ["EV_TIMEOUT",         ac_timeout,         null],
+            ["EV_WAKEUP",          ac_wakeup,          null]
         ]]
     ];
 
@@ -552,10 +704,12 @@ function create_gclass(gclass_name)
         ["EV_LOGIN_ACCEPTED",  out],
         ["EV_LOGIN_DENIED",    out],
         ["EV_LOGIN_REFRESHED", out],
+        ["EV_REFRESH_FAILED",  out],
         ["EV_LOGOUT_DONE",     out],
         ["EV_RESTORE_FAILED",  out],
         ["EV_TOKEN_FETCHED",   0],
-        ["EV_TIMEOUT",         0]
+        ["EV_TIMEOUT",         0],
+        ["EV_WAKEUP",          0]
     ];
 
     __gclass__ = gclass_create(
