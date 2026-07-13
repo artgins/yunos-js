@@ -29,8 +29,18 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   footer stayed a single nowrap row and clipped the page-size select and the
   First/Prev/Next/Last buttons off the right edge (the mobile rule stacks the
   counter over the full pager). Also restores the card chrome (scrollable
-  dashboard column, card border/title ellipsis). Card spacing bumped
-  0.75rem → 1.5rem.
+  dashboard column, card border/title ellipsis).
+
+- **fix(gui_treedb): Tranger cards read as separate objects.** In a view that is
+  a *stack of tables* (grid lines and scrollbars everywhere) consecutive cards
+  looked like one continuous table. Now: `mb-6` gutter (3rem, the top of Bulma's
+  spacing scale), a much darker shadow **around** the card — via Bulma's own
+  `--bulma-box-shadow` knob on the `.box`, all-round (offset 0 + positive
+  spread) instead of a downward "elevation" one, with a hairline ring so it
+  stays legible in dark mode — and a titled header band. The dashboard column
+  gets `px-3`: it scrolls (`overflow-y:auto`, which forces `overflow-x` to
+  `auto`), so a full-width card had no room for its lateral shadow and got it
+  clipped at the edge.
 
 - **feat(gui_treedb): Rows request options + per-column operator filters +
   responsive Keys picker in the Tranger browser.** The Keys picker is presented

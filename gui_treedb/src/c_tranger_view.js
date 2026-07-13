@@ -91,8 +91,20 @@ const STYLE_CSS = `
 .C_TRANGER_VIEW .TRANGER_DASHBOARD {
     flex: 1 1 auto; min-height: 0; overflow-y: auto;
 }
-.C_TRANGER_VIEW .TRANGER_CARD { margin-bottom: 1.5rem; }
+/*  The card IS a Bulma .box: spacing is the mb-6 helper on the element (3rem,
+    the top of Bulma's scale — a stack of tables needs a wide gutter to read as
+    separate objects). Bulma has no shadow helper, so the depth comes from its
+    OWN customization knob: the .box CSS variable, overridden here to a much
+    darker drop shadow + a hairline ring (the ring is what keeps the card
+    legible in dark mode, where a shadow on a dark background barely shows).  */
+.C_TRANGER_VIEW .TRANGER_CARD {
+    --bulma-box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.22),
+        0 0 0.6rem 0.1rem rgba(0, 0, 0, 0.42),
+        0 0 1.2rem 0.2rem rgba(0, 0, 0, 0.25);
+}
 .C_TRANGER_VIEW .TRANGER_CARD_HEAD {
+    background: var(--bulma-scheme-main-bis, #fafafa);
     border-bottom: 1px solid var(--bulma-border, #dbdbdb);
 }
 .C_TRANGER_VIEW .TRANGER_CARD_TITLE {
@@ -307,8 +319,11 @@ function build_ui(gobj)
             t("open a key view")]);
     priv.$empty = $empty;
 
+    /*  px-3: the scrolling column clips horizontally (overflow-y:auto forces
+     *  overflow-x to auto), so a full-width card has NO room for its lateral
+     *  shadow — it gets cut at the edge. The padding is that room.  */
     let $dashboard = createElement2(
-        ["div", {class: "TRANGER_DASHBOARD"}, [$empty]]);
+        ["div", {class: "TRANGER_DASHBOARD px-3"}, [$empty]]);
     priv.$dashboard = $dashboard;
 
     let $container = createElement2(
@@ -1017,7 +1032,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
             head_children]);
 
     let $el = createElement2(
-        ["div", {class: "box p-0 TRANGER_CARD"}, [$head, $table]]);
+        ["div", {class: "box p-0 mb-6 TRANGER_CARD"}, [$head, $table]]);
     card.$el = $el;
 
     priv.cards.push(card);
