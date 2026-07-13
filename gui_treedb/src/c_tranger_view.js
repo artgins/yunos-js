@@ -2080,6 +2080,11 @@ function flatten_record(r)
  *  Format a tranger timestamp for the t / tm columns. `ms` says the value
  *  is in milliseconds (the topic set sf_t_ms / sf_tm_ms); otherwise it is
  *  in seconds.
+ *
+ *  LOCAL wall-clock, like the time pickers and the span caption of the
+ *  Rows options: those are `datetime-local`, so rendering the columns in
+ *  UTC put the same instant on two different clocks in one card — asking
+ *  for "from 18:55" (local) returned rows the table labelled 16:55.
  ***************************************************************/
 function fmt_ts(value, ms)
 {
@@ -2087,8 +2092,7 @@ function fmt_ts(value, ms)
         return "";
     }
     try {
-        let d = new Date(ms ? value : value * 1000);
-        return d.toISOString().replace("T", " ").slice(0, 19);
+        return epoch_to_local_input(value, ms).replace("T", " ");
     } catch(e) {
         return String(value);
     }
