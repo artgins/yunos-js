@@ -81,8 +81,9 @@ const PAGE_SIZE = 100;
 /*  Max rows kept in a Live card's rolling buffer (newest on top).  */
 const LIVE_MAX = 500;
 
-/*  Fixed table height inside a card (its own pager sits below).  */
-const CARD_TABLE_HEIGHT = "480px";
+/*  Table height inside a card (its own pager sits below): follows the
+ *  viewport, capped — a short screen must not be eaten by one card.  */
+const CARD_TABLE_HEIGHT = "min(60vh, 560px)";
 
 /*  Injected once (inline styles cannot carry these); scoped by the
  *  gclass class. Card chrome + the scrollable dashboard column.  */

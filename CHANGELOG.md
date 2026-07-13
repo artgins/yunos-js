@@ -41,7 +41,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   through the app's i18n in every paginated tranger table (new `showing rows`
   key, en/es) — Tabulator's built-in `paginationCounter: "rows"` is hardcoded
   English. Card content gets `p-2` of padding (the `.box` stays `p-0` so the
-  header band runs edge to edge) and the table area grows 320px → 480px.
+  header band runs edge to edge) and the table grows from a fixed 320px to
+  `min(60vh, 560px)` — it follows the viewport but never lets one card eat a
+  short screen. (The Live table devotes that height almost entirely to rows; a
+  Rows table spends part of it on the header filters and the pager footer.
+  Tabulator's `height` is the height of the WHOLE table, not of the rows area.)
 
 - **fix(gui_treedb): Tranger cards read as separate objects.** In a view that is
   a *stack of tables* (grid lines and scrollbars everywhere) consecutive cards
