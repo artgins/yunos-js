@@ -1868,12 +1868,29 @@ function ac_tranger_record_added(gobj, event, kw, src)
     let priv = gobj.priv;
     let topic = (kw && kw.topic_name) || "";
     let key = (kw && kw.key) || "";
+    let rt_id = (kw && kw.rt_id) || "";
     let record = kw ? kw.record : null;
     if(!record) {
         return 0;
     }
+
+    /*  The backend runs the publish callback once per OPEN FEED, so a record
+     *  arrives once per feed alive on that key — including feeds leaked by a
+     *  session that died without close-rt. `rt_id` says which feed produced
+     *  it: route it to THAT card and nothing else, so a foreign feed cannot
+     *  duplicate our rows. Backends older than the rt_id field send none:
+     *  fall back to topic+key (and to their duplicates).  */
     for(let card of priv.cards) {
-        if(card.mode === "live" && card.topic === topic && card.key === key) {
+        if(card.mode !== "live") {
+            continue;
+        }
+        if(rt_id) {
+            if(card.rt_id === rt_id) {
+                push_live_record(card, record);
+            }
+            continue;
+        }
+        if(card.topic === topic && card.key === key) {
             push_live_record(card, record);
         }
     }
