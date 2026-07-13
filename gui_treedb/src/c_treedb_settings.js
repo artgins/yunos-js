@@ -34,9 +34,10 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t,
-    gclass_create, log_error,
+    gclass_create, log_error, log_warning, gobj_short_name,
     gobj_read_attr, gobj_write_attr,
     gobj_subscribe_event,
+    gobj_unsubscribe_event,
     gobj_find_service,
     gobj_send_event,
     gobj_parent,
@@ -108,7 +109,19 @@ function mt_create(gobj)
 {
     gobj_write_attr(gobj, "table_id", "treedb_settings_table");
     build_ui(gobj);
+}
 
+/***************************************************************
+ *          Framework Method: Start
+ *
+ *  Subscriptions live HERE so they pair with the unsubscribes in mt_stop.
+ *  This view is `lazy_destroy`: it is destroyed and re-created on every
+ *  visit to Settings, so a subscription taken in mt_create and never undone
+ *  added a whole set per visit — each one delivering into a gobj that had
+ *  already been destroyed.
+ ***************************************************************/
+function mt_start(gobj)
+{
     /*  Refresh the status column when a connection goes up/down, and
      *  reload the tree when a discovery finishes (auto on first connect,
      *  or the refresh button). NOT subscribed to EV_CONNECTIONS_CHANGED:
@@ -120,14 +133,11 @@ function mt_create(gobj)
         gobj_subscribe_event(links, "EV_ON_CLOSE", {}, gobj);
         gobj_subscribe_event(links, "EV_TREEDB_SCAN_DONE", {}, gobj);
         gobj_subscribe_event(links, "EV_TREEDB_SCAN_ERROR", {}, gobj);
+    } else {
+        log_error(`${gobj_short_name(gobj)}: no treedb_links service: ` +
+                  `Settings will not see a connection open, close or scan`);
     }
-}
 
-/***************************************************************
- *          Framework Method: Start
- ***************************************************************/
-function mt_start(gobj)
-{
     /*  The shell has appended $container by now, so the table div is in
      *  the DOM and Tabulator can attach.  */
     create_table(gobj);
@@ -138,12 +148,20 @@ function mt_start(gobj)
  ***************************************************************/
 function mt_stop(gobj)
 {
+    let links = gobj_find_service("treedb_links", false);
+    if(links) {
+        gobj_unsubscribe_event(links, "EV_ON_OPEN", {}, gobj);
+        gobj_unsubscribe_event(links, "EV_ON_CLOSE", {}, gobj);
+        gobj_unsubscribe_event(links, "EV_TREEDB_SCAN_DONE", {}, gobj);
+        gobj_unsubscribe_event(links, "EV_TREEDB_SCAN_ERROR", {}, gobj);
+    }
+
     let table = gobj_read_attr(gobj, "tabulator");
     if(table) {
         try {
             table.destroy();
         } catch(e) {
-            /*  already gone  */
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
         }
         gobj_write_attr(gobj, "tabulator", null);
     }
@@ -429,7 +447,7 @@ function refresh_services(gobj, row)
     try {
         row.reformat();
     } catch(e) {
-        /*  table mid-rebuild  */
+        log_warning(`${GCLASS_NAME}: table mid-rebuild: ${e}`);
     }
 }
 
@@ -582,7 +600,7 @@ function make_columns(gobj)
         try {
             cell.getRow().reformat();
         } catch(err) {
-            /*  table mid-rebuild  */
+            log_warning(`${GCLASS_NAME}: table mid-rebuild: ${err}`);
         }
     }
 
@@ -727,7 +745,7 @@ function reload_table(gobj)
     try {
         table.setData(rows_from_config(gobj));
     } catch(e) {
-        /*  table mid-rebuild  */
+        log_warning(`${GCLASS_NAME}: table mid-rebuild: ${e}`);
     }
 }
 
@@ -745,7 +763,7 @@ function refresh_status(gobj)
             row.reformat();
         });
     } catch(e) {
-        /*  table mid-rebuild  */
+        log_warning(`${GCLASS_NAME}: table mid-rebuild: ${e}`);
     }
 }
 

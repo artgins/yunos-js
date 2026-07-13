@@ -19,9 +19,10 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t,
-    gclass_create, log_error,
+    gclass_create, log_error, gobj_short_name,
     gobj_read_attr, gobj_write_attr,
     gobj_subscribe_event,
+    gobj_unsubscribe_event,
     gobj_find_service,
     gobj_send_event,
     createElement2, refresh_language,
@@ -40,6 +41,8 @@ import {
     treedb_links_is_connected,
     treedb_links_get_open_error,
 } from "./c_treedb_links.js";
+
+import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 
 /***************************************************************
@@ -81,25 +84,38 @@ let __gclass__ = null;
 function mt_create(gobj)
 {
     build_ui(gobj);
+}
 
+/***************************************************************
+ *          Framework Method: Start
+ *
+ *  The subscriptions live HERE, not in mt_create, so they are symmetric
+ *  with the unsubscribes in mt_stop (the same rule C_TREEDB_VIEW states).
+ *  This view is destroyed and re-created by the shell — and on logout it
+ *  dies while its publishers (services under the app root) live on: taken
+ *  in mt_create and never undone, every visit left a subscription set
+ *  behind, delivering into a destroyed gobj.
+ ***************************************************************/
+function mt_start(gobj)
+{
     let config = gobj_find_service("treedb_config", false);
     if(config) {
         gobj_subscribe_event(config, "EV_CONNECTIONS_CHANGED", {}, gobj);
         gobj_subscribe_event(config, "EV_SELECTED_TREEDBS_CHANGED", {}, gobj);
+    } else {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service: ` +
+                  `the picker will not see a connection change`);
     }
     let links = gobj_find_service("treedb_links", false);
     if(links) {
         gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
         gobj_subscribe_event(links, "EV_ON_CLOSE", {}, gobj);
         gobj_subscribe_event(links, "EV_ON_OPEN_ERROR", {}, gobj);
+    } else {
+        log_error(`${gobj_short_name(gobj)}: no treedb_links service: ` +
+                  `the picker will not see a connection open or fail`);
     }
-}
 
-/***************************************************************
- *          Framework Method: Start
- ***************************************************************/
-function mt_start(gobj)
-{
     render(gobj);
 }
 
@@ -108,6 +124,17 @@ function mt_start(gobj)
  ***************************************************************/
 function mt_stop(gobj)
 {
+    let config = gobj_find_service("treedb_config", false);
+    if(config) {
+        gobj_unsubscribe_event(config, "EV_CONNECTIONS_CHANGED", {}, gobj);
+        gobj_unsubscribe_event(config, "EV_SELECTED_TREEDBS_CHANGED", {}, gobj);
+    }
+    let links = gobj_find_service("treedb_links", false);
+    if(links) {
+        gobj_unsubscribe_event(links, "EV_ON_OPEN", {}, gobj);
+        gobj_unsubscribe_event(links, "EV_ON_CLOSE", {}, gobj);
+        gobj_unsubscribe_event(links, "EV_ON_OPEN_ERROR", {}, gobj);
+    }
 }
 
 /***************************************************************
@@ -141,8 +168,7 @@ function build_ui(gobj)
         ["button", {class: "button is-small PICKER_MANAGE",
                     i18n: "manage connections"}, "Manage connections"]);
     $manage.addEventListener("click", () => {
-        /*  hash routing: jump to the Settings page.  */
-        window.location.hash = "#/settings";
+        gobj_send_event(gobj, "EV_MANAGE_CONNECTIONS", {}, gobj);
     });
 
     let $container = createElement2(
@@ -179,6 +205,7 @@ function clear_node($el)
 function status_dot(connected)
 {
     return ["span", {
+        class: "PICKER_STATUS_DOT",
         style: "display:inline-block; width:0.7em; height:0.7em; border-radius:50%; "
              + "margin-right:0.5em; vertical-align:middle; background:"
              + (connected ? "#48c78e" : "#b5b5b5") + ";"
@@ -338,6 +365,25 @@ function ac_refresh(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  "Manage connections" → the Settings page.
+ *
+ *  Through the shell's navigate, not by assigning window.location.hash in
+ *  the click handler: that wrote the route from OUTSIDE the shell (which
+ *  owns it) and left no trace in the machine — the one place a route change
+ *  should be visible.
+ ***************************************************************/
+function ac_manage_connections(gobj, event, kw, src)
+{
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot open Settings`);
+        return -1;
+    }
+    yui_shell_navigate(shell, "/settings");
+    return 0;
+}
+
 
 
 
@@ -368,7 +414,8 @@ function create_gclass(gclass_name)
             ["EV_SELECTED_TREEDBS_CHANGED", ac_refresh, null],
             ["EV_ON_OPEN",                  ac_refresh, null],
             ["EV_ON_CLOSE",                 ac_refresh, null],
-            ["EV_ON_OPEN_ERROR",            ac_refresh, null]
+            ["EV_ON_OPEN_ERROR",            ac_refresh, null],
+            ["EV_MANAGE_CONNECTIONS",       ac_manage_connections, null]
         ]]
     ];
 
@@ -377,7 +424,8 @@ function create_gclass(gclass_name)
         ["EV_SELECTED_TREEDBS_CHANGED", 0],
         ["EV_ON_OPEN",                  0],
         ["EV_ON_CLOSE",                 0],
-        ["EV_ON_OPEN_ERROR",            0]
+        ["EV_ON_OPEN_ERROR",            0],
+        ["EV_MANAGE_CONNECTIONS",       0]
     ];
 
     __gclass__ = gclass_create(

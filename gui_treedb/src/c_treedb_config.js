@@ -37,7 +37,7 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t, sdata_flag_t, event_flag_t,
-    gclass_create, log_error,
+    gclass_create, log_error, gobj_short_name,
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_save_persistent_attrs,
     gobj_subscribe_event,
@@ -179,6 +179,24 @@ function treedb_config_conn_services(conn)
 }
 
 /***************************************************************
+ *  Persist an attr and SAY SO when the store refused it.
+ *
+ *  Every one of these writes goes to localStorage, and localStorage can
+ *  say no: quota exceeded, Safari private mode, storage disabled. The
+ *  return value was ignored at all eight call sites, so a rejected write
+ *  was invisible — the in-memory attr and the UI showed the change as
+ *  saved while nothing had reached the disk, and the next reload lost it.
+ *  Nothing here can RECOVER from that, but the log must carry it.
+ ***************************************************************/
+function persist(gobj, attr)
+{
+    if(gobj_save_persistent_attrs(gobj, attr) < 0) {
+        log_error(`${gobj_short_name(gobj)}: cannot persist '${attr}' ` +
+                  `(browser storage full or blocked) — the change is only in memory`);
+    }
+}
+
+/***************************************************************
  *  Replace ONE connection's services (the Settings checkboxes edit
  *  the `selected` flags through this), persist, notify.
  ***************************************************************/
@@ -187,11 +205,12 @@ function do_set_conn_services(gobj, conn_id, services)
     let list = treedb_config_get_connections(gobj);
     let idx = list.findIndex((c) => c && c.id === conn_id);
     if(idx < 0) {
+        log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' to mutate`);
         return;
     }
     list[idx] = Object.assign({}, list[idx], {services: sanitize_services(services)});
     gobj_write_attr(gobj, "connections", list);
-    gobj_save_persistent_attrs(gobj, "connections");
+    persist(gobj, "connections");
     gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list, conn: list[idx]});
 }
 
@@ -206,6 +225,7 @@ function do_store_scanned_services(gobj, conn_id, found)
     let list = treedb_config_get_connections(gobj);
     let idx = list.findIndex((c) => c && c.id === conn_id);
     if(idx < 0) {
+        log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' to mutate`);
         return;
     }
     let prev_selected = {};
@@ -221,7 +241,7 @@ function do_store_scanned_services(gobj, conn_id, found)
     }));
     list[idx] = Object.assign({}, list[idx], {services: services});
     gobj_write_attr(gobj, "connections", list);
-    gobj_save_persistent_attrs(gobj, "connections");
+    persist(gobj, "connections");
     gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list, conn: list[idx]});
 }
 
@@ -235,11 +255,12 @@ function do_set_conn_enabled(gobj, conn_id, enabled)
     let list = treedb_config_get_connections(gobj);
     let idx = list.findIndex((c) => c && c.id === conn_id);
     if(idx < 0) {
+        log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' to mutate`);
         return;
     }
     list[idx] = Object.assign({}, list[idx], {enabled: !!enabled});
     gobj_write_attr(gobj, "connections", list);
-    gobj_save_persistent_attrs(gobj, "connections");
+    persist(gobj, "connections");
     gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list, conn: list[idx]});
 }
 
@@ -269,7 +290,7 @@ function do_set_connections(gobj, list)
 {
     let clean = Array.isArray(list) ? list.filter((c) => c && c.id) : [];
     gobj_write_attr(gobj, "connections", clean);
-    gobj_save_persistent_attrs(gobj, "connections");
+    persist(gobj, "connections");
 
     let alive = {};
     for(let c of clean) {
@@ -327,7 +348,7 @@ function read_tranger_views(gobj)
 function write_tranger_views(gobj, map)
 {
     gobj_write_attr(gobj, "tranger_views", map);
-    gobj_save_persistent_attrs(gobj, "tranger_views");
+    persist(gobj, "tranger_views");
 }
 
 /***************************************************************
@@ -411,7 +432,7 @@ function read_selection_map(gobj)
 function write_selection_map(gobj, map)
 {
     gobj_write_attr(gobj, "selected_treedbs", map);
-    gobj_save_persistent_attrs(gobj, "selected_treedbs");
+    persist(gobj, "selected_treedbs");
 }
 
 /***************************************************************
@@ -538,7 +559,7 @@ function do_set_active_tab(gobj, workspace, id)
     }
     map[workspace] = id || "";
     gobj_write_attr(gobj, "active_tabs", map);
-    gobj_save_persistent_attrs(gobj, "active_tabs");
+    persist(gobj, "active_tabs");
 }
 
 /***************************************************************
@@ -566,7 +587,7 @@ function do_set_live_max(gobj, n)
         v = LIVE_MAX_DEFAULT;
     }
     gobj_write_attr(gobj, "live_max", clamp_live_max(v));
-    gobj_save_persistent_attrs(gobj, "live_max");
+    persist(gobj, "live_max");
 }
 
 function clamp_live_max(n)

@@ -75,7 +75,7 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t, event_flag_t, kw_flag_t,
-    gclass_create, log_error,
+    gclass_create, log_error, log_warning,
     gobj_read_attr, gobj_write_attr,
     gobj_read_pointer_attr, gobj_read_str_attr,
     gobj_parent, gobj_short_name,
@@ -105,6 +105,15 @@ import {
     LIVE_MAX_DEFAULT,
 } from "./c_treedb_config.js";
 import {treedb_links_get_iev} from "./c_treedb_links.js";
+
+import {
+    SF_T_MS,
+    SF_TM_MS,
+    to_epoch,
+    epoch_to_local_input,
+    flatten_record,
+    op_filter,
+} from "./tranger_helpers.js";
 
 
 /***************************************************************
@@ -137,20 +146,11 @@ const PAGE_TIMEOUT_MS = 20000;
  *  (t, tm, rowid), so this leaves one record field visible.  */
 const MOBILE_COLS = 4;
 
-/*  A tranger record carries TWO timestamps, and they are two independent
- *  axes of the same record:
- *
- *      t   PERSISTENCE time — when the record was appended to the topic.
- *      tm  MESSAGE time     — when the event it carries actually happened
- *                             (set by the producer; it can lag t by hours
- *                             after a backfill, or by a device's buffered
- *                             upload).
- *
- *  The iterator's match_cond takes both ranges and combines them, so the
- *  Rows-options modal offers both. Both are expressed in the TOPIC's own
- *  unit: seconds, unless the topic's system_flag sets these bits.  */
-const SF_T_MS  = 0x0100;    /*  sf_t_ms:  t  is in milliseconds  */
-const SF_TM_MS = 0x0200;    /*  sf_tm_ms: tm is in milliseconds  */
+/*  A tranger record carries TWO timestamps (t = persistence, tm = message
+ *  origin) and they are two independent axes: the iterator's match_cond takes
+ *  both ranges and ANDs them, so the Rows-options modal offers both. Their
+ *  unit (seconds, or milliseconds when the topic's system_flag says so) is
+ *  what SF_T_MS / SF_TM_MS decide — see tranger_helpers.js.  */
 
 /*  Quick ranges offered by the modal, as a span BACK FROM NOW (seconds).
  *  "today" is special-cased (it starts at local midnight, not N seconds
@@ -904,7 +904,7 @@ function open_keys_picker(gobj)
             try {
                 picker.redraw(true);
             } catch(e) {
-                /*  destroyed before the frame  */
+                log_warning(`${GCLASS_NAME}: destroyed before the frame: ${e}`);
             }
         });
     });
@@ -928,7 +928,7 @@ function close_picker(gobj)
         try {
             priv.picker_tbl.destroy();
         } catch(e) {
-            /*  already gone  */
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
         }
         priv.picker_tbl = null;
     }
@@ -938,14 +938,14 @@ function close_picker(gobj)
         try {
             gobj_destroy(win);
         } catch(e) {
-            /*  already gone  */
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
         }
     }
     if(modal && typeof modal.close === "function") {
         try {
             modal.close();
         } catch(e) {
-            /*  already gone  */
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
         }
     }
 }
@@ -963,7 +963,7 @@ function refresh_picker_actions(gobj)
     try {
         priv.picker_tbl.getRows().forEach((r) => r.reformat());
     } catch(e) {
-        /*  table gone  */
+        log_warning(`${GCLASS_NAME}: table gone: ${e}`);
     }
 }
 
@@ -1158,35 +1158,6 @@ function key_span(gobj, key)
         fr_tm: (row && row.fr_tm) || 0,
         to_tm: (row && row.to_tm) || 0
     };
-}
-
-/***************************************************************
- *  Epoch (topic unit) <-> the LOCAL wall-clock string a `datetime-local`
- *  input takes ("YYYY-MM-DDTHH:MM:SS", step=1 so seconds survive).
- *  Empty / unparseable → 0 (unset), which is exactly how the iterator
- *  reads an absent condition.
- ***************************************************************/
-function to_epoch(v, ms)
-{
-    if(!v) {
-        return 0;
-    }
-    let t = Date.parse(v);
-    if(Number.isNaN(t)) {
-        return 0;
-    }
-    return ms ? t : Math.floor(t / 1000);
-}
-
-function epoch_to_local_input(value, ms)
-{
-    if(!value) {
-        return "";
-    }
-    let d = new Date(ms ? value : value * 1000);
-    let pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-           `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 /***************************************************************
@@ -1550,7 +1521,7 @@ function apply_card_match_cond(gobj, card, match_cond)
             card.tabulator.replaceData();
         }
     } catch(e) {
-        /*  destroyed mid-flight  */
+        log_warning(`${GCLASS_NAME}: destroyed mid-flight: ${e}`);
     }
 }
 
@@ -1790,7 +1761,7 @@ function mount_rows_table(gobj, card, $table)
             try {
                 table.redraw(true);
             } catch(e) {
-                /*  destroyed before the frame  */
+                log_warning(`${GCLASS_NAME}: destroyed before the frame: ${e}`);
             }
         });
     });
@@ -1833,7 +1804,7 @@ function mount_live_table(gobj, card, $table)
             try {
                 table.redraw(true);
             } catch(e) {
-                /*  destroyed before the frame  */
+                log_warning(`${GCLASS_NAME}: destroyed before the frame: ${e}`);
             }
         });
     });
@@ -1871,52 +1842,6 @@ function live_filter(card)
         return {topic_name: card.topic};
     }
     return {topic_name: card.topic, key: card.key};
-}
-
-/***************************************************************
- *  Custom Tabulator header-filter: parse a leading comparison operator
- *  from the typed term (`>=`, `<=`, `!=`, `>`, `<`, `=`) and compare —
- *  numeric when both sides parse as numbers (so `Voltage  >200` works),
- *  else string. No operator ⇒ case-insensitive substring match. Empty
- *  term ⇒ no filtering. Runs client-side over the LOADED page.
- ***************************************************************/
-function op_filter(headerValue, rowValue)
-{
-    let term = String(headerValue === null || headerValue === undefined ? "" : headerValue).trim();
-    if(!term) {
-        return true;
-    }
-    let cell = (rowValue === null || rowValue === undefined) ? "" : rowValue;
-    let m = term.match(/^(>=|<=|!=|>|<|=)\s*(.*)$/);
-    if(m) {
-        let op = m[1];
-        let rhs = m[2].trim();
-        let a = Number(cell);
-        let b = Number(rhs);
-        if(rhs !== "" && !Number.isNaN(a) && !Number.isNaN(b)) {
-            switch(op) {
-                case ">":  return a > b;
-                case "<":  return a < b;
-                case ">=": return a >= b;
-                case "<=": return a <= b;
-                case "=":  return a === b;
-                case "!=": return a !== b;
-                default:   return true;
-            }
-        }
-        let s = String(cell).toLowerCase();
-        let r = rhs.toLowerCase();
-        switch(op) {
-            case ">":  return s > r;
-            case "<":  return s < r;
-            case ">=": return s >= r;
-            case "<=": return s <= r;
-            case "=":  return s === r;
-            case "!=": return s !== r;
-            default:   return true;
-        }
-    }
-    return String(cell).toLowerCase().indexOf(term.toLowerCase()) !== -1;
 }
 
 /***************************************************************
@@ -2004,7 +1929,7 @@ function push_live_row(card, row)
         try {
             table.setColumns(columns_from_row(row));
         } catch(e) {
-            /*  table gone  */
+            log_warning(`${GCLASS_NAME}: table gone: ${e}`);
         }
     }
     Promise.resolve(table.addData([row], true)).then(function() {
@@ -2017,14 +1942,14 @@ function push_live_row(card, row)
                     try {
                         r.delete();
                     } catch(e) {
-                        /*  gone  */
+                        log_warning(`${GCLASS_NAME}: gone: ${e}`);
                     }
                 }
             }
         }
         update_live_count(card);
-    }).catch(function() {
-        /*  table torn down mid-append  */
+    }).catch(function(e) {
+        log_warning(`${GCLASS_NAME}: table torn down mid-append: ${e}`);
     });
 }
 
@@ -2041,7 +1966,8 @@ function update_live_count(card)
     try {
         n = card.tabulator.getDataCount();
     } catch(e) {
-        return;     /*  table gone  */
+        log_warning(`${GCLASS_NAME}: table gone: ${e}`);
+        return;
     }
     card.$count.textContent = `${n} / ${card.live_max}`;
 }
@@ -2070,7 +1996,7 @@ function close_card(gobj, card, forget)
         try {
             card.tabulator.destroy();
         } catch(e) {
-            /*  already gone  */
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
         }
         card.tabulator = null;
     }
@@ -2199,85 +2125,6 @@ function request_page(gobj, card, page, size)
                 __md_command__: {req_id: req_id}   /*  echoed back for correlation  */
             }, gobj);
     });
-}
-
-/***************************************************************
- *  Flatten a tranger record for the records table: metadata columns
- *  (t and tm formatted, rowid) first, then the record's own fields; the
- *  full record is kept in __rec (no column) for the row dialog.
- *
- *  BOTH timestamps get a column: they are the two axes the Rows options
- *  filter on, and a card filtered by tm while showing only t would be
- *  unreadable. The unit comes from the record's OWN system_flag (each
- *  record carries it in its metadata), so this needs no topic context.
- ***************************************************************/
-function flatten_record(r, key)
-{
-    let md = (r && r.__md_tranger__) || {};
-    let flags = md.system_flag || 0;
-    let row = {};
-    /*  A whole-topic Live card mixes keys: name the one each record came
-     *  from, or the card is a stream of anonymous rows. A per-key card
-     *  already says its key in the header — no column for it there.  */
-    if(key !== undefined && key !== null && key !== "") {
-        row.key = key;
-    }
-    row.t = fmt_ts(md.t,  (flags & SF_T_MS)  !== 0);
-    row.tm = fmt_ts(md.tm, (flags & SF_TM_MS) !== 0);
-    row.rowid = md.g_rowid !== undefined ? md.g_rowid : (md.rowid || "");
-    if(r && typeof r === "object") {
-        for(let k in r) {
-            if(k === "__md_tranger__") {
-                continue;
-            }
-            let v = r[k];
-            /*  A record is free to carry its OWN field named t / tm / rowid,
-             *  and it collides with the metadata columns above. Skipping it
-             *  (what this did) DELETED it from the table while the row dialog
-             *  still showed it — the two disagreed about the same record.
-             *  Suffix the column instead: nothing is lost and the header says
-             *  which one is the record's.  */
-            let name = k;
-            while(row[name] !== undefined) {
-                name += "_";
-            }
-            row[name] = (v !== null && typeof v === "object") ? JSON.stringify(v) : v;
-        }
-    }
-    row.__rec = r;
-    return row;
-}
-
-/***************************************************************
- *  Format a tranger timestamp for the t / tm columns. `ms` says the value
- *  is in milliseconds (the topic set sf_t_ms / sf_tm_ms); otherwise it is
- *  in seconds.
- *
- *  LOCAL wall-clock, like the time pickers and the span caption of the
- *  Rows options: those are `datetime-local`, so rendering the columns in
- *  UTC put the same instant on two different clocks in one card — asking
- *  for "from 18:55" (local) returned rows the table labelled 16:55.
- *
- *  A MILLISECOND topic keeps its milliseconds here (.SSS). The pickers do
- *  not — `datetime-local` tops out at seconds — but the columns are what
- *  you READ, and a topic that went to the trouble of setting sf_t_ms
- *  usually appends several records inside the same second: rendering them
- *  all as the same instant makes the card unreadable.
- ***************************************************************/
-function fmt_ts(value, ms)
-{
-    if(!value) {
-        return "";
-    }
-    try {
-        let s = epoch_to_local_input(value, ms).replace("T", " ");
-        if(ms) {
-            s += `.${String(value % 1000).padStart(3, "0")}`;
-        }
-        return s;
-    } catch(e) {
-        return String(value);
-    }
 }
 
 /***************************************************************
@@ -2416,7 +2263,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 try {
                     priv.picker_tbl.replaceData(priv.keys);
                 } catch(e) {
-                    /*  table gone  */
+                    log_warning(`${GCLASS_NAME}: table gone: ${e}`);
                 }
             }
             restore_saved_views(gobj);
@@ -2534,7 +2381,7 @@ function ac_picker_closed(gobj, event, kw, src)
         try {
             priv.picker_tbl.destroy();
         } catch(e) {
-            /*  already gone  */
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
         }
         priv.picker_tbl = null;
     }
@@ -2649,7 +2496,7 @@ function ac_clear_card(gobj, event, kw, src)
         try {
             card.tabulator.clearData();
         } catch(e) {
-            /*  destroyed mid-flight  */
+            log_warning(`${GCLASS_NAME}: destroyed mid-flight: ${e}`);
         }
         update_live_count(card);
     }
@@ -2720,7 +2567,7 @@ function rearm_rows_card(gobj, card)
         try {
             card.tabulator.replaceData();
         } catch(e) {
-            /*  destroyed mid-flight  */
+            log_warning(`${GCLASS_NAME}: destroyed mid-flight: ${e}`);
         }
     }
 }
@@ -2839,7 +2686,7 @@ function bump_key_count(gobj, key)
     try {
         priv.picker_tbl.updateData([{key: entry.key, records: entry.records}]);
     } catch(e) {
-        /*  table gone  */
+        log_warning(`${GCLASS_NAME}: table gone: ${e}`);
     }
 }
 
