@@ -616,12 +616,18 @@ function open_keys_picker(gobj)
         paginationCounter: rows_counter(),
         initialSort:    [{column: "records", dir: "desc"}],
         data:           priv.keys || [],
+        /*  Compact widths on a phone: fitColumns cannot shrink a column below
+         *  its minWidth/width, so the desktop set (150+110+160) overflows a
+         *  ~300px sheet and Tabulator adds a horizontal scrollbar — two-axis
+         *  scrolling inside a modal. The action buttons go icon-only there
+         *  (their labels are is-hidden-mobile), hence the narrower column.  */
         columns: [
-            {title: t("key"), field: "key", minWidth: 150,
+            {title: t("key"), field: "key", minWidth: mobile ? 100 : 150,
                 headerFilter: "input"},
-            {title: t("records"), field: "records", width: 110, hozAlign: "right",
-                sorter: "number"},
-            {title: t("actions"), field: "_act", headerSort: false, width: 160,
+            {title: t("records"), field: "records", width: mobile ? 70 : 110,
+                hozAlign: "right", sorter: "number"},
+            {title: t("actions"), field: "_act", headerSort: false,
+                width: mobile ? 96 : 160,
                 formatter: (cell) => build_key_actions(gobj, cell)}
         ]
     });
@@ -786,7 +792,7 @@ function build_key_actions(gobj, cell)
                     type: "button", title: t("rows"), "aria-label": t("rows")},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-eye"}]]],
-                ["span", {i18n: "rows"}, t("rows")]
+                ["span", {class: "is-hidden-mobile", i18n: "rows"}, t("rows")]
             ]
         ]);
     $rows.addEventListener("click", (ev) => {
@@ -807,7 +813,7 @@ function build_key_actions(gobj, cell)
                     type: "button", title: t("live"), "aria-label": t("live")},
             [
                 ["span", {class: "TRANGER_LIVE_DOT mr-1"}, ""],
-                ["span", {i18n: "live"}, t("live")]
+                ["span", {class: "is-hidden-mobile", i18n: "live"}, t("live")]
             ]
         ]);
     $live.addEventListener("click", (ev) => {

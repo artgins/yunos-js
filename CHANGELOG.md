@@ -22,6 +22,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the Keys picker fits a phone.** Its columns asked for
+  150+110+160px, and `fitColumns` cannot shrink a column below its
+  `minWidth`/`width` — so inside the ~300px mobile sheet Tabulator added a
+  horizontal scrollbar (two-axis scrolling in a modal). On mobile the columns go
+  compact (100 / 70 / 96) and the per-key **Rows** / **Live** buttons go
+  icon-only (`is-hidden-mobile` labels, `title` + `aria-label` kept), per the
+  repo's mobile button convention. Desktop is unchanged.
+
 - **fix(gui_treedb): the Live card's Clear button gets its own icon**
   (`yi-broom`). Clear and Close both used `yi-xmark`, and on mobile the text
   label is hidden — so the two buttons were indistinguishable, one emptying the
