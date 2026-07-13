@@ -37,7 +37,32 @@
  *      selected topic deep-links into the URL, and honours EV_SHOW to
  *      restore it.
  *
- *          Copyright (c) 2026, ArtGins.
+ *      FSM — every action crosses the automaton (JS GUI rule: the browser is
+ *      just another OS, so a click / an on_close / a dialog confirm is an OS
+ *      notification, and a DOM handler's only job is to turn it into an
+ *      event). The `machine` trace is therefore the execution log of this
+ *      view; nothing happens outside it.
+ *
+ *        ST_DISCONNECTED   — no session yet: the topics are unknown. The only
+ *                            way forward is EV_ON_OPEN (the link came up),
+ *                            which asks for them.
+ *        ST_LOADING_TOPICS — `topics` asked, waiting. A service with NO topics
+ *                            rests here (error banner): there is nothing to
+ *                            browse, so opening cards/keys is impossible BY
+ *                            CONSTRUCTION, not by an `if` that silently
+ *                            no-ops the button.
+ *        ST_TOPIC_SELECTED — a topic is selected: keys, cards and options live
+ *                            here. An EV_OPEN_CARD arriving in any other state
+ *                            fails LOUDLY and names its sender.
+ *
+ *      Cards are NOT child gobjs (they stay inside this gclass); what crosses
+ *      the FSM is what HAPPENS to them: EV_OPEN_CARD / EV_CLOSE_CARD /
+ *      EV_REFRESH_CARD / EV_CLEAR_CARD / EV_APPLY_MATCH_COND, plus the re-arm
+ *      driven by EV_ON_OPEN. Widget plumbing that is not an action stays a
+ *      plain call: Tabulator's `ajaxRequestFunc` (it must RETURN a Promise —
+ *      it is a data source, not an event) and the `tableBuilt` redraw.
+ *
+ *          Copyright (c) 2024-2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
 import {
@@ -49,6 +74,8 @@ import {
     gobj_subscribe_event,
     gobj_unsubscribe_event,
     gobj_publish_event,
+    gobj_send_event,
+    gobj_change_state,
     gobj_command,
     gobj_current_state, gobj_is_destroying,
     gobj_create_service, gobj_find_service, gobj_destroy, is_gobj,
@@ -311,6 +338,15 @@ function mt_start(gobj)
     if(links) {
         gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
     }
+
+    /*  Mounted with no session (link still down): stay in ST_DISCONNECTED and
+     *  let EV_ON_OPEN ask for the topics. Before the FSM this path just logged
+     *  "no session" and NOTHING ever retried — the view stayed empty for the
+     *  rest of its life.  */
+    if(!live_transport(gobj)) {
+        return;
+    }
+    gobj_change_state(gobj, "ST_LOADING_TOPICS");
     request_topics(gobj);
 }
 
@@ -373,7 +409,7 @@ function build_ui(gobj)
             ]
         ]);
     $keys_btn.addEventListener("click", () => {
-        open_keys_picker(gobj);
+        gobj_send_event(gobj, "EV_OPEN_KEYS", {}, gobj);
     });
 
     let $meta = createElement2(
@@ -528,7 +564,7 @@ function render_tabs(gobj)
         let $a = createElement2(["a", {class: "TRANGER_TOPIC_TAB"}, topic]);
         $a.addEventListener("click", (ev) => {
             ev.preventDefault();
-            select_topic(gobj, topic);
+            gobj_send_event(gobj, "EV_SELECT_TOPIC", {topic: topic}, gobj);
         });
         let $li = createElement2(
             ["li", {class: "TRANGER_TOPIC_TAB_ITEM" +
@@ -540,13 +576,11 @@ function render_tabs(gobj)
 /***************************************************************
  *  Select a topic: mark its tab, drop any open cards, (re)load its
  *  keys for the picker, publish the selection for the URL deep link.
+ *  The work of ac_select_topic (which owns the state change).
  ***************************************************************/
-function select_topic(gobj, topic_name)
+function do_select_topic(gobj, topic_name)
 {
     let priv = gobj.priv;
-    if(!topic_name || !(priv.topics || []).includes(topic_name)) {
-        return;
-    }
     close_all_cards(gobj);
     close_picker(gobj);     /*  keys are per-topic; reopen for the new one  */
     priv.cur_topic = topic_name;
@@ -599,9 +633,9 @@ function is_mobile()
 function open_keys_picker(gobj)
 {
     let priv = gobj.priv;
-    if(!priv.cur_topic) {
-        return;
-    }
+    /*  No !cur_topic guard: only ST_TOPIC_SELECTED declares EV_OPEN_KEYS, so
+     *  a Keys click with no topic is a LOUD FSM error naming its sender —
+     *  never the silent no-op button it used to be.  */
     if(priv.picker_win || priv.picker_modal) {
         return;     /*  already open  */
     }
@@ -622,10 +656,11 @@ function open_keys_picker(gobj)
                  style: mobile ? "" : "height:100%; display:flex; flex-direction:column;"},
             [$tbl]]);
 
-    /*  on_close (both paths) releases the table and clears the refs so
-     *  nothing leaks on any dismiss (X / dock / Escape / back).  */
+    /*  A dismiss (X / dock / Escape / back) is an OS notification: turn it
+     *  into EV_PICKER_CLOSED and let the action release the table + refs.  */
     if(mobile) {
         if(!shell) {
+            log_error(`${gobj_short_name(gobj)}: no shell, cannot open the Keys sheet`);
             return;
         }
         priv.picker_modal = yui_shell_show_modal(shell, $box, {
@@ -634,15 +669,13 @@ function open_keys_picker(gobj)
             title:  `${priv.cur_topic} · ${t("keys")}`,
             t:      t,
             on_close: () => {
-                if(priv.picker_tbl) {
-                    try {
-                        priv.picker_tbl.destroy();
-                    } catch(e) {
-                        /*  already gone  */
-                    }
-                    priv.picker_tbl = null;
+                /*  A teardown (mt_stop / destroy) already released the picker
+                 *  and cleared the refs; sending there would only log
+                 *  "gobj dst DESTROYED".  */
+                if(gobj_is_destroying(gobj)) {
+                    return;
                 }
-                priv.picker_modal = null;
+                gobj_send_event(gobj, "EV_PICKER_CLOSED", {}, gobj);
             }
         });
     } else {
@@ -680,15 +713,10 @@ function open_keys_picker(gobj)
                  *  Without a manager, minimize collapses it in place.  */
                 manager:    null,
                 on_close: () => {
-                    if(priv.picker_tbl) {
-                        try {
-                            priv.picker_tbl.destroy();
-                        } catch(e) {
-                            /*  already gone  */
-                        }
-                        priv.picker_tbl = null;
+                    if(gobj_is_destroying(gobj)) {
+                        return;     /*  teardown already released the picker  */
                     }
-                    priv.picker_win = null;
+                    gobj_send_event(gobj, "EV_PICKER_CLOSED", {}, gobj);
                 }
             },
             gobj
@@ -804,6 +832,24 @@ function refresh_picker_actions(gobj)
 }
 
 /***************************************************************
+ *  The open card for (key, mode), or null. There is at most ONE (add_card
+ *  dedups), and every open card belongs to cur_topic (a topic switch closes
+ *  them all), so the pair identifies a card unambiguously.
+ *
+ *  This is why the card EVENTS carry {key, mode} and never the card object
+ *  itself: a kw must stay PLAIN JSON. The machine trace dumps it
+ *  (`trace_json(kw)`), and a card holds its Tabulator and its DOM nodes —
+ *  circular structures that would throw on serialization, breaking the very
+ *  trace this FSM exists to feed. {key, mode} also reads better in the log.
+ ***************************************************************/
+function find_card(gobj, key, mode)
+{
+    let priv = gobj.priv;
+    return priv.cards.find(
+        (c) => c.key === String(key) && c.mode === mode) || null;
+}
+
+/***************************************************************
  *  The config service that owns the persisted open key-views (per
  *  connection). null if unavailable — persistence then no-ops.
  ***************************************************************/
@@ -866,7 +912,9 @@ function restore_saved_views(gobj)
         if(!present[String(v.key)]) {
             continue;   /*  key no longer exists; skip the stale restore  */
         }
-        add_card(gobj, String(v.key), v.mode, v.match_cond || {}, true);
+        gobj_send_event(gobj, "EV_OPEN_CARD",
+            {key: String(v.key), mode: v.mode, match_cond: v.match_cond || {},
+             restoring: true}, gobj);
     }
 }
 
@@ -894,13 +942,11 @@ function build_key_actions(gobj, cell)
     $rows.addEventListener("click", (ev) => {
         ev.stopPropagation();
         if(rows_open) {
-            let card = priv.cards.find((c) => c.key === key && c.mode === "rows");
-            if(card) {
-                close_card(gobj, card);
-            }
+            gobj_send_event(gobj, "EV_CLOSE_CARD",
+                {key: key, mode: "rows"}, gobj);
             return;
         }
-        open_rows_options(gobj, key);
+        gobj_send_event(gobj, "EV_OPEN_OPTIONS", {key: key}, gobj);
     });
 
     let $live = createElement2(
@@ -915,13 +961,11 @@ function build_key_actions(gobj, cell)
     $live.addEventListener("click", (ev) => {
         ev.stopPropagation();
         if(live_open) {
-            let card = priv.cards.find((c) => c.key === key && c.mode === "live");
-            if(card) {
-                close_card(gobj, card);
-            }
+            gobj_send_event(gobj, "EV_CLOSE_CARD",
+                {key: key, mode: "live"}, gobj);
             return;
         }
-        add_card(gobj, key, "live");
+        gobj_send_event(gobj, "EV_OPEN_CARD", {key: key, mode: "live"}, gobj);
     });
 
     return createElement2(
@@ -1075,6 +1119,7 @@ function open_rows_options(gobj, key)
 {
     let shell = yui_shell_of(gobj);
     if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot open the Rows options`);
         return;
     }
     let form = build_rows_options_form();
@@ -1089,7 +1134,8 @@ function open_rows_options(gobj, key)
         if(opt_modal && typeof opt_modal.close === "function") {
             opt_modal.close();
         }
-        add_card(gobj, key, "rows", match_cond);
+        gobj_send_event(gobj, "EV_OPEN_CARD",
+            {key: key, mode: "rows", match_cond: match_cond}, gobj);
     });
 }
 
@@ -1102,6 +1148,7 @@ function open_card_options(gobj, card)
 {
     let shell = yui_shell_of(gobj);
     if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot open the card options`);
         return;
     }
     let form = build_rows_options_form(card.match_cond, true);
@@ -1116,7 +1163,8 @@ function open_card_options(gobj, card)
         if(opt_modal && typeof opt_modal.close === "function") {
             opt_modal.close();
         }
-        apply_card_match_cond(gobj, card, match_cond);
+        gobj_send_event(gobj, "EV_APPLY_MATCH_COND",
+            {key: card.key, mode: card.mode, match_cond: match_cond}, gobj);
     });
 }
 
@@ -1178,7 +1226,10 @@ function apply_card_match_cond(gobj, card, match_cond)
 function add_card(gobj, key, mode, match_cond, restoring)
 {
     let priv = gobj.priv;
-    if(!priv.cur_topic || (mode !== "rows" && mode !== "live")) {
+    /*  cur_topic is guaranteed by ST_TOPIC_SELECTED (the only state that
+     *  declares EV_OPEN_CARD); an unknown mode is a caller bug.  */
+    if(mode !== "rows" && mode !== "live") {
+        log_error(`${gobj_short_name(gobj)}: bad card mode '${mode}'`);
         return;
     }
     if(!live_transport(gobj)) {
@@ -1214,7 +1265,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
             ]
         ]);
     $close.addEventListener("click", () => {
-        close_card(gobj, card);
+        gobj_send_event(gobj, "EV_CLOSE_CARD",
+            {key: card.key, mode: card.mode}, gobj);
     });
 
     /*  Rows only: reopen the options dialog, preloaded with THIS card's
@@ -1230,7 +1282,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
                 ]
             ]);
         $options.addEventListener("click", () => {
-            open_card_options(gobj, card);
+            gobj_send_event(gobj, "EV_OPEN_CARD_OPTIONS",
+                {key: card.key, mode: card.mode}, gobj);
         });
     }
 
@@ -1246,7 +1299,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
                 ]
             ]);
         $action.addEventListener("click", () => {
-            rearm_rows_card(gobj, card);    /*  the iterator is a snapshot  */
+            gobj_send_event(gobj, "EV_REFRESH_CARD",
+                {key: card.key, mode: card.mode}, gobj);
         });
     } else {
         $action = createElement2(
@@ -1258,10 +1312,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
                 ]
             ]);
         $action.addEventListener("click", () => {
-            if(card.tabulator) {
-                card.tabulator.clearData();
-                update_live_count(card);
-            }
+            gobj_send_event(gobj, "EV_CLEAR_CARD",
+                {key: card.key, mode: card.mode}, gobj);
         });
     }
 
@@ -1377,7 +1429,8 @@ function mount_rows_table(gobj, card, $table)
         autoColumnsDefinitions: tune_columns
     });
     table.on("rowClick", function(e, row) {
-        show_record_dialog(gobj, row.getData().__rec, card.key);
+        gobj_send_event(gobj, "EV_SHOW_RECORD",
+            {record: row.getData().__rec, key: card.key}, gobj);
     });
     /*  Re-measure once built + laid out (autoResize handles later window
      *  resizes), so the columns fit the card instead of a stale width.  */
@@ -1415,7 +1468,8 @@ function mount_live_table(gobj, card, $table)
         data:           []
     });
     table.on("rowClick", function(e, row) {
-        show_record_dialog(gobj, row.getData().__rec, card.key);
+        gobj_send_event(gobj, "EV_SHOW_RECORD",
+            {record: row.getData().__rec, key: card.key}, gobj);
     });
     table.on("tableBuilt", function() {
         card.built = true;
@@ -1894,8 +1948,11 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 : priv.topics[0];
             priv.pending_seg = "";
             if(topic) {
-                select_topic(gobj, topic);
+                gobj_send_event(gobj, "EV_SELECT_TOPIC", {topic: topic}, gobj);
             } else {
+                /*  A service with no topics: nothing to browse. Rest in
+                 *  ST_LOADING_TOPICS — Keys/cards are undeclared there, so
+                 *  they cannot be opened at all.  */
                 render_tabs(gobj);
                 show_error(gobj, "no topics");
             }
@@ -1937,11 +1994,15 @@ function ac_mt_command_answer(gobj, event, kw, src)
 }
 
 /************************************************************
- *  The link reopened (dropped websocket, token refresh): every open card
- *  holds server-side state that no longer exists — the backend reaps the
- *  iterators and realtime feeds of a session when it dies. A Rows card
- *  would page against a dead iterator ("No records", pager collapsed) and
- *  a Live card would never see a record again. Re-arm both.
+ *  The link reopened (dropped websocket, token refresh).
+ *
+ *  From ST_DISCONNECTED it is what gets the view going: ask for the topics.
+ *
+ *  From ST_TOPIC_SELECTED every open card holds server-side state that no
+ *  longer exists — the backend reaps the iterators and realtime feeds of a
+ *  session when it dies. A Rows card would page against a dead iterator
+ *  ("No records", pager collapsed) and a Live card would never see a record
+ *  again. Re-arm both.
  ************************************************************/
 function ac_transport_open(gobj, event, kw, src)
 {
@@ -1970,6 +2031,12 @@ function ac_transport_open(gobj, event, kw, src)
         return 0;   /*  transport recreated — the host rebinds us  */
     }
 
+    if(gobj_current_state(gobj) === "ST_DISCONNECTED") {
+        gobj_change_state(gobj, "ST_LOADING_TOPICS");
+        request_topics(gobj);
+        return 0;
+    }
+
     if(priv.cur_topic) {
         request_keys(gobj, priv.cur_topic);
     }
@@ -1980,6 +2047,177 @@ function ac_transport_open(gobj, event, kw, src)
             rearm_live_card(gobj, card);
         }
     }
+    return 0;
+}
+
+/************************************************************
+ *  Select a topic (tab click, deep-link restore, or the first topic of
+ *  the `topics` answer). Entering ST_TOPIC_SELECTED is what makes the
+ *  Keys picker and the cards reachable at all.
+ ************************************************************/
+function ac_select_topic(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let topic = (kw && kw.topic) || "";
+
+    if(!topic || !(priv.topics || []).includes(topic)) {
+        log_error(`${gobj_short_name(gobj)}: unknown topic '${topic}' ` +
+                  `(from ${src ? gobj_short_name(src) : "?"})`);
+        return -1;
+    }
+    do_select_topic(gobj, topic);
+    gobj_change_state(gobj, "ST_TOPIC_SELECTED");
+    return 0;
+}
+
+/************************************************************
+ *  Open the Keys picker of the current topic.
+ ************************************************************/
+function ac_open_keys(gobj, event, kw, src)
+{
+    open_keys_picker(gobj);
+    return 0;
+}
+
+/************************************************************
+ *  The Keys picker was dismissed (X / dock / Escape / back), or torn
+ *  down by close_picker(): release its Tabulator and clear the refs.
+ ************************************************************/
+function ac_picker_closed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.picker_tbl) {
+        try {
+            priv.picker_tbl.destroy();
+        } catch(e) {
+            /*  already gone  */
+        }
+        priv.picker_tbl = null;
+    }
+    priv.picker_win = null;
+    priv.picker_modal = null;
+    return 0;
+}
+
+/************************************************************
+ *  Open the Rows-options dialog for a key (its confirm sends
+ *  EV_OPEN_CARD with the chosen match conditions).
+ ************************************************************/
+function ac_open_options(gobj, event, kw, src)
+{
+    open_rows_options(gobj, (kw && kw.key) || "");
+    return 0;
+}
+
+/************************************************************
+ *  The card an event refers to, by {key, mode}. A miss means the card
+ *  closed between the click and the event: loud, and the action bails.
+ ************************************************************/
+function card_of_event(gobj, event, kw, src)
+{
+    let card = find_card(gobj, (kw && kw.key) || "", (kw && kw.mode) || "");
+    if(!card) {
+        log_error(`${gobj_short_name(gobj)}: ${event} on an unknown card ` +
+                  `'${(kw && kw.key) || ""}' (${(kw && kw.mode) || ""}) ` +
+                  `from ${src ? gobj_short_name(src) : "?"}`);
+    }
+    return card;
+}
+
+/************************************************************
+ *  Edit the match conditions of an OPEN Rows card (its confirm sends
+ *  EV_APPLY_MATCH_COND).
+ ************************************************************/
+function ac_open_card_options(gobj, event, kw, src)
+{
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+    open_card_options(gobj, card);
+    return 0;
+}
+
+/************************************************************
+ *  Apply new match conditions to an open Rows card.
+ ************************************************************/
+function ac_apply_match_cond(gobj, event, kw, src)
+{
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+    apply_card_match_cond(gobj, card, (kw && kw.match_cond) || {});
+    return 0;
+}
+
+/************************************************************
+ *  Open a card (Rows or Live) for a key of the current topic.
+ ************************************************************/
+function ac_open_card(gobj, event, kw, src)
+{
+    add_card(gobj,
+        String((kw && kw.key) !== undefined ? kw.key : ""),
+        (kw && kw.mode) || "",
+        (kw && kw.match_cond) || {},
+        !!(kw && kw.restoring));
+    return 0;
+}
+
+/************************************************************
+ *  Close a card. `forget` (default true) also drops it from the
+ *  persisted open-views set — a deliberate user close.
+ ************************************************************/
+function ac_close_card(gobj, event, kw, src)
+{
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+    close_card(gobj, card, !kw || kw.forget !== false);
+    return 0;
+}
+
+/************************************************************
+ *  Refresh a Rows card: its iterator is a SNAPSHOT, so it is re-opened
+ *  (see rearm_rows_card) rather than re-read.
+ ************************************************************/
+function ac_refresh_card(gobj, event, kw, src)
+{
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+    rearm_rows_card(gobj, card);
+    return 0;
+}
+
+/************************************************************
+ *  Empty a Live card's rolling buffer (the feed stays open).
+ ************************************************************/
+function ac_clear_card(gobj, event, kw, src)
+{
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+    if(card.tabulator) {
+        try {
+            card.tabulator.clearData();
+        } catch(e) {
+            /*  destroyed mid-flight  */
+        }
+        update_live_count(card);
+    }
+    return 0;
+}
+
+/************************************************************
+ *  A row was clicked: show the full record as JSON.
+ ************************************************************/
+function ac_show_record(gobj, event, kw, src)
+{
+    show_record_dialog(gobj, kw ? kw.record : null, (kw && kw.key) || "");
     return 0;
 }
 
@@ -2063,8 +2301,10 @@ function ac_show(gobj, event, kw, src)
         return 0;
     }
     if(priv.topics) {
-        select_topic(gobj, seg);
+        gobj_send_event(gobj, "EV_SELECT_TOPIC", {topic: seg}, gobj);
     } else {
+        /*  Topics not loaded yet (ST_DISCONNECTED / ST_LOADING_TOPICS): the
+         *  `topics` answer picks it up.  */
         priv.pending_seg = seg;
     }
     return 0;
@@ -2161,12 +2401,46 @@ function create_gclass(gclass_name)
         return -1;
     }
 
+    /*
+     *  The transport events (EV_MT_COMMAND_ANSWER, EV_TRANGER_RECORD_ADDED,
+     *  EV_ON_OPEN) and the routing ones (EV_SHOW) are declared in EVERY state:
+     *  they are driven by the backend / the host, not by the user, and they
+     *  can legitimately land at any moment — a live record still in flight
+     *  when a topic switch closed its card is a benign race, not a bug worth
+     *  an error. The USER actions are declared ONLY in ST_TOPIC_SELECTED: with
+     *  no topic there is nothing to open, so they must fail loudly.
+     */
     const states = [
-        ["ST_IDLE", [
+        ["ST_DISCONNECTED", [
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
             ["EV_SHOW",                 ac_show,                  null]
+        ]],
+        ["ST_LOADING_TOPICS", [
+            ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
+            ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
+            ["EV_ON_OPEN",              ac_transport_open,        null],
+            ["EV_SHOW",                 ac_show,                  null],
+            ["EV_SELECT_TOPIC",         ac_select_topic,          null]
+        ]],
+        ["ST_TOPIC_SELECTED", [
+            ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
+            ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
+            ["EV_ON_OPEN",              ac_transport_open,        null],
+            ["EV_SHOW",                 ac_show,                  null],
+            ["EV_SELECT_TOPIC",         ac_select_topic,          null],
+            /*  user actions  */
+            ["EV_OPEN_KEYS",            ac_open_keys,             null],
+            ["EV_PICKER_CLOSED",        ac_picker_closed,         null],
+            ["EV_OPEN_OPTIONS",         ac_open_options,          null],
+            ["EV_OPEN_CARD_OPTIONS",    ac_open_card_options,     null],
+            ["EV_APPLY_MATCH_COND",     ac_apply_match_cond,      null],
+            ["EV_OPEN_CARD",            ac_open_card,             null],
+            ["EV_CLOSE_CARD",           ac_close_card,            null],
+            ["EV_REFRESH_CARD",         ac_refresh_card,          null],
+            ["EV_CLEAR_CARD",           ac_clear_card,            null],
+            ["EV_SHOW_RECORD",          ac_show_record,           null]
         ]]
     ];
 
@@ -2175,7 +2449,18 @@ function create_gclass(gclass_name)
         ["EV_TRANGER_RECORD_ADDED", event_flag_t.EVF_PUBLIC_EVENT],
         ["EV_ON_OPEN",              0],
         ["EV_TOPIC_SELECTED",       event_flag_t.EVF_OUTPUT_EVENT],
-        ["EV_SHOW",                 0]
+        ["EV_SHOW",                 0],
+        ["EV_SELECT_TOPIC",         0],
+        ["EV_OPEN_KEYS",            0],
+        ["EV_PICKER_CLOSED",        0],
+        ["EV_OPEN_OPTIONS",         0],
+        ["EV_OPEN_CARD_OPTIONS",    0],
+        ["EV_APPLY_MATCH_COND",     0],
+        ["EV_OPEN_CARD",            0],
+        ["EV_CLOSE_CARD",           0],
+        ["EV_REFRESH_CARD",         0],
+        ["EV_CLEAR_CARD",           0],
+        ["EV_SHOW_RECORD",          0]
     ];
 
     __gclass__ = gclass_create(

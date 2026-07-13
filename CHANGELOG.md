@@ -22,6 +22,32 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **refactor(gui_treedb): every action in the Tranger browser crosses the
+  FSM.** `C_TRANGER_VIEW` lived entirely in `ST_IDLE`: button clicks called
+  functions directly, and so did everything the view did on its own (arm an
+  iterator, refresh, close, re-arm on reconnect). Nothing reached the `machine`
+  trace, so its bugs had to be chased through WebSocket traffic and
+  screenshots. It now has the states its life actually has —
+  `ST_DISCONNECTED` → `ST_LOADING_TOPICS` → `ST_TOPIC_SELECTED` — and every
+  click, window/modal `on_close` and dialog confirm is an event
+  (`EV_SELECT_TOPIC`, `EV_OPEN_KEYS`, `EV_PICKER_CLOSED`, `EV_OPEN_OPTIONS`,
+  `EV_OPEN_CARD`, `EV_CLOSE_CARD`, `EV_REFRESH_CARD`, `EV_CLEAR_CARD`,
+  `EV_APPLY_MATCH_COND`, `EV_SHOW_RECORD`); a DOM handler now does nothing but
+  translate the browser's notification into one. "No topic yet" is a STATE, so
+  the Keys button with no topic fails loudly naming its sender instead of
+  silently no-opping on an `if(!priv.cur_topic) return`.
+
+  Two things fell out of the redesign. **A view mounted with no session stayed
+  empty forever**: `mt_start` asked for the topics, failed, logged "no session"
+  and nothing ever retried — that is `ST_DISCONNECTED` now, and the `EV_ON_OPEN`
+  that arrives when the link comes up asks for them. And the card events carry
+  **`{key, mode}`, never the card object**: a `kw` must be plain JSON because
+  the machine trace dumps it, and a card holds its Tabulator and its DOM nodes
+  — circular structures that throw on serialization, which would have broken
+  the very trace this redesign exists to feed. Cards stay inside the gclass
+  (they are not child gobjs); Tabulator's `ajaxRequestFunc` stays a plain call
+  (it must RETURN a Promise — a data source, not an action).
+
 - **fix(gui_treedb): every connection event reached the app TWICE, and that
   re-armed the NAK loop.** `C_TREEDB_APP` created `treedb_links` with a
   `subscriber` attr — which makes its SERVICE `mt_create` subscribe the app to
