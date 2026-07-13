@@ -1028,7 +1028,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
             ["button", {class: "button TRANGER_CARD_CLEAR",
                         title: t("clear"), "aria-label": t("clear")},
                 [
-                    ["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]],
+                    ["span", {class: "icon"}, [["i", {class: "yi-broom"}]]],
                     ["span", {class: "is-hidden-mobile", i18n: "clear"}, t("clear")]
                 ]
             ]);
