@@ -31,6 +31,18 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   counter over the full pager). Also restores the card chrome (scrollable
   dashboard column, card border/title ellipsis).
 
+- **fix(gui_treedb): Tranger footers, counter and card breathing room.** The
+  mobile footer rule reached the Rows cards but never the **Keys picker**: it
+  was scoped to `TRANGER_KEYS_TABLE`, the div handed to Tabulator — which
+  Tabulator turns INTO the `.tabulator` element (it adds the class), so
+  `.TRANGER_KEYS_TABLE .tabulator` asked for a descendant of itself and matched
+  nothing. Scoped to the wrapper (`TRANGER_KEYS_PICKER`) instead. The picker now
+  also shows the **"Showing x-y of N rows"** counter, and that counter goes
+  through the app's i18n in every paginated tranger table (new `showing rows`
+  key, en/es) — Tabulator's built-in `paginationCounter: "rows"` is hardcoded
+  English. Card content gets `p-2` of padding (the `.box` stays `p-0` so the
+  header band runs edge to edge) and the table area grows 320px → 480px.
+
 - **fix(gui_treedb): Tranger cards read as separate objects.** In a view that is
   a *stack of tables* (grid lines and scrollbars everywhere) consecutive cards
   looked like one continuous table. Now: `mb-6` gutter (3rem, the top of Bulma's

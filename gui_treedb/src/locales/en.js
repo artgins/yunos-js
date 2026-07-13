@@ -111,6 +111,7 @@ const en = {
         "filter keys": "Filter keys…",
         "filter the loaded keys": "Filter the loaded keys",
         "no keys": "No keys",
+        "showing rows": "Showing {{from}}-{{to}} of {{total}} rows",
         "loading": "Loading…",
         "keys": "Keys",
         "rows": "Rows",

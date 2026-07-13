@@ -82,7 +82,7 @@ const PAGE_SIZE = 100;
 const LIVE_MAX = 500;
 
 /*  Fixed table height inside a card (its own pager sits below).  */
-const CARD_TABLE_HEIGHT = "320px";
+const CARD_TABLE_HEIGHT = "480px";
 
 /*  Injected once (inline styles cannot carry these); scoped by the
  *  gclass class. Card chrome + the scrollable dashboard column.  */
@@ -130,22 +130,29 @@ const STYLE_CSS = `
     page-size + First/Prev/Next/Last clip off the right — flex-wrap can't
     save it (basis 0 never wraps to a new line). So on mobile STACK the
     footer vertically: counter on one line, the full pager (left-aligned,
-    wrapping) below. Scoped to the tranger tables (cards + Keys picker).  */
+    wrapping) below.
+
+    Scoped to the tranger tables through their CONTAINERS: the Keys picker
+    hangs off TRANGER_KEYS_PICKER (the wrapper), never off TRANGER_KEYS_TABLE
+    — Tabulator turns the div you hand it INTO the .tabulator element (it just
+    adds the class), so a ".TRANGER_KEYS_TABLE .tabulator" descendant selector
+    asks for an element inside itself and matches nothing.
+    NOTE: this is a template literal — no backticks in these comments.  */
 .C_TRANGER_VIEW .tabulator .tabulator-footer,
-.TRANGER_KEYS_TABLE .tabulator .tabulator-footer {
+.TRANGER_KEYS_PICKER .tabulator .tabulator-footer {
     white-space: normal;
 }
 @media (max-width: 768px) {
     .C_TRANGER_VIEW .tabulator .tabulator-footer .tabulator-footer-contents,
-    .TRANGER_KEYS_TABLE .tabulator .tabulator-footer .tabulator-footer-contents {
+    .TRANGER_KEYS_PICKER .tabulator .tabulator-footer .tabulator-footer-contents {
         flex-direction: column; align-items: flex-start; gap: 0.3rem;
     }
     .C_TRANGER_VIEW .tabulator .tabulator-footer .tabulator-paginator,
-    .TRANGER_KEYS_TABLE .tabulator .tabulator-footer .tabulator-paginator {
+    .TRANGER_KEYS_PICKER .tabulator .tabulator-footer .tabulator-paginator {
         flex: none; width: 100%; text-align: left;
     }
     .C_TRANGER_VIEW .tabulator .tabulator-footer .tabulator-page-counter,
-    .TRANGER_KEYS_TABLE .tabulator .tabulator-footer .tabulator-page-counter {
+    .TRANGER_KEYS_PICKER .tabulator .tabulator-footer .tabulator-page-counter {
         margin-left: 0;
     }
 }
@@ -160,6 +167,21 @@ function inject_style()
     style.id = STYLE_ID;
     style.textContent = STYLE_CSS;
     document.head.appendChild(style);
+}
+
+/***************************************************************
+ *  Tabulator's built-in `paginationCounter: "rows"` is hardcoded
+ *  English ("Showing 1-100 of 399600 rows"). Same line, but through
+ *  our i18n. Used by every paginated tranger table (Rows cards and
+ *  the Keys picker), so the two footers read alike.
+ ***************************************************************/
+function rows_counter()
+{
+    return function(pageSize, currentRow, currentPage, totalRows) {
+        let from = totalRows ? currentRow : 0;
+        let to = Math.min(currentRow + pageSize - 1, totalRows);
+        return t("showing rows", {from: from, to: to, total: totalRows});
+    };
 }
 
 
@@ -590,6 +612,7 @@ function open_keys_picker(gobj)
         pagination:     true,
         paginationSize: 15,
         paginationSizeSelector: [15, 30, 50, 100],
+        paginationCounter: rows_counter(),
         initialSort:    [{column: "records", dir: "desc"}],
         data:           priv.keys || [],
         columns: [
@@ -967,7 +990,9 @@ function add_card(gobj, key, mode, match_cond, restoring)
         built: false, seeded: false, pending: []
     };
 
-    let $table = createElement2(["div", {class: "TRANGER_CARD_TABLE"}, []]);
+    /*  p-2: the card is a .box with p-0 (the header band must run edge to
+     *  edge), so the breathing room around the table is set here.  */
+    let $table = createElement2(["div", {class: "TRANGER_CARD_TABLE p-2"}, []]);
 
     let $close = createElement2(
         ["button", {class: "button TRANGER_CARD_CLOSE",
@@ -1090,7 +1115,7 @@ function mount_rows_table(gobj, card, $table)
         filterMode:     "local",   /*  the head search filters the loaded page  */
         paginationSize: PAGE_SIZE,
         paginationSizeSelector: [50, 100, 200, 500],
-        paginationCounter: "rows",
+        paginationCounter: rows_counter(),
         ajaxURL:        "get-page",     /*  dummy: only triggers ajaxRequestFunc  */
         ajaxRequestFunc: function(url, config, params) {
             return request_page(gobj, card, params.page || 1, params.size || PAGE_SIZE);

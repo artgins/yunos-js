@@ -111,6 +111,7 @@ const es = {
         "filter keys": "Filtrar claves…",
         "filter the loaded keys": "Filtrar las claves cargadas",
         "no keys": "Sin claves",
+        "showing rows": "Mostrando {{from}}-{{to}} de {{total}} filas",
         "loading": "Cargando…",
         "keys": "Claves",
         "rows": "Filas",
