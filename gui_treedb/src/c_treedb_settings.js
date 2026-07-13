@@ -74,6 +74,13 @@ const GCLASS_NAME = "C_TREEDB_SETTINGS";
 /*  Child (service) row id separator: conn.id <STX> service key.  */
 const CHILD_SEP = "\x02";
 
+/*  What an exported connections file says it is. A file that does not say so
+ *  is still accepted if it carries a `connections` list (or IS one) — an
+ *  operator hand-writing the list is a legitimate way in — but the marker is
+ *  what lets a future format be told apart from this one.  */
+const EXPORT_KIND = "yuneta.treedb.connections";
+const EXPORT_VERSION = 1;
+
 
 /***************************************************************
  *              Attrs
@@ -89,6 +96,7 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     $scan_errors: null,   /*  refresh failure report area  */
+    $import_file: null,   /*  hidden <input type=file> of the Import button  */
 };
 let __gclass__ = null;
 
@@ -216,7 +224,57 @@ function build_ui(gobj)
         ["button", {class: "button is-primary is-small SETTINGS_ADD", id: "treedb-settings-add",
                     i18n: "add connection"}, "Add connection"]);
     $add.addEventListener("click", () => {
-        add_row(gobj);
+        gobj_send_event(gobj, "EV_ADD_CONN", {}, gobj);
+    });
+
+    /*  The connection set is browser-local: without these, moving it to another
+     *  browser (or another operator's machine) means retyping every row.  */
+    let $export = createElement2(
+        ["button", {class: "button is-small ml-2 SETTINGS_EXPORT",
+                    title: t("download the connections as a json file"),
+                    "aria-label": t("export")},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-download"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "export"}, t("export")]
+            ]
+        ]);
+    $export.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_EXPORT_CONNS", {}, gobj);
+    });
+
+    /*  The file input is the OS's, so it stays hidden behind our own button:
+     *  its `change` does nothing but turn the picked file into an event.  */
+    let $file = createElement2(
+        ["input", {type: "file", accept: "application/json,.json",
+                   class: "is-hidden SETTINGS_IMPORT_FILE"}]);
+    $file.addEventListener("change", () => {
+        let file = $file.files && $file.files[0];
+        $file.value = "";       /*  so picking the same file twice fires again  */
+        if(!file) {
+            return;
+        }
+        file.text()
+            .then((text) => {
+                gobj_send_event(gobj, "EV_IMPORT_CONNS", {text: text}, gobj);
+            })
+            .catch((e) => {
+                gobj_send_event(gobj, "EV_IMPORT_CONNS",
+                    {text: "", error: String(e)}, gobj);
+            });
+    });
+    priv.$import_file = $file;
+
+    let $import = createElement2(
+        ["button", {class: "button is-small ml-2 SETTINGS_IMPORT",
+                    title: t("add the connections of a json file"),
+                    "aria-label": t("import")},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-plus"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "import"}, t("import")]
+            ]
+        ]);
+    $import.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_PICK_IMPORT_FILE", {}, gobj);
     });
 
     let $scan_errors = createElement2(
@@ -230,7 +288,7 @@ function build_ui(gobj)
                     ["div", {class: "level-left"}, [
                         ["h2", {class: "title is-5", i18n: "connections"}, "Connections"]
                     ]],
-                    ["div", {class: "level-right"}, [$add]]
+                    ["div", {class: "level-right"}, [$add, $export, $import, $file]]
                 ]],
                 ["p", {class: "is-size-7 has-text-grey mb-3 SETTINGS_HELP", i18n: "connections help"},
                     "Edit cells inline. Each URL is a yuno's public wss endpoint " +
@@ -618,6 +676,24 @@ function make_columns(gobj)
              + `background:${color};"></span>`;
     }
 
+    function clone_formatter(cell)
+    {
+        if(cell.getData()._child) {
+            return "";
+        }
+        return `<span class="icon SETTINGS_CLONE" title="${t("clone this connection")}" `
+             + `aria-label="${t("clone")}"><i class="yi-copy"></i></span>`;
+    }
+
+    function clone_click(e, cell)
+    {
+        let d = cell.getData();
+        if(d._child) {
+            return;
+        }
+        gobj_send_event(gobj, "EV_CLONE_CONN", {conn_id: d.id}, gobj);
+    }
+
     function del_formatter(cell)
     {
         if(cell.getData()._child) {
@@ -687,6 +763,8 @@ function make_columns(gobj)
             formatter: connect_formatter, cellClick: connect_click},
         {title: "", field: "_status", width: 56, minWidth: 56, headerSort: false, hozAlign: "center",
             formatter: status_formatter},
+        {title: "", field: "_clone", width: 48, minWidth: 48, headerSort: false, hozAlign: "center",
+            formatter: clone_formatter, cellClick: clone_click},
         {title: "", field: "_del", width: 48, minWidth: 48, headerSort: false, hozAlign: "center",
             formatter: del_formatter, cellClick: del_click}
     ];
@@ -809,6 +887,156 @@ function ac_scan_error(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  Add a blank connection row.
+ ***************************************************************/
+function ac_add_conn(gobj, event, kw, src)
+{
+    add_row(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Clone a connection: same coordinates, a NEW id, and DISABLED.
+ *
+ *  Disabled because a clone is a starting point for an edit ("the same
+ *  backend, its other treedb service"), and this SPA never auto-connects
+ *  something the user has not pressed connect on. Its discovered services
+ *  travel with it — they belong to the yuno, not to the row.
+ ***************************************************************/
+function ac_clone_conn(gobj, event, kw, src)
+{
+    let conn_id = (kw && kw.conn_id) || "";
+    let config = gobj_find_service("treedb_config", false);
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service, cannot clone`);
+        return -1;
+    }
+    let list = treedb_config_get_connections(config);
+    let src_conn = list.find((c) => c && c.id === conn_id);
+    if(!src_conn) {
+        log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' to clone`);
+        return -1;
+    }
+
+    let clone = Object.assign({}, src_conn, {
+        id:      new_id(),
+        label:   `${src_conn.label || src_conn.url || ""} (${t("copy")})`,
+        enabled: false
+    });
+    gobj_send_event(config, "EV_SET_CONNECTIONS",
+        {connections: list.concat([clone])}, gobj);
+    reload_table(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Download the connection set as a JSON file.
+ *
+ *  Nothing secret travels: the access_token is never stored here (it is
+ *  fetched from the BFF per session), so a connection is only its
+ *  coordinates plus the services discovered behind them.
+ ***************************************************************/
+function ac_export_conns(gobj, event, kw, src)
+{
+    let config = gobj_find_service("treedb_config", false);
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service, cannot export`);
+        return -1;
+    }
+    let doc = {
+        kind:        EXPORT_KIND,
+        version:     EXPORT_VERSION,
+        connections: treedb_config_get_connections(config)
+    };
+
+    let url = URL.createObjectURL(
+        new Blob([JSON.stringify(doc, null, 4)], {type: "application/json"}));
+    let $a = createElement2(
+        ["a", {href: url, download: "treedb-connections.json"}, ""]);
+    $a.click();
+    URL.revokeObjectURL(url);
+    return 0;
+}
+
+/***************************************************************
+ *  Open the OS file picker (the input is ours, hidden).
+ ***************************************************************/
+function ac_pick_import_file(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(!priv.$import_file) {
+        log_error(`${gobj_short_name(gobj)}: no file input`);
+        return -1;
+    }
+    priv.$import_file.click();
+    return 0;
+}
+
+/***************************************************************
+ *  Import connections from a picked file: ADD them, never replace the set.
+ *
+ *  Every imported connection gets a FRESH id and lands DISABLED. Fresh
+ *  because the id is what everything else in this browser is keyed by (the
+ *  open tabs, the Tranger views): reusing an exported id would silently
+ *  adopt whatever local state a previous connection of that id had left
+ *  behind. Disabled because importing a file must not open sockets.
+ ***************************************************************/
+function ac_import_conns(gobj, event, kw, src)
+{
+    let config = gobj_find_service("treedb_config", false);
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service, cannot import`);
+        return -1;
+    }
+    if(kw && kw.error) {
+        log_error(`${gobj_short_name(gobj)}: cannot read the file: ${kw.error}`);
+        show_scan_errors(gobj, [{yuno: "", error: "the file could not be read"}]);
+        return -1;
+    }
+
+    let doc = null;
+    try {
+        doc = JSON.parse((kw && kw.text) || "");
+    } catch(e) {
+        log_error(`${gobj_short_name(gobj)}: the file is not JSON: ${e}`);
+        show_scan_errors(gobj, [{yuno: "", error: "the file is not a connections export"}]);
+        return -1;
+    }
+
+    let rows = (doc && Array.isArray(doc.connections)) ? doc.connections
+             : (Array.isArray(doc) ? doc : null);
+    if(!rows) {
+        log_error(`${gobj_short_name(gobj)}: the file carries no connections list`);
+        show_scan_errors(gobj, [{yuno: "", error: "the file is not a connections export"}]);
+        return -1;
+    }
+
+    let imported = rows
+        .filter((c) => c && c.url)      /*  a connection with no url can never open  */
+        .map((c) => ({
+            id:                  new_id(),
+            label:               String(c.label || ""),
+            url:                 String(c.url),
+            remote_yuno_role:    String(c.remote_yuno_role || ""),
+            remote_yuno_service: String(c.remote_yuno_service || ""),
+            enabled:             false,
+            services:            Array.isArray(c.services) ? c.services : []
+        }));
+
+    if(!imported.length) {
+        log_error(`${gobj_short_name(gobj)}: the file holds no usable connection`);
+        show_scan_errors(gobj, [{yuno: "", error: "the file holds no usable connection"}]);
+        return -1;
+    }
+
+    let list = treedb_config_get_connections(config).concat(imported);
+    gobj_send_event(config, "EV_SET_CONNECTIONS", {connections: list}, gobj);
+    show_scan_errors(gobj, []);
+    reload_table(gobj);
+    return 0;
+}
+
 
 
 
@@ -835,10 +1063,16 @@ function create_gclass(gclass_name)
 
     const states = [
         ["ST_IDLE", [
-            ["EV_ON_OPEN",            ac_conn_status, null],
-            ["EV_ON_CLOSE",           ac_conn_status, null],
-            ["EV_TREEDB_SCAN_DONE",   ac_scan_done,   null],
-            ["EV_TREEDB_SCAN_ERROR",  ac_scan_error,  null]
+            ["EV_ON_OPEN",            ac_conn_status,     null],
+            ["EV_ON_CLOSE",           ac_conn_status,     null],
+            ["EV_TREEDB_SCAN_DONE",   ac_scan_done,       null],
+            ["EV_TREEDB_SCAN_ERROR",  ac_scan_error,      null],
+            /*  user actions  */
+            ["EV_ADD_CONN",           ac_add_conn,        null],
+            ["EV_CLONE_CONN",         ac_clone_conn,      null],
+            ["EV_EXPORT_CONNS",       ac_export_conns,    null],
+            ["EV_PICK_IMPORT_FILE",   ac_pick_import_file,null],
+            ["EV_IMPORT_CONNS",       ac_import_conns,    null]
         ]]
     ];
 
@@ -846,7 +1080,12 @@ function create_gclass(gclass_name)
         ["EV_ON_OPEN",           0],
         ["EV_ON_CLOSE",          0],
         ["EV_TREEDB_SCAN_DONE",  0],
-        ["EV_TREEDB_SCAN_ERROR", 0]
+        ["EV_TREEDB_SCAN_ERROR", 0],
+        ["EV_ADD_CONN",          0],
+        ["EV_CLONE_CONN",        0],
+        ["EV_EXPORT_CONNS",      0],
+        ["EV_PICK_IMPORT_FILE",  0],
+        ["EV_IMPORT_CONNS",      0]
     ];
 
     __gclass__ = gclass_create(

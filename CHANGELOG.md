@@ -72,6 +72,42 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   you almost always want, and it was previously unreachable without paging by
   hand to the end of 400k rows.
 
+- **feat(gui_treedb): the connection set can leave the browser, and a card can
+  choose its columns.** Connections live in this browser's localStorage, so
+  moving them to another browser (or to another operator's machine) meant
+  retyping every row: Settings gains **Export** (a JSON file — nothing secret
+  travels, the access_token is never stored there) and **Import** (it ADDS the
+  file's connections, never replaces the set; each arrives with a **fresh id**,
+  because the id is what the open tabs and Tranger views are keyed by, and
+  **disabled**, because importing a file must not open sockets). A row can also
+  be **cloned** — same backend, new id, disabled: the starting point for "the
+  same yuno, its other treedb service".
+
+  And a card gains a **column chooser**. On a phone only the first four columns
+  are shown — a record with a dozen fields is 1000+px wide and the table just
+  scrolls sideways — but that was a one-way door: nothing could bring a hidden
+  column back, and the choice of which four to keep was the SPA's, not the
+  reader's.
+
+- **fix(gui_treedb): reconnects back off instead of hammering.** Inherited from
+  gobj-js (see its changelog): a dead backend was retried every 5s for the life
+  of the tab by every link pointed at it, in lockstep. Now 5s → 60s with jitter,
+  reset on a real session. Requires gobj-js ≥ unreleased.
+
+- **feat(gui_treedb): a card is a link you can send.** Only the topic used to
+  travel in the URL. A card's match conditions — the two time windows, the rowid
+  range, the user_flag masks, backward — lived ONLY in the browser's local
+  config, so the one thing worth showing a colleague ("look at key X between A
+  and B") was the one thing you could not send them. A card's **Share** button
+  now puts a link on the clipboard that rebuilds it: the URL segment becomes
+  `<topic>~<base64url of {key, mode, match_cond}>` (one path segment; `~` is
+  legal in a path and cannot appear in a topic name). It navigates first, so
+  what you send is what you are looking at. A bare `<topic>` — every link shared
+  before this — still works, and a corrupt or unknown payload degrades to its
+  topic: a link is never worth failing a navigation for. Arriving by link opens
+  the card like any other (deduped against an already-open one, and persisted:
+  arriving by link is a deliberate open).
+
 - **feat(gui_treedb): pause a Live card, export what a card holds, copy a
   record.** **Pause** stops the table without closing the feed: records that
   arrive while paused are **held** (capped like the table) and flushed on

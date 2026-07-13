@@ -16,8 +16,14 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   only from the row's **connect/disconnect button** (persisted `enabled`
   intent) — editing a row's coordinates disables it until reconnected, so
   typing never auto-connects — and deleting a row asks for confirmation.
+  A row can be **cloned** (same backend, new id, disabled), and the whole set
+  **exported / imported** as a JSON file — nothing secret travels (the
+  access_token is never stored here). An import ADDS: every connection arrives
+  with a fresh id (the id is what the open tabs and Tranger views are keyed by)
+  and disabled (importing a file must not open sockets).
   The picker (tab 0 of Topics/Graphs) selects which services to open per
-  workspace.
+  workspace. A connection whose backend is down is retried with a **backoff**
+  (5s → 60s, jittered), not every 5s for ever.
 - **Service discovery:** on the first connect of a never-scanned connection,
   `C_TREEDB_LINKS` discovers the yuno's **`C_NODE` / `C_TRANGER`** services
   automatically (one `services` command to `__yuno__`) and persists the WHOLE
@@ -53,7 +59,14 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   full record JSON in the shell dialog, with a **Copy** button; a card's
   **Export** downloads what its table HOLDS as CSV (the loaded page / the live
   buffer — not the key: a server-side dump of millions of records is not
-  something this SPA can stream). Requires a backend whose `c_tranger`
+  something this SPA can stream). A card's **Share** copies a link that
+  **rebuilds it** — the URL segment carries the topic AND the card
+  (`<topic>~<base64url of {key, mode, match_cond}>`, one path segment), so
+  "look at key X between A and B" is a link instead of a paragraph of
+  instructions; a bare `<topic>` still works and an unreadable payload degrades
+  to its topic. A **column chooser** decides what the table shows — on a phone
+  only the first few columns are painted, and this is the way back.
+  Requires a backend whose `c_tranger`
   exposes the iterator/rt read commands with `open-iterator` match conditions.
 - **Authorization note:** the discovery addresses `__yuno__` (a `dst_service`
   beyond the connected service), and `C_IEVENT_SRV` only routes that for

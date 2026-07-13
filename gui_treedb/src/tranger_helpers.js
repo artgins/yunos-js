@@ -188,6 +188,89 @@ function op_filter(headerValue, rowValue)
     return String(cell).toLowerCase().indexOf(term.toLowerCase()) !== -1;
 }
 
+/***************************************************************
+ *  The URL segment of a Tranger view: the selected topic, and OPTIONALLY
+ *  the card to open on arrival — its key, its mode and its match
+ *  conditions.
+ *
+ *  Only the topic used to travel. A card's conditions (the time windows,
+ *  the rowid range, the user_flag masks, backward) lived ONLY in the
+ *  browser's local config, so the one thing worth showing someone else —
+ *  "look at key X between A and B" — was the one thing you could not send
+ *  them. A link is now that whole state.
+ *
+ *  Wire shape: `<topic>~<base64url of {k, m, c}>`. A bare `<topic>` (every
+ *  link ever shared before this) still parses, and so does a payload this
+ *  version cannot read — a link is never worth failing a navigation for, so
+ *  a broken one degrades to "just the topic".
+ *
+ *  `~` separates because it is legal in a URL path and cannot appear in a
+ *  topic name (tranger topics are identifiers), and base64url carries no
+ *  `/` (it uses `-` and `_`), so the whole thing stays ONE path segment.
+ ***************************************************************/
+const SEG_SEP = "~";
+
+function b64url_encode(s)
+{
+    let bytes = new TextEncoder().encode(s);
+    let bin = "";
+    for(let b of bytes) {
+        bin += String.fromCharCode(b);
+    }
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64url_decode(s)
+{
+    let b = String(s).replace(/-/g, "+").replace(/_/g, "/");
+    while(b.length % 4) {
+        b += "=";
+    }
+    let bin = atob(b);
+    let bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+}
+
+function encode_seg(topic, card)
+{
+    if(!card || !card.mode) {
+        return String(topic || "");
+    }
+    let payload = {
+        k: String(card.key === undefined || card.key === null ? "" : card.key),
+        m: card.mode,
+        c: card.match_cond || {}
+    };
+    return String(topic || "") + SEG_SEP + b64url_encode(JSON.stringify(payload));
+}
+
+function decode_seg(seg)
+{
+    let s = String(seg || "");
+    let i = s.indexOf(SEG_SEP);
+    if(i < 0) {
+        return {topic: s, card: null};
+    }
+    let topic = s.slice(0, i);
+    try {
+        let p = JSON.parse(b64url_decode(s.slice(i + 1)));
+        if(!p || (p.m !== "rows" && p.m !== "live")) {
+            return {topic: topic, card: null};
+        }
+        return {
+            topic: topic,
+            card: {
+                key:        String(p.k === undefined || p.k === null ? "" : p.k),
+                mode:       p.m,
+                match_cond: (p.c && typeof p.c === "object") ? p.c : {}
+            }
+        };
+    } catch(e) {
+        /*  A link is never worth failing a navigation for: show the topic.  */
+        return {topic: topic, card: null};
+    }
+}
+
 export {
     SF_T_MS,
     SF_TM_MS,
@@ -196,4 +279,6 @@ export {
     fmt_ts,
     flatten_record,
     op_filter,
+    encode_seg,
+    decode_seg,
 };

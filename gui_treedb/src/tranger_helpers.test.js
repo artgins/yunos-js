@@ -18,6 +18,8 @@ import {
     fmt_ts,
     flatten_record,
     op_filter,
+    encode_seg,
+    decode_seg,
 } from "./tranger_helpers.js";
 
 
@@ -136,5 +138,60 @@ describe("op_filter", () => {
         expect(op_filter(null, "anything")).toBe(true);
         expect(op_filter("x", null)).toBe(false);
         expect(op_filter("x", undefined)).toBe(false);
+    });
+});
+
+
+describe("the URL segment of a view", () => {
+    it("carries the whole card: key, mode and match conditions", () => {
+        let card = {
+            key: "dev-42",
+            mode: "rows",
+            match_cond: {from_t: 1000, to_t: 2000, backward: 1}
+        };
+        let seg = encode_seg("readings", card);
+        let back = decode_seg(seg);
+
+        expect(back.topic).toBe("readings");
+        expect(back.card.key).toBe("dev-42");
+        expect(back.card.mode).toBe("rows");
+        expect(back.card.match_cond).toEqual({from_t: 1000, to_t: 2000, backward: 1});
+    });
+
+    it("stays ONE url path segment (no slash, no ?, no #)", () => {
+        let seg = encode_seg("readings", {
+            key: "a/b?c#d e",       /*  a key is user data: it can hold anything  */
+            mode: "live",
+            match_cond: {}
+        });
+        expect(seg).not.toMatch(/[/?#]/);
+        expect(decode_seg(seg).card.key).toBe("a/b?c#d e");
+    });
+
+    it("survives a whole-topic card (the empty key)", () => {
+        let seg = encode_seg("readings", {key: "", mode: "live", match_cond: {}});
+        let back = decode_seg(seg);
+        expect(back.card.key).toBe("");
+        expect(back.card.mode).toBe("live");
+    });
+
+    it("is a bare topic when there is no card", () => {
+        expect(encode_seg("readings", null)).toBe("readings");
+        expect(decode_seg("readings")).toEqual({topic: "readings", card: null});
+    });
+
+    it("degrades to the topic on a corrupt or unknown payload", () => {
+        /*  A link is never worth failing a navigation for: a truncated link, or
+         *  one written by a version that knows more than we do, still opens its
+         *  topic.  */
+        expect(decode_seg("readings~not-base64!!").card).toBe(null);
+        expect(decode_seg("readings~").card).toBe(null);
+        expect(decode_seg("readings~" + btoa('{"m":"telepathy"}')).card).toBe(null);
+        expect(decode_seg("readings~not-base64!!").topic).toBe("readings");
+    });
+
+    it("round-trips a non-ASCII key", () => {
+        let seg = encode_seg("lecturas", {key: "año-ñ-日本", mode: "rows", match_cond: {}});
+        expect(decode_seg(seg).card.key).toBe("año-ñ-日本");
     });
 });

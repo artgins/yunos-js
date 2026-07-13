@@ -113,6 +113,8 @@ import {
     epoch_to_local_input,
     flatten_record,
     op_filter,
+    encode_seg,
+    decode_seg,
 } from "./tranger_helpers.js";
 
 
@@ -135,6 +137,10 @@ const ALL_KEYS = "";
  *  answer): without a deadline the request would sit in priv.pending for the
  *  life of the tab and its table would spin forever.  */
 const PAGE_TIMEOUT_MS = 20000;
+
+/*  How long a Copy/Share button says "Copied" before going back to its own
+ *  label — feedback, not a mode.  */
+const COPY_FEEDBACK_MS = 1500;
 
 /*  Rows kept in a Live card's rolling buffer (newest on top): the user's
  *  setting (C_TREEDB_CONFIG `live_max`, Settings), read when the card is
@@ -304,6 +310,7 @@ let PRIVATE_DATA = {
                              leaves this empty — seconds, as it always was  */
     cur_topic:   "",     /*  selected topic  */
     pending_seg: "",     /*  topic asked via EV_SHOW before topics loaded  */
+    pending_card: null,  /*  card carried by a shared link, until its keys land  */
     keys:        null,   /*  [{key, records, fr_t, to_t, fr_tm, to_tm}] of
                              cur_topic (from list-keys): count + time span  */
     cards:       null,   /*  [{key, mode, iterator_id, tabulator, $el}]  */
@@ -320,7 +327,8 @@ let PRIVATE_DATA = {
     $meta:       null,
     $error:      null,
     $dashboard:  null,   /*  cards column  */
-    $copy_btn:   null,   /*  Copy button of the open record dialog (or null)  */
+    $copy_btn:   null,   /*  button awaiting clipboard feedback (or null)  */
+    copy_label:  "",     /*  its label, to restore after the feedback  */
     $empty:      null,   /*  empty-dashboard hint  */
 };
 
@@ -346,6 +354,7 @@ function mt_create(gobj)
     priv.topic_flags = {};
     priv.cur_topic = "";
     priv.pending_seg = "";
+    priv.pending_card = null;
     priv.keys = null;
     priv.cards = [];
     priv.tok = Math.random().toString(36).slice(2, 10);
@@ -426,6 +435,7 @@ function mt_stop(gobj)
     priv.keys = null;
     priv.cur_topic = "";
     priv.pending_seg = "";
+    priv.pending_card = null;
     gobj_change_state(gobj, "ST_DISCONNECTED");
 }
 
@@ -1044,6 +1054,30 @@ function restore_saved_views(gobj)
     let priv = gobj.priv;
     let cfg = config_service();
     let conn_id = gobj_read_str_attr(gobj, "conn_id");
+
+    let present = {};
+    for(let k of (priv.keys || [])) {
+        present[String(k.key)] = true;
+    }
+
+    /*  The card a shared link asked for. It opens like any other (add_card
+     *  dedups it against an already-open one) and IS persisted: arriving by
+     *  link is a deliberate open, and it must survive the next visit like a
+     *  card opened by hand.  */
+    let linked = priv.pending_card;
+    priv.pending_card = null;
+    if(linked && priv.cur_topic) {
+        if(String(linked.key) === ALL_KEYS || present[String(linked.key)]) {
+            gobj_send_event(gobj, "EV_OPEN_CARD",
+                {key: String(linked.key), mode: linked.mode,
+                 match_cond: linked.match_cond || {}}, gobj);
+        } else {
+            log_error(`${gobj_short_name(gobj)}: the shared link points at ` +
+                      `key '${linked.key}', which '${priv.cur_topic}' does not have`);
+            show_error(gobj, "the link points at a key this topic does not have");
+        }
+    }
+
     if(!cfg || !conn_id || !priv.cur_topic) {
         return;
     }
@@ -1051,10 +1085,6 @@ function restore_saved_views(gobj)
         gobj_read_str_attr(gobj, "treedb_name"), priv.cur_topic);
     if(!saved.length) {
         return;
-    }
-    let present = {};
-    for(let k of (priv.keys || [])) {
-        present[String(k.key)] = true;
     }
     for(let v of saved) {
         /*  A whole-topic Live card is not bound to any key, so it is always
@@ -1563,7 +1593,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
 
     let card = {
         key: key, mode: mode, topic: priv.cur_topic,
-        tabulator: null, $el: null, $count: null, $pause: null,
+        tabulator: null, $el: null, $count: null, $pause: null, $share: null,
         match_cond: match_cond || {},
         live_max: cfg ? treedb_config_get_live_max(cfg) : LIVE_MAX_DEFAULT,
         iterator_id: null, rt_id: null, subscribed: false,
@@ -1621,6 +1651,41 @@ function add_card(gobj, key, mode, match_cond, restoring)
         ]);
     $export.addEventListener("click", () => {
         gobj_send_event(gobj, "EV_EXPORT_CARD",
+            {key: card.key, mode: card.mode}, gobj);
+    });
+
+    /*  A link to THIS card — its key, its mode and its match conditions —
+     *  instead of "open the topic and set the same six fields I did".  */
+    let $share = createElement2(
+        ["button", {class: "button TRANGER_CARD_SHARE",
+                    title: t("copy a link to this card"),
+                    "aria-label": t("share")},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-link"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "share"}, t("share")]
+            ]
+        ]);
+    $share.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_SHARE_CARD",
+            {key: card.key, mode: card.mode}, gobj);
+    });
+    card.$share = $share;
+
+    /*  On a phone the card shows only the first MOBILE_COLS columns — a record
+     *  with a dozen fields is 1000+px wide and the table just scrolls sideways.
+     *  That was a one-way door: nothing could bring a hidden column back, and
+     *  the choice of WHICH four to keep was ours, not the reader's.  */
+    let $cols = createElement2(
+        ["button", {class: "button TRANGER_CARD_COLUMNS",
+                    title: t("choose the columns to show"),
+                    "aria-label": t("columns")},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-table"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "columns"}, t("columns")]
+            ]
+        ]);
+    $cols.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_OPEN_COLUMNS",
             {key: card.key, mode: card.mode}, gobj);
     });
 
@@ -1714,7 +1779,9 @@ function add_card(gobj, key, mode, match_cond, restoring)
     if($pause) {
         head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$pause]]);
     }
+    head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$cols]]);
     head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$export]]);
+    head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$share]]);
     head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$action]]);
     head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$close]]);
     let $head = createElement2(
@@ -2702,7 +2769,124 @@ function ac_export_card(gobj, event, kw, src)
  ************************************************************/
 function ac_copy_record(gobj, event, kw, src)
 {
-    let text = (kw && kw.text) || "";
+    return copy_to_clipboard(gobj, (kw && kw.text) || "");
+}
+
+/************************************************************
+ *  The column chooser of a card: one checkbox per column, checked when the
+ *  column is shown. It is the only way back from the mobile hiding — and it
+ *  hands the choice of what matters to the person reading the record, which
+ *  is where it belongs.
+ ************************************************************/
+function ac_open_columns(gobj, event, kw, src)
+{
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+    let shell = yui_shell_of(gobj);
+    if(!shell || !card.tabulator) {
+        log_error(`${gobj_short_name(gobj)}: no shell or no table, ` +
+                  `cannot choose columns`);
+        return -1;
+    }
+
+    let cols = [];
+    try {
+        cols = card.tabulator.getColumns();
+    } catch(e) {
+        log_error(`${gobj_short_name(gobj)}: cannot read the columns: ${e}`);
+        return -1;
+    }
+
+    let $list = createElement2(
+        ["div", {class: "TRANGER_COLUMNS_LIST",
+                 style: "min-width:min(80vw, 260px); max-height:60vh; overflow:auto;"}, []]);
+
+    for(let col of cols) {
+        let field = col.getField();
+        if(!field || field === "__rec") {
+            continue;
+        }
+        let $cb = createElement2(["input", {type: "checkbox"}]);
+        $cb.checked = col.isVisible();
+        $cb.addEventListener("change", () => {
+            gobj_send_event(gobj, "EV_TOGGLE_COLUMN",
+                {key: card.key, mode: card.mode,
+                 field: field, visible: $cb.checked}, gobj);
+        });
+        $list.appendChild(createElement2(
+            ["label", {class: "checkbox is-block mb-1 TRANGER_COLUMN_ITEM"},
+                [$cb, ["span", {class: "ml-2"}, field]]]));
+    }
+
+    yui_shell_show_modal(shell, $list, {
+        dialog: true,
+        logical_class: "TRANGER_COLUMNS_DIALOG",
+        title: t("columns"),
+        t: t
+    });
+    return 0;
+}
+
+/************************************************************
+ *  Show / hide one column of a card.
+ ************************************************************/
+function ac_toggle_column(gobj, event, kw, src)
+{
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+    let field = (kw && kw.field) || "";
+    if(!field || !card.tabulator) {
+        log_error(`${gobj_short_name(gobj)}: no column '${field}' to toggle`);
+        return -1;
+    }
+    try {
+        if(kw.visible) {
+            card.tabulator.showColumn(field);
+        } else {
+            card.tabulator.hideColumn(field);
+        }
+    } catch(e) {
+        log_error(`${gobj_short_name(gobj)}: cannot toggle column '${field}': ${e}`);
+        return -1;
+    }
+    return 0;
+}
+
+/************************************************************
+ *  Share a card: put the URL that REBUILDS it on the clipboard.
+ *
+ *  The link carries the topic, the key, the mode and the match conditions,
+ *  so "look at key X between A and B" is one link instead of a paragraph of
+ *  instructions. It navigates first — the shared URL becomes the one in the
+ *  address bar, so what you send is what you are looking at — and the
+ *  browser's own location is then the single source of the text copied.
+ ************************************************************/
+function ac_share_card(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+
+    priv.$copy_btn = card.$share;
+    gobj_publish_event(gobj, "EV_TOPIC_SELECTED",
+        {topic: encode_seg(priv.cur_topic, card)});
+
+    return copy_to_clipboard(gobj, window.location.href);
+}
+
+/***************************************************************
+ *  Put `text` on the clipboard, and turn the settled promise into an
+ *  event (a resolved promise is an OS notification like any other; the
+ *  feedback belongs in the action).
+ ***************************************************************/
+function copy_to_clipboard(gobj, text)
+{
     if(!text) {
         log_error(`${gobj_short_name(gobj)}: nothing to copy`);
         return -1;
@@ -2730,15 +2914,41 @@ function ac_copy_done(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     let ok = !!(kw && kw.ok);
-    if(!priv.$copy_btn) {
+    let $btn = priv.$copy_btn;
+    if(!$btn) {
         return 0;
     }
-    let $text = priv.$copy_btn.querySelector("span:not(.icon)");
+    let $text = $btn.querySelector("span:not(.icon)");
     if($text) {
+        priv.copy_label = $text.textContent;
         $text.textContent = ok ? t("copied") : t("copy failed");
     }
-    priv.$copy_btn.classList.toggle("is-success", ok);
-    priv.$copy_btn.classList.toggle("is-danger", !ok);
+    $btn.classList.toggle("is-success", ok);
+    $btn.classList.toggle("is-danger", !ok);
+
+    /*  A button stuck on "Copied" forever reads as a mode, not as feedback.  */
+    setTimeout(function() {
+        gobj_send_event(gobj, "EV_COPY_RESET", {}, gobj);
+    }, COPY_FEEDBACK_MS);
+    return 0;
+}
+
+/************************************************************
+ *  The copy feedback has been read: put the button back as it was.
+ ************************************************************/
+function ac_copy_reset(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let $btn = priv.$copy_btn;
+    priv.$copy_btn = null;
+    if(!$btn || !$btn.isConnected) {
+        return 0;   /*  its dialog / card is gone  */
+    }
+    let $text = $btn.querySelector("span:not(.icon)");
+    if($text && priv.copy_label) {
+        $text.textContent = priv.copy_label;
+    }
+    $btn.classList.remove("is-success", "is-danger");
     return 0;
 }
 
@@ -2818,8 +3028,12 @@ function rearm_live_card(gobj, card)
 }
 
 /************************************************************
- *  Parent (routing) informs the topic to restore: href's right
- *  part after '?' (same contract as C_YUI_TREEDB_TOPICS).
+ *  Parent (routing) informs the segment to restore: href's right part
+ *  after '?' (same contract as C_YUI_TREEDB_TOPICS).
+ *
+ *  The segment is the topic, and OPTIONALLY the card a shared link carries
+ *  (key + mode + match conditions). The card can only be opened once the
+ *  topic's keys are known, so it waits in `pending_card`.
  ************************************************************/
 function ac_show(gobj, event, kw, src)
 {
@@ -2830,12 +3044,20 @@ function ac_show(gobj, event, kw, src)
     if(!seg) {
         return 0;
     }
+
+    let parsed = decode_seg(seg);
+    if(!parsed.topic) {
+        log_error(`${gobj_short_name(gobj)}: link with no topic: '${seg}'`);
+        return -1;
+    }
+    priv.pending_card = parsed.card;
+
     if(priv.topics) {
-        gobj_send_event(gobj, "EV_SELECT_TOPIC", {topic: seg}, gobj);
+        gobj_send_event(gobj, "EV_SELECT_TOPIC", {topic: parsed.topic}, gobj);
     } else {
         /*  Topics not loaded yet (ST_DISCONNECTED / ST_LOADING_TOPICS): the
          *  `topics` answer picks it up.  */
-        priv.pending_seg = seg;
+        priv.pending_seg = parsed.topic;
     }
     return 0;
 }
@@ -2981,7 +3203,11 @@ function create_gclass(gclass_name)
             ["EV_EXPORT_CARD",          ac_export_card,           null],
             ["EV_SHOW_RECORD",          ac_show_record,           null],
             ["EV_COPY_RECORD",          ac_copy_record,           null],
-            ["EV_COPY_DONE",            ac_copy_done,             null]
+            ["EV_SHARE_CARD",           ac_share_card,            null],
+            ["EV_OPEN_COLUMNS",         ac_open_columns,          null],
+            ["EV_TOGGLE_COLUMN",        ac_toggle_column,         null],
+            ["EV_COPY_DONE",            ac_copy_done,             null],
+            ["EV_COPY_RESET",           ac_copy_reset,            null]
         ]]
     ];
 
@@ -3006,7 +3232,11 @@ function create_gclass(gclass_name)
         ["EV_EXPORT_CARD",          0],
         ["EV_SHOW_RECORD",          0],
         ["EV_COPY_RECORD",          0],
-        ["EV_COPY_DONE",            0]
+        ["EV_SHARE_CARD",           0],
+        ["EV_OPEN_COLUMNS",         0],
+        ["EV_TOGGLE_COLUMN",        0],
+        ["EV_COPY_DONE",            0],
+        ["EV_COPY_RESET",           0]
     ];
 
     __gclass__ = gclass_create(
