@@ -292,6 +292,23 @@ function mt_create(gobj)
  ***************************************************************/
 function mt_start(gobj)
 {
+    /*  The server-side state of a card (its iterator, its realtime feed) is
+     *  owned by the SESSION that opened it, and the backend reaps both when
+     *  that session dies: a dropped websocket leaves every open card holding
+     *  a dead iterator_id / rt_id. C_IEVENT_CLI resends the event
+     *  SUBSCRIPTIONS on reopen, but nothing re-opens what a COMMAND created,
+     *  so watch the link and re-arm.
+     *
+     *  Watch it on the LOCAL treedb_links service (as the host C_TREEDB_VIEW
+     *  does), NEVER by subscribing on the C_IEVENT_CLI itself: every explicit
+     *  subscription there is FORWARDED to the remote service as
+     *  `__subscribing__` (c_ievent_cli's send_remote_subscription), and
+     *  asking a C_TRANGER for an event it does not publish breaks the
+     *  session — topics/list-keys stop arriving and the view goes blank.  */
+    let links = gobj_find_service("treedb_links", false);
+    if(links) {
+        gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
+    }
     request_topics(gobj);
 }
 
@@ -300,6 +317,10 @@ function mt_start(gobj)
  ***************************************************************/
 function mt_stop(gobj)
 {
+    let links = gobj_find_service("treedb_links", false);
+    if(links) {
+        gobj_unsubscribe_event(links, "EV_ON_OPEN", {}, gobj);
+    }
     close_all_cards(gobj);
     close_picker(gobj);
 }
@@ -1191,9 +1212,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                 ]
             ]);
         $action.addEventListener("click", () => {
-            if(card.tabulator) {
-                card.tabulator.replaceData();
-            }
+            rearm_rows_card(gobj, card);    /*  the iterator is a snapshot  */
         });
     } else {
         $action = createElement2(
@@ -1799,7 +1818,15 @@ function ac_mt_command_answer(gobj, event, kw, src)
             } else {
                 let page = data || {};
                 let rows = (Array.isArray(page.data) ? page.data : []).map(flatten_record);
-                pend.resolve({data: rows, last_page: Math.max(1, page.pages || 1)});
+                /*  `last_row` is the exact row count: without it Tabulator
+                 *  ESTIMATES the total as last_page * page_size (its
+                 *  remoteRowCountEstimate) and the counter lies — "Showing
+                 *  390001-100 of 100 rows".  */
+                pend.resolve({
+                    data:      rows,
+                    last_page: Math.max(1, page.pages || 1),
+                    last_row:  Math.max(0, page.total_rows || 0)
+                });
             }
         }
         return 0;
@@ -1860,6 +1887,107 @@ function ac_mt_command_answer(gobj, event, kw, src)
     }
 
     return 0;
+}
+
+/************************************************************
+ *  The link reopened (dropped websocket, token refresh): every open card
+ *  holds server-side state that no longer exists — the backend reaps the
+ *  iterators and realtime feeds of a session when it dies. A Rows card
+ *  would page against a dead iterator ("No records", pager collapsed) and
+ *  a Live card would never see a record again. Re-arm both.
+ ************************************************************/
+function ac_transport_open(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    if(kw && kw.conn_id && kw.conn_id !== gobj_read_str_attr(gobj, "conn_id")) {
+        return 0;   /*  another connection  */
+    }
+
+    if(priv.cur_topic) {
+        request_keys(gobj, priv.cur_topic);
+    }
+    for(let card of priv.cards) {
+        if(card.mode === "rows") {
+            rearm_rows_card(gobj, card);
+        } else {
+            rearm_live_card(gobj, card);
+        }
+    }
+    return 0;
+}
+
+/************************************************************
+ *  Re-open a Rows card's iterator (new id, same match conditions) and
+ *  re-fetch its page. Also what Refresh does: an iterator is a SNAPSHOT
+ *  (its row index is built when it is opened), so appends made since are
+ *  invisible to it — re-asking for the page would return the same rows
+ *  and the same total, and Last would never reach the new records.
+ ************************************************************/
+function rearm_rows_card(gobj, card)
+{
+    let priv = gobj.priv;
+    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    if(!remote) {
+        log_error(`${gobj_short_name(gobj)}: No gobj_remote_yuno defined`);
+        return;
+    }
+
+    /*  Drop the previous iterator: on a Refresh it is alive and would linger
+     *  on the backend; after a reconnect it is already gone and the close is
+     *  a harmless no-op there.  */
+    close_iterator(gobj, card.iterator_id);
+
+    card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
+
+    let iter_kw = {
+        service:     gobj_read_str_attr(gobj, "treedb_name"),
+        iterator_id: card.iterator_id,
+        topic_name:  card.topic,
+        key:         card.key
+    };
+    Object.assign(iter_kw, card.match_cond || {});
+    let ret = gobj_command(remote, "open-iterator", iter_kw, gobj);
+    if(ret) {
+        log_error(ret);
+        return;
+    }
+    if(card.tabulator) {
+        try {
+            card.tabulator.replaceData();
+        } catch(e) {
+            /*  destroyed mid-flight  */
+        }
+    }
+}
+
+/************************************************************
+ *  Re-open a Live card's realtime feed (new id). The rolling buffer is
+ *  kept: those records were real, only the feed died.
+ ************************************************************/
+function rearm_live_card(gobj, card)
+{
+    let priv = gobj.priv;
+    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    if(!remote) {
+        log_error(`${gobj_short_name(gobj)}: No gobj_remote_yuno defined`);
+        return;
+    }
+
+    close_rt(gobj, card.rt_id);      /*  no-op if the session already died  */
+
+    card.rt_id = `spa-${priv.tok}-rt-${++priv.iter_seq}`;
+
+    let ret = gobj_command(remote, "open-rt",
+        {
+            service:    gobj_read_str_attr(gobj, "treedb_name"),
+            rt_id:      card.rt_id,
+            topic_name: card.topic,
+            key:        card.key
+        }, gobj);
+    if(ret) {
+        log_error(ret);
+    }
 }
 
 /************************************************************
@@ -1978,6 +2106,7 @@ function create_gclass(gclass_name)
         ["ST_IDLE", [
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
+            ["EV_ON_OPEN",              ac_transport_open,        null],
             ["EV_SHOW",                 ac_show,                  null]
         ]]
     ];
@@ -1985,6 +2114,7 @@ function create_gclass(gclass_name)
     const event_types = [
         ["EV_MT_COMMAND_ANSWER",    event_flag_t.EVF_PUBLIC_EVENT],
         ["EV_TRANGER_RECORD_ADDED", event_flag_t.EVF_PUBLIC_EVENT],
+        ["EV_ON_OPEN",              0],
         ["EV_TOPIC_SELECTED",       event_flag_t.EVF_OUTPUT_EVENT],
         ["EV_SHOW",                 0]
     ];

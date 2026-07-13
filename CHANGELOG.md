@@ -22,6 +22,28 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): Tranger cards survive a reconnect, and Refresh really
+  refreshes.** The server-side state of a card (its iterator, its realtime feed)
+  belongs to the SESSION that opened it, and the backend now reaps both when
+  that session dies (yunetas `c_tranger`, same release): a dropped websocket
+  left every open card holding a dead `iterator_id` / `rt_id` — a Rows card
+  paged against nothing ("No records", pager collapsed) and a Live card went
+  quiet. `C_IEVENT_CLI` resends event SUBSCRIPTIONS on reopen, but nothing
+  re-opens what a COMMAND created, so the view now watches the link — on the
+  **local** `treedb_links` service, as its host does — and re-arms every card.
+  **Never subscribe to `EV_ON_OPEN` on the `C_IEVENT_CLI` itself:** every
+  explicit subscription there is forwarded to the REMOTE service as
+  `__subscribing__`, and `c_ievent_srv` logs an error and rejects it (only the
+  destination service's `EVF_PUBLIC_EVENT` events are accepted) — that mistake
+  is what showed up as "SUBSCRIBING event ignored" in the backend's Global
+  Errors.
+  **Refresh** on a Rows card re-opens the iterator too: an iterator is a
+  SNAPSHOT (its row index is built when it is opened), so re-asking for the page
+  returned the same rows and the same total, and **Last** never reached the new
+  records. The pager also gets the exact `total_rows` as Tabulator's `last_row`
+  — without it Tabulator estimates the total as `last_page * page_size`, and the
+  counter lied ("Showing 390001-100 of 100 rows").
+
 - **fix(gui_treedb): the Keys picker's record counts go stale.** They came from
   the `list-keys` snapshot taken when the topic was selected, and nothing ever
   refreshed them. Now the picker re-asks `list-keys` **every time it opens**
