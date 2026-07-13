@@ -41,6 +41,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   applied per record — against an older backend they are honored only at file
   granularity.
 
+- **fix(gui_treedb): the `t`/`tm` columns were on a different clock than the
+  time pickers.** The columns rendered UTC (`toISOString`) while the pickers,
+  the presets and the key's span caption are LOCAL (`datetime-local`): asking
+  for "tm from 18:55" returned a card whose first row was labelled 16:55 — the
+  same instant on two clocks. Found in live QA against a staging backend.
+  `fmt_ts()` now renders the local wall-clock through the same helper that feeds
+  the pickers, so caption, picked range and column values all read alike.
+
 - **refactor(gui_treedb): the config service and the login service cross their
   own FSMs.** `C_TREEDB_CONFIG` had a literally EMPTY automaton
   (`[["ST_IDLE", []]]`) and twelve exported mutators that four other gclasses
