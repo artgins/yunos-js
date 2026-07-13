@@ -150,6 +150,10 @@ const es = {
         "0 = last": "0 = último",
         "user_flag bits": "bits de user_flag",
         "no topics": "Sin topics",
+        "live topic": "Live del topic",
+        "live on the whole topic": "Seguir todas las keys del topic",
+        "all keys": "Todas las keys",
+        "newest first": "Más recientes primero (indexar la key desde el final)",
         "the backend did not answer in time": "El backend no respondió a tiempo",
         "cannot connect - retrying": "No se puede conectar — reintentando…",
         "access rejected by the backend - fix the roles and reconnect":

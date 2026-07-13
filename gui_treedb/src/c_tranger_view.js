@@ -115,6 +115,12 @@ const GCLASS_NAME = "C_TRANGER_VIEW";
 /*  Records per page in a Rows card (Tabulator's paginationSize).  */
 const PAGE_SIZE = 100;
 
+/*  A card's key when it follows the WHOLE topic instead of one key: what
+ *  `open-rt` takes as "every key" (an empty key), and what identifies the
+ *  card in find_card / the persisted view set. A topic has no key named ""
+ *  — tranger keys are non-empty — so it can never collide with a real one.  */
+const ALL_KEYS = "";
+
 /*  How long a get-page answer may take before its Promise is failed. The
  *  link being UP does not guarantee an answer (a reaped iterator, a dropped
  *  answer): without a deadline the request would sit in priv.pending for the
@@ -470,6 +476,24 @@ function build_ui(gobj)
         gobj_send_event(gobj, "EV_OPEN_KEYS", {}, gobj);
     });
 
+    /*  Live on the WHOLE topic: `open-rt` takes an empty key as "every key of
+     *  the topic". Following a busy topic used to mean opening one Live card
+     *  per key — and you cannot even do that for a topic whose keys are
+     *  created as the data arrives.  */
+    let $live_btn = createElement2(
+        ["button", {class: "button ml-2 TRANGER_LIVE_TOPIC_BTN",
+                    title: t("live on the whole topic"),
+                    "aria-label": t("live on the whole topic")},
+            [
+                ["span", {class: "TRANGER_LIVE_DOT mr-2"}, ""],
+                ["span", {class: "is-hidden-mobile", i18n: "live topic"},
+                    t("live topic")]
+            ]
+        ]);
+    $live_btn.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_OPEN_CARD", {key: ALL_KEYS, mode: "live"}, gobj);
+    });
+
     let $meta = createElement2(
         ["span", {class: "is-size-7 has-text-grey ml-3 TRANGER_META"}, ""]);
     priv.$meta = $meta;
@@ -499,7 +523,7 @@ function build_ui(gobj)
             [
                 ["div", {class: "tabs is-boxed mb-2 TRANGER_TOPICS"}, [$tabs]],
                 ["div", {class: "is-flex is-align-items-center mb-2 TRANGER_TOOLBAR"},
-                    [$keys_btn, $meta]],
+                    [$keys_btn, $live_btn, $meta]],
                 $error,
                 $dashboard
             ]
@@ -1032,7 +1056,9 @@ function restore_saved_views(gobj)
         present[String(k.key)] = true;
     }
     for(let v of saved) {
-        if(!present[String(v.key)]) {
+        /*  A whole-topic Live card is not bound to any key, so it is always
+         *  restorable — `present` only vets the per-key ones.  */
+        if(String(v.key) !== ALL_KEYS && !present[String(v.key)]) {
             continue;   /*  key no longer exists; skip the stale restore  */
         }
         gobj_send_event(gobj, "EV_OPEN_CARD",
@@ -1323,6 +1349,15 @@ function build_rows_options_form(match_cond, editing, span, units)
         tm: {$from: range_tm.$from, $to: range_tm.$to, ms: units.tm_ms}
     };
 
+    /*  The iterator can index the key from the END (open-iterator's
+     *  `backward`). In a log that is what you almost always want — the last
+     *  records, not the first ones the key ever got — and it is the only way
+     *  to reach them without paging by hand through 400k rows to the end.  */
+    let $backward = createElement2(["input", {type: "checkbox",
+        class: "TRANGER_OPT_BACKWARD"}]);
+    $backward.checked = !!mc.backward;
+    inputs.backward = $backward;
+
     let field = (label, input) => ["div", {class: "field TRANGER_OPT_FIELD"},
         [
             ["label", {class: "label mb-1", i18n: label}, t(label)],
@@ -1357,6 +1392,9 @@ function build_rows_options_form(match_cond, editing, span, units)
                         ["div", {class: "column is-half"}, [field("user-flag mask clear", inputs.mask_notset)]]
                     ]
                 ],
+                ["label", {class: "checkbox is-block mt-2 TRANGER_OPT_BACKWARD_FIELD"},
+                    [$backward,
+                     ["span", {class: "ml-2", i18n: "newest first"}, t("newest first")]]],
                 ["div", {class: "has-text-right mt-2 TRANGER_OPT_ACTIONS"}, [$open]]
             ]
         ]);
@@ -1402,6 +1440,9 @@ function collect_rows_match_cond(form)
     let mn = parseInt(inputs.mask_notset.value, 10);
     if(!Number.isNaN(mn) && mn !== 0) {
         mc.user_flag_mask_notset = mn;
+    }
+    if(inputs.backward && inputs.backward.checked) {
+        mc.backward = 1;
     }
     return mc;
 }
@@ -1530,6 +1571,12 @@ function add_card(gobj, key, mode, match_cond, restoring)
         log_error(`${gobj_short_name(gobj)}: bad card mode '${mode}'`);
         return;
     }
+    if(mode === "rows" && key === ALL_KEYS) {
+        /*  Only the realtime feed takes "every key": an iterator indexes ONE
+         *  key (open-iterator requires it).  */
+        log_error(`${gobj_short_name(gobj)}: a Rows card needs a key`);
+        return;
+    }
     if(!live_transport(gobj)) {
         log_error(`${gobj_short_name(gobj)}: no session, cannot open a '${mode}' card`);
         return;
@@ -1621,7 +1668,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
             ["span", {class: "TRANGER_LIVE_DOT ml-1 mr-2 is-flex-shrink-0",
                       title: t("live")}, ""]);
     }
-    head_children.push(["span", {class: "TRANGER_CARD_TITLE"}, `${key} · ${t(mode)}`]);
+    let title = key === ALL_KEYS ? t("all keys") : key;
+    head_children.push(["span", {class: "TRANGER_CARD_TITLE"}, `${title} · ${t(mode)}`]);
 
     /*  Live has no pager, so no "Showing x of N" footer: without this the
      *  rolling buffer is a black box (is it 12 rows or the 500 cap?).  */
@@ -1805,12 +1853,24 @@ function mount_live_table(gobj, card, $table)
             service:    service,
             rt_id:      card.rt_id,
             topic_name: card.topic,
-            key:        card.key
+            key:        card.key      /*  ALL_KEYS ("") = the whole topic  */
         }, gobj);
     gobj_subscribe_event(remote, "EV_TRANGER_RECORD_ADDED",
-        {__service__: service, __filter__: {topic_name: card.topic, key: card.key}},
-        gobj);
+        {__service__: service, __filter__: live_filter(card)}, gobj);
     card.subscribed = true;
+}
+
+/***************************************************************
+ *  The subscription filter of a Live card. A whole-topic card must NOT
+ *  filter by key: the events carry the record's REAL key, so a `key: ""`
+ *  filter would match nothing and the card would never see a record.
+ ***************************************************************/
+function live_filter(card)
+{
+    if(card.key === ALL_KEYS) {
+        return {topic_name: card.topic};
+    }
+    return {topic_name: card.topic, key: card.key};
 }
 
 /***************************************************************
@@ -1920,12 +1980,12 @@ function columns_from_row(row)
  *  Feed a live record into a card: buffer until the table is built, then
  *  prepend (newest on top) and trim to the card's live_max.
  ***************************************************************/
-function push_live_record(card, record)
+function push_live_record(card, record, key)
 {
     if(!card.tabulator) {
         return;
     }
-    let row = flatten_record(record);
+    let row = flatten_record(record, card.key === ALL_KEYS ? key : "");
     if(!card.built) {
         card.pending.push(row);
         return;
@@ -2028,7 +2088,7 @@ function close_card(gobj, card, forget)
             if(remote) {
                 gobj_unsubscribe_event(remote, "EV_TRANGER_RECORD_ADDED",
                     {__service__: gobj_read_str_attr(gobj, "treedb_name"),
-                     __filter__: {topic_name: card.topic, key: card.key}}, gobj);
+                     __filter__: live_filter(card)}, gobj);
             }
             card.subscribed = false;
         }
@@ -2151,15 +2211,20 @@ function request_page(gobj, card, page, size)
  *  unreadable. The unit comes from the record's OWN system_flag (each
  *  record carries it in its metadata), so this needs no topic context.
  ***************************************************************/
-function flatten_record(r)
+function flatten_record(r, key)
 {
     let md = (r && r.__md_tranger__) || {};
     let flags = md.system_flag || 0;
-    let row = {
-        t:     fmt_ts(md.t,  (flags & SF_T_MS)  !== 0),
-        tm:    fmt_ts(md.tm, (flags & SF_TM_MS) !== 0),
-        rowid: md.g_rowid !== undefined ? md.g_rowid : (md.rowid || "")
-    };
+    let row = {};
+    /*  A whole-topic Live card mixes keys: name the one each record came
+     *  from, or the card is a stream of anonymous rows. A per-key card
+     *  already says its key in the header — no column for it there.  */
+    if(key !== undefined && key !== null && key !== "") {
+        row.key = key;
+    }
+    row.t = fmt_ts(md.t,  (flags & SF_T_MS)  !== 0);
+    row.tm = fmt_ts(md.tm, (flags & SF_TM_MS) !== 0);
+    row.rowid = md.g_rowid !== undefined ? md.g_rowid : (md.rowid || "");
     if(r && typeof r === "object") {
         for(let k in r) {
             if(k === "__md_tranger__") {
@@ -2281,7 +2346,10 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 pend.reject(new Error(comment || "get-page failed"));
             } else {
                 let page = data || {};
-                let rows = (Array.isArray(page.data) ? page.data : []).map(flatten_record);
+                /*  NOT `.map(flatten_record)`: map would hand it the INDEX as
+                 *  its second argument, which is the key parameter.  */
+                let rows = (Array.isArray(page.data) ? page.data : [])
+                    .map((rec) => flatten_record(rec));
                 /*  `last_row` is the exact row count: without it Tabulator
                  *  ESTIMATES the total as last_page * page_size (its
                  *  remoteRowCountEstimate) and the counter lies — "Showing
@@ -2733,12 +2801,14 @@ function ac_tranger_record_added(gobj, event, kw, src)
         }
         if(rt_id) {
             if(card.rt_id === rt_id) {
-                push_live_record(card, record);
+                push_live_record(card, record, key);
             }
             continue;
         }
-        if(card.topic === topic && card.key === key) {
-            push_live_record(card, record);
+        /*  A whole-topic card takes every key of its topic (that is what its
+         *  feed was opened on).  */
+        if(card.topic === topic && (card.key === ALL_KEYS || card.key === key)) {
+            push_live_record(card, record, key);
         }
     }
 
