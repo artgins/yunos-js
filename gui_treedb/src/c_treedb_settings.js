@@ -38,6 +38,7 @@ import {
     gobj_read_attr, gobj_write_attr,
     gobj_subscribe_event,
     gobj_find_service,
+    gobj_send_event,
     gobj_parent,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
@@ -51,12 +52,8 @@ import {yui_shell_confirm_yesno} from "@yuneta/gobj-ui/src/shell_modals.js";
 import {
     treedb_config_get_connections,
     treedb_config_get_connection,
-    treedb_config_set_connections,
-    treedb_config_set_conn_services,
-    treedb_config_set_conn_enabled,
     treedb_config_conn_services,
     treedb_config_get_live_max,
-    treedb_config_set_live_max,
     LIVE_MAX_MIN,
     LIVE_MAX_MAX,
 } from "./c_treedb_config.js";
@@ -256,9 +253,10 @@ function build_live_max_field(gobj)
             log_error(`${GCLASS_NAME}: treedb_config service not found`);
             return;
         }
-        treedb_config_set_live_max(cfg, $input.value);
+        gobj_send_event(cfg, "EV_SET_LIVE_MAX", {live_max: $input.value}, gobj);
         /*  Echo back what was STORED: the value is clamped, so a typed
-         *  1000000 must not keep showing 1000000 in the field.  */
+         *  1000000 must not keep showing 1000000 in the field. The send is
+         *  synchronous, so the clamped value is already persisted here.  */
         $input.value = String(treedb_config_get_live_max(cfg));
     });
 
@@ -364,7 +362,7 @@ function persist(gobj)
         };
     });
     if(config) {
-        treedb_config_set_connections(config, list);
+        gobj_send_event(config, "EV_SET_CONNECTIONS", {connections: list}, gobj);
     }
 }
 
@@ -406,7 +404,8 @@ function toggle_service(gobj, row)
         }
         return {service: s.service, gclass: s.gclass, selected: selected};
     });
-    treedb_config_set_conn_services(config, d._conn_id, list);
+    gobj_send_event(config, "EV_SET_CONN_SERVICES",
+        {conn_id: d._conn_id, services: list}, gobj);
     row.update({_checked: now_checked});
 }
 
@@ -578,7 +577,8 @@ function make_columns(gobj)
         if(!conn) {
             return;
         }
-        treedb_config_set_conn_enabled(config, d.id, !conn.enabled);
+        gobj_send_event(config, "EV_SET_CONN_ENABLED",
+            {conn_id: d.id, enabled: !conn.enabled}, gobj);
         try {
             cell.getRow().reformat();
         } catch(err) {
@@ -637,7 +637,8 @@ function make_columns(gobj)
             if(config) {
                 let list = treedb_config_get_connections(config)
                     .filter((c) => c && c.id !== d.id);
-                treedb_config_set_connections(config, list);
+                gobj_send_event(config, "EV_SET_CONNECTIONS",
+                    {connections: list}, gobj);
             }
             reload_table(gobj);
         });

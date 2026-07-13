@@ -22,6 +22,37 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **refactor(gui_treedb): the config service and the login service cross their
+  own FSMs.** `C_TREEDB_CONFIG` had a literally EMPTY automaton
+  (`[["ST_IDLE", []]]`) and twelve exported mutators that four other gclasses
+  called directly, each ending in a `gobj_publish_event` fired from inside a
+  FOREIGN gobj's DOM callback: nothing about the config's life reached the
+  `machine` trace, and the notification came out of a stack that had no
+  business owning it. Every mutation is an event now (`EV_SET_CONNECTIONS`,
+  `EV_SET_CONN_SERVICES`, `EV_STORE_SCANNED_SERVICES`, `EV_SET_CONN_ENABLED`,
+  `EV_TOGGLE_SELECTED`, `EV_REMOVE_SELECTED`, `EV_SET_ACTIVE_TAB`,
+  `EV_SET_LIVE_MAX`, `EV_ADD_TRANGER_VIEW`, `EV_REMOVE_TRANGER_VIEW`) and the
+  work — write, persist, publish — happens in its own action. READS stay plain
+  functions: reading an attr changes no state and there is nothing to audit.
+
+  `C_TREEDB_LOGIN` kept two paths outside its automaton.
+  `try_restore_session` changed state and published by hand from a promise,
+  with `EV_RESTORE_FAILED` declared in `event_types` but handled in **no
+  state** — a transition that existed only in hand-written code; and
+  `fetch_and_publish` published the output event from its promise. Both send
+  events now (`EV_RESTORE_FAILED`, `EV_TOKEN_FETCHED`). That also covers a race
+  that would have raised "event not defined": logging out while `/auth/token`
+  is in flight lands the token in `ST_LOGOUT`, where it is dropped as stale —
+  the same shape as the already-handled late `EV_LOGIN_REFRESHED`.
+
+- **fix(gui_treedb): deleting a connection leaked its saved Tranger views.**
+  The pruning of a connection's persisted key-views lived in
+  `treedb_config_remove_connection`, which **nothing ever called**; the live
+  delete path (`set_connections`, from the Settings table) pruned the open tabs
+  but not the views, so every deleted connection left its Tranger views in
+  localStorage forever. The pruning now runs where the deletion actually
+  happens.
+
 - **refactor(gui_treedb): every action in the Tranger browser crosses the
   FSM.** `C_TRANGER_VIEW` lived entirely in `ST_IDLE`: button clicks called
   functions directly, and so did everything the view did on its own (arm an

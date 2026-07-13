@@ -23,6 +23,7 @@ import {
     gobj_read_attr, gobj_write_attr,
     gobj_subscribe_event,
     gobj_find_service,
+    gobj_send_event,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
 
@@ -32,7 +33,6 @@ import {
     treedb_config_get_connections,
     treedb_config_conn_services,
     treedb_config_is_selected,
-    treedb_config_toggle_selected,
     sel_id,
 } from "./c_treedb_config.js";
 
@@ -229,11 +229,15 @@ function render_connection(gobj, conn)
             $cb.checked = !!checked;
             $cb.disabled = !connected;
             $cb.addEventListener("change", () => {
-                treedb_config_toggle_selected(config, workspace, {
-                    conn_id: conn.id,
-                    svc:     svc,
-                    label:   `${svc.service} · ${conn.label}`
-                });
+                gobj_send_event(config, "EV_TOGGLE_SELECTED",
+                    {
+                        workspace: workspace,
+                        sel: {
+                            conn_id: conn.id,
+                            svc:     svc,
+                            label:   `${svc.service} · ${conn.label}`
+                        }
+                    }, gobj);
             });
             let $svc_label = [["span", {class: "ml-2"}, svc.service]];
             if(svc.gclass === "C_TRANGER") {

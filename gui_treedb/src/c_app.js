@@ -52,9 +52,7 @@ import {
     treedb_config_get_connections,
     treedb_config_get_connection,
     treedb_config_get_selected,
-    treedb_config_remove_selected,
     treedb_config_get_active_tab,
-    treedb_config_set_active_tab,
     treedb_config_normalize_sel,
     treedb_config_conn_services,
 } from "./c_treedb_config.js";
@@ -932,7 +930,8 @@ function ac_nav_item_close(gobj, event, kw, src)
     }
     let config = gobj_find_service("treedb_config", false);
     if(config) {
-        treedb_config_remove_selected(config, ws, sel_id_);
+        gobj_send_event(config, "EV_REMOVE_SELECTED",
+            {workspace: ws, id: sel_id_}, gobj);
     }
     return 0;
 }
@@ -962,7 +961,8 @@ function ac_route_changed(gobj, event, kw, src)
         if(sel_id_) {
             let config = gobj_find_service("treedb_config", false);
             if(config) {
-                treedb_config_set_active_tab(config, ws, sel_id_);
+                gobj_send_event(config, "EV_SET_ACTIVE_TAB",
+                    {workspace: ws, id: sel_id_}, gobj);
             }
         }
         return 0;
@@ -981,7 +981,8 @@ function ac_route_changed(gobj, event, kw, src)
         if(sub) {
             let config = gobj_find_service("treedb_config", false);
             if(config) {
-                treedb_config_set_active_tab(config, ws, sub);
+                gobj_send_event(config, "EV_SET_ACTIVE_TAB",
+                    {workspace: ws, id: sub}, gobj);
             }
             return 0;
         }

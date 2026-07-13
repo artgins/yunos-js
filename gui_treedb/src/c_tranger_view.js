@@ -93,8 +93,6 @@ import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {
     treedb_config_get_tranger_views,
-    treedb_config_add_tranger_view,
-    treedb_config_remove_tranger_view,
     treedb_config_get_live_max,
     LIVE_MAX_DEFAULT,
 } from "./c_treedb_config.js";
@@ -869,9 +867,15 @@ function persist_view(gobj, card)
     if(!cfg || !conn_id) {
         return;
     }
-    treedb_config_add_tranger_view(cfg, conn_id,
-        gobj_read_str_attr(gobj, "treedb_name"),
-        card.topic, card.key, card.mode, card.match_cond || {});
+    gobj_send_event(cfg, "EV_ADD_TRANGER_VIEW",
+        {
+            conn_id:     conn_id,
+            treedb_name: gobj_read_str_attr(gobj, "treedb_name"),
+            topic:       card.topic,
+            key:         card.key,
+            mode:        card.mode,
+            match_cond:  card.match_cond || {}
+        }, gobj);
 }
 
 function unpersist_view(gobj, card)
@@ -881,9 +885,14 @@ function unpersist_view(gobj, card)
     if(!cfg || !conn_id) {
         return;
     }
-    treedb_config_remove_tranger_view(cfg, conn_id,
-        gobj_read_str_attr(gobj, "treedb_name"),
-        card.topic, card.key, card.mode);
+    gobj_send_event(cfg, "EV_REMOVE_TRANGER_VIEW",
+        {
+            conn_id:     conn_id,
+            treedb_name: gobj_read_str_attr(gobj, "treedb_name"),
+            topic:       card.topic,
+            key:         card.key,
+            mode:        card.mode
+        }, gobj);
 }
 
 /***************************************************************

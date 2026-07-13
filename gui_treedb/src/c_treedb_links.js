@@ -40,6 +40,7 @@ import {
     gobj_subscribe_event,
     gobj_publish_event,
     gobj_find_service,
+    gobj_send_event,
     gobj_yuno,
     gobj_create,
     gobj_name,
@@ -53,7 +54,6 @@ import {
 import {
     treedb_config_conn_services,
     treedb_config_get_connection,
-    treedb_config_store_scanned_services,
 } from "./c_treedb_config.js";
 
 
@@ -396,7 +396,8 @@ function finish_scan(gobj, conn_id, error)
         }
         let config = gobj_find_service("treedb_config", false);
         if(config) {
-            treedb_config_store_scanned_services(config, conn_id, scan.services);
+            gobj_send_event(config, "EV_STORE_SCANNED_SERVICES",
+                {conn_id: conn_id, services: scan.services}, gobj);
         }
         gobj_publish_event(gobj, "EV_TREEDB_SCAN_DONE", {
             conn_id:  conn_id,

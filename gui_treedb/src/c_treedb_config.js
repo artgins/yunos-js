@@ -182,7 +182,7 @@ function treedb_config_conn_services(conn)
  *  Replace ONE connection's services (the Settings checkboxes edit
  *  the `selected` flags through this), persist, notify.
  ***************************************************************/
-function treedb_config_set_conn_services(gobj, conn_id, services)
+function do_set_conn_services(gobj, conn_id, services)
 {
     let list = treedb_config_get_connections(gobj);
     let idx = list.findIndex((c) => c && c.id === conn_id);
@@ -201,7 +201,7 @@ function treedb_config_set_conn_services(gobj, conn_id, services)
  *  keeping the `selected` flag of every service that survived the
  *  refresh. Persist + notify.
  ***************************************************************/
-function treedb_config_store_scanned_services(gobj, conn_id, found)
+function do_store_scanned_services(gobj, conn_id, found)
 {
     let list = treedb_config_get_connections(gobj);
     let idx = list.findIndex((c) => c && c.id === conn_id);
@@ -230,7 +230,7 @@ function treedb_config_store_scanned_services(gobj, conn_id, found)
  *  button), persist, notify. The app root reacts by opening/closing
  *  its transport (treedb_links_sync).
  ***************************************************************/
-function treedb_config_set_conn_enabled(gobj, conn_id, enabled)
+function do_set_conn_enabled(gobj, conn_id, enabled)
 {
     let list = treedb_config_get_connections(gobj);
     let idx = list.findIndex((c) => c && c.id === conn_id);
@@ -265,17 +265,18 @@ function treedb_config_get_connection(gobj, id)
  *  the source of truth), persist, notify. Drops selected treedbs that
  *  point at a connection id no longer present.
  ***************************************************************/
-function treedb_config_set_connections(gobj, list)
+function do_set_connections(gobj, list)
 {
     let clean = Array.isArray(list) ? list.filter((c) => c && c.id) : [];
     gobj_write_attr(gobj, "connections", clean);
     gobj_save_persistent_attrs(gobj, "connections");
 
-    /*  Prune open tabs whose connection is gone.  */
     let alive = {};
     for(let c of clean) {
         alive[c.id] = true;
     }
+
+    /*  Prune open tabs whose connection is gone.  */
     let map = read_selection_map(gobj);
     let touched = false;
     for(let ws in map) {
@@ -289,45 +290,23 @@ function treedb_config_set_connections(gobj, list)
         write_selection_map(gobj, map);
     }
 
-    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: clean});
-}
-
-/***************************************************************
- *  Remove a connection and every selected treedb that belonged to it,
- *  persist, notify.
- ***************************************************************/
-function treedb_config_remove_connection(gobj, id)
-{
-    if(!id) {
-        return;
-    }
-    let list = treedb_config_get_connections(gobj).filter((c) => c && c.id !== id);
-    gobj_write_attr(gobj, "connections", list);
-    gobj_save_persistent_attrs(gobj, "connections");
-
-    /*  Drop that connection's open tabs from every workspace.  */
-    let map = read_selection_map(gobj);
-    let touched = false;
-    for(let ws in map) {
-        let kept = (map[ws] || []).filter((s) => s && s.conn_id !== id);
-        if(kept.length !== (map[ws] || []).length) {
-            map[ws] = kept;
-            touched = true;
+    /*  And the saved Tranger key-views of a connection that is gone: its wss
+     *  endpoint no longer exists, so its open/closed state goes with it.
+     *  (This ran only in a remove_connection() that nothing ever called, so
+     *  deleting a connection in Settings leaked its views in localStorage.)  */
+    let tv = read_tranger_views(gobj);
+    let dropped = false;
+    for(let conn_id in tv) {
+        if(!alive[conn_id]) {
+            delete tv[conn_id];
+            dropped = true;
         }
     }
-    if(touched) {
-        write_selection_map(gobj, map);
-    }
-
-    /*  Drop that connection's saved Tranger key-views (the wss endpoint is
-     *  gone, so its open/closed state goes with it).  */
-    let tv = read_tranger_views(gobj);
-    if(Object.prototype.hasOwnProperty.call(tv, id)) {
-        delete tv[id];
+    if(dropped) {
         write_tranger_views(gobj, tv);
     }
 
-    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list});
+    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: clean});
 }
 
 /***************************************************************
@@ -369,7 +348,7 @@ function treedb_config_get_tranger_views(gobj, conn_id, treedb_name, topic)
  *  Persist a view as open (idempotent per conn/treedb/topic/key/mode;
  *  a re-add refreshes its match_cond).
  ***************************************************************/
-function treedb_config_add_tranger_view(gobj, conn_id, treedb_name, topic, key, mode, match_cond)
+function do_add_tranger_view(gobj, conn_id, treedb_name, topic, key, mode, match_cond)
 {
     if(!conn_id) {
         return;
@@ -393,7 +372,7 @@ function treedb_config_add_tranger_view(gobj, conn_id, treedb_name, topic, key, 
 /***************************************************************
  *  Mark a view as closed (drop it from persistence).
  ***************************************************************/
-function treedb_config_remove_tranger_view(gobj, conn_id, treedb_name, topic, key, mode)
+function do_remove_tranger_view(gobj, conn_id, treedb_name, topic, key, mode)
 {
     if(!conn_id) {
         return;
@@ -458,7 +437,7 @@ function treedb_config_is_selected(gobj, workspace, id)
 /***************************************************************
  *  Replace one workspace's selection, persist, notify.
  ***************************************************************/
-function treedb_config_set_selected(gobj, workspace, list)
+function do_set_selected(gobj, workspace, list)
 {
     let map = read_selection_map(gobj);
     map[workspace] = Array.isArray(list) ? list : [];
@@ -474,7 +453,7 @@ function treedb_config_set_selected(gobj, workspace, list)
  *  {conn_id, svc: {key, service, gclass}, label}.
  *  Legacy persisted entries only have treedb_name — normalize on read.
  ***************************************************************/
-function treedb_config_toggle_selected(gobj, workspace, sel)
+function do_toggle_selected(gobj, workspace, sel)
 {
     if(!sel || !sel.conn_id || !sel.svc || !sel.svc.key) {
         return;
@@ -496,7 +475,7 @@ function treedb_config_toggle_selected(gobj, workspace, sel)
             label:       sel.label || sel.svc.service
         });
     }
-    treedb_config_set_selected(gobj, workspace, list);
+    do_set_selected(gobj, workspace, list);
 }
 
 /***************************************************************
@@ -521,13 +500,13 @@ function treedb_config_normalize_sel(s)
 /***************************************************************
  *  Remove one selected id from a workspace (tab close).
  ***************************************************************/
-function treedb_config_remove_selected(gobj, workspace, id)
+function do_remove_selected(gobj, workspace, id)
 {
     if(!id) {
         return;
     }
     let list = treedb_config_get_selected(gobj, workspace).filter((s) => s && s.id !== id);
-    treedb_config_set_selected(gobj, workspace, list);
+    do_set_selected(gobj, workspace, list);
 }
 
 /***************************************************************
@@ -547,7 +526,7 @@ function treedb_config_get_active_tab(gobj, workspace)
 /***************************************************************
  *  Record a workspace's active tab and persist it. No-op when unchanged.
  ***************************************************************/
-function treedb_config_set_active_tab(gobj, workspace, id)
+function do_set_active_tab(gobj, workspace, id)
 {
     if(!workspace) {
         return;
@@ -580,7 +559,7 @@ function treedb_config_get_live_max(gobj)
     return clamp_live_max(n);
 }
 
-function treedb_config_set_live_max(gobj, n)
+function do_set_live_max(gobj, n)
 {
     let v = parseInt(n, 10);
     if(Number.isNaN(v) || v <= 0) {
@@ -599,6 +578,99 @@ function clamp_live_max(n)
         return LIVE_MAX_MAX;
     }
     return n;
+}
+
+
+
+
+                    /***************************
+                     *      Actions
+                     ***************************/
+
+
+
+
+/***************************************************************
+ *  Every MUTATION of the config is an event.
+ *
+ *  It used to be a set of exported functions that four other gclasses
+ *  called directly, each ending in a gobj_publish_event fired from inside
+ *  a FOREIGN gobj's DOM callback: nothing about the config's life reached
+ *  the `machine` trace, and the notification came out of a stack that had
+ *  no business owning it. Now a caller sends an event and the work — write,
+ *  persist, publish — happens here, in this gobj's own action.
+ *
+ *  READS stay plain exported functions (treedb_config_get_*): reading an
+ *  attr changes no state and there is nothing to audit.
+ ***************************************************************/
+function ac_set_connections(gobj, event, kw, src)
+{
+    do_set_connections(gobj, (kw && kw.connections) || []);
+    return 0;
+}
+
+function ac_set_conn_services(gobj, event, kw, src)
+{
+    do_set_conn_services(gobj, (kw && kw.conn_id) || "", (kw && kw.services) || []);
+    return 0;
+}
+
+function ac_store_scanned_services(gobj, event, kw, src)
+{
+    do_store_scanned_services(gobj, (kw && kw.conn_id) || "", (kw && kw.services) || []);
+    return 0;
+}
+
+function ac_set_conn_enabled(gobj, event, kw, src)
+{
+    do_set_conn_enabled(gobj, (kw && kw.conn_id) || "", !!(kw && kw.enabled));
+    return 0;
+}
+
+function ac_toggle_selected(gobj, event, kw, src)
+{
+    let sel = kw ? kw.sel : null;
+    if(!sel || !sel.conn_id || !sel.svc || !sel.svc.key) {
+        log_error(`${GCLASS_NAME}: EV_TOGGLE_SELECTED with a bad selection`);
+        return -1;
+    }
+    do_toggle_selected(gobj, (kw && kw.workspace) || "", sel);
+    return 0;
+}
+
+function ac_remove_selected(gobj, event, kw, src)
+{
+    do_remove_selected(gobj, (kw && kw.workspace) || "", (kw && kw.id) || "");
+    return 0;
+}
+
+function ac_set_active_tab(gobj, event, kw, src)
+{
+    do_set_active_tab(gobj, (kw && kw.workspace) || "", (kw && kw.id) || "");
+    return 0;
+}
+
+function ac_set_live_max(gobj, event, kw, src)
+{
+    do_set_live_max(gobj, kw ? kw.live_max : 0);
+    return 0;
+}
+
+function ac_add_tranger_view(gobj, event, kw, src)
+{
+    do_add_tranger_view(gobj,
+        (kw && kw.conn_id) || "", (kw && kw.treedb_name) || "",
+        (kw && kw.topic) || "", (kw && kw.key) || "", (kw && kw.mode) || "",
+        (kw && kw.match_cond) || {});
+    return 0;
+}
+
+function ac_remove_tranger_view(gobj, event, kw, src)
+{
+    do_remove_tranger_view(gobj,
+        (kw && kw.conn_id) || "", (kw && kw.treedb_name) || "",
+        (kw && kw.topic) || "", (kw && kw.key) || "", (kw && kw.mode) || "");
+    return 0;
 }
 
 
@@ -635,13 +707,36 @@ function create_gclass(gclass_name)
      *          States
      *---------------------------------------------*/
     const states = [
-        ["ST_IDLE", []]
+        ["ST_IDLE", [
+            ["EV_SET_CONNECTIONS",       ac_set_connections,       null],
+            ["EV_SET_CONN_SERVICES",     ac_set_conn_services,     null],
+            ["EV_STORE_SCANNED_SERVICES", ac_store_scanned_services, null],
+            ["EV_SET_CONN_ENABLED",      ac_set_conn_enabled,      null],
+            ["EV_TOGGLE_SELECTED",       ac_toggle_selected,       null],
+            ["EV_REMOVE_SELECTED",       ac_remove_selected,       null],
+            ["EV_SET_ACTIVE_TAB",        ac_set_active_tab,        null],
+            ["EV_SET_LIVE_MAX",          ac_set_live_max,          null],
+            ["EV_ADD_TRANGER_VIEW",      ac_add_tranger_view,      null],
+            ["EV_REMOVE_TRANGER_VIEW",   ac_remove_tranger_view,   null]
+        ]]
     ];
 
     /*---------------------------------------------*
      *          Events
      *---------------------------------------------*/
     const event_types = [
+        /*  input: the mutations (see the Actions banner)  */
+        ["EV_SET_CONNECTIONS",          0],
+        ["EV_SET_CONN_SERVICES",        0],
+        ["EV_STORE_SCANNED_SERVICES",   0],
+        ["EV_SET_CONN_ENABLED",         0],
+        ["EV_TOGGLE_SELECTED",          0],
+        ["EV_REMOVE_SELECTED",          0],
+        ["EV_SET_ACTIVE_TAB",           0],
+        ["EV_SET_LIVE_MAX",             0],
+        ["EV_ADD_TRANGER_VIEW",         0],
+        ["EV_REMOVE_TRANGER_VIEW",      0],
+        /*  output  */
         ["EV_CONNECTIONS_CHANGED",     event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
         ["EV_SELECTED_TREEDBS_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
     ];
@@ -679,28 +774,16 @@ export {
     register_c_treedb_config,
     sel_id,
     treedb_config_conn_services,
-    treedb_config_set_conn_services,
-    treedb_config_store_scanned_services,
-    treedb_config_set_conn_enabled,
     treedb_config_service_key,
     treedb_config_normalize_sel,
     treedb_config_get_connections,
     treedb_config_get_connection,
-    treedb_config_set_connections,
-    treedb_config_remove_connection,
     treedb_config_get_selected,
     treedb_config_is_selected,
-    treedb_config_set_selected,
-    treedb_config_toggle_selected,
-    treedb_config_remove_selected,
     treedb_config_get_active_tab,
-    treedb_config_set_active_tab,
     treedb_config_get_live_max,
-    treedb_config_set_live_max,
     LIVE_MAX_DEFAULT,
     LIVE_MAX_MIN,
     LIVE_MAX_MAX,
     treedb_config_get_tranger_views,
-    treedb_config_add_tranger_view,
-    treedb_config_remove_tranger_view,
 };

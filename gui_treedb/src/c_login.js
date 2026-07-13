@@ -257,13 +257,11 @@ function try_restore_session(gobj)
             gobj_write_attr(gobj, "username", data.username || data.email || "");
             gobj_send_event(gobj, "EV_LOGIN_ACCEPTED", data, gobj);
         } else {
-            gobj_change_state(gobj, "ST_LOGOUT");
-            gobj_publish_event(gobj, "EV_RESTORE_FAILED", {});
+            gobj_send_event(gobj, "EV_RESTORE_FAILED", {}, gobj);
         }
     })
     .catch(() => {
-        gobj_change_state(gobj, "ST_LOGOUT");
-        gobj_publish_event(gobj, "EV_RESTORE_FAILED", {});
+        gobj_send_event(gobj, "EV_RESTORE_FAILED", {}, gobj);
     });
 }
 
@@ -306,13 +304,15 @@ function fetch_and_publish(gobj, out_event)
                 gobj_write_attr(gobj, "username", username);
             }
         }
-        gobj_publish_event(gobj, out_event, {username, access_token: token});
+        gobj_send_event(gobj, "EV_TOKEN_FETCHED",
+            {out_event: out_event, username: username, access_token: token}, gobj);
     })
     .catch(err => {
         log_warning(`${gobj_short_name(gobj)}: /auth/token fetch failed: ${err.message}`);
         gobj_write_attr(gobj, "access_token", "");
-        gobj_publish_event(gobj, out_event,
-            {username: gobj_read_attr(gobj, "username"), access_token: ""});
+        gobj_send_event(gobj, "EV_TOKEN_FETCHED",
+            {out_event: out_event, username: gobj_read_attr(gobj, "username"),
+             access_token: ""}, gobj);
     });
 }
 
@@ -438,6 +438,43 @@ function ac_clear_session(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  No session to restore on page load (no/expired cookies). Not an
+ *  error: the app just shows the login form.
+ *
+ *  The fetch callback SENDS this instead of changing state and publishing
+ *  by itself: a promise is an OS notification, and its only job is to turn
+ *  it into an event. Before, the state change lived outside the FSM and
+ *  EV_RESTORE_FAILED was declared in `event_types` but handled in NO
+ *  state — a transition that existed only in hand-written code.
+ ***************************************************************/
+function ac_restore_failed(gobj, event, kw, src)
+{
+    gobj_publish_event(gobj, "EV_RESTORE_FAILED", {});
+    return 0;
+}
+
+/***************************************************************
+ *  The access_token came back from the BFF (/auth/token): publish the
+ *  output event the flow asked for (EV_LOGIN_ACCEPTED on a fresh login /
+ *  restore, EV_LOGIN_REFRESHED on a rotation) with the token, so the app
+ *  can forward it in every C_IEVENT_CLI identity_card.
+ ***************************************************************/
+function ac_token_fetched(gobj, event, kw, src)
+{
+    let out_event = (kw && kw.out_event) || "";
+    if(out_event !== "EV_LOGIN_ACCEPTED" && out_event !== "EV_LOGIN_REFRESHED") {
+        log_error(sprintf("%s: EV_TOKEN_FETCHED with a bad out_event: %s",
+            gobj_short_name(gobj), out_event));
+        return -1;
+    }
+    gobj_publish_event(gobj, out_event, {
+        username:     (kw && kw.username) || "",
+        access_token: (kw && kw.access_token) || ""
+    });
+    return 0;
+}
+
 function ac_timeout(gobj, event, kw, src)
 {
     do_bff_refresh(gobj);
@@ -481,13 +518,19 @@ function create_gclass(gclass_name)
              *  stale EV_LOGIN_REFRESHED success is discarded (we are logged out
              *  on purpose) instead of raising "event not defined".
              */
-            ["EV_LOGIN_REFRESHED", ac_clear_session,   null]
+            ["EV_LOGIN_REFRESHED", ac_clear_session,   null],
+            /*
+             *  Same shape: the /auth/token fetch of a session that was logged
+             *  out while it was in flight. The token is stale — drop it.
+             */
+            ["EV_TOKEN_FETCHED",   ac_clear_session,   null]
         ]],
 
         ["ST_WAIT_TOKEN", [
             ["EV_DO_LOGIN",        ac_do_login,        null],
             ["EV_LOGIN_ACCEPTED",  ac_login_accepted,  "ST_LOGIN"],
-            ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"]
+            ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"],
+            ["EV_RESTORE_FAILED",  ac_restore_failed,  "ST_LOGOUT"]
         ]],
 
         ["ST_LOGIN", [
@@ -496,6 +539,7 @@ function create_gclass(gclass_name)
             ["EV_LOGIN_REFRESHED", ac_login_refreshed, null],
             ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"],
             ["EV_LOGOUT_DONE",     ac_logout_done,     "ST_LOGOUT"],
+            ["EV_TOKEN_FETCHED",   ac_token_fetched,   null],
             ["EV_TIMEOUT",         ac_timeout,         null]
         ]]
     ];
@@ -510,6 +554,7 @@ function create_gclass(gclass_name)
         ["EV_LOGIN_REFRESHED", out],
         ["EV_LOGOUT_DONE",     out],
         ["EV_RESTORE_FAILED",  out],
+        ["EV_TOKEN_FETCHED",   0],
         ["EV_TIMEOUT",         0]
     ];
 
