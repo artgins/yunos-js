@@ -27,7 +27,7 @@
  *        - selected_treedbs: which (connection, treedb) pairs are open as
  *          tabs, PER WORKSPACE ("topics" / "graphs"):
  *            {workspace: [{id, conn_id, treedb_name, label}, ...]}
- *          id is the composite conn_id<US>treedb_name (sel_id/sel_parse).
+ *          id is the composite conn_id<US>treedb_name (sel_id).
  *
  *        - active_tabs: the last-active tab per workspace, so returning to a
  *          workspace (or a fresh load) restores it.
@@ -63,7 +63,6 @@ SDATA(data_type_t.DTP_POINTER,  "subscriber",       0,                        nu
 SDATA(data_type_t.DTP_JSON,     "connections",      sdata_flag_t.SDF_PERSIST, "[]", "Configured backends: [{id,label,url,remote_yuno_role,remote_yuno_service,enabled,services}]"),
 SDATA(data_type_t.DTP_JSON,     "selected_treedbs", sdata_flag_t.SDF_PERSIST, "{}", "Open (conn,treedb) tabs per workspace: {workspace: [{id,conn_id,treedb_name,label}]}"),
 SDATA(data_type_t.DTP_JSON,     "active_tabs",      sdata_flag_t.SDF_PERSIST, "{}", "Last-active tab per workspace: {workspace: sel_id}"),
-SDATA(data_type_t.DTP_STRING,   "display_mode",     sdata_flag_t.SDF_PERSIST, "table", "Record display: table | form (raw JSON)"),
 SDATA(data_type_t.DTP_JSON,     "tranger_views",    sdata_flag_t.SDF_PERSIST, "{}", "Open Tranger key-views per connection: {conn_id: [{treedb_name,topic,key,mode,match_cond}]}"),
 SDATA(data_type_t.DTP_INTEGER,  "live_max",         sdata_flag_t.SDF_PERSIST, 1000, "Rows kept in a Live card's rolling buffer (oldest dropped at the cap)"),
 SDATA_END()
@@ -128,31 +127,11 @@ function mt_destroy(gobj)
 
 
 /***************************************************************
- *  Composite id for a selected (connection, treedb) pair, and its
- *  inverse.
+ *  Composite id for a selected (connection, treedb) pair.
  ***************************************************************/
 function sel_id(conn_id, treedb_name)
 {
     return String(conn_id || "") + SEL_SEP + String(treedb_name || "");
-}
-
-function sel_parse(id)
-{
-    let s = String(id || "");
-    let i = s.indexOf(SEL_SEP);
-    if(i < 0) {
-        return {conn_id: s, treedb_name: ""};
-    }
-    return {conn_id: s.slice(0, i), treedb_name: s.slice(i + 1)};
-}
-
-/***************************************************************
- *  A stable id for a connection, derived from its coordinates so the
- *  same backend+service is never duplicated.
- ***************************************************************/
-function connection_id(conn)
-{
-    return `${conn.url || ""}#${conn.remote_yuno_service || ""}`;
 }
 
 /***************************************************************
@@ -279,42 +258,6 @@ function treedb_config_get_connections(gobj)
 function treedb_config_get_connection(gobj, id)
 {
     return treedb_config_get_connections(gobj).find((c) => c && c.id === id) || null;
-}
-
-/***************************************************************
- *  Add or replace a connection (keyed by connection_id), persist, notify.
- *  Returns the stored connection (with its resolved id).
- ***************************************************************/
-function treedb_config_upsert_connection(gobj, conn)
-{
-    if(!conn || !conn.url) {
-        return null;
-    }
-    let stored = {
-        id:                  conn.id || connection_id(conn),
-        label:               conn.label || conn.url,
-        url:                 conn.url,
-        remote_yuno_role:    conn.remote_yuno_role || "",
-        remote_yuno_service: conn.remote_yuno_service || "",
-        enabled:             !!conn.enabled,
-        /*
-         *  The C_NODE/C_TRANGER services discovered in the connected yuno
-         *  (see c_treedb_links scan), each with its `selected` flag.
-         */
-        services:            sanitize_services(conn.services)
-    };
-    let list = treedb_config_get_connections(gobj);
-    let idx = list.findIndex((c) => c && c.id === stored.id);
-    if(idx >= 0) {
-        list[idx] = stored;
-    } else {
-        list.push(stored);
-    }
-    gobj_write_attr(gobj, "connections", list);
-    gobj_save_persistent_attrs(gobj, "connections");
-    /*  `conn` lets the app (re)open just the affected transport.  */
-    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list, conn: stored});
-    return stored;
 }
 
 /***************************************************************
@@ -620,20 +563,6 @@ function treedb_config_set_active_tab(gobj, workspace, id)
 }
 
 /***************************************************************
- *  Record display mode: "table" (default) or "form" (raw JSON).
- ***************************************************************/
-function treedb_config_get_display_mode(gobj)
-{
-    return gobj_read_attr(gobj, "display_mode") || "table";
-}
-
-function treedb_config_set_display_mode(gobj, mode)
-{
-    gobj_write_attr(gobj, "display_mode", mode || "table");
-    gobj_save_persistent_attrs(gobj, "display_mode");
-}
-
-/***************************************************************
  *  Rows kept in a Live card's rolling buffer. It is a BROWSER memory
  *  bound (the backend keeps no live data), so it is clamped: a bad value
  *  would either make the card useless or eat the tab's memory.
@@ -749,8 +678,6 @@ function register_c_treedb_config()
 export {
     register_c_treedb_config,
     sel_id,
-    sel_parse,
-    connection_id,
     treedb_config_conn_services,
     treedb_config_set_conn_services,
     treedb_config_store_scanned_services,
@@ -759,7 +686,6 @@ export {
     treedb_config_normalize_sel,
     treedb_config_get_connections,
     treedb_config_get_connection,
-    treedb_config_upsert_connection,
     treedb_config_set_connections,
     treedb_config_remove_connection,
     treedb_config_get_selected,
@@ -769,8 +695,6 @@ export {
     treedb_config_remove_selected,
     treedb_config_get_active_tab,
     treedb_config_set_active_tab,
-    treedb_config_get_display_mode,
-    treedb_config_set_display_mode,
     treedb_config_get_live_max,
     treedb_config_set_live_max,
     LIVE_MAX_DEFAULT,

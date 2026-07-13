@@ -33,7 +33,7 @@
  *          All Rights Reserved.
  ***********************************************************************/
 import {
-    SDATA, SDATA_END, data_type_t, event_flag_t,
+    SDATA, SDATA_END, data_type_t,
     gclass_create, log_error,
     gobj_read_attr, gobj_write_attr,
     gobj_subscribe_event,

@@ -29,7 +29,7 @@ import {
     gobj_create_service, gobj_create_pure_child,
     gobj_subscribe_event, gobj_send_event,
     gobj_find_service, gobj_yuno,
-    gobj_start_tree, gobj_stop, gobj_stop_tree, gobj_destroy, gobj_is_running,
+    gobj_start_tree, gobj_stop_tree, gobj_destroy, gobj_is_running,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
 
@@ -57,7 +57,6 @@ import {
     treedb_config_set_active_tab,
     treedb_config_normalize_sel,
     treedb_config_conn_services,
-    sel_parse,
 } from "./c_treedb_config.js";
 
 import {
@@ -73,7 +72,7 @@ import {
 import {setup_dev, dev_window_was_open} from "@yuneta/gobj-ui/src/yui_dev.js";
 
 import {switch_locale, current_locale} from "./locales/locales.js";
-import {current_theme, apply_theme, toggle_theme} from "./theme.js";
+import {current_theme, toggle_theme} from "./theme.js";
 import {mount_login} from "./login.js";
 import {deploy_info} from "./conf/deploy.js";
 
@@ -88,9 +87,6 @@ const WORKSPACES = {
     topics: {view: "C_YUI_TREEDB_TOPICS", icon: "yi-table"},
     graphs: {view: "C_YUI_TREEDB_GRAPH",  icon: "yi-hexagon-nodes"}
 };
-
-let __app_gobj__ = null;
-
 
 /***************************************************************
  *              Attrs
@@ -111,6 +107,7 @@ let PRIVATE_DATA = {
     refreshing:   false,  /*  a BFF refresh is in flight (dedupes concurrent NAKs)  */
     ever_connected: null, /*  conn_ids that reached session at least once (keep tab)  */
     mounted_base: "",     /*  last EV_ROUTE_CHANGED base (resolved route)  */
+    about_modal:  null,   /*  the open About dialog (closed on logout)  */
 };
 
 let __gclass__ = null;
@@ -130,7 +127,6 @@ let __gclass__ = null;
  ***************************************************************/
 function mt_create(gobj)
 {
-    __app_gobj__ = gobj;
     gobj.priv.nak_conns = {};
     gobj.priv.nak_recovered = {};
     gobj.priv.ever_connected = {};
@@ -145,8 +141,14 @@ function mt_create(gobj)
     gobj_create_service("treedb_login", "C_TREEDB_LOGIN", {subscriber: gobj}, gobj);
 
     /*  Per-connection transports (child of self); subscribe to the
-     *  connection events it re-publishes.  */
-    let links = gobj_create_service("treedb_links", "C_TREEDB_LINKS", {subscriber: gobj}, gobj);
+     *  connection events it re-publishes.
+     *
+     *  No `subscriber` attr here: that would ADD a null (all-events)
+     *  subscription on top of the explicit ones below, and a null
+     *  subscription does NOT dedupe against a named one — every event would
+     *  be delivered TWICE (a second EV_ON_ID_NAK re-entering ac_on_id_nak is
+     *  what re-armed the refresh->reopen->NAK loop this app tries to break).  */
+    let links = gobj_create_service("treedb_links", "C_TREEDB_LINKS", {}, gobj);
     gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
     gobj_subscribe_event(links, "EV_ON_CLOSE", {}, gobj);
     gobj_subscribe_event(links, "EV_ON_ID_NAK", {}, gobj);
@@ -693,29 +695,6 @@ function ac_on_id_nak(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  A connection could not open (bad URL / cert / port / backend down).
- *  The transport keeps retrying; C_TREEDB_LINKS recorded the cause and
- *  C_TREEDB_PICKER surfaces it (it subscribes to EV_ON_OPEN_ERROR too). The
- *  app is a null-subscriber to every links event, so declare it here — a
- *  no-op — to keep the FSM happy (it must not "escalate" one bad backend into
- *  a session teardown; other backends and the BFF session stay up).
- ***************************************************************/
-function ac_on_open_error(gobj, event, kw, src)
-{
-    return 0;
-}
-
-/***************************************************************
- *  Scan lifecycle events (C_TREEDB_LINKS). The app is a
- *  null-subscriber to every links event, so declare them — no-ops —
- *  to keep the FSM happy; C_TREEDB_SETTINGS is the consumer.
- ***************************************************************/
-function ac_scan_event(gobj, event, kw, src)
-{
-    return 0;
-}
-
-/***************************************************************
  *  No valid session on load — show the login form (no error).
  ***************************************************************/
 function ac_restore_failed(gobj, event, kw, src)
@@ -913,7 +892,11 @@ function ac_selected_treedbs_changed(gobj, event, kw, src)
      *  (or the picker).  */
     let prefix = db_home_route(ws) + "/";
     if(cur.indexOf(prefix) === 0) {
-        let id = decode_tail(cur.slice(prefix.length));
+        /*  The tab is keyed by the FIRST segment: a deeper subpath is the
+         *  view's own topic/mode (/topics/db/<sel>/<topic>), not part of the
+         *  selection id — without the split, a deep-linked topic never
+         *  matched and every selection change navigated the user away.  */
+        let id = decode_tail(cur.slice(prefix.length).split("/")[0]);
         if(!selected.some((s) => s && s.id === id)) {
             let first = selected.length ? db_tab_route(ws, selected[0].id) : picker_route(ws);
             yui_shell_navigate(shell, first);
@@ -1059,9 +1042,6 @@ function create_gclass(gclass_name)
             ["EV_ON_OPEN",          ac_on_open,         null],
             ["EV_ON_CLOSE",         ac_on_close,        null],
             ["EV_ON_ID_NAK",        ac_on_id_nak,       null],
-            ["EV_ON_OPEN_ERROR",    ac_on_open_error,   null],
-            ["EV_TREEDB_SCAN_DONE",  ac_scan_event,     null],
-            ["EV_TREEDB_SCAN_ERROR", ac_scan_event,     null],
             /*  shell chrome  */
             ["EV_LOGOUT",           ac_logout,          null],
             ["EV_TOGGLE_THEME",     ac_toggle_theme,    null],
@@ -1085,9 +1065,6 @@ function create_gclass(gclass_name)
         ["EV_ON_OPEN",          0],
         ["EV_ON_CLOSE",         0],
         ["EV_ON_ID_NAK",        0],
-        ["EV_ON_OPEN_ERROR",    0],
-        ["EV_TREEDB_SCAN_DONE",  0],
-        ["EV_TREEDB_SCAN_ERROR", 0],
         ["EV_LOGOUT",           0],
         ["EV_TOGGLE_THEME",     0],
         ["EV_TOGGLE_LANGUAGE",  0],

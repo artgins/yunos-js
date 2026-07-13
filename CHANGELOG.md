@@ -22,6 +22,49 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): every connection event reached the app TWICE, and that
+  re-armed the NAK loop.** `C_TREEDB_APP` created `treedb_links` with a
+  `subscriber` attr — which makes its SERVICE `mt_create` subscribe the app to
+  ALL its events (a `null` subscription) — and then subscribed EXPLICITLY to
+  three of them on top. A null subscription does not dedupe against a named
+  one, so both fired. The damage was in `ac_on_id_nak`: the second NAK of a
+  connection entered twice, the first delivery consumed the `nak_recovered`
+  mark and gave up on the connection, and the second, no longer finding it,
+  took the first-NAK branch and asked for a token refresh that reopened the
+  connection just abandoned — the exact refresh -> reopen -> NAK loop the guard
+  exists to break. Every `EV_ON_OPEN` also rebuilt the workspaces twice. The
+  app now opts in per event, and the two no-op actions that only existed to
+  swallow the events the null subscription dragged in are gone with it.
+
+- **fix(gui_treedb): a command on a dead link left Tabulator loading forever.**
+  `gobj_command()` returns `null` BOTH on success and after logging *"Not in
+  session"*, so every `if(ret) { log_error(ret); }` guard in `C_TRANGER_VIEW`
+  was unreachable: with the websocket down the command evaporated, and
+  `get-page` kept a pending entry whose answer never landed — the card spun on
+  its loading state and `priv.pending` grew one entry per request. All commands
+  now go through a `live_transport()` check (transport alive, not destroyed, in
+  `ST_SESSION`); `get-page` rejects its Promise immediately when there is no
+  session, and in-flight requests are settled when the session reopens or the
+  view stops. `C_TRANGER_VIEW` also no longer re-arms its cards against a
+  DESTROYED transport: on a token-refresh reopen the iev is recreated and the
+  host (`C_TREEDB_VIEW`) rebuilds the view — the old code fired `list-keys` plus
+  one re-arm per card at the dead pointer, logging *"gobj NULL or DESTROYED"*
+  for each.
+
+- **fix(gui_treedb): deselecting a treedb kicked you off the tab you were on.**
+  `ac_selected_treedbs_changed` keyed the current tab on the whole route tail,
+  so with a topic deep-linked (`/topics/db/<sel>/<topic>`) the id was
+  `<sel>/<topic>`, never matched a selection, and the app navigated away. It
+  keys on the first segment now, as `restore_tab_from_url` already did.
+
+- **chore(gui_treedb): drop dead code (-890 lines).** `ui_lib_devices.js` and
+  `ui_lib_time.js` (imported by nothing), the persisted `display_mode` attr and
+  its accessors (never read), `treedb_config_upsert_connection` /
+  `connection_id` / `sel_parse` (exported, never called), the `services_roles`
+  capture + getter in `C_TREEDB_LINKS` (never consumed), `__app_gobj__`,
+  `refresh_expires_in`, unused imports, and the DOM `id` duplicated across the
+  two Keys-picker instances (now the `PICKER_MANAGE` logical class).
+
 - **fix(gui_treedb): Tranger cards survive a reconnect, and Refresh really
   refreshes.** The server-side state of a card (its iterator, its realtime feed)
   belongs to the SESSION that opened it, and the backend now reaps both when

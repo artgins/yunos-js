@@ -281,18 +281,6 @@ function treedb_links_get_iev(gobj, conn_id)
 }
 
 /***************************************************************
- *  The services_roles of a connection (captured on its last EV_ON_OPEN),
- *  {} when unknown. This is how the picker discovers which treedbs a
- *  backend exposes to the user: {treedb_name: [roles]}.
- ***************************************************************/
-function treedb_links_get_services_roles(gobj, conn_id)
-{
-    let priv = gobj.priv;
-    let e = priv.conns[conn_id];
-    return (e && e.services_roles) ? e.services_roles : {};
-}
-
-/***************************************************************
  *  The last connect failure for a connection, or null. {url, reason, code}.
  *  Set on EV_ON_OPEN_ERROR, cleared on EV_ON_OPEN.
  ***************************************************************/
@@ -503,12 +491,8 @@ function republish(gobj, src, event, kw)
 
 function ac_on_open(gobj, event, kw, src)
 {
-    /*  Capture the identity ack's services_roles for the picker.  */
     let priv = gobj.priv;
     let conn_id = priv.by_name[gobj_name(src)] || "";
-    if(conn_id && priv.conns[conn_id]) {
-        priv.conns[conn_id].services_roles = (kw && kw.services_roles) || {};
-    }
     /*  Connected → clear any prior connect-failure state. */
     if(conn_id) {
         delete priv.open_errors[conn_id];
@@ -529,12 +513,8 @@ function ac_on_open(gobj, event, kw, src)
 
 function ac_on_close(gobj, event, kw, src)
 {
-    /*  Clear the cached services_roles: the connection is down.  */
     let priv = gobj.priv;
     let conn_id = priv.by_name[gobj_name(src)] || "";
-    if(conn_id && priv.conns[conn_id]) {
-        priv.conns[conn_id].services_roles = {};
-    }
     if(conn_id && priv.scans[conn_id]) {
         finish_scan(gobj, conn_id, "connection closed");
     }
@@ -699,7 +679,6 @@ export {
     treedb_links_ensure,
     treedb_links_sync,
     treedb_links_get_iev,
-    treedb_links_get_services_roles,
     treedb_links_get_open_error,
     treedb_links_is_connected,
     treedb_links_scan,

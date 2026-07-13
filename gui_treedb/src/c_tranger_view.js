@@ -50,6 +50,7 @@ import {
     gobj_unsubscribe_event,
     gobj_publish_event,
     gobj_command,
+    gobj_current_state, gobj_is_destroying,
     gobj_create_service, gobj_find_service, gobj_destroy, is_gobj,
     createElement2, refresh_language,
     msg_iev_get_stack,
@@ -70,6 +71,7 @@ import {
     treedb_config_get_live_max,
     LIVE_MAX_DEFAULT,
 } from "./c_treedb_config.js";
+import {treedb_links_get_iev} from "./c_treedb_links.js";
 
 
 /***************************************************************
@@ -321,6 +323,7 @@ function mt_stop(gobj)
     if(links) {
         gobj_unsubscribe_event(links, "EV_ON_OPEN", {}, gobj);
     }
+    reject_pending(gobj, "view stopped");
     close_all_cards(gobj);
     close_picker(gobj);
 }
@@ -433,20 +436,59 @@ function show_error(gobj, msg)
 }
 
 /***************************************************************
+ *  The transport to command through, or null when it cannot carry a
+ *  command right now (no transport, transport destroyed by a reconnect,
+ *  or websocket down).
+ *
+ *  Every caller MUST go through this. `gobj_command()` returns null BOTH
+ *  on success AND after logging "Not in session", so its return value can
+ *  never tell the two apart: a `if(ret) { log_error(ret); }` guard on a
+ *  dead link is silently unreachable, the command evaporates, and anything
+ *  waiting for its answer (get-page's Promise) waits forever.
+ ***************************************************************/
+function live_transport(gobj)
+{
+    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    if(!remote || !is_gobj(remote) || gobj_is_destroying(remote)) {
+        return null;
+    }
+    if(gobj_current_state(remote) !== "ST_SESSION") {
+        return null;
+    }
+    return remote;
+}
+
+/***************************************************************
+ *  Settle every get-page Promise still waiting for an answer that will
+ *  never land (session died / view stopping). Tabulator shows its error
+ *  placeholder instead of spinning forever, and priv.pending does not
+ *  grow one entry per lost request.
+ ***************************************************************/
+function reject_pending(gobj, reason)
+{
+    let priv = gobj.priv;
+    let ids = Object.keys(priv.pending || {});
+    for(let req_id of ids) {
+        let pend = priv.pending[req_id];
+        delete priv.pending[req_id];
+        if(pend && pend.reject) {
+            pend.reject(new Error(reason));
+        }
+    }
+}
+
+/***************************************************************
  *  Command to remote service: list the topics.
  ***************************************************************/
 function request_topics(gobj)
 {
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let remote = live_transport(gobj);
     if(!remote) {
-        log_error(`${gobj_short_name(gobj)}: No gobj_remote_yuno defined`);
+        log_error(`${gobj_short_name(gobj)}: no session, cannot list topics`);
         return;
     }
     let service = gobj_read_str_attr(gobj, "treedb_name");
-    let ret = gobj_command(remote, "topics", {service: service}, gobj);
-    if(ret) {
-        log_error(ret);
-    }
+    gobj_command(remote, "topics", {service: service}, gobj);
 }
 
 /***************************************************************
@@ -458,21 +500,18 @@ function request_keys(gobj, topic_name)
     if(!topic_name) {
         return;
     }
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let remote = live_transport(gobj);
     if(!remote) {
-        log_error(`${gobj_short_name(gobj)}: No gobj_remote_yuno defined`);
+        log_error(`${gobj_short_name(gobj)}: no session, cannot list keys of '${topic_name}'`);
         return;
     }
     let service = gobj_read_str_attr(gobj, "treedb_name");
-    let ret = gobj_command(remote, "list-keys",
+    gobj_command(remote, "list-keys",
         {
             service:    service,
             topic_name: topic_name,
             __md_command__: {topic_name: topic_name}   /*  echoed back for correlation  */
         }, gobj);
-    if(ret) {
-        log_error(ret);
-    }
 }
 
 /***************************************************************
@@ -1092,9 +1131,9 @@ function open_card_options(gobj, card)
 function apply_card_match_cond(gobj, card, match_cond)
 {
     let priv = gobj.priv;
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let remote = live_transport(gobj);
     if(!remote) {
-        log_error(`${gobj_short_name(gobj)}: No gobj_remote_yuno defined`);
+        log_error(`${gobj_short_name(gobj)}: no session, cannot apply match conditions`);
         return;
     }
 
@@ -1110,11 +1149,7 @@ function apply_card_match_cond(gobj, card, match_cond)
         key:         card.key
     };
     Object.assign(iter_kw, card.match_cond);
-    let ret = gobj_command(remote, "open-iterator", iter_kw, gobj);
-    if(ret) {
-        log_error(ret);
-        return;
-    }
+    gobj_command(remote, "open-iterator", iter_kw, gobj);
 
     persist_view(gobj, card);   /*  upsert: the saved view carries match_cond  */
 
@@ -1146,9 +1181,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
     if(!priv.cur_topic || (mode !== "rows" && mode !== "live")) {
         return;
     }
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
-    if(!remote) {
-        log_error(`${gobj_short_name(gobj)}: No gobj_remote_yuno defined`);
+    if(!live_transport(gobj)) {
+        log_error(`${gobj_short_name(gobj)}: no session, cannot open a '${mode}' card`);
         return;
     }
     for(let c of priv.cards) {
@@ -1301,7 +1335,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
 function mount_rows_table(gobj, card, $table)
 {
     let priv = gobj.priv;
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let remote = live_transport(gobj);
     let service = gobj_read_str_attr(gobj, "treedb_name");
     card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
 
@@ -1316,9 +1350,12 @@ function mount_rows_table(gobj, card, $table)
         key:         card.key
     };
     Object.assign(iter_kw, card.match_cond || {});
-    let ret = gobj_command(remote, "open-iterator", iter_kw, gobj);
-    if(ret) {
-        log_error(ret);
+    if(remote) {
+        gobj_command(remote, "open-iterator", iter_kw, gobj);
+    } else {
+        /*  The link went down between add_card()'s check and here: mount the
+         *  table anyway (the card is persisted) — EV_ON_OPEN re-arms it.  */
+        log_error(`${gobj_short_name(gobj)}: no session, iterator not armed for '${card.topic}'`);
     }
 
     let table = new Tabulator($table, {
@@ -1365,7 +1402,7 @@ function mount_rows_table(gobj, card, $table)
 function mount_live_table(gobj, card, $table)
 {
     let priv = gobj.priv;
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let remote = live_transport(gobj);
     let service = gobj_read_str_attr(gobj, "treedb_name");
     card.rt_id = `spa-${priv.tok}-rt-${++priv.iter_seq}`;
 
@@ -1398,16 +1435,19 @@ function mount_live_table(gobj, card, $table)
     card.tabulator = table;
 
     /*  Arm the feed, then subscribe to its pushes.  */
-    let ret = gobj_command(remote, "open-rt",
+    if(!remote) {
+        /*  Link down between add_card()'s check and here: the empty table
+         *  stays mounted (the card is persisted) — EV_ON_OPEN re-arms it.  */
+        log_error(`${gobj_short_name(gobj)}: no session, feed not armed for '${card.topic}'`);
+        return;
+    }
+    gobj_command(remote, "open-rt",
         {
             service:    service,
             rt_id:      card.rt_id,
             topic_name: card.topic,
             key:        card.key
         }, gobj);
-    if(ret) {
-        log_error(ret);
-    }
     gobj_subscribe_event(remote, "EV_TRANGER_RECORD_ADDED",
         {__service__: service, __filter__: {topic_name: card.topic, key: card.key}},
         gobj);
@@ -1616,7 +1656,9 @@ function close_card(gobj, card, forget)
     }
     if(card.mode === "live") {
         if(card.subscribed) {
-            let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+            /*  A DESTROYED transport (reconnect) took its subscriptions with
+             *  it — unsubscribing there logs "gobj NULL or DESTROYED".  */
+            let remote = live_transport(gobj);
             if(remote) {
                 gobj_unsubscribe_event(remote, "EV_TRANGER_RECORD_ADDED",
                     {__service__: gobj_read_str_attr(gobj, "treedb_name"),
@@ -1649,13 +1691,16 @@ function close_all_cards(gobj)
 
 /***************************************************************
  *  Fire-and-forget close of a server-side iterator.
+ *
+ *  No session = nothing to close: the backend already reaped the
+ *  iterators of a dead session. Deliberately silent, not an error path.
  ***************************************************************/
 function close_iterator(gobj, iterator_id)
 {
     if(!iterator_id) {
         return;
     }
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let remote = live_transport(gobj);
     if(!remote) {
         return;
     }
@@ -1666,13 +1711,14 @@ function close_iterator(gobj, iterator_id)
 
 /***************************************************************
  *  Fire-and-forget close of a server-side realtime feed.
+ *  Same contract as close_iterator(): no session = already reaped.
  ***************************************************************/
 function close_rt(gobj, rt_id)
 {
     if(!rt_id) {
         return;
     }
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let remote = live_transport(gobj);
     if(!remote) {
         return;
     }
@@ -1691,9 +1737,14 @@ function request_page(gobj, card, page, size)
 {
     let priv = gobj.priv;
     return new Promise(function(resolve, reject) {
-        let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+        let remote = live_transport(gobj);
         if(!remote) {
-            reject(new Error("No transport"));
+            /*  Reject NOW: a command sent on a dead link is dropped and its
+             *  answer never lands, so a registered pending entry would leave
+             *  Tabulator spinning forever and leak one entry per request.  */
+            let msg = `${gobj_short_name(gobj)}: no session, cannot get page ${page}`;
+            log_error(msg);
+            reject(new Error(msg));
             return;
         }
         let service = gobj_read_str_attr(gobj, "treedb_name");
@@ -1701,7 +1752,7 @@ function request_page(gobj, card, page, size)
         priv.pending[req_id] = {resolve: resolve, reject: reject};
 
         let from_rowid = (page - 1) * size + 1;
-        let ret = gobj_command(remote, "get-page",
+        gobj_command(remote, "get-page",
             {
                 service:     service,
                 iterator_id: card.iterator_id,
@@ -1709,10 +1760,6 @@ function request_page(gobj, card, page, size)
                 limit:       size,
                 __md_command__: {req_id: req_id}   /*  echoed back for correlation  */
             }, gobj);
-        if(ret) {
-            delete priv.pending[req_id];
-            reject(new Error(String(ret)));
-        }
     });
 }
 
@@ -1899,9 +1946,28 @@ function ac_mt_command_answer(gobj, event, kw, src)
 function ac_transport_open(gobj, event, kw, src)
 {
     let priv = gobj.priv;
+    let conn_id = gobj_read_str_attr(gobj, "conn_id");
 
-    if(kw && kw.conn_id && kw.conn_id !== gobj_read_str_attr(gobj, "conn_id")) {
+    if(kw && kw.conn_id && kw.conn_id !== conn_id) {
         return 0;   /*  another connection  */
+    }
+
+    /*  In-flight get-page answers belong to the session that just died.  */
+    reject_pending(gobj, "session reopened");
+
+    /*  Two different reopens land here:
+     *
+     *  - the SAME transport reconnected (websocket flap): our
+     *    gobj_remote_yuno is still the live one — re-arm, that is what this
+     *    action is for.
+     *  - the transport was RECREATED (token refresh / coords edit): the iev
+     *    we hold is DESTROYED, and commanding it only logs "gobj NULL or
+     *    DESTROYED" once per card. The host (C_TREEDB_VIEW) owns that case:
+     *    it rebuilds us against the new transport. Do nothing here.  */
+    let links = gobj_find_service("treedb_links", false);
+    let live = links ? treedb_links_get_iev(links, conn_id) : null;
+    if(!live || live !== gobj_read_pointer_attr(gobj, "gobj_remote_yuno")) {
+        return 0;   /*  transport recreated — the host rebinds us  */
     }
 
     if(priv.cur_topic) {
@@ -1927,9 +1993,9 @@ function ac_transport_open(gobj, event, kw, src)
 function rearm_rows_card(gobj, card)
 {
     let priv = gobj.priv;
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let remote = live_transport(gobj);
     if(!remote) {
-        log_error(`${gobj_short_name(gobj)}: No gobj_remote_yuno defined`);
+        log_error(`${gobj_short_name(gobj)}: no session, cannot re-arm the Rows card of '${card.topic}'`);
         return;
     }
 
@@ -1947,11 +2013,7 @@ function rearm_rows_card(gobj, card)
         key:         card.key
     };
     Object.assign(iter_kw, card.match_cond || {});
-    let ret = gobj_command(remote, "open-iterator", iter_kw, gobj);
-    if(ret) {
-        log_error(ret);
-        return;
-    }
+    gobj_command(remote, "open-iterator", iter_kw, gobj);
     if(card.tabulator) {
         try {
             card.tabulator.replaceData();
@@ -1968,9 +2030,9 @@ function rearm_rows_card(gobj, card)
 function rearm_live_card(gobj, card)
 {
     let priv = gobj.priv;
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    let remote = live_transport(gobj);
     if(!remote) {
-        log_error(`${gobj_short_name(gobj)}: No gobj_remote_yuno defined`);
+        log_error(`${gobj_short_name(gobj)}: no session, cannot re-arm the Live card of '${card.topic}'`);
         return;
     }
 
@@ -1978,16 +2040,13 @@ function rearm_live_card(gobj, card)
 
     card.rt_id = `spa-${priv.tok}-rt-${++priv.iter_seq}`;
 
-    let ret = gobj_command(remote, "open-rt",
+    gobj_command(remote, "open-rt",
         {
             service:    gobj_read_str_attr(gobj, "treedb_name"),
             rt_id:      card.rt_id,
             topic_name: card.topic,
             key:        card.key
         }, gobj);
-    if(ret) {
-        log_error(ret);
-    }
 }
 
 /************************************************************

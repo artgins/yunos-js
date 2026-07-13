@@ -75,7 +75,6 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     timeout_refresh:    0,
-    refresh_expires_in: 0,
     gobj_timer:         null,
 };
 
@@ -350,8 +349,6 @@ function username_from_jwt(token)
 function save_session_info(gobj, data)
 {
     let priv = gobj.priv;
-
-    priv.refresh_expires_in = data.refresh_expires_in || 0;
 
     let access_expires = data.expires_in || 300;
     priv.timeout_refresh = Math.max(
