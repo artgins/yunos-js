@@ -537,6 +537,7 @@ function open_keys_picker(gobj)
         }
         priv.picker_modal = yui_shell_show_modal(shell, $box, {
             dialog: true,
+            logical_class: "TRANGER_KEYS_SHEET",
             title:  `${priv.cur_topic} · ${t("keys")}`,
             t:      t,
             on_close: () => {
@@ -576,6 +577,7 @@ function open_keys_picker(gobj)
                 auto_save_size_and_position: true,
                 width:      560,
                 height:     520,
+                logical_class: "TRANGER_KEYS_WINDOW",
                 title:      `${priv.cur_topic} · ${t("keys")}`,
                 icon:       "yi-table",
                 body:       $box,
