@@ -320,6 +320,7 @@ let PRIVATE_DATA = {
     $meta:       null,
     $error:      null,
     $dashboard:  null,   /*  cards column  */
+    $copy_btn:   null,   /*  Copy button of the open record dialog (or null)  */
     $empty:      null,   /*  empty-dashboard hint  */
 };
 
@@ -1562,10 +1563,12 @@ function add_card(gobj, key, mode, match_cond, restoring)
 
     let card = {
         key: key, mode: mode, topic: priv.cur_topic,
-        tabulator: null, $el: null, $count: null, match_cond: match_cond || {},
+        tabulator: null, $el: null, $count: null, $pause: null,
+        match_cond: match_cond || {},
         live_max: cfg ? treedb_config_get_live_max(cfg) : LIVE_MAX_DEFAULT,
         iterator_id: null, rt_id: null, subscribed: false,
-        built: false, seeded: false, pending: []
+        built: false, seeded: false, pending: [],
+        paused: false, held: []   /*  Live: records that arrived while paused  */
     };
 
     /*  p-2: the card is a .box with p-0 (the header band must run edge to
@@ -1601,6 +1604,45 @@ function add_card(gobj, key, mode, match_cond, restoring)
             gobj_send_event(gobj, "EV_OPEN_CARD_OPTIONS",
                 {key: card.key, mode: card.mode}, gobj);
         });
+    }
+
+    /*  Export what the table HOLDS — the loaded page of a Rows card, the
+     *  rolling buffer of a Live one. Deliberately not "export the key": that
+     *  is a server-side dump of possibly millions of records, and this SPA has
+     *  no streaming download. The title says exactly what travels.  */
+    let $export = createElement2(
+        ["button", {class: "button TRANGER_CARD_EXPORT",
+                    title: t("download the rows loaded in this table as csv"),
+                    "aria-label": t("export")},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-download"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "export"}, t("export")]
+            ]
+        ]);
+    $export.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_EXPORT_CARD",
+            {key: card.key, mode: card.mode}, gobj);
+    });
+
+    /*  Live only: hold the table still without closing the feed. Records that
+     *  arrive while paused are BUFFERED (capped like the table itself), not
+     *  dropped — pausing to read a row must not cost you the rows that land
+     *  while you read it.  */
+    let $pause = null;
+    if(mode === "live") {
+        $pause = createElement2(
+            ["button", {class: "button TRANGER_CARD_PAUSE",
+                        title: t("pause"), "aria-label": t("pause")},
+                [
+                    ["span", {class: "icon"}, [["i", {class: "yi-pause"}]]],
+                    ["span", {class: "is-hidden-mobile", i18n: "pause"}, t("pause")]
+                ]
+            ]);
+        $pause.addEventListener("click", () => {
+            gobj_send_event(gobj, "EV_TOGGLE_PAUSE",
+                {key: card.key, mode: card.mode}, gobj);
+        });
+        card.$pause = $pause;
     }
 
     /*  mode-specific action: Rows -> Refresh (reload page), Live -> Clear.  */
@@ -1669,6 +1711,10 @@ function add_card(gobj, key, mode, match_cond, restoring)
     if($options) {
         head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$options]]);
     }
+    if($pause) {
+        head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$pause]]);
+    }
+    head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$export]]);
     head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$action]]);
     head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$close]]);
     let $head = createElement2(
@@ -1902,8 +1948,9 @@ function columns_from_row(row)
 }
 
 /***************************************************************
- *  Feed a live record into a card: buffer until the table is built, then
- *  prepend (newest on top) and trim to the card's live_max.
+ *  Feed a live record into a card: buffer until the table is built (or
+ *  while the card is PAUSED), then prepend (newest on top) and trim to the
+ *  card's live_max.
  ***************************************************************/
 function push_live_record(card, record, key)
 {
@@ -1913,6 +1960,17 @@ function push_live_record(card, record, key)
     let row = flatten_record(record, card.key === ALL_KEYS ? key : "");
     if(!card.built) {
         card.pending.push(row);
+        return;
+    }
+    if(card.paused) {
+        /*  Held, not dropped: pausing to read a row must not cost you the rows
+         *  that land while you read it. Capped like the table — a pause left
+         *  on for an hour is not a licence to grow without bound.  */
+        card.held.push(row);
+        if(card.held.length > card.live_max) {
+            card.held.shift();
+        }
+        update_live_count(card);
         return;
     }
     push_live_row(card, row);
@@ -1969,7 +2027,10 @@ function update_live_count(card)
         log_warning(`${GCLASS_NAME}: table gone: ${e}`);
         return;
     }
-    card.$count.textContent = `${n} / ${card.live_max}`;
+    let held = card.held ? card.held.length : 0;
+    card.$count.textContent = held
+        ? `${n} / ${card.live_max} (+${held})`
+        : `${n} / ${card.live_max}`;
 }
 
 /***************************************************************
@@ -2132,18 +2193,41 @@ function request_page(gobj, card, page, size)
  ***************************************************************/
 function show_record_dialog(gobj, record, key)
 {
+    let priv = gobj.priv;
     let shell = yui_shell_of(gobj);
     if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot show the record`);
         return;
     }
+    let json = JSON.stringify(record, null, 4);
+
     let $pre = createElement2(
         ["pre", {class: "is-size-7 TRANGER_RECORD_JSON",
                  style: "max-width:80vw; max-height:70vh; overflow:auto;"}, ""]);
-    $pre.textContent = JSON.stringify(record, null, 4);
-    yui_shell_show_modal(shell, $pre, {
+    $pre.textContent = json;
+
+    /*  Reading a record in a browser and then having to retype it into a
+     *  ticket is the most common thing this dialog is used for.  */
+    let $copy = createElement2(
+        ["button", {class: "button is-small mt-2 TRANGER_RECORD_COPY",
+                    title: t("copy"), "aria-label": t("copy")},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-copy"}]]],
+                ["span", {i18n: "copy"}, t("copy")]
+            ]
+        ]);
+    $copy.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_COPY_RECORD", {text: json}, gobj);
+    });
+    priv.$copy_btn = $copy;
+
+    let $box = createElement2(
+        ["div", {class: "TRANGER_RECORD_BOX"}, [$pre, $copy]]);
+
+    yui_shell_show_modal(shell, $box, {
         dialog: true,
         logical_class: "TRANGER_RECORD_DIALOG",
-        title:  `${gobj.priv.cur_topic} · ${key}`,
+        title:  `${priv.cur_topic} · ${key === ALL_KEYS ? t("all keys") : key}`,
         t:      t
     });
 }
@@ -2524,6 +2608,141 @@ function ac_page_timeout(gobj, event, kw, src)
 }
 
 /************************************************************
+ *  Pause / resume a Live card. The FEED stays open — only the table stops
+ *  moving — so nothing is lost: the records that arrive while paused are
+ *  held and flushed, oldest first, on resume.
+ ************************************************************/
+function ac_toggle_pause(gobj, event, kw, src)
+{
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+    if(card.mode !== "live") {
+        log_error(`${gobj_short_name(gobj)}: only a Live card can pause`);
+        return -1;
+    }
+
+    card.paused = !card.paused;
+
+    if(!card.paused) {
+        let held = card.held;
+        card.held = [];
+        for(let row of held) {
+            push_live_row(card, row);
+        }
+    }
+    update_live_count(card);
+    paint_pause_button(card);
+    return 0;
+}
+
+/***************************************************************
+ *  The pause button says what it WILL do (pause / resume) and is colored
+ *  while the card is held.
+ ***************************************************************/
+function paint_pause_button(card)
+{
+    if(!card.$pause) {
+        return;
+    }
+    let label = card.paused ? t("resume") : t("pause");
+    card.$pause.title = label;
+    card.$pause.setAttribute("aria-label", label);
+    card.$pause.classList.toggle("is-warning", card.paused);
+    card.$pause.classList.toggle("is-selected", card.paused);
+
+    let $icon = card.$pause.querySelector("i");
+    if($icon) {
+        $icon.className = card.paused ? "yi-play" : "yi-pause";
+    }
+    let $text = card.$pause.querySelector("span:not(.icon)");
+    if($text) {
+        $text.textContent = label;
+        $text.setAttribute("i18n", card.paused ? "resume" : "pause");
+    }
+}
+
+/************************************************************
+ *  Download what the card's table HOLDS as CSV: the loaded page of a Rows
+ *  card, the rolling buffer of a Live one. Not the key — that is a
+ *  server-side dump this SPA cannot stream.
+ ************************************************************/
+function ac_export_card(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+    if(!card.tabulator) {
+        log_error(`${gobj_short_name(gobj)}: no table to export ` +
+                  `('${card.key}', ${card.mode})`);
+        return -1;
+    }
+
+    let key = card.key === ALL_KEYS ? "all-keys" : card.key;
+    let name = `${priv.cur_topic}-${key}-${card.mode}.csv`
+        .replace(/[^\w.\-]+/g, "_");
+    try {
+        /*  Tabulator writes the VISIBLE columns of the loaded rows, header
+         *  filters applied — which is exactly what the user is looking at.  */
+        card.tabulator.download("csv", name);
+    } catch(e) {
+        log_error(`${gobj_short_name(gobj)}: CSV export failed: ${e}`);
+        show_error(gobj, "export failed");
+        return -1;
+    }
+    return 0;
+}
+
+/************************************************************
+ *  Copy the record shown in the dialog to the clipboard, as the JSON the
+ *  dialog is showing.
+ ************************************************************/
+function ac_copy_record(gobj, event, kw, src)
+{
+    let text = (kw && kw.text) || "";
+    if(!text) {
+        log_error(`${gobj_short_name(gobj)}: nothing to copy`);
+        return -1;
+    }
+    if(!navigator.clipboard || !navigator.clipboard.writeText) {
+        /*  Non-secure origin (plain http): the API is not there at all.  */
+        log_error(`${gobj_short_name(gobj)}: no clipboard API ` +
+                  `(is this a secure origin?)`);
+        show_error(gobj, "the browser did not allow the copy");
+        return -1;
+    }
+    navigator.clipboard.writeText(text).then(function() {
+        gobj_send_event(gobj, "EV_COPY_DONE", {ok: true}, gobj);
+    }).catch(function(e) {
+        log_error(`${gobj_short_name(gobj)}: clipboard write failed: ${e}`);
+        gobj_send_event(gobj, "EV_COPY_DONE", {ok: false}, gobj);
+    });
+    return 0;
+}
+
+/************************************************************
+ *  The clipboard write settled: tell the user, on the button itself.
+ ************************************************************/
+function ac_copy_done(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let ok = !!(kw && kw.ok);
+    if(!priv.$copy_btn) {
+        return 0;
+    }
+    let $text = priv.$copy_btn.querySelector("span:not(.icon)");
+    if($text) {
+        $text.textContent = ok ? t("copied") : t("copy failed");
+    }
+    priv.$copy_btn.classList.toggle("is-success", ok);
+    priv.$copy_btn.classList.toggle("is-danger", !ok);
+    return 0;
+}
+
+/************************************************************
  *  A row was clicked: show the full record as JSON.
  ************************************************************/
 function ac_show_record(gobj, event, kw, src)
@@ -2758,7 +2977,11 @@ function create_gclass(gclass_name)
             ["EV_CLOSE_CARD",           ac_close_card,            null],
             ["EV_REFRESH_CARD",         ac_refresh_card,          null],
             ["EV_CLEAR_CARD",           ac_clear_card,            null],
-            ["EV_SHOW_RECORD",          ac_show_record,           null]
+            ["EV_TOGGLE_PAUSE",         ac_toggle_pause,          null],
+            ["EV_EXPORT_CARD",          ac_export_card,           null],
+            ["EV_SHOW_RECORD",          ac_show_record,           null],
+            ["EV_COPY_RECORD",          ac_copy_record,           null],
+            ["EV_COPY_DONE",            ac_copy_done,             null]
         ]]
     ];
 
@@ -2779,7 +3002,11 @@ function create_gclass(gclass_name)
         ["EV_CLOSE_CARD",           0],
         ["EV_REFRESH_CARD",         0],
         ["EV_CLEAR_CARD",           0],
-        ["EV_SHOW_RECORD",          0]
+        ["EV_TOGGLE_PAUSE",         0],
+        ["EV_EXPORT_CARD",          0],
+        ["EV_SHOW_RECORD",          0],
+        ["EV_COPY_RECORD",          0],
+        ["EV_COPY_DONE",            0]
     ];
 
     __gclass__ = gclass_create(

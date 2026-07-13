@@ -22,6 +22,105 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the bugs that survive a reconnect.** Seven failures found
+  auditing the SPA against the backend it talks to; they share a shape —
+  something that only bites when the link, the answer or the data is not what
+  the happy path assumed.
+    - A **Live card closed during a flap kept its subscription**: the
+      unsubscribe was guarded by `live_transport()`, which requires
+      `ST_SESSION`, but a subscription is LOCAL state of the iev and
+      `C_IEVENT_CLI` **resends it on reopen**. Records kept arriving for a card
+      that no longer existed, and `bump_key_count` inflated the picker's key
+      counts for a view nobody had open. Unsubscribe on an ALIVE transport, in
+      session or not.
+    - A **malformed `services` answer WIPED the connection's stored services**:
+      `result >= 0` with a non-array `data` was read as an empty yuno and
+      persisted `[]` — the one thing `finish_scan`'s success branch exists to
+      prevent. It is a failure now, logged and reported.
+    - The **NAK give-up undid itself**: closing the transport left `enabled`
+      true, so the next `EV_CONNECTIONS_CHANGED` (any unrelated edit) re-synced
+      it back up and re-armed the refresh→reopen→NAK loop. And it closed in
+      silence: no log, no error, the picker on "Connecting…" forever for a
+      connection nobody was retrying. It now logs, records a **sticky
+      rejection** the picker shows for what it is (fix the roles on that
+      backend, then reconnect), and clears the connect intent.
+    - **`get-page` had no deadline**: an answer that never landed (link UP,
+      iterator reaped) left its entry in `priv.pending` for the life of the tab
+      and its table spinning forever. A watchdog turns it into `EV_PAGE_TIMEOUT`
+      (the timer only makes the event; the rejection happens in the action); a
+      card close settles its own in-flight requests; an answer for an unknown
+      `req_id` is logged, not dropped.
+    - An **iterator armed against a link that died mid-mount** kept its id, so
+      the re-arm asked the backend to close an iterator it had never opened and
+      painted the error answer as a banner.
+    - **`key_span()`** was the only key lookup comparing unstringified: with
+      numeric keys the find missed and the Rows options silently lost their
+      min/max bounds and the "full span" preset.
+    - **`flatten_record()` DELETED a record's own field named `t` / `tm` /
+      `rowid`** (collision with the metadata columns) — the table and the row
+      dialog disagreed about the same record. The column is suffixed instead.
+      And a **millisecond topic keeps its milliseconds** in the t/tm columns.
+
+- **feat(gui_treedb): follow a whole topic, and read a key from its end.** Two
+  things `c_tranger` has offered all along and the browser never asked for.
+  `open-rt` takes an **empty key** as "every key of the topic" → a **Live topic**
+  button beside Keys (its card names the key each record came from; the
+  subscription filter drops the key, since the events carry the record's real
+  one). `open-iterator` takes **`backward`** → a **"newest first"** checkbox in
+  the Rows options, which travels with the rest of the match conditions
+  (persisted with the card, re-applied on every re-arm). In a log that is what
+  you almost always want, and it was previously unreachable without paging by
+  hand to the end of 400k rows.
+
+- **feat(gui_treedb): pause a Live card, export what a card holds, copy a
+  record.** **Pause** stops the table without closing the feed: records that
+  arrive while paused are **held** (capped like the table) and flushed on
+  resume — pausing to read a row must not cost you the rows that land while you
+  read it; the counter shows `n / max (+held)`. **Export** downloads what the
+  table HOLDS as CSV (the loaded page of a Rows card, the buffer of a Live one
+  — deliberately not the key: that is a server-side dump this SPA cannot
+  stream). **Copy** puts the record dialog's JSON on the clipboard.
+
+- **fix(gui_treedb): a blink of the network is not a logout.** `/auth/refresh`
+  called `resp.json()` unguarded, so a 502 answering an HTML gateway page threw
+  in the parse and landed in the same catch as a real rejection:
+  `EV_LOGIN_DENIED` → shell destroyed, links closed, **every open card lost**,
+  back to the login form — because the network blinked. Failures are classified
+  now: the BFF *answering* "no" is a denial; a rejected fetch, a timeout, a 5xx
+  or a non-JSON body is transport noise → `EV_REFRESH_FAILED`, which retries
+  with backoff (5s…60s) and keeps the session, the shell and the cards.
+  Every BFF call has a **15s deadline** (a stalled `/auth/refresh` used to kill
+  the refresh loop outright: the promise never resolved, so the timer was never
+  re-armed). And a **sleeping laptop woke up logged out** — background tabs get
+  their timers throttled, so the refresh fired after the token was already dead;
+  `visibilitychange` / `online` now enter the FSM as `EV_WAKEUP` and the action
+  refreshes on the spot if the deadline has passed.
+
+- **fix(gui_treedb): each backend is told only ITS OWN required services.**
+  `required_services` was the yuno-wide attr, which for a multi-backend SPA can
+  only be the union of every connection's selection — so each backend was
+  handed the service names of all the others. Each transport now carries its own
+  list (new `C_IEVENT_CLI` per-link attr; requires gobj-js ≥ unreleased).
+
+- **fix(gui_treedb): stop swallowing errors, and start testing what is
+  testable.** 22 bare `catch(e) {}` each claimed "the table is gone" — and
+  caught every other exception with it, so a real Tabulator/data bug inside a
+  redraw was invisible. They log now. Same shape elsewhere:
+  `gobj_save_persistent_attrs`' result was ignored at all eight call sites (a
+  rejected localStorage write now says so), a config mutation on an unknown
+  `conn_id` returned mute, and the picker and Settings said nothing when the
+  services they depend on were missing. Two subscription **leaks** closed:
+  `C_TREEDB_PICKER` and `C_TREEDB_SETTINGS` subscribed in `mt_create` and never
+  undid it, while both are destroyed and re-created by the shell (Settings is
+  `lazy_destroy`: a fresh set per visit) — subscriptions move to `mt_start`,
+  paired with unsubscribes in `mt_stop`. The picker's "Manage connections" wrote
+  `window.location.hash` straight from its click handler (a route change from
+  outside the shell that owns it, invisible to the machine); it crosses the FSM
+  now. And `npm test` was wired to vitest with **not one test file**: the view's
+  pure helpers move to `tranger_helpers.js`, where **15 tests** pin the two time
+  axes, the two time units, the metadata-column collision and the filter
+  grammar.
+
 - **feat(gui_treedb): the Rows options offer BOTH time axes of a tranger
   record, bounded to what the key really holds.** A record carries two
   timestamps — `t` (PERSISTENCE: when it was stored) and `tm` (MESSAGE ORIGIN:

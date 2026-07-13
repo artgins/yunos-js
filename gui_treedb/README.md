@@ -38,12 +38,22 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   when the connection is removed). A key opens a **Rows** card — a records
   table with native remote pagination
   (`open-iterator` + `get-page`), optionally pre-filtered at open time by
-  server-side **match conditions** (time / rowid range, user_flag masks) chosen
-  in an options form — or a **Live** card that streams new appends (`open-rt` +
-  `EV_TRANGER_RECORD_ADDED`, newest on top, no history). Per-column header
+  server-side **match conditions** (time / rowid range, user_flag masks, and
+  **newest first** — `open-iterator`'s `backward`, which indexes the key from
+  its end) chosen in an options form — or a **Live** card that streams new
+  appends (`open-rt` + `EV_TRANGER_RECORD_ADDED`, newest on top, no history).
+  The toolbar's **Live topic** button opens a Live card on the WHOLE topic
+  (`open-rt` takes an empty key as "every key"); it names the key of each
+  record, which a per-key card does not need. A Live card can be **paused**
+  without closing its feed — the records that arrive meanwhile are held (capped
+  like the table) and flushed on resume, so pausing to read a row does not cost
+  you the rows that land while you read it. Per-column header
   filters accept a comparison operator (`>200`, `<=5`, `=ok`) or a plain
   substring and filter the loaded rows client-side (no polling). A row opens the
-  full record JSON in the shell dialog. Requires a backend whose `c_tranger`
+  full record JSON in the shell dialog, with a **Copy** button; a card's
+  **Export** downloads what its table HOLDS as CSV (the loaded page / the live
+  buffer — not the key: a server-side dump of millions of records is not
+  something this SPA can stream). Requires a backend whose `c_tranger`
   exposes the iterator/rt read commands with `open-iterator` match conditions.
 - **Authorization note:** the discovery addresses `__yuno__` (a `dst_service`
   beyond the connected service), and `C_IEVENT_SRV` only routes that for
@@ -56,11 +66,26 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   backend on another host, the SPA fetches the access_token from the BFF
   (`POST /auth/token`, opt-in — see yunetas `c_auth_bff.c` + `YUNO_AUTH.md §2.2`)
   and **forwards it in each `C_IEVENT_CLI` identity_card**. The connection's
-  SELECTED services are advertised in the identity_card's `required_services`,
-  which the backend's `C_AUTHZ` needs to authorize the treedb commands (else
-  the `descs` is silently dropped); a selection change reopens the connection
-  to re-send the card. Each remote backend must have the issuer JWKS
+  SELECTED services are advertised in **that transport's own**
+  `required_services` (a per-link `C_IEVENT_CLI` attr), which the backend's
+  `C_AUTHZ` needs to authorize the treedb commands (else the `descs` is silently
+  dropped); a selection change recreates the connection to re-send the card.
+  It is per link, not the yuno-wide attr, because that one can only be the
+  UNION of every configured backend's selection — each backend would be told the
+  service names of all the others. Each remote backend must have the issuer JWKS
   provisioned.
+
+- **A session that survives the real world.** The access_token is refreshed
+  before it expires, and a refresh that could not be MADE (network down, BFF
+  502, request timed out) is not a denial: it retries with backoff and keeps the
+  session, the shell and every open card. Only the BFF *answering* "no" logs you
+  out. Because a background tab's timers are throttled — so the refresh of a
+  sleeping laptop fires after the token is already dead — `visibilitychange` /
+  `online` enter the FSM as `EV_WAKEUP` and refresh on the spot if the deadline
+  has passed. A backend that NAKs the identity even after a fresh token is
+  **rejected**: its transport is closed, its connect intent cleared, and the
+  cause shown in the picker (retrying would only NAK again — it takes fixing the
+  user's roles on that backend and reconnecting in Settings).
 - **View adapter:** `C_TREEDB_VIEW` hosts the gobj-ui `C_YUI_TREEDB_TOPICS` /
   `C_YUI_TREEDB_GRAPH` as a **named service** (so `C_IEVENT_CLI` can route their
   command answers back) and resolves the live transport by `conn_id`.
@@ -128,6 +153,14 @@ To test
 or
 
     npm run test:coverage
+
+The suite covers `src/tranger_helpers.js` — the PURE part of the tranger
+browser (record → table row, epoch ↔ local wall clock, the header-filter
+grammar). It lives apart from the gclass precisely because that is where the
+view's real traps are — the two time axes (`t` persistence vs `tm` message
+origin), the two time units (seconds vs `sf_t_ms` milliseconds), a record free
+to carry its own field named like a metadata column — and there a test can
+reach them with no DOM, no Tabulator and no websocket.
 
 ## Update js packages
 
