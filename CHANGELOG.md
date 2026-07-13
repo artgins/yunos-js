@@ -22,15 +22,6 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
-- **fix(gui_treedb): the Keys picker's record counts go stale.** They came from
-  the `list-keys` snapshot taken when the topic was selected, and nothing ever
-  refreshed them. Now the picker re-asks `list-keys` **every time it opens**
-  (and an answer landing while it is up repaints it — before, the answer only
-  updated the internal list), and a live append **bumps its key's count** in
-  place (`index: "key"` on the picker table, so `updateData()` finds the row).
-  No polling: on-demand refresh + the producer's event. Keys without an open
-  Live card produce no events, so they refresh when the picker is reopened.
-
 - **feat(gui_treedb): the Live buffer cap is a setting (default 500 -> 1000).**
   New persisted `live_max` attr on `C_TREEDB_CONFIG`, editable in **Settings ->
   Live buffer**. It bounds the BROWSER's memory (the backend keeps no live

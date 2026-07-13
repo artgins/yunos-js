@@ -549,13 +549,6 @@ function open_keys_picker(gobj)
     let mobile = is_mobile();
     let shell = yui_shell_of(gobj);
 
-    /*  The record counts come from `list-keys`, a snapshot taken when the
-     *  topic was selected — they go stale as the backend appends. No polling
-     *  (Yuneta rule): ask again HERE, every time the picker is opened (the
-     *  answer repaints the table if it is already up), and let live records
-     *  bump the count of their key (see ac_tranger_record_added).  */
-    request_keys(gobj, priv.cur_topic);
-
     let $tbl = createElement2(["div", {class: "TRANGER_KEYS_TABLE"}, []]);
     let $box = createElement2(
         ["div", {class: "TRANGER_KEYS_PICKER",
@@ -643,7 +636,6 @@ function open_keys_picker(gobj)
      *  the Tabulator can build against a live element right away.  */
     let picker = new Tabulator($tbl, {
         height:         mobile ? "min(60vh, 460px)" : "100%",
-        index:          "key",     /*  row identity: updateData() finds by it  */
         layout:         "fitColumns",
         placeholder:    t("no keys"),
         pagination:     true,
@@ -1835,15 +1827,6 @@ function ac_mt_command_answer(gobj, event, kw, src)
             }
             priv.keys = Array.isArray(data) ? data : [];
             update_meta(gobj);
-            /*  The picker asks for a fresh list every time it opens, so an
-             *  answer that lands while it is up must repaint it.  */
-            if(priv.picker_tbl) {
-                try {
-                    priv.picker_tbl.replaceData(priv.keys);
-                } catch(e) {
-                    /*  table gone  */
-                }
-            }
             restore_saved_views(gobj);
             break;
         }
@@ -1918,36 +1901,7 @@ function ac_tranger_record_added(gobj, event, kw, src)
             push_live_record(card, record);
         }
     }
-
-    if(topic === priv.cur_topic) {
-        bump_key_count(gobj, key);
-    }
     return 0;
-}
-
-/************************************************************
- *  A live append means one more record on its key: keep the Keys
- *  picker's count in step instead of leaving the `list-keys` snapshot
- *  frozen until the picker is reopened. Only keys with an open Live
- *  card produce these events — the rest are refreshed on open.
- ************************************************************/
-function bump_key_count(gobj, key)
-{
-    let priv = gobj.priv;
-    let entry = (priv.keys || []).find((k) => String(k.key) === String(key));
-    if(!entry) {
-        return;
-    }
-    entry.records = (parseInt(entry.records, 10) || 0) + 1;
-
-    if(!priv.picker_tbl) {
-        return;
-    }
-    try {
-        priv.picker_tbl.updateData([{key: entry.key, records: entry.records}]);
-    } catch(e) {
-        /*  table gone  */
-    }
 }
 
 
