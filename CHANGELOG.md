@@ -22,6 +22,25 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): the Rows options offer BOTH time axes of a tranger
+  record, bounded to what the key really holds.** A record carries two
+  timestamps — `t` (PERSISTENCE: when it was stored) and `tm` (MESSAGE ORIGIN:
+  when the event it carries happened) — and they diverge whenever data is
+  backfilled or a device uploads a buffer late. The modal offered a single
+  range, silently `t`. It now has a block per axis (they are independent
+  conditions and the iterator ANDs them), each with from/to pickers at SECONDS
+  precision, quick presets (last hour / 24h / 7 days / today / full span /
+  clear), and the key's real extent shown as a caption and set as the pickers'
+  `min`/`max` — the backend reports it per key in `list-keys`
+  (`fr_t`/`to_t`, `fr_tm`/`to_tm`). The records table gained a `tm` column
+  beside `t`, so the axis being filtered is visible. Times are converted in the
+  topic's own unit: the view asks `topics expanded=1` and reads each topic's
+  `system_flag` (`sf_t_ms` / `sf_tm_ms` = milliseconds); a backend too old to
+  answer that shape still works, and its topics read as seconds, exactly as
+  before. Requires SDK ≥ (unreleased) for the span and for the conditions to be
+  applied per record — against an older backend they are honored only at file
+  granularity.
+
 - **refactor(gui_treedb): the config service and the login service cross their
   own FSMs.** `C_TREEDB_CONFIG` had a literally EMPTY automaton
   (`[["ST_IDLE", []]]`) and twelve exported mutators that four other gclasses

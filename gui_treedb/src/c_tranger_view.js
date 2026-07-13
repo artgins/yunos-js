@@ -8,17 +8,25 @@
  *      contract: `gobj_remote_yuno` is the live transport and
  *      `treedb_name` is the remote service name). Model:
  *
- *        - mt_start → `topics` command → one Bulma tab per topic;
- *        - selecting a topic → `list-keys` (keys + record counts, kept
- *          for the picker) and an empty card dashboard;
+ *        - mt_start → `topics expanded=1` command → one Bulma tab per topic
+ *          (expanded because a topic's `system_flag` is what tells whether
+ *          its t/tm are seconds or milliseconds);
+ *        - selecting a topic → `list-keys` (keys + record counts + the time
+ *          span of each key, kept for the picker and for the Rows options)
+ *          and an empty card dashboard;
  *        - the toolbar "Keys" button opens a Tabulator of the topic's keys
  *          (sortable by record count, header-filter), presented responsively:
  *          a moveable C_YUI_WINDOW on desktop, the shell's adaptive modal
  *          sheet on mobile. It persists while views are opened/closed; each
  *          row's "Rows"/"Live" button is colored ONLY while that view is
  *          open for the key and toggles it. A key's "Rows" opens an options
- *          form (server-side match conditions: time / rowid range, user_flag
- *          masks) and then a Rows card; "Live" opens a Live card directly;
+ *          form (server-side match conditions) and then a Rows card; "Live"
+ *          opens a Live card directly. The options form offers BOTH time
+ *          axes of a tranger record — `t` (persistence: when it was stored)
+ *          and `tm` (message origin: when it happened) — as two independent
+ *          ranges the iterator ANDs, each bounded to the key's real extent
+ *          (list-keys reports it) and fillable from quick presets. Plus
+ *          rowid range and user_flag masks;
  *        - a "Rows" card is a records Tabulator using its NATIVE remote
  *          pagination: `open-iterator` builds the key's server-side row
  *          index (pre-filtered by the chosen match conditions) and
@@ -113,8 +121,35 @@ const PAGE_SIZE = 100;
  *  buffer that is already filling.  */
 
 /*  Columns a card shows on a phone; the rest are hidden (the full record
- *  is one row-click away, as JSON).  */
-const MOBILE_COLS = 3;
+ *  is one row-click away, as JSON). The first three are the metadata ones
+ *  (t, tm, rowid), so this leaves one record field visible.  */
+const MOBILE_COLS = 4;
+
+/*  A tranger record carries TWO timestamps, and they are two independent
+ *  axes of the same record:
+ *
+ *      t   PERSISTENCE time — when the record was appended to the topic.
+ *      tm  MESSAGE time     — when the event it carries actually happened
+ *                             (set by the producer; it can lag t by hours
+ *                             after a backfill, or by a device's buffered
+ *                             upload).
+ *
+ *  The iterator's match_cond takes both ranges and combines them, so the
+ *  Rows-options modal offers both. Both are expressed in the TOPIC's own
+ *  unit: seconds, unless the topic's system_flag sets these bits.  */
+const SF_T_MS  = 0x0100;    /*  sf_t_ms:  t  is in milliseconds  */
+const SF_TM_MS = 0x0200;    /*  sf_tm_ms: tm is in milliseconds  */
+
+/*  Quick ranges offered by the modal, as a span BACK FROM NOW (seconds).
+ *  "today" is special-cased (it starts at local midnight, not N seconds
+ *  ago) and so is "span" (the key's own extent).  */
+const TIME_PRESETS = [
+    {id: "1h",    label: "last hour",   secs: 3600},
+    {id: "24h",   label: "last 24h",    secs: 24 * 3600},
+    {id: "7d",    label: "last 7 days", secs: 7 * 24 * 3600},
+    {id: "today", label: "today",       secs: 0},
+    {id: "span",  label: "full span",   secs: 0}
+];
 
 /*  Table height inside a card (its own pager sits below): follows the
  *  viewport, capped — a short screen must not be eaten by one card.  */
@@ -251,9 +286,14 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     topics:      null,   /*  topic names from the `topics` answer  */
+    topic_flags: null,   /*  topic_name -> system_flag: says whether t/tm are
+                             seconds or milliseconds (SF_T_MS / SF_TM_MS). An
+                             old backend answers `topics` with plain names and
+                             leaves this empty — seconds, as it always was  */
     cur_topic:   "",     /*  selected topic  */
     pending_seg: "",     /*  topic asked via EV_SHOW before topics loaded  */
-    keys:        null,   /*  [{key, records}] of cur_topic (from list-keys)  */
+    keys:        null,   /*  [{key, records, fr_t, to_t, fr_tm, to_tm}] of
+                             cur_topic (from list-keys): count + time span  */
     cards:       null,   /*  [{key, mode, iterator_id, tabulator, $el}]  */
     tok:         "",     /*  per-view token: keeps iterator_ids unique across
                              reloads so they never collide with iterators a
@@ -290,6 +330,7 @@ function mt_create(gobj)
 {
     let priv = gobj.priv;
     priv.topics = null;
+    priv.topic_flags = {};
     priv.cur_topic = "";
     priv.pending_seg = "";
     priv.keys = null;
@@ -513,6 +554,12 @@ function reject_pending(gobj, reason)
 
 /***************************************************************
  *  Command to remote service: list the topics.
+ *
+ *  `expanded=1` asks for a dict per topic instead of a bare name — what we
+ *  are after is its `system_flag`, the only thing that says whether the
+ *  topic's t/tm are seconds or milliseconds. A backend older than that
+ *  parameter simply ignores it and answers the old array of names; the
+ *  answer handler takes both shapes.
  ***************************************************************/
 function request_topics(gobj)
 {
@@ -522,12 +569,12 @@ function request_topics(gobj)
         return;
     }
     let service = gobj_read_str_attr(gobj, "treedb_name");
-    gobj_command(remote, "topics", {service: service}, gobj);
+    gobj_command(remote, "topics", {service: service, expanded: 1}, gobj);
 }
 
 /***************************************************************
  *  Command to remote service: list the keys of a topic (with their
- *  record counts) for the Keys picker.
+ *  record counts and their time span) for the Keys picker.
  ***************************************************************/
 function request_keys(gobj, topic_name)
 {
@@ -982,47 +1029,201 @@ function build_key_actions(gobj, cell)
 }
 
 /***************************************************************
- *  Parse a "datetime-local" input value into epoch seconds (the tranger
- *  `t` unit). Empty / unparseable → 0 (unset).
+ *  The time unit of the CURRENT topic, per axis: true when the topic
+ *  stores that timestamp in milliseconds (system_flag sf_t_ms / sf_tm_ms)
+ *  instead of seconds. Unknown topic (old backend, no `expanded` answer)
+ *  → seconds, the historical assumption.
  ***************************************************************/
-function to_epoch_secs(v)
+function topic_time_units(gobj)
+{
+    let priv = gobj.priv;
+    let flags = (priv.topic_flags && priv.topic_flags[priv.cur_topic]) || 0;
+    return {
+        t_ms:  (flags & SF_T_MS)  !== 0,
+        tm_ms: (flags & SF_TM_MS) !== 0
+    };
+}
+
+/***************************************************************
+ *  The time span of a key, as `list-keys` reported it:
+ *  {fr_t, to_t, fr_tm, to_tm}, each in the topic's own unit and 0 when
+ *  the backend did not report it (older c_tranger). Never null — an
+ *  all-zeros span reads as "unknown", which every caller already handles
+ *  as "no bounds".
+ ***************************************************************/
+function key_span(gobj, key)
+{
+    let priv = gobj.priv;
+    let row = (priv.keys || []).find((k) => k.key === key);
+    return {
+        fr_t:  (row && row.fr_t)  || 0,
+        to_t:  (row && row.to_t)  || 0,
+        fr_tm: (row && row.fr_tm) || 0,
+        to_tm: (row && row.to_tm) || 0
+    };
+}
+
+/***************************************************************
+ *  Epoch (topic unit) <-> the LOCAL wall-clock string a `datetime-local`
+ *  input takes ("YYYY-MM-DDTHH:MM:SS", step=1 so seconds survive).
+ *  Empty / unparseable → 0 (unset), which is exactly how the iterator
+ *  reads an absent condition.
+ ***************************************************************/
+function to_epoch(v, ms)
 {
     if(!v) {
         return 0;
     }
-    let ms = Date.parse(v);
-    if(Number.isNaN(ms)) {
+    let t = Date.parse(v);
+    if(Number.isNaN(t)) {
         return 0;
     }
-    return Math.floor(ms / 1000);
+    return ms ? t : Math.floor(t / 1000);
+}
+
+function epoch_to_local_input(value, ms)
+{
+    if(!value) {
+        return "";
+    }
+    let d = new Date(ms ? value : value * 1000);
+    let pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+           `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 /***************************************************************
- *  Inverse of to_epoch_secs(): an epoch (secs) as the LOCAL wall-clock
- *  string a `datetime-local` input takes ("YYYY-MM-DDTHH:MM"). Used to
- *  preload the form when editing an open card's conditions.
+ *  One time-range block of the modal: from/to pickers bounded to what the
+ *  key actually holds, the preset buttons, and the span caption.
+ *
+ *  `axis` is "t" (persistence) or "tm" (message origin) — they are two
+ *  independent match conditions and the iterator ANDs them, so each gets
+ *  its own block instead of a selector that would let the user express
+ *  only one of the two.
+ *
+ *  Returns {$block, $from, $to}.
  ***************************************************************/
-function epoch_to_local_input(secs)
+function build_time_range_block(axis, from_val, to_val, ms, span_from, span_to)
 {
-    if(!secs) {
-        return "";
+    let up = axis.toUpperCase();
+    let mk = (which, val) => createElement2(
+        ["input", {class: `input TRANGER_OPT_${which}_${up}`,
+                   type: "datetime-local", step: "1",
+                   /*  Bounded to the key's real extent: a range outside it can
+                    *  only ever return zero rows, and the bounds double as a
+                    *  hint of what there is to look at.  */
+                   min: epoch_to_local_input(span_from, ms),
+                   max: epoch_to_local_input(span_to, ms),
+                   value: epoch_to_local_input(val, ms)}]);
+
+    let $from = mk("FROM", from_val);
+    let $to = mk("TO", to_val);
+
+    let $presets = createElement2(
+        ["div", {class: `is-flex is-flex-wrap-wrap TRANGER_OPT_PRESETS_${up}`}, []]);
+    for(let preset of TIME_PRESETS) {
+        let $btn = createElement2(
+            ["button", {class: "button is-small is-light mr-1 mt-1 " +
+                               `TRANGER_OPT_PRESET TRANGER_OPT_PRESET_${preset.id.toUpperCase()}`,
+                        type: "button", title: t(preset.label),
+                        "aria-label": t(preset.label)},
+                [["span", {i18n: preset.label}, t(preset.label)]]
+            ]);
+        $btn.addEventListener("click", () => {
+            apply_time_preset(preset, $from, $to, ms, span_from, span_to);
+        });
+        $presets.appendChild($btn);
     }
-    let d = new Date(secs * 1000);
-    let pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-           `T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    let $clear = createElement2(
+        ["button", {class: "button is-small is-light mr-1 mt-1 TRANGER_OPT_PRESET_CLEAR",
+                    type: "button", title: t("clear"), "aria-label": t("clear")},
+            [["span", {i18n: "clear"}, t("clear")]]
+        ]);
+    $clear.addEventListener("click", () => {
+        $from.value = "";
+        $to.value = "";
+    });
+    $presets.appendChild($clear);
+
+    let caption = (span_from && span_to)
+        ? `${epoch_to_local_input(span_from, ms).replace("T", " ")} → ` +
+          `${epoch_to_local_input(span_to, ms).replace("T", " ")}`
+        : t("span unknown");
+
+    let $block = createElement2(
+        ["div", {class: `TRANGER_OPT_RANGE TRANGER_OPT_RANGE_${up}`},
+            [
+                ["p", {class: "label mb-1", i18n: axis === "t" ? "t persistence" : "tm message origin"},
+                    t(axis === "t" ? "t persistence" : "tm message origin")],
+                ["div", {class: "columns is-mobile is-multiline mb-0"},
+                    [
+                        ["div", {class: "column is-half"},
+                            [
+                                ["label", {class: "label is-small mb-1", i18n: "from"}, t("from")],
+                                ["div", {class: "control"}, [$from]]
+                            ]
+                        ],
+                        ["div", {class: "column is-half"},
+                            [
+                                ["label", {class: "label is-small mb-1", i18n: "to"}, t("to")],
+                                ["div", {class: "control"}, [$to]]
+                            ]
+                        ]
+                    ]
+                ],
+                $presets,
+                ["p", {class: "is-size-7 has-text-grey mt-1 TRANGER_OPT_SPAN"}, caption]
+            ]
+        ]);
+
+    return {$block: $block, $from: $from, $to: $to};
+}
+
+/***************************************************************
+ *  Fill a range block from a quick preset. "span" is the key's own
+ *  extent; "today" starts at local midnight; the rest are a window back
+ *  from now. The `to` end is left OPEN for the now-relative ones — an
+ *  iterator with no to_t keeps matching records that land while the card
+ *  is open, and pinning it to "now" would silently exclude them.
+ ***************************************************************/
+function apply_time_preset(preset, $from, $to, ms, span_from, span_to)
+{
+    if(preset.id === "span") {
+        $from.value = epoch_to_local_input(span_from, ms);
+        $to.value = epoch_to_local_input(span_to, ms);
+        return;
+    }
+
+    let from_ms;
+    if(preset.id === "today") {
+        let d = new Date();
+        d.setHours(0, 0, 0, 0);
+        from_ms = d.getTime();
+    } else {
+        from_ms = Date.now() - preset.secs * 1000;
+    }
+
+    $from.value = epoch_to_local_input(ms ? from_ms : Math.floor(from_ms / 1000), ms);
+    $to.value = "";
 }
 
 /***************************************************************
  *  Build the Rows-options form: the server-side match conditions
  *  forwarded to `open-iterator` (all optional; blank = the full key).
  *
+ *  The two time axes get a block each — `t` (persistence) and `tm`
+ *  (message origin) — bounded to `span`, the key's real extent as
+ *  list-keys reported it. `units` says whether the topic keeps them in
+ *  seconds or milliseconds; every value handed to / read from the pickers
+ *  crosses that conversion, so the numbers put on the wire are always in
+ *  the topic's own unit.
+ *
  *  `match_cond` preloads the fields (editing the conditions of an open
  *  card); `editing` only swaps the confirm button (open a new card vs
  *  apply to this one) — the fields are the same either way.
- *  Returns {$box, inputs, $open}.
+ *  Returns {$box, inputs, ranges, $open}.
  ***************************************************************/
-function build_rows_options_form(match_cond, editing)
+function build_rows_options_form(match_cond, editing, span, units)
 {
     let mc = match_cond || {};
 
@@ -1030,11 +1231,12 @@ function build_rows_options_form(match_cond, editing)
         ["input", {class: `input ${cls}`, type: type, placeholder: ph || "",
                    value: (val === 0 || val === undefined || val === null) ? "" : String(val)}]);
 
+    let range_t = build_time_range_block("t", mc.from_t, mc.to_t, units.t_ms,
+                        span.fr_t, span.to_t);
+    let range_tm = build_time_range_block("tm", mc.from_tm, mc.to_tm, units.tm_ms,
+                        span.fr_tm, span.to_tm);
+
     let inputs = {
-        from_t:      mk_input("TRANGER_OPT_FROM_T",      "datetime-local", "",
-                        epoch_to_local_input(mc.from_t)),
-        to_t:        mk_input("TRANGER_OPT_TO_T",        "datetime-local", "",
-                        epoch_to_local_input(mc.to_t)),
         from_rowid:  mk_input("TRANGER_OPT_FROM_ROWID",  "number", t("1-based; negative = from end"),
                         mc.from_rowid),
         to_rowid:    mk_input("TRANGER_OPT_TO_ROWID",    "number", t("0 = last"),
@@ -1043,6 +1245,11 @@ function build_rows_options_form(match_cond, editing)
                         mc.user_flag_mask_set),
         mask_notset: mk_input("TRANGER_OPT_MASK_NOTSET", "number", t("user_flag bits"),
                         mc.user_flag_mask_notset)
+    };
+
+    let ranges = {
+        t:  {$from: range_t.$from,  $to: range_t.$to,  ms: units.t_ms},
+        tm: {$from: range_tm.$from, $to: range_tm.$to, ms: units.tm_ms}
     };
 
     let field = (label, input) => ["div", {class: "field TRANGER_OPT_FIELD"},
@@ -1067,10 +1274,12 @@ function build_rows_options_form(match_cond, editing)
             [
                 ["p", {class: "is-size-7 has-text-grey mb-3", i18n: "leave blank for the full key"},
                     t("leave blank for the full key")],
+                range_t.$block,
+                ["hr", {class: "my-3"}, ""],
+                range_tm.$block,
+                ["hr", {class: "my-3"}, ""],
                 ["div", {class: "columns is-mobile is-multiline"},
                     [
-                        ["div", {class: "column is-half"}, [field("from time", inputs.from_t)]],
-                        ["div", {class: "column is-half"}, [field("to time", inputs.to_t)]],
                         ["div", {class: "column is-half"}, [field("from rowid", inputs.from_rowid)]],
                         ["div", {class: "column is-half"}, [field("to rowid", inputs.to_rowid)]],
                         ["div", {class: "column is-half"}, [field("user-flag mask set", inputs.mask_set)]],
@@ -1081,25 +1290,32 @@ function build_rows_options_form(match_cond, editing)
             ]
         ]);
 
-    return {$box: $box, inputs: inputs, $open: $open};
+    return {$box: $box, inputs: inputs, ranges: ranges, $open: $open};
 }
 
 /***************************************************************
  *  Collect a match_cond from the Rows-options form: only fields the
  *  user actually set (0/blank = unset), so the iterator applies exactly
- *  what was asked.
+ *  what was asked. The four time bounds go out in the topic's unit.
  ***************************************************************/
-function collect_rows_match_cond(inputs)
+function collect_rows_match_cond(form)
 {
+    let inputs = form.inputs;
+    let ranges = form.ranges;
     let mc = {};
-    let ft = to_epoch_secs(inputs.from_t.value);
-    if(ft) {
-        mc.from_t = ft;
+
+    for(let axis of ["t", "tm"]) {
+        let range = ranges[axis];
+        let from = to_epoch(range.$from.value, range.ms);
+        if(from) {
+            mc[`from_${axis}`] = from;
+        }
+        let to = to_epoch(range.$to.value, range.ms);
+        if(to) {
+            mc[`to_${axis}`] = to;
+        }
     }
-    let tt = to_epoch_secs(inputs.to_t.value);
-    if(tt) {
-        mc.to_t = tt;
-    }
+
     let fr = parseInt(inputs.from_rowid.value, 10);
     if(!Number.isNaN(fr) && fr !== 0) {
         mc.from_rowid = fr;
@@ -1131,7 +1347,8 @@ function open_rows_options(gobj, key)
         log_error(`${gobj_short_name(gobj)}: no shell, cannot open the Rows options`);
         return;
     }
-    let form = build_rows_options_form();
+    let form = build_rows_options_form(
+        null, false, key_span(gobj, key), topic_time_units(gobj));
     let opt_modal = yui_shell_show_modal(shell, form.$box, {
         dialog: true,
         logical_class: "TRANGER_ROWS_OPTIONS",
@@ -1139,7 +1356,7 @@ function open_rows_options(gobj, key)
         t:      t
     });
     form.$open.addEventListener("click", () => {
-        let match_cond = collect_rows_match_cond(form.inputs);
+        let match_cond = collect_rows_match_cond(form);
         if(opt_modal && typeof opt_modal.close === "function") {
             opt_modal.close();
         }
@@ -1160,7 +1377,8 @@ function open_card_options(gobj, card)
         log_error(`${gobj_short_name(gobj)}: no shell, cannot open the card options`);
         return;
     }
-    let form = build_rows_options_form(card.match_cond, true);
+    let form = build_rows_options_form(
+        card.match_cond, true, key_span(gobj, card.key), topic_time_units(gobj));
     let opt_modal = yui_shell_show_modal(shell, form.$box, {
         dialog: true,
         logical_class: "TRANGER_ROWS_OPTIONS",
@@ -1168,7 +1386,7 @@ function open_card_options(gobj, card)
         t:      t
     });
     form.$open.addEventListener("click", () => {
-        let match_cond = collect_rows_match_cond(form.inputs);
+        let match_cond = collect_rows_match_cond(form);
         if(opt_modal && typeof opt_modal.close === "function") {
             opt_modal.close();
         }
@@ -1591,7 +1809,7 @@ function tune_columns(defs)
                 d.width = 80;
                 d.hozAlign = "right";
             }
-            if(d.field === "t") {
+            if(d.field === "t" || d.field === "tm") {
                 d.minWidth = 150;
             }
             if(mobile) {
@@ -1828,19 +2046,26 @@ function request_page(gobj, card, page, size)
 
 /***************************************************************
  *  Flatten a tranger record for the records table: metadata columns
- *  (t formatted, rowid) first, then the record's own fields; the full
- *  record is kept in __rec (no column) for the row dialog.
+ *  (t and tm formatted, rowid) first, then the record's own fields; the
+ *  full record is kept in __rec (no column) for the row dialog.
+ *
+ *  BOTH timestamps get a column: they are the two axes the Rows options
+ *  filter on, and a card filtered by tm while showing only t would be
+ *  unreadable. The unit comes from the record's OWN system_flag (each
+ *  record carries it in its metadata), so this needs no topic context.
  ***************************************************************/
 function flatten_record(r)
 {
     let md = (r && r.__md_tranger__) || {};
+    let flags = md.system_flag || 0;
     let row = {
-        t:     fmt_ts(md.t),
+        t:     fmt_ts(md.t,  (flags & SF_T_MS)  !== 0),
+        tm:    fmt_ts(md.tm, (flags & SF_TM_MS) !== 0),
         rowid: md.g_rowid !== undefined ? md.g_rowid : (md.rowid || "")
     };
     if(r && typeof r === "object") {
         for(let k in r) {
-            if(k === "__md_tranger__" || k === "t" || k === "rowid") {
+            if(k === "__md_tranger__" || k === "t" || k === "tm" || k === "rowid") {
                 continue;
             }
             let v = r[k];
@@ -1852,18 +2077,20 @@ function flatten_record(r)
 }
 
 /***************************************************************
- *  Format a tranger timestamp (seconds) for the t column.
+ *  Format a tranger timestamp for the t / tm columns. `ms` says the value
+ *  is in milliseconds (the topic set sf_t_ms / sf_tm_ms); otherwise it is
+ *  in seconds.
  ***************************************************************/
-function fmt_ts(secs)
+function fmt_ts(value, ms)
 {
-    if(!secs) {
+    if(!value) {
         return "";
     }
     try {
-        let d = new Date(secs * 1000);
+        let d = new Date(ms ? value : value * 1000);
         return d.toISOString().replace("T", " ").slice(0, 19);
     } catch(e) {
-        return String(secs);
+        return String(value);
     }
 }
 
@@ -1949,9 +2176,22 @@ function ac_mt_command_answer(gobj, event, kw, src)
 
     switch(command) {
         case "topics": {
-            priv.topics = (Array.isArray(data) ? data : []).filter(
-                (name) => typeof name === "string"
-            );
+            /*  Two shapes: `expanded=1` gives a desc per topic (what we asked
+             *  for), an older backend gives plain names. Both are legitimate
+             *  answers — with names only, system_flag stays unknown and t/tm
+             *  are read as seconds, which is what the view did before.  */
+            priv.topics = [];
+            priv.topic_flags = {};
+            for(let item of (Array.isArray(data) ? data : [])) {
+                if(typeof item === "string") {
+                    priv.topics.push(item);
+                    continue;
+                }
+                if(item && typeof item === "object" && item.topic_name) {
+                    priv.topics.push(item.topic_name);
+                    priv.topic_flags[item.topic_name] = item.system_flag || 0;
+                }
+            }
             let topic = priv.pending_seg && priv.topics.includes(priv.pending_seg)
                 ? priv.pending_seg
                 : priv.topics[0];
