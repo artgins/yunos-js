@@ -955,6 +955,7 @@ function open_rows_options(gobj, key)
     let form = build_rows_options_form();
     let opt_modal = yui_shell_show_modal(shell, form.$box, {
         dialog: true,
+        logical_class: "TRANGER_ROWS_OPTIONS",
         title:  `${key} · ${t("rows")}`,
         t:      t
     });
@@ -1532,6 +1533,7 @@ function show_record_dialog(gobj, record, key)
     $pre.textContent = JSON.stringify(record, null, 4);
     yui_shell_show_modal(shell, $pre, {
         dialog: true,
+        logical_class: "TRANGER_RECORD_DIALOG",
         title:  `${gobj.priv.cur_topic} · ${key}`,
         t:      t
     });

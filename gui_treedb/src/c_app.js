@@ -879,6 +879,7 @@ function ac_open_about(gobj, event, kw, src)
 
     priv.about_modal = yui_shell_show_modal(priv.shell, $content, {
         dialog: true,
+        logical_class: "TREEDB_ABOUT",
         title: "about",
         t: t,
         on_close: function() {

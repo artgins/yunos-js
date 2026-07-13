@@ -826,6 +826,7 @@ function ac_open_about(gobj, event, kw, src)
     let $c = gobj_read_attr(view, "$container");
     priv.about_modal = yui_shell_show_modal(priv.shell, $c, {
         dialog: true,
+        logical_class: "AGENT_ABOUT",
         title: "about",
         t: t,
         on_close: function() {
