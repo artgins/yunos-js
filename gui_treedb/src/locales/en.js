@@ -94,6 +94,7 @@ const en = {
         "scan timeout": "Discovery timeout",
         "connection closed": "Connection closed",
         "services failed": "services failed",
+        "bad services answer": "The yuno answered `services` with an unexpected shape",
         "browse this service": "Browse this service",
         "refresh": "Refresh",
         "load more": "Load more",
@@ -149,6 +150,10 @@ const en = {
         "0 = last": "0 = last",
         "user_flag bits": "user_flag bits",
         "no topics": "No topics",
+        "the backend did not answer in time": "The backend did not answer in time",
+        "cannot connect - retrying": "Cannot connect — retrying…",
+        "access rejected by the backend - fix the roles and reconnect":
+            "Access rejected by this backend — fix the user's roles there, then reconnect in Settings",
         "connecting": "Connecting…",
         "connected": "Connected",
         "disconnected": "Disconnected",

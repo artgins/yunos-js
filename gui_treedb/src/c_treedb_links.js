@@ -43,7 +43,7 @@ import {
     gobj_send_event,
     gobj_yuno,
     gobj_create,
-    gobj_name,
+    gobj_name, gobj_short_name,
     gobj_write_str_attr,
     gobj_start_tree, gobj_stop_tree, gobj_destroy,
     gobj_is_running,
@@ -290,6 +290,34 @@ function treedb_links_get_open_error(gobj, conn_id)
 }
 
 /***************************************************************
+ *  The backend REJECTED this connection's identity and a fresh token did
+ *  not fix it (no role for its services, or the BFF is not exposing the
+ *  access_token at all): close the transport — retrying only feeds the
+ *  refresh→reopen→NAK loop — and keep the cause STICKY in open_errors.
+ *
+ *  Sticky because a rejection is not a connect failure that heals itself:
+ *  nothing will clear it until the connection is reconnected on purpose
+ *  (EV_ON_OPEN clears it) or its coordinates change. Before this, the
+ *  give-up path closed the transport in silence and the picker sat on
+ *  "Connecting…" forever for a connection nobody was even retrying.
+ ***************************************************************/
+function treedb_links_reject(gobj, conn_id, reason)
+{
+    let priv = gobj.priv;
+    let e = priv.conns[conn_id];
+    let url = e ? String(e.coords || "").split("|")[0] : "";
+
+    treedb_links_close(gobj, conn_id);      /*  drops open_errors[conn_id]  */
+
+    priv.open_errors[conn_id] = {
+        url:      url,
+        reason:   reason || "",
+        code:     0,
+        rejected: true
+    };
+}
+
+/***************************************************************
  *  True while a connection is in session.
  ***************************************************************/
 function treedb_links_is_connected(gobj, conn_id)
@@ -369,6 +397,15 @@ function finish_scan(gobj, conn_id, error)
     }
     if(error) {
         scan.errors.push({yuno: "", error: error});
+    }
+
+    /*  The scan report only reaches the UI through Settings, which is a
+     *  lazy_destroy view: a discovery that failed while the user was in the
+     *  picker used to vanish without a trace — the picker just said "no
+     *  services selected". The log is the one place that always sees it.  */
+    for(let err of scan.errors) {
+        log_error(`${gobj_short_name(gobj)}: discovery of '${conn_id}' failed: ` +
+                  `${err.error}`);
     }
 
     if(scan.services === null) {
@@ -542,15 +579,28 @@ function ac_mt_command_answer(gobj, event, kw, src)
     let comment = (kw && kw.comment) || "";
     let data = kw ? kw.data : null;
 
+    let e = priv.conns[conn_id];
+    let yuno = (e && e.role) || "";
+
     if(result < 0) {
-        let e = priv.conns[conn_id];
         scan.errors.push({
-            yuno:  (e && e.role) || "",
+            yuno:  yuno,
             error: String(comment || "services failed")
         });
+    } else if(!Array.isArray(data)) {
+        /*  `result >= 0` with an answer that is not a list is a FAILURE, not
+         *  an empty yuno: taking it as `[]` walked into finish_scan's success
+         *  branch and REPLACED the connection's stored services with nothing —
+         *  the very thing that branch exists to prevent. Leave scan.services
+         *  null (= no successful answer) and report.  */
+        log_error(`${gobj_short_name(gobj)}: 'services' answered a ` +
+                  `${typeof data}, expected a list (yuno '${yuno}')`);
+        scan.errors.push({
+            yuno:  yuno,
+            error: "bad services answer"
+        });
     } else {
-        let rows = Array.isArray(data) ? data : [];
-        scan.services = rows
+        scan.services = data
             .filter((r) => r && (r.gclass === "C_NODE" || r.gclass === "C_TRANGER"))
             .map((r) => ({service: r.service, gclass: r.gclass}));
     }
@@ -681,6 +731,7 @@ export {
     treedb_links_sync,
     treedb_links_get_iev,
     treedb_links_get_open_error,
+    treedb_links_reject,
     treedb_links_is_connected,
     treedb_links_scan,
     treedb_links_is_scanning,

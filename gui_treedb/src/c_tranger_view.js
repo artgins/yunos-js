@@ -115,6 +115,12 @@ const GCLASS_NAME = "C_TRANGER_VIEW";
 /*  Records per page in a Rows card (Tabulator's paginationSize).  */
 const PAGE_SIZE = 100;
 
+/*  How long a get-page answer may take before its Promise is failed. The
+ *  link being UP does not guarantee an answer (a reaped iterator, a dropped
+ *  answer): without a deadline the request would sit in priv.pending for the
+ *  life of the tab and its table would spin forever.  */
+const PAGE_TIMEOUT_MS = 20000;
+
 /*  Rows kept in a Live card's rolling buffer (newest on top): the user's
  *  setting (C_TREEDB_CONFIG `live_max`, Settings), read when the card is
  *  created and frozen in the card — changing the setting must not resize a
@@ -401,6 +407,19 @@ function mt_stop(gobj)
     reject_pending(gobj, "view stopped");
     close_all_cards(gobj);
     close_picker(gobj);
+
+    /*  A stopped view knows NOTHING: leaving the topic list, the keys and the
+     *  selected topic behind meant a stop→start cycle re-entered with the
+     *  previous session's topics still in priv and the FSM still in
+     *  ST_TOPIC_SELECTED — cards openable against a service that had not
+     *  answered `topics` yet.  */
+    let priv = gobj.priv;
+    priv.topics = null;
+    priv.topic_flags = {};
+    priv.keys = null;
+    priv.cur_topic = "";
+    priv.pending_seg = "";
+    gobj_change_state(gobj, "ST_DISCONNECTED");
 }
 
 /***************************************************************
@@ -511,7 +530,29 @@ function show_error(gobj, msg)
 }
 
 /***************************************************************
- *  The transport to command through, or null when it cannot carry a
+ *  The transport gobj, alive or not in session — null only when there is
+ *  none or a reconnect destroyed it.
+ *
+ *  This is the transport to UNSUBSCRIBE on, and only that. A subscription
+ *  is LOCAL state of the iev (gobj_unsubscribe_event drops it from its
+ *  subscription list whatever its state; mt_subscription_deleted merely
+ *  skips the remote notification when there is no session). Guarding the
+ *  unsubscribe with live_transport() — which requires ST_SESSION — meant a
+ *  card closed DURING a flap kept its subscription: C_IEVENT_CLI resent it
+ *  on reopen (resend_subscriptions) and records kept arriving for a card
+ *  that no longer existed, inflating the picker's key counts.
+ ***************************************************************/
+function alive_transport(gobj)
+{
+    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    if(!remote || !is_gobj(remote) || gobj_is_destroying(remote)) {
+        return null;
+    }
+    return remote;
+}
+
+/***************************************************************
+ *  The transport to COMMAND through, or null when it cannot carry a
  *  command right now (no transport, transport destroyed by a reconnect,
  *  or websocket down).
  *
@@ -523,8 +564,8 @@ function show_error(gobj, msg)
  ***************************************************************/
 function live_transport(gobj)
 {
-    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
-    if(!remote || !is_gobj(remote) || gobj_is_destroying(remote)) {
+    let remote = alive_transport(gobj);
+    if(!remote) {
         return null;
     }
     if(gobj_current_state(remote) !== "ST_SESSION") {
@@ -534,18 +575,44 @@ function live_transport(gobj)
 }
 
 /***************************************************************
- *  Settle every get-page Promise still waiting for an answer that will
- *  never land (session died / view stopping). Tabulator shows its error
- *  placeholder instead of spinning forever, and priv.pending does not
- *  grow one entry per lost request.
+ *  Take a get-page request out of the pending set (and disarm its
+ *  watchdog). Returns the entry, or null when the req_id is unknown.
  ***************************************************************/
-function reject_pending(gobj, reason)
+function take_pending(gobj, req_id)
+{
+    let priv = gobj.priv;
+    let pend = req_id ? priv.pending[req_id] : null;
+    if(!pend) {
+        return null;
+    }
+    delete priv.pending[req_id];
+    if(pend.timer) {
+        clearTimeout(pend.timer);
+        pend.timer = null;
+    }
+    return pend;
+}
+
+/***************************************************************
+ *  Settle every get-page Promise still waiting for an answer that will
+ *  never land (session died / view stopping / its card closed). Tabulator
+ *  shows its error placeholder instead of spinning forever, and
+ *  priv.pending does not grow one entry per lost request.
+ *
+ *  With a `card`, only that card's requests are settled — a closed card
+ *  must not leave an answer in flight that later resolves a Promise for a
+ *  destroyed table.
+ ***************************************************************/
+function reject_pending(gobj, reason, card)
 {
     let priv = gobj.priv;
     let ids = Object.keys(priv.pending || {});
     for(let req_id of ids) {
         let pend = priv.pending[req_id];
-        delete priv.pending[req_id];
+        if(card && pend && pend.card !== card) {
+            continue;
+        }
+        take_pending(gobj, req_id);
         if(pend && pend.reject) {
             pend.reject(new Error(reason));
         }
@@ -1054,7 +1121,11 @@ function topic_time_units(gobj)
 function key_span(gobj, key)
 {
     let priv = gobj.priv;
-    let row = (priv.keys || []).find((k) => k.key === key);
+    /*  Compare STRINGIFIED, like every other key lookup here: a topic with
+     *  numeric keys answers `list-keys` with numbers while every caller (the
+     *  picker's cell data) hands us a string — the miss silently dropped the
+     *  pickers' min/max bounds and the "full span" preset.  */
+    let row = (priv.keys || []).find((k) => String(k.key) === String(key));
     return {
         fr_t:  (row && row.fr_t)  || 0,
         to_t:  (row && row.to_t)  || 0,
@@ -1616,25 +1687,30 @@ function mount_rows_table(gobj, card, $table)
     let priv = gobj.priv;
     let remote = live_transport(gobj);
     let service = gobj_read_str_attr(gobj, "treedb_name");
-    card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
 
-    /*  Arm the iterator FIRST; the Tabulator's first get-page (fired on
-     *  build) is processed after it by the remote's FIFO command order.
-     *  The chosen match_cond pre-filters the index, so total_rows / paging
-     *  already reflect it.  */
-    let iter_kw = {
-        service:     service,
-        iterator_id: card.iterator_id,
-        topic_name:  card.topic,
-        key:         card.key
-    };
-    Object.assign(iter_kw, card.match_cond || {});
-    if(remote) {
-        gobj_command(remote, "open-iterator", iter_kw, gobj);
-    } else {
+    if(!remote) {
         /*  The link went down between add_card()'s check and here: mount the
-         *  table anyway (the card is persisted) — EV_ON_OPEN re-arms it.  */
+         *  table anyway (the card is persisted) — EV_ON_OPEN re-arms it. Leave
+         *  iterator_id NULL: an id that was never opened would make the re-arm
+         *  close-iterator an iterator the backend never knew, and its error
+         *  answer paints a misleading banner.  */
         log_error(`${gobj_short_name(gobj)}: no session, iterator not armed for '${card.topic}'`);
+        card.iterator_id = null;
+    } else {
+        card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
+
+        /*  Arm the iterator FIRST; the Tabulator's first get-page (fired on
+         *  build) is processed after it by the remote's FIFO command order.
+         *  The chosen match_cond pre-filters the index, so total_rows / paging
+         *  already reflect it.  */
+        let iter_kw = {
+            service:     service,
+            iterator_id: card.iterator_id,
+            topic_name:  card.topic,
+            key:         card.key
+        };
+        Object.assign(iter_kw, card.match_cond || {});
+        gobj_command(remote, "open-iterator", iter_kw, gobj);
     }
 
     let table = new Tabulator($table, {
@@ -1684,7 +1760,7 @@ function mount_live_table(gobj, card, $table)
     let priv = gobj.priv;
     let remote = live_transport(gobj);
     let service = gobj_read_str_attr(gobj, "treedb_name");
-    card.rt_id = `spa-${priv.tok}-rt-${++priv.iter_seq}`;
+    card.rt_id = null;
 
     let table = new Tabulator($table, {
         height:         CARD_TABLE_HEIGHT,
@@ -1718,10 +1794,12 @@ function mount_live_table(gobj, card, $table)
     /*  Arm the feed, then subscribe to its pushes.  */
     if(!remote) {
         /*  Link down between add_card()'s check and here: the empty table
-         *  stays mounted (the card is persisted) — EV_ON_OPEN re-arms it.  */
+         *  stays mounted (the card is persisted) — EV_ON_OPEN re-arms it.
+         *  rt_id stays null: nothing was opened, so nothing is closed.  */
         log_error(`${gobj_short_name(gobj)}: no session, feed not armed for '${card.topic}'`);
         return;
     }
+    card.rt_id = `spa-${priv.tok}-rt-${++priv.iter_seq}`;
     gobj_command(remote, "open-rt",
         {
             service:    service,
@@ -1924,6 +2002,10 @@ function close_card(gobj, card, forget)
     if(i >= 0) {
         priv.cards.splice(i, 1);
     }
+    /*  Its get-page requests are in flight against a table that is about to be
+     *  destroyed: settle them here, or their answer resolves a Promise nobody
+     *  owns any more (and their watchdog fires on a card that is gone).  */
+    reject_pending(gobj, "card closed", card);
     if(card.tabulator) {
         try {
             card.tabulator.destroy();
@@ -1937,9 +2019,12 @@ function close_card(gobj, card, forget)
     }
     if(card.mode === "live") {
         if(card.subscribed) {
-            /*  A DESTROYED transport (reconnect) took its subscriptions with
-             *  it — unsubscribing there logs "gobj NULL or DESTROYED".  */
-            let remote = live_transport(gobj);
+            /*  Unsubscribe on the transport whenever it is ALIVE, in session
+             *  or not: the subscription is local state of the iev and a
+             *  websocket that is merely down will resend it on reopen. Only a
+             *  DESTROYED transport (reconnect) took its subscriptions with it
+             *  — unsubscribing there logs "gobj NULL or DESTROYED".  */
+            let remote = alive_transport(gobj);
             if(remote) {
                 gobj_unsubscribe_event(remote, "EV_TRANGER_RECORD_ADDED",
                     {__service__: gobj_read_str_attr(gobj, "treedb_name"),
@@ -2030,7 +2115,19 @@ function request_page(gobj, card, page, size)
         }
         let service = gobj_read_str_attr(gobj, "treedb_name");
         let req_id = `q${++priv.req_seq}`;
-        priv.pending[req_id] = {resolve: resolve, reject: reject};
+
+        /*  Watchdog: the link can stay UP and the answer still never land (the
+         *  backend dropped it, the iterator died under us). Without it the
+         *  entry lived forever in priv.pending and Tabulator span forever. The
+         *  timer only turns the browser notification into an EVENT — the
+         *  rejection happens in the action, like everything else here.  */
+        let timer = setTimeout(function() {
+            gobj_send_event(gobj, "EV_PAGE_TIMEOUT", {req_id: req_id}, gobj);
+        }, PAGE_TIMEOUT_MS);
+
+        priv.pending[req_id] = {
+            resolve: resolve, reject: reject, card: card, timer: timer
+        };
 
         let from_rowid = (page - 1) * size + 1;
         gobj_command(remote, "get-page",
@@ -2065,11 +2162,21 @@ function flatten_record(r)
     };
     if(r && typeof r === "object") {
         for(let k in r) {
-            if(k === "__md_tranger__" || k === "t" || k === "tm" || k === "rowid") {
+            if(k === "__md_tranger__") {
                 continue;
             }
             let v = r[k];
-            row[k] = (v !== null && typeof v === "object") ? JSON.stringify(v) : v;
+            /*  A record is free to carry its OWN field named t / tm / rowid,
+             *  and it collides with the metadata columns above. Skipping it
+             *  (what this did) DELETED it from the table while the row dialog
+             *  still showed it — the two disagreed about the same record.
+             *  Suffix the column instead: nothing is lost and the header says
+             *  which one is the record's.  */
+            let name = k;
+            while(row[name] !== undefined) {
+                name += "_";
+            }
+            row[name] = (v !== null && typeof v === "object") ? JSON.stringify(v) : v;
         }
     }
     row.__rec = r;
@@ -2085,6 +2192,12 @@ function flatten_record(r)
  *  Rows options: those are `datetime-local`, so rendering the columns in
  *  UTC put the same instant on two different clocks in one card — asking
  *  for "from 18:55" (local) returned rows the table labelled 16:55.
+ *
+ *  A MILLISECOND topic keeps its milliseconds here (.SSS). The pickers do
+ *  not — `datetime-local` tops out at seconds — but the columns are what
+ *  you READ, and a topic that went to the trouble of setting sf_t_ms
+ *  usually appends several records inside the same second: rendering them
+ *  all as the same instant makes the card unreadable.
  ***************************************************************/
 function fmt_ts(value, ms)
 {
@@ -2092,7 +2205,11 @@ function fmt_ts(value, ms)
         return "";
     }
     try {
-        return epoch_to_local_input(value, ms).replace("T", " ");
+        let s = epoch_to_local_input(value, ms).replace("T", " ");
+        if(ms) {
+            s += `.${String(value % 1000).padStart(3, "0")}`;
+        }
+        return s;
     } catch(e) {
         return String(value);
     }
@@ -2151,10 +2268,16 @@ function ac_mt_command_answer(gobj, event, kw, src)
      */
     if(command === "get-page") {
         let req_id = kw_command ? kw_command.req_id : null;
-        let pend = req_id ? priv.pending[req_id] : null;
-        if(pend) {
-            delete priv.pending[req_id];
+        let pend = take_pending(gobj, req_id);
+        if(!pend) {
+            /*  Its Promise is already settled (timed out, card closed, session
+             *  reopened): nothing to resolve, but never silently.  */
+            log_error(`${gobj_short_name(gobj)}: get-page answer for an ` +
+                      `unknown request '${req_id}' (already settled?)`);
+        } else {
             if(result < 0) {
+                log_error(`${gobj_short_name(gobj)}: get-page failed: ` +
+                          `${comment || "(no comment)"}`);
                 pend.reject(new Error(comment || "get-page failed"));
             } else {
                 let page = data || {};
@@ -2466,6 +2589,26 @@ function ac_clear_card(gobj, event, kw, src)
 }
 
 /************************************************************
+ *  A get-page answer did not land within PAGE_TIMEOUT_MS: fail its Promise
+ *  so the table shows its error placeholder instead of spinning, and say so
+ *  — a silent timeout is indistinguishable from an empty topic.
+ ************************************************************/
+function ac_page_timeout(gobj, event, kw, src)
+{
+    let req_id = (kw && kw.req_id) || "";
+    let pend = take_pending(gobj, req_id);
+    if(!pend) {
+        return 0;   /*  the answer landed first: nothing to do  */
+    }
+    let msg = `${gobj_short_name(gobj)}: get-page '${req_id}' timed out ` +
+              `after ${PAGE_TIMEOUT_MS} ms`;
+    log_error(msg);
+    show_error(gobj, "the backend did not answer in time");
+    pend.reject(new Error(msg));
+    return 0;
+}
+
+/************************************************************
  *  A row was clicked: show the full record as JSON.
  ************************************************************/
 function ac_show_record(gobj, event, kw, src)
@@ -2660,19 +2803,23 @@ function create_gclass(gclass_name)
      *  they are driven by the backend / the host, not by the user, and they
      *  can legitimately land at any moment — a live record still in flight
      *  when a topic switch closed its card is a benign race, not a bug worth
-     *  an error. The USER actions are declared ONLY in ST_TOPIC_SELECTED: with
-     *  no topic there is nothing to open, so they must fail loudly.
+     *  an error. EV_PAGE_TIMEOUT is one of them: its watchdog was armed in a
+     *  state the view may well have left by the time it fires. The USER
+     *  actions are declared ONLY in ST_TOPIC_SELECTED: with no topic there is
+     *  nothing to open, so they must fail loudly.
      */
     const states = [
         ["ST_DISCONNECTED", [
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
+            ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
             ["EV_SHOW",                 ac_show,                  null]
         ]],
         ["ST_LOADING_TOPICS", [
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
+            ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
             ["EV_SHOW",                 ac_show,                  null],
             ["EV_SELECT_TOPIC",         ac_select_topic,          null]
@@ -2680,6 +2827,7 @@ function create_gclass(gclass_name)
         ["ST_TOPIC_SELECTED", [
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
+            ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
             ["EV_SHOW",                 ac_show,                  null],
             ["EV_SELECT_TOPIC",         ac_select_topic,          null],
@@ -2700,6 +2848,7 @@ function create_gclass(gclass_name)
     const event_types = [
         ["EV_MT_COMMAND_ANSWER",    event_flag_t.EVF_PUBLIC_EVENT],
         ["EV_TRANGER_RECORD_ADDED", event_flag_t.EVF_PUBLIC_EVENT],
+        ["EV_PAGE_TIMEOUT",         0],
         ["EV_ON_OPEN",              0],
         ["EV_TOPIC_SELECTED",       event_flag_t.EVF_OUTPUT_EVENT],
         ["EV_SHOW",                 0],

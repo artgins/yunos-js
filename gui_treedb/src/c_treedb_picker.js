@@ -273,13 +273,22 @@ function render_connection(gobj, conn)
             `${conn.url}  ·  ${conn.remote_yuno_role || "?"}/${conn.remote_yuno_service || "?"}`]
     ];
     if(open_error) {
-        /*  Surface the connect failure (bad URL / cert / port / backend down)
-         *  instead of a permanent "Connecting…". The transport keeps retrying,
-         *  so it recovers on its own if the backend comes up. */
+        /*  Surface the failure instead of a permanent "Connecting…". Two very
+         *  different ones:
+         *
+         *  - a connect failure (bad URL / cert / port / backend down): the
+         *    transport keeps retrying and recovers on its own;
+         *  - a REJECTED identity (the backend NAK'd a freshly refreshed token):
+         *    nobody is retrying — the transport was closed and the connection
+         *    disabled, because looping would only NAK again. It takes fixing
+         *    the user's roles on that backend and reconnecting in Settings.  */
         let detail = (open_error.reason ||
             (open_error.code ? "code " + open_error.code : "")).toString().trim();
-        $card_body.push(["p", {class: "is-size-7 has-text-danger"},
-            "Cannot connect" + (detail ? " (" + detail + ")" : "") + " — retrying…"]);
+        let msg = open_error.rejected
+            ? t("access rejected by the backend - fix the roles and reconnect")
+            : t("cannot connect - retrying");
+        $card_body.push(["p", {class: "is-size-7 has-text-danger PICKER_CONN_ERROR"},
+            msg + (detail ? ` (${detail})` : "")]);
     }
     $card_body.push($treedb_list);
 

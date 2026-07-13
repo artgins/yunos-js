@@ -94,6 +94,7 @@ const es = {
         "scan timeout": "Descubrimiento agotado (timeout)",
         "connection closed": "Conexión cerrada",
         "services failed": "services falló",
+        "bad services answer": "El yuno respondió a `services` con una forma inesperada",
         "browse this service": "Explorar este servicio",
         "refresh": "Refrescar",
         "load more": "Cargar más",
@@ -149,6 +150,10 @@ const es = {
         "0 = last": "0 = último",
         "user_flag bits": "bits de user_flag",
         "no topics": "Sin topics",
+        "the backend did not answer in time": "El backend no respondió a tiempo",
+        "cannot connect - retrying": "No se puede conectar — reintentando…",
+        "access rejected by the backend - fix the roles and reconnect":
+            "Este backend rechaza el acceso — corrige los roles del usuario allí y reconecta en Settings",
         "connecting": "Conectando…",
         "connected": "Conectado",
         "disconnected": "Desconectado",

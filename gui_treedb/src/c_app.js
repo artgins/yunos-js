@@ -24,7 +24,7 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t,
-    gclass_create, log_error,
+    gclass_create, log_error, gobj_short_name,
     gobj_read_attr, gobj_write_attr, gobj_write_str_attr,
     gobj_create_service, gobj_create_pure_child,
     gobj_subscribe_event, gobj_send_event,
@@ -63,7 +63,7 @@ import {
     treedb_links_get_iev,
     treedb_links_is_connected,
     treedb_links_reopen,
-    treedb_links_close,
+    treedb_links_reject,
     treedb_links_close_all,
 } from "./c_treedb_links.js";
 
@@ -670,10 +670,30 @@ function ac_on_id_nak(gobj, event, kw, src)
         delete priv.nak_recovered[conn_id];
         delete priv.nak_conns[conn_id];
         delete priv.ever_connected[conn_id];   /*  transport gone → drop its tab  */
+
+        let reason = (kw && kw.comment) || "identity rejected";
+        log_error(`${gobj_short_name(gobj)}: connection '${conn_id}' rejected ` +
+                  `by the backend after a token refresh: ${reason}`);
+
         let links = gobj_find_service("treedb_links", false);
         if(links) {
-            treedb_links_close(links, conn_id);
+            /*  Not a bare close: a close leaves NO trace and the picker sits on
+             *  "Connecting…" for a connection nobody is retrying. Reject it —
+             *  the transport goes and the cause stays visible.  */
+            treedb_links_reject(links, conn_id, reason);
         }
+
+        /*  Clear the user's connect intent too. Closing the transport alone was
+         *  not enough: `enabled` stayed true, so the NEXT EV_CONNECTIONS_CHANGED
+         *  (any unrelated edit) re-synced it back up and re-armed the very
+         *  refresh→reopen→NAK loop this branch exists to break. Reconnecting is
+         *  now a deliberate act in Settings, once the roles are fixed.  */
+        let config = gobj_find_service("treedb_config", false);
+        if(config) {
+            gobj_send_event(config, "EV_SET_CONN_ENABLED",
+                {conn_id: conn_id, enabled: false}, gobj);
+        }
+
         rebuild_all_workspaces(gobj);
         return 0;
     }
