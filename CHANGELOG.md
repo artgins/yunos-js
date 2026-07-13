@@ -22,6 +22,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the Live card's Clear button gets its own icon**
+  (`yi-broom`). Clear and Close both used `yi-xmark`, and on mobile the text
+  label is hidden — so the two buttons were indistinguishable, one emptying the
+  rolling buffer and the other closing the card.
+
 - **fix(gui_treedb): the Tranger view's scoped CSS was dead.** Its root element
   carried the gclass name as an inert HTML **attribute** (`gclass="…"`, read by
   nobody) instead of a **class**, so every `.C_TRANGER_VIEW …` rule of the
