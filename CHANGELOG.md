@@ -22,6 +22,16 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): a Rows card can edit its match conditions.** New
+  **Options** button (`TRANGER_CARD_OPTIONS`) in the card header reopens the
+  `TRANGER_ROWS_OPTIONS` dialog **preloaded with that card's current
+  conditions** (the confirm button reads *Apply* instead of *Open Rows*). The
+  conditions live in the SERVER-side iterator (they pre-filter its row index),
+  so applying them closes the old iterator, opens a new one and re-fetches from
+  page 1 — the card, its Tabulator and its columns stay, only the data behind
+  them changes. The saved view is upserted, so a reload restores the card with
+  the NEW conditions. New i18n keys: `options`, `apply`.
+
 - **fix(gui_treedb): the Keys picker fits a phone.** Its columns asked for
   150+110+160px, and `fitColumns` cannot shrink a column below its
   `minWidth`/`width` — so inside the ~300px mobile sheet Tabulator added a

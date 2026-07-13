@@ -110,6 +110,8 @@ const en = {
         "next page": "Next page",
         "filter keys": "Filter keys…",
         "filter the loaded keys": "Filter the loaded keys",
+        "options": "Options",
+        "apply": "Apply",
         "no keys": "No keys",
         "showing rows": "Showing {{from}}-{{to}} of {{total}} rows",
         "loading": "Loading…",

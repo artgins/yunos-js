@@ -851,22 +851,51 @@ function to_epoch_secs(v)
 }
 
 /***************************************************************
+ *  Inverse of to_epoch_secs(): an epoch (secs) as the LOCAL wall-clock
+ *  string a `datetime-local` input takes ("YYYY-MM-DDTHH:MM"). Used to
+ *  preload the form when editing an open card's conditions.
+ ***************************************************************/
+function epoch_to_local_input(secs)
+{
+    if(!secs) {
+        return "";
+    }
+    let d = new Date(secs * 1000);
+    let pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+           `T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/***************************************************************
  *  Build the Rows-options form: the server-side match conditions
  *  forwarded to `open-iterator` (all optional; blank = the full key).
+ *
+ *  `match_cond` preloads the fields (editing the conditions of an open
+ *  card); `editing` only swaps the confirm button (open a new card vs
+ *  apply to this one) — the fields are the same either way.
  *  Returns {$box, inputs, $open}.
  ***************************************************************/
-function build_rows_options_form()
+function build_rows_options_form(match_cond, editing)
 {
-    let mk_input = (cls, type, ph) => createElement2(
-        ["input", {class: `input ${cls}`, type: type, placeholder: ph || ""}]);
+    let mc = match_cond || {};
+
+    let mk_input = (cls, type, ph, val) => createElement2(
+        ["input", {class: `input ${cls}`, type: type, placeholder: ph || "",
+                   value: (val === 0 || val === undefined || val === null) ? "" : String(val)}]);
 
     let inputs = {
-        from_t:      mk_input("TRANGER_OPT_FROM_T",      "datetime-local", ""),
-        to_t:        mk_input("TRANGER_OPT_TO_T",        "datetime-local", ""),
-        from_rowid:  mk_input("TRANGER_OPT_FROM_ROWID",  "number", t("1-based; negative = from end")),
-        to_rowid:    mk_input("TRANGER_OPT_TO_ROWID",    "number", t("0 = last")),
-        mask_set:    mk_input("TRANGER_OPT_MASK_SET",    "number", t("user_flag bits")),
-        mask_notset: mk_input("TRANGER_OPT_MASK_NOTSET", "number", t("user_flag bits"))
+        from_t:      mk_input("TRANGER_OPT_FROM_T",      "datetime-local", "",
+                        epoch_to_local_input(mc.from_t)),
+        to_t:        mk_input("TRANGER_OPT_TO_T",        "datetime-local", "",
+                        epoch_to_local_input(mc.to_t)),
+        from_rowid:  mk_input("TRANGER_OPT_FROM_ROWID",  "number", t("1-based; negative = from end"),
+                        mc.from_rowid),
+        to_rowid:    mk_input("TRANGER_OPT_TO_ROWID",    "number", t("0 = last"),
+                        mc.to_rowid),
+        mask_set:    mk_input("TRANGER_OPT_MASK_SET",    "number", t("user_flag bits"),
+                        mc.user_flag_mask_set),
+        mask_notset: mk_input("TRANGER_OPT_MASK_NOTSET", "number", t("user_flag bits"),
+                        mc.user_flag_mask_notset)
     };
 
     let field = (label, input) => ["div", {class: "field TRANGER_OPT_FIELD"},
@@ -878,8 +907,10 @@ function build_rows_options_form()
     let $open = createElement2(
         ["button", {class: "button is-link TRANGER_OPT_OPEN", type: "button"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-eye"}]]],
-                ["span", {i18n: "open rows"}, t("open rows")]
+                ["span", {class: "icon"},
+                    [["i", {class: editing ? "yi-square-check" : "yi-eye"}]]],
+                ["span", {i18n: editing ? "apply" : "open rows"},
+                    t(editing ? "apply" : "open rows")]
             ]
         ]);
 
@@ -969,6 +1000,84 @@ function open_rows_options(gobj, key)
 }
 
 /***************************************************************
+ *  Edit the match conditions of an OPEN Rows card: the same dialog,
+ *  preloaded with what the card is currently showing. Confirming applies
+ *  them in place (the card stays, its data is re-fetched).
+ ***************************************************************/
+function open_card_options(gobj, card)
+{
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        return;
+    }
+    let form = build_rows_options_form(card.match_cond, true);
+    let opt_modal = yui_shell_show_modal(shell, form.$box, {
+        dialog: true,
+        logical_class: "TRANGER_ROWS_OPTIONS",
+        title:  `${card.key} · ${t("rows")}`,
+        t:      t
+    });
+    form.$open.addEventListener("click", () => {
+        let match_cond = collect_rows_match_cond(form.inputs);
+        if(opt_modal && typeof opt_modal.close === "function") {
+            opt_modal.close();
+        }
+        apply_card_match_cond(gobj, card, match_cond);
+    });
+}
+
+/***************************************************************
+ *  Apply new match conditions to an open Rows card. The conditions live
+ *  in the SERVER-side iterator (they pre-filter its row index), so they
+ *  cannot be changed in place: close the old iterator, open a new one
+ *  with the new conditions, and re-fetch from page 1 (the old page number
+ *  is meaningless against a different row set). The card, its Tabulator
+ *  and its columns stay — only the data behind them changes.
+ ***************************************************************/
+function apply_card_match_cond(gobj, card, match_cond)
+{
+    let priv = gobj.priv;
+    let remote = gobj_read_pointer_attr(gobj, "gobj_remote_yuno");
+    if(!remote) {
+        log_error(`${gobj_short_name(gobj)}: No gobj_remote_yuno defined`);
+        return;
+    }
+
+    close_iterator(gobj, card.iterator_id);
+
+    card.match_cond = match_cond || {};
+    card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
+
+    let iter_kw = {
+        service:     gobj_read_str_attr(gobj, "treedb_name"),
+        iterator_id: card.iterator_id,
+        topic_name:  card.topic,
+        key:         card.key
+    };
+    Object.assign(iter_kw, card.match_cond);
+    let ret = gobj_command(remote, "open-iterator", iter_kw, gobj);
+    if(ret) {
+        log_error(ret);
+        return;
+    }
+
+    persist_view(gobj, card);   /*  upsert: the saved view carries match_cond  */
+
+    if(!card.tabulator) {
+        return;
+    }
+    try {
+        if(card.tabulator.getPage() > 1) {
+            card.tabulator.setPage(1);      /*  re-fetches page 1 via ajax  */
+        } else {
+            card.tabulator.replaceData();
+        }
+    } catch(e) {
+        /*  destroyed mid-flight  */
+    }
+}
+
+/***************************************************************
  *  Add a card to the dashboard for `key` in `mode`:
  *    - "rows": records Tabulator with native remote pagination
  *      (open-iterator + get-page).
@@ -1016,6 +1125,23 @@ function add_card(gobj, key, mode, match_cond, restoring)
         close_card(gobj, card);
     });
 
+    /*  Rows only: reopen the options dialog, preloaded with THIS card's
+     *  conditions, and apply the edit in place.  */
+    let $options = null;
+    if(mode === "rows") {
+        $options = createElement2(
+            ["button", {class: "button TRANGER_CARD_OPTIONS",
+                        title: t("options"), "aria-label": t("options")},
+                [
+                    ["span", {class: "icon"}, [["i", {class: "yi-cog"}]]],
+                    ["span", {class: "is-hidden-mobile", i18n: "options"}, t("options")]
+                ]
+            ]);
+        $options.addEventListener("click", () => {
+            open_card_options(gobj, card);
+        });
+    }
+
     /*  mode-specific action: Rows -> Refresh (reload page), Live -> Clear.  */
     let $action;
     if(mode === "rows") {
@@ -1060,6 +1186,9 @@ function add_card(gobj, key, mode, match_cond, restoring)
                   title: t("column filters apply to the loaded rows only")},
             t("filters loaded rows")]);
     head_children.push(["span", {class: "TRANGER_CARD_SPACER", style: "flex:1 1 auto;"}, ""]);
+    if($options) {
+        head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$options]]);
+    }
     head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$action]]);
     head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$close]]);
     let $head = createElement2(

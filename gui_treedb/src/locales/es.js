@@ -110,6 +110,8 @@ const es = {
         "next page": "Página siguiente",
         "filter keys": "Filtrar claves…",
         "filter the loaded keys": "Filtrar las claves cargadas",
+        "options": "Opciones",
+        "apply": "Aplicar",
         "no keys": "Sin claves",
         "showing rows": "Mostrando {{from}}-{{to}} de {{total}} filas",
         "loading": "Cargando…",
