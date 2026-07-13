@@ -55,6 +55,10 @@ import {
     treedb_config_set_conn_services,
     treedb_config_set_conn_enabled,
     treedb_config_conn_services,
+    treedb_config_get_live_max,
+    treedb_config_set_live_max,
+    LIVE_MAX_MIN,
+    LIVE_MAX_MAX,
 } from "./c_treedb_config.js";
 
 import {
@@ -205,7 +209,7 @@ function build_ui(gobj)
     priv.$scan_errors = $scan_errors;
 
     let $container = createElement2(
-        ["div", {class: "ytreedb-settings p-4", gclass: "C_TREEDB_SETTINGS"},
+        ["div", {class: "C_TREEDB_SETTINGS ytreedb-settings p-4"},
             [
                 ["div", {class: "level mb-3"}, [
                     ["div", {class: "level-left"}, [
@@ -219,13 +223,62 @@ function build_ui(gobj)
                     "services are discovered on the first connect; check the ones " +
                     "to browse."],
                 $scan_errors,
-                ["div", {id: table_id}, []]
+                ["div", {id: table_id}, []],
+                build_live_max_field(gobj)
             ]
         ]
     );
 
     gobj_write_attr(gobj, "$container", $container);
     refresh_language($container, t);
+}
+
+/***************************************************************
+ *  Live-buffer setting: how many rows a Live card keeps (newest on top;
+ *  the oldest are dropped at the cap). It bounds the BROWSER's memory —
+ *  the backend keeps no live data — so the value is clamped by
+ *  C_TREEDB_CONFIG. Applied to cards opened from now on: an open card
+ *  keeps the cap it was created with.
+ ***************************************************************/
+function build_live_max_field(gobj)
+{
+    let config = gobj_find_service("treedb_config", false);
+    let cur = config ? treedb_config_get_live_max(config) : LIVE_MAX_MIN;
+
+    let $input = createElement2(
+        ["input", {class: "input is-small SETTINGS_LIVE_MAX", type: "number",
+                   min: String(LIVE_MAX_MIN), max: String(LIVE_MAX_MAX),
+                   step: "50", value: String(cur),
+                   style: "max-width:9rem;"}]);
+    $input.addEventListener("change", () => {
+        let cfg = gobj_find_service("treedb_config", false);
+        if(!cfg) {
+            log_error(`${GCLASS_NAME}: treedb_config service not found`);
+            return;
+        }
+        treedb_config_set_live_max(cfg, $input.value);
+        /*  Echo back what was STORED: the value is clamped, so a typed
+         *  1000000 must not keep showing 1000000 in the field.  */
+        $input.value = String(treedb_config_get_live_max(cfg));
+    });
+
+    return ["div", {class: "SETTINGS_LIVE mt-5"},
+        [
+            ["h2", {class: "title is-5 mb-2", i18n: "live buffer"}, "Live buffer"],
+            ["p", {class: "is-size-7 has-text-grey mb-3 SETTINGS_LIVE_HELP",
+                   i18n: "live buffer help"},
+                "Rows a Live card keeps in memory. The oldest are dropped when " +
+                "the cap is reached; nothing is lost — the records stay in the " +
+                "backend and can be read in a Rows card. Applies to cards opened " +
+                "from now on."],
+            ["div", {class: "field SETTINGS_LIVE_FIELD"},
+                [
+                    ["label", {class: "label is-small mb-1", i18n: "rows per live card"},
+                        "Rows per Live card"],
+                    ["div", {class: "control"}, [$input]]
+                ]
+            ]
+        ]];
 }
 
 /***************************************************************

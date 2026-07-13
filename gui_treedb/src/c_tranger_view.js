@@ -67,6 +67,8 @@ import {
     treedb_config_get_tranger_views,
     treedb_config_add_tranger_view,
     treedb_config_remove_tranger_view,
+    treedb_config_get_live_max,
+    LIVE_MAX_DEFAULT,
 } from "./c_treedb_config.js";
 
 
@@ -78,8 +80,10 @@ const GCLASS_NAME = "C_TRANGER_VIEW";
 /*  Records per page in a Rows card (Tabulator's paginationSize).  */
 const PAGE_SIZE = 100;
 
-/*  Max rows kept in a Live card's rolling buffer (newest on top).  */
-const LIVE_MAX = 500;
+/*  Rows kept in a Live card's rolling buffer (newest on top): the user's
+ *  setting (C_TREEDB_CONFIG `live_max`, Settings), read when the card is
+ *  created and frozen in the card — changing the setting must not resize a
+ *  buffer that is already filling.  */
 
 /*  Columns a card shows on a phone; the rest are hidden (the full record
  *  is one row-click away, as JSON).  */
@@ -1124,9 +1128,12 @@ function add_card(gobj, key, mode, match_cond, restoring)
         }
     }
 
+    let cfg = config_service();
+
     let card = {
         key: key, mode: mode, topic: priv.cur_topic,
         tabulator: null, $el: null, $count: null, match_cond: match_cond || {},
+        live_max: cfg ? treedb_config_get_live_max(cfg) : LIVE_MAX_DEFAULT,
         iterator_id: null, rt_id: null, subscribed: false,
         built: false, seeded: false, pending: []
     };
@@ -1211,7 +1218,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
         card.$count = createElement2(
             ["span", {class: "TRANGER_CARD_COUNT tag is-light ml-2 is-flex-shrink-0",
                       title: t("rows buffered - oldest are dropped at the cap")},
-                `0 / ${LIVE_MAX}`]);
+                `0 / ${card.live_max}`]);
         head_children.push(card.$count);
     }
 
@@ -1325,7 +1332,7 @@ function mount_rows_table(gobj, card, $table)
 /***************************************************************
  *  Live card: mount an empty rolling Tabulator, arm the backend realtime
  *  feed (open-rt) and subscribe to its pushes. New records prepend
- *  (newest on top), capped at LIVE_MAX; columns are seeded from the first
+ *  (newest on top), capped at the card's live_max; columns are seeded from the first
  *  record (the feed loads no history).
  ***************************************************************/
 function mount_live_table(gobj, card, $table)
@@ -1485,7 +1492,7 @@ function columns_from_row(row)
 
 /***************************************************************
  *  Feed a live record into a card: buffer until the table is built, then
- *  prepend (newest on top) and trim to LIVE_MAX.
+ *  prepend (newest on top) and trim to the card's live_max.
  ***************************************************************/
 function push_live_record(card, record)
 {
@@ -1515,7 +1522,7 @@ function push_live_row(card, row)
         }
     }
     Promise.resolve(table.addData([row], true)).then(function() {
-        let over = table.getDataCount() - LIVE_MAX;
+        let over = table.getDataCount() - card.live_max;
         if(over > 0) {
             let rows = table.getRows();
             for(let i = 0; i < over; i++) {
@@ -1550,7 +1557,7 @@ function update_live_count(card)
     } catch(e) {
         return;     /*  table gone  */
     }
-    card.$count.textContent = `${n} / ${LIVE_MAX}`;
+    card.$count.textContent = `${n} / ${card.live_max}`;
 }
 
 /***************************************************************

@@ -65,6 +65,7 @@ SDATA(data_type_t.DTP_JSON,     "selected_treedbs", sdata_flag_t.SDF_PERSIST, "{
 SDATA(data_type_t.DTP_JSON,     "active_tabs",      sdata_flag_t.SDF_PERSIST, "{}", "Last-active tab per workspace: {workspace: sel_id}"),
 SDATA(data_type_t.DTP_STRING,   "display_mode",     sdata_flag_t.SDF_PERSIST, "table", "Record display: table | form (raw JSON)"),
 SDATA(data_type_t.DTP_JSON,     "tranger_views",    sdata_flag_t.SDF_PERSIST, "{}", "Open Tranger key-views per connection: {conn_id: [{treedb_name,topic,key,mode,match_cond}]}"),
+SDATA(data_type_t.DTP_INTEGER,  "live_max",         sdata_flag_t.SDF_PERSIST, 1000, "Rows kept in a Live card's rolling buffer (oldest dropped at the cap)"),
 SDATA_END()
 ];
 
@@ -632,6 +633,45 @@ function treedb_config_set_display_mode(gobj, mode)
     gobj_save_persistent_attrs(gobj, "display_mode");
 }
 
+/***************************************************************
+ *  Rows kept in a Live card's rolling buffer. It is a BROWSER memory
+ *  bound (the backend keeps no live data), so it is clamped: a bad value
+ *  would either make the card useless or eat the tab's memory.
+ ***************************************************************/
+const LIVE_MAX_DEFAULT = 1000;
+const LIVE_MAX_MIN = 50;
+const LIVE_MAX_MAX = 100000;
+
+function treedb_config_get_live_max(gobj)
+{
+    let n = parseInt(gobj_read_attr(gobj, "live_max"), 10);
+    if(Number.isNaN(n) || n <= 0) {
+        return LIVE_MAX_DEFAULT;
+    }
+    return clamp_live_max(n);
+}
+
+function treedb_config_set_live_max(gobj, n)
+{
+    let v = parseInt(n, 10);
+    if(Number.isNaN(v) || v <= 0) {
+        v = LIVE_MAX_DEFAULT;
+    }
+    gobj_write_attr(gobj, "live_max", clamp_live_max(v));
+    gobj_save_persistent_attrs(gobj, "live_max");
+}
+
+function clamp_live_max(n)
+{
+    if(n < LIVE_MAX_MIN) {
+        return LIVE_MAX_MIN;
+    }
+    if(n > LIVE_MAX_MAX) {
+        return LIVE_MAX_MAX;
+    }
+    return n;
+}
+
 
 
 
@@ -731,6 +771,11 @@ export {
     treedb_config_set_active_tab,
     treedb_config_get_display_mode,
     treedb_config_set_display_mode,
+    treedb_config_get_live_max,
+    treedb_config_set_live_max,
+    LIVE_MAX_DEFAULT,
+    LIVE_MAX_MIN,
+    LIVE_MAX_MAX,
     treedb_config_get_tranger_views,
     treedb_config_add_tranger_view,
     treedb_config_remove_tranger_view,

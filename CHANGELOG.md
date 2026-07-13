@@ -22,8 +22,28 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): the Live buffer cap is a setting (default 500 -> 1000).**
+  New persisted `live_max` attr on `C_TREEDB_CONFIG`, editable in **Settings ->
+  Live buffer**. It bounds the BROWSER's memory (the backend keeps no live
+  data), so `C_TREEDB_CONFIG` clamps it (50 … 100000) and the field echoes back
+  what was actually stored. A card freezes the cap it was created with —
+  changing the setting applies to cards opened from then on, it never re-trims
+  a buffer that is already filling — and its header counter reads
+  `N / <its cap>`. New i18n keys: `live buffer`, `live buffer help`,
+  `rows per live card`.
+
+- **fix(gui_treedb): live records are routed by `rt_id`, not by topic+key.** The
+  backend runs its publish callback once per OPEN realtime feed, so a record
+  arrives once per feed alive on that key — including feeds leaked by sessions
+  that died without `close-rt`. Matching on topic+key accepted all of them: the
+  same `rowid` was pushed into a Live card 20+ times, which read as "the feed is
+  loading history". Now a record is routed to the card whose `rt_id` produced it
+  (new field in the payload — yunetas `c_tranger`, same release, which also
+  stops the leak). Backends older than the field send none: fall back to
+  topic+key (and to their duplicates).
+
 - **feat(gui_treedb): Tranger cards on a phone — row counter, fewer columns,
-  reachable hint.** A **Live** card now shows a `N / 500` counter
+  reachable hint.** A **Live** card now shows a `N / <cap>` counter
   (`TRANGER_CARD_COUNT`) next to its dot: it has no pager, so without it the
   rolling buffer was a black box (12 rows, or the cap?). On mobile a card shows
   only its first 3 columns (`MOBILE_COLS`) — a dozen fields at 90px each is
