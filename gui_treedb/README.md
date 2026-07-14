@@ -130,6 +130,27 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 
 Reference implementation for the treedb-view adapter: wattyzer's `C_WZ_TREEDB`.
 
+## i18n
+
+Every text goes through i18n **and must be able to change language**: see
+gobj-ui's README ("Conventions → i18n") for the full contract. In this SPA:
+
+- The switch is the shell's: `C_TREEDB_APP` switches i18next and calls
+  `yui_shell_language_changed(shell)`, which re-translates the document and
+  publishes `EV_LANGUAGE_CHANGED`. Every view that builds DOM imperatively (the
+  picker, Settings, the Tranger cards, and gobj-ui's own treedb views)
+  subscribes to the shell and re-renders **in its action** — a Tabulator header,
+  a paginator or anything a formatter paints is drawn ONCE and no `data-i18n`
+  attribute can reach it.
+- `npm run validate-locales` (a `prebuild` step, so it breaks the build) enforces
+  four rules: keys are ASCII + lower-case, the locales are symmetric, **no
+  duplicate key** in a file (an object literal keeps the last one and says
+  nothing), and **every key the source uses is defined** — including the ones the
+  **gobj-ui views this app mounts** ask for, because the library translates
+  through THIS app's i18next. A key it asks for and this app does not define
+  renders as the raw key, in every language.
+
+
 ## Install
 
 This project uses [`vite`](https://vite.dev/) as build tool.

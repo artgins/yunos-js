@@ -72,6 +72,20 @@ The Console targets remote role `controlcenter` / service `controlcenter` and
 wraps each typed line in a `command-agent` (which returns a synchronous dispatch
 ack plus the agent's asynchronous real answer).
 
+## i18n
+
+Every text goes through i18n **and must be able to change language** (the full
+contract is in gobj-ui's README, "Conventions → i18n"). Here: the Settings page
+switches i18next and calls `yui_shell_language_changed(shell)`, and the views
+that build DOM imperatively — the three Tabulator tables above all — subscribe
+to the shell's `EV_LANGUAGE_CHANGED` and re-render in their action. A `title`
+needs `data-i18n-title`; a fresh nav submenu needs a `refresh_language()` after
+`yui_shell_set_submenu` (without it the node tabs render the RAW KEY);
+Tabulator's own chrome goes through `yui_tabulator_lang()`.
+`npm run validate-locales` runs on every build and fails on a duplicate key or a
+key used and not defined.
+
+
 ## Build & run
 
 ```bash
