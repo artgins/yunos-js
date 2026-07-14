@@ -27,6 +27,8 @@ const en = {
 
     translation: {
         /* free-text UI labels (called via t() in c_yuneta_gui.js) */
+        "class": "Class",
+        "browse": "Browse",
         "cause":                              "Cause",
         "user":                               "User",
         /*  Tabulator renders its own chrome (paginator, notices): the keys

@@ -27,6 +27,8 @@ const es = {
 
     translation: {
         /* etiquetas de UI (llamadas vía t() en c_yuneta_gui.js) */
+        "class": "Clase",
+        "browse": "Examinar",
         "cause":                              "Motivo",
         "user":                               "Usuario",
         /*  Tabulator renders its own chrome (paginator, notices): the keys

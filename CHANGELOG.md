@@ -22,6 +22,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the services of a connection are a table of their OWN.** As
+  Tabulator dataTree children they were rows of the CONNECTIONS table and
+  therefore wore ITS columns: a service's name landed under "Label", its gclass
+  and its checkbox under two blank, unlabelled columns, and nothing on screen
+  said what any of it was. Each connection row now nests a table of its services
+  with its own header — **service / class / browse** — and only its own fields.
+  (The dark-mode cell editor, unreadable while focused, is fixed in gobj-ui.)
+
 - **fix(gui_agent): the same i18n audit, and a raw key that was on screen all
   along.** The node tabs of every workspace rendered as the RAW KEY (`nodes`, not
   `Nodos`): `yui_shell_set_submenu` builds fresh nav DOM, after the app's

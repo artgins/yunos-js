@@ -21,10 +21,14 @@
  *      connect C_TREEDB_LINKS discovers that yuno's C_NODE / C_TRANGER
  *      services automatically (`services` command) and persists the
  *      WHOLE found list in the connection's `services`; the refresh
- *      button of a row re-runs the discovery. The services render as
- *      dataTree SUB-ROWS with a checkbox editing each service's
- *      `selected` flag — selected services are the ones offered in the
- *      workspace pickers ("connections" tab of Topics / Graphs).
+ *      button of a row re-runs the discovery. The services of a connection
+ *      render as a TABLE OF THEIR OWN, nested in its row, with its own
+ *      header (service / class / browse) and only its own fields — as
+ *      dataTree children they were rows of THIS table and wore ITS columns:
+ *      a service's name under "Label", its gclass and its checkbox under two
+ *      blank, unlabelled ones. Its checkbox edits the service's `selected`
+ *      flag — selected services are the ones offered in the workspace
+ *      pickers ("connections" tab of Topics / Graphs).
  *      Deleting a row asks for confirmation (shell yes/no dialog).
  *
  *      A view: builds its own `$container` for the shell to mount.
@@ -84,9 +88,6 @@ import {
  ***************************************************************/
 const GCLASS_NAME = "C_TREEDB_SETTINGS";
 
-/*  Child (service) row id separator: conn.id <STX> service key.  */
-const CHILD_SEP = "\x02";
-
 /*  What an exported connections file says it is. A file that does not say so
  *  is still accepted if it carries a `connections` list (or IS one) — an
  *  operator hand-writing the list is a legitimate way in — but the marker is
@@ -110,6 +111,7 @@ SDATA_END()
 let PRIVATE_DATA = {
     $scan_errors: null,   /*  refresh failure report area  */
     $import_file: null,   /*  hidden <input type=file> of the Import button  */
+    subtables:    null,   /*  conn_id -> the services Tabulator inside its row  */
 };
 let __gclass__ = null;
 
@@ -128,6 +130,7 @@ let __gclass__ = null;
  ***************************************************************/
 function mt_create(gobj)
 {
+    gobj.priv.subtables = {};
     gobj_write_attr(gobj, "table_id", "treedb_settings_table");
     build_ui(gobj);
 }
@@ -191,6 +194,8 @@ function mt_stop(gobj)
     if(shell) {
         gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
+
+    drop_all_subtables(gobj);
 
     let table = gobj_read_attr(gobj, "tabulator");
     if(table) {
@@ -388,46 +393,140 @@ function build_live_max_field(gobj)
 }
 
 /***************************************************************
- *  Connection rows for the table, with the discovered services as
- *  dataTree children.
+ *  Connection rows for the table. ONLY connections: the discovered
+ *  services of each one are their own table, nested in the row (see
+ *  build_services_subtable) — as dataTree children they were rows of THIS
+ *  table and therefore wore ITS columns, so a service showed its name under
+ *  "Label", its gclass and its checkbox under two blank, unlabelled columns,
+ *  and nothing said what any of it was.
  ***************************************************************/
 function rows_from_config(gobj)
 {
     let config = gobj_find_service("treedb_config", false);
     let conns = config ? treedb_config_get_connections(config) : [];
-    return conns.map((c) => {
-        let row = {
-            id:                  c.id,
-            label:               c.label || "",
-            url:                 c.url || "",
-            remote_yuno_role:    c.remote_yuno_role || "",
-            remote_yuno_service: c.remote_yuno_service || ""
-        };
-        let children = service_children(c);
-        if(children.length) {
-            row._children = children;
+    return conns.map((c) => ({
+        id:                  c.id,
+        label:               c.label || "",
+        url:                 c.url || "",
+        remote_yuno_role:    c.remote_yuno_role || "",
+        remote_yuno_service: c.remote_yuno_service || ""
+    }));
+}
+
+/***************************************************************
+ *  The services of a connection, as a table of their OWN inside its row:
+ *  its own header (service, class, browse) and only its own fields.
+ *
+ *  Tabulator's rowFormatter runs on every render of the row, so the previous
+ *  sub-table is destroyed first — otherwise each redraw would leave another
+ *  one behind, alive and listening.
+ ***************************************************************/
+function build_services_subtable(gobj, row)
+{
+    let priv = gobj.priv;
+    let conn_id = row.getData().id;
+    let $row = row.getElement();
+
+    drop_subtable(gobj, conn_id);
+    let $old = $row.querySelector(".SETTINGS_SUBTABLE");
+    if($old) {
+        $old.remove();
+    }
+
+    let config = gobj_find_service("treedb_config", false);
+    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
+    let services = conn ? treedb_config_conn_services(conn) : [];
+    if(!services.length) {
+        return;     /*  never scanned, or an empty yuno: no sub-table at all  */
+    }
+
+    /*  Indented under its connection, so the nesting is visible without a
+     *  tree control; the width follows the row.  */
+    let $holder = createElement2(
+        ["div", {class: "SETTINGS_SUBTABLE",
+                 style: "margin: 0.25rem 0 0.5rem 2rem; max-width: calc(100% - 2.5rem);"},
+            []]);
+    $row.appendChild($holder);
+
+    let sub = new Tabulator($holder, {
+        ...yui_tabulator_lang(t),
+        layout:         "fitColumns",
+        index:          "key",
+        data:           services.map((svc) => ({
+            key:      svc.key,
+            service:  svc.service,
+            gclass:   svc.gclass,
+            selected: !!svc.selected
+        })),
+        columnDefaults: {headerHozAlign: "left", headerSort: false, resizable: false},
+        columns: [
+            {title: t("service"), field: "service", minWidth: 180, widthGrow: 3,
+                formatter: (cell) => {
+                    let $s = document.createElement("span");
+                    $s.classList.add("SETTINGS_SERVICE", "has-text-weight-semibold");
+                    $s.textContent = cell.getValue();
+                    return $s;
+                }},
+            {title: t("class"), field: "gclass", width: 130,
+                formatter: (cell) => {
+                    let $tag = document.createElement("span");
+                    $tag.classList.add("tag", "is-size-7", "is-light",
+                        "SETTINGS_SERVICE_GCLASS",
+                        cell.getValue() === "C_TRANGER" ? "is-warning" : "is-info");
+                    $tag.textContent = cell.getValue();
+                    return $tag;
+                }},
+            {title: t("browse"), field: "selected", width: 120, hozAlign: "center",
+                formatter: (cell) => {
+                    let on = !!cell.getValue();
+                    return `<span class="icon SETTINGS_SERVICE_CHECK" role="checkbox" `
+                         + `aria-checked="${on ? "true" : "false"}" `
+                         + `title="${t("browse this service")}">`
+                         + `<i class="${on ? "yi-square-check" : "yi-square"}"></i></span>`;
+                },
+                cellClick: (e, cell) => {
+                    gobj_send_event(gobj, "EV_TOGGLE_SERVICE",
+                        {conn_id: conn_id, svc_key: cell.getRow().getData().key}, gobj);
+                }}
+        ]
+    });
+    priv.subtables[conn_id] = sub;
+
+    /*  The row was laid out before the sub-table existed: give it back its
+     *  real height, or the services are clipped to one line.  */
+    sub.on("tableBuilt", () => {
+        try {
+            row.normalizeHeight();
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: row gone: ${e}`);
         }
-        return row;
     });
 }
 
 /***************************************************************
- *  The service sub-rows of a connection: the WHOLE persisted
- *  discovered list (checked state = each service's `selected` flag).
+ *  Destroy one connection's sub-table (a redraw, a reload, a stop).
  ***************************************************************/
-function service_children(conn)
+function drop_subtable(gobj, conn_id)
 {
-    let children = [];
-    for(let svc of treedb_config_conn_services(conn)) {
-        children.push({
-            id:       conn.id + CHILD_SEP + svc.key,
-            _child:   true,
-            _conn_id: conn.id,
-            _svc:     svc,
-            _checked: !!svc.selected
-        });
+    let priv = gobj.priv;
+    let sub = priv.subtables ? priv.subtables[conn_id] : null;
+    if(!sub) {
+        return;
     }
-    return children;
+    delete priv.subtables[conn_id];
+    try {
+        sub.destroy();
+    } catch(e) {
+        log_warning(`${GCLASS_NAME}: sub-table already gone: ${e}`);
+    }
+}
+
+function drop_all_subtables(gobj)
+{
+    let priv = gobj.priv;
+    for(let conn_id of Object.keys(priv.subtables || {})) {
+        drop_subtable(gobj, conn_id);
+    }
 }
 
 /***************************************************************
@@ -443,7 +542,7 @@ function persist(gobj)
         return;
     }
     let config = gobj_find_service("treedb_config", false);
-    let list = table.getData().filter((r) => r && !r._child).map((r) => {
+    let list = table.getData().map((r) => {
         let prev = config ? treedb_config_get_connection(config, r.id) : null;
         let url     = (r.url || "").trim();
         let role    = (r.remote_yuno_role || "").trim();
@@ -527,73 +626,16 @@ function show_scan_errors(gobj, errors)
  ***************************************************************/
 function make_columns(gobj)
 {
-    function is_parent(cell)
-    {
-        return !cell.getData()._child;
-    }
-
-    function label_formatter(cell)
-    {
-        let d = cell.getData();
-        let $span = document.createElement("span");
-        if(!d._child) {
-            $span.textContent = d.label || "";
-            return $span;
-        }
-        $span.classList.add("SETTINGS_SERVICE");
-        let $svc = document.createElement("span");
-        $svc.textContent = d._svc.service;
-        $svc.classList.add("has-text-weight-semibold");
-        $span.appendChild($svc);
-        return $span;
-    }
-
-    function gclass_formatter(cell)
-    {
-        let d = cell.getData();
-        if(!d._child) {
-            return "";
-        }
-        let $tag = document.createElement("span");
-        $tag.classList.add("tag", "is-size-7", "SETTINGS_SERVICE_GCLASS");
-        $tag.classList.add(d._svc.gclass === "C_TRANGER" ? "is-warning" : "is-info");
-        $tag.classList.add("is-light");
-        $tag.textContent = d._svc.gclass;
-        return $tag;
-    }
-
-    function check_formatter(cell)
-    {
-        let d = cell.getData();
-        if(!d._child) {
-            return "";
-        }
-        let icon = d._checked ? "yi-square-check" : "yi-square";
-        return `<span class="icon SETTINGS_SERVICE_CHECK" role="checkbox" `
-             + `aria-checked="${d._checked ? "true" : "false"}" `
-             + `title="${t("browse this service")}">`
-             + `<i class="${icon}"></i></span>`;
-    }
-
-    /*  A cellClick is an OS notification: its only job is to make an event.
-     *  The kw carries IDENTITIES (conn_id, svc_key) — never the row or the
-     *  cell: a kw must stay plain JSON (the machine trace serializes it).  */
-    function check_click(e, cell)
-    {
-        let d = cell.getData();
-        if(!d._child) {
-            return;
-        }
-        gobj_send_event(gobj, "EV_TOGGLE_SERVICE",
-            {conn_id: d._conn_id, svc_key: d._svc.key}, gobj);
-    }
-
+    /*  Every row of THIS table is a connection now: the services live in the
+     *  sub-table nested in each row (build_services_subtable), with their own
+     *  header. So no more `_child` guard in every formatter.
+     *
+     *  A cellClick is an OS notification: its only job is to make an event, and
+     *  the kw carries IDENTITIES (conn_id) — never the row or the cell: a kw
+     *  must stay plain JSON (the machine trace serializes it).  */
     function refresh_formatter(cell)
     {
         let d = cell.getData();
-        if(d._child) {
-            return "";
-        }
         let links = gobj_find_service("treedb_links", false);
         let scanning = links ? treedb_links_is_scanning(links, d.id) : false;
         let connected = links ? treedb_links_is_connected(links, d.id) : false;
@@ -606,18 +648,12 @@ function make_columns(gobj)
     function refresh_click(e, cell)
     {
         let d = cell.getData();
-        if(d._child) {
-            return;
-        }
         gobj_send_event(gobj, "EV_REFRESH_SERVICES", {conn_id: d.id}, gobj);
     }
 
     function connect_formatter(cell)
     {
         let d = cell.getData();
-        if(d._child) {
-            return "";
-        }
         let config = gobj_find_service("treedb_config", false);
         let conn = config ? treedb_config_get_connection(config, d.id) : null;
         let enabled = !!(conn && conn.enabled);
@@ -631,18 +667,12 @@ function make_columns(gobj)
     function connect_click(e, cell)
     {
         let d = cell.getData();
-        if(d._child) {
-            return;
-        }
         gobj_send_event(gobj, "EV_TOGGLE_CONN_ENABLED", {conn_id: d.id}, gobj);
     }
 
     function status_formatter(cell)
     {
         let d = cell.getData();
-        if(d._child) {
-            return "";
-        }
         let links = gobj_find_service("treedb_links", false);
         let connected = links ? treedb_links_is_connected(links, d.id) : false;
         let color = connected ? "#48c78e" : "#b5b5b5";
@@ -653,9 +683,6 @@ function make_columns(gobj)
 
     function clone_formatter(cell)
     {
-        if(cell.getData()._child) {
-            return "";
-        }
         return `<span class="icon SETTINGS_CLONE" title="${t("clone this connection")}" `
              + `aria-label="${t("clone")}"><i class="yi-copy"></i></span>`;
     }
@@ -663,17 +690,11 @@ function make_columns(gobj)
     function clone_click(e, cell)
     {
         let d = cell.getData();
-        if(d._child) {
-            return;
-        }
         gobj_send_event(gobj, "EV_CLONE_CONN", {conn_id: d.id}, gobj);
     }
 
     function del_formatter(cell)
     {
-        if(cell.getData()._child) {
-            return "";
-        }
         return `<span class="icon has-text-danger" aria-label="${t("remove")}">`
              + `<i class="yi-trash"></i></span>`;
     }
@@ -681,9 +702,6 @@ function make_columns(gobj)
     function del_click(e, cell)
     {
         let d = cell.getData();
-        if(d._child) {
-            return;
-        }
         gobj_send_event(gobj, "EV_REMOVE_CONN", {conn_id: d.id}, gobj);
     }
 
@@ -694,18 +712,14 @@ function make_columns(gobj)
      *  on desktop the widthGrow weights fill the extra width.
      */
     return [
-        {title: t("label"),   field: "label",               editor: "input", editable: is_parent,
-            minWidth: 220, widthGrow: 2, formatter: label_formatter},
-        {title: t("url"),     field: "url",                 editor: "input", editable: is_parent,
+        {title: t("label"),   field: "label",               editor: "input",
+            minWidth: 220, widthGrow: 2},
+        {title: t("url"),     field: "url",                 editor: "input",
             minWidth: 200, widthGrow: 2},
-        {title: t("role"),    field: "remote_yuno_role",    editor: "input", editable: is_parent,
+        {title: t("role"),    field: "remote_yuno_role",    editor: "input",
             minWidth: 120, widthGrow: 1},
-        {title: t("service"), field: "remote_yuno_service", editor: "input", editable: is_parent,
+        {title: t("service"), field: "remote_yuno_service", editor: "input",
             minWidth: 120, widthGrow: 1},
-        {title: "", field: "_gclass", width: 110, minWidth: 110, headerSort: false,
-            formatter: gclass_formatter},
-        {title: "", field: "_checked", width: 48, minWidth: 48, headerSort: false, hozAlign: "center",
-            formatter: check_formatter, cellClick: check_click},
         {title: "", field: "_refresh", width: 48, minWidth: 48, headerSort: false, hozAlign: "center",
             formatter: refresh_formatter, cellClick: refresh_click},
         {title: "", field: "_connect", width: 48, minWidth: 48, headerSort: false, hozAlign: "center",
@@ -743,11 +757,10 @@ function create_table(gobj)
         maxHeight:      "70vh",
         placeholder:    t("no connections - click add connection"),
         columnDefaults: {headerHozAlign: "left", resizable: true},
-        dataTree:               true,
-        dataTreeChildField:     "_children",
-        dataTreeStartExpanded:  true,
-        dataTreeElementColumn:  "label",
-        columns:        make_columns(gobj)
+        columns:        make_columns(gobj),
+        /*  Each connection carries its services as a table of their own,
+         *  nested in its row — with its own header.  */
+        rowFormatter:   (row) => build_services_subtable(gobj, row)
     };
 
     let table = new Tabulator($div, settings);
@@ -770,6 +783,11 @@ function reload_table(gobj)
     if(!table) {
         return;
     }
+    /*  The sub-tables are Tabulators living INSIDE the parent's row elements:
+     *  re-rendering the parent while they are alive tears the ground from under
+     *  them mid-render ("e.getElement().classList is undefined"). Destroy them
+     *  first; the rowFormatter builds them again for the new rows.  */
+    drop_all_subtables(gobj);
     try {
         table.setData(rows_from_config(gobj));
     } catch(e) {
@@ -856,10 +874,20 @@ function ac_language_changed(gobj, event, kw, src)
         return 0;
     }
     try {
+        /*  FIRST of all: the sub-tables live inside the parent's row elements, and
+         *  everything below re-renders those rows (setLocale does too, not only
+         *  setColumns). Re-rendering a row under a live Tabulator leaves it
+         *  mid-render — "e.getElement().classList is undefined".  */
+        drop_all_subtables(gobj);
+
         yui_tabulator_relocalize(table, t);
         table.options.placeholder = t("no connections - click add connection");
+
+        /*  setColumns re-renders every row — and with them the rowFormatter, so
+         *  the sub-tables are rebuilt in the new language. NOT followed by a
+         *  reload: a second re-render would pull the rows out from under the
+         *  sub-tables the first one had only just started building.  */
         table.setColumns(make_columns(gobj));
-        reload_table(gobj);     /*  re-renders the rows through the formatters  */
     } catch(e) {
         log_warning(`${GCLASS_NAME}: table gone: ${e}`);
     }
@@ -920,15 +948,16 @@ function ac_toggle_service(gobj, event, kw, src)
     gobj_send_event(config, "EV_SET_CONN_SERVICES",
         {conn_id: conn_id, services: list}, gobj);
 
-    let table = gobj_read_attr(gobj, "tabulator");
-    if(table) {
+    /*  The service lives in the connection's own sub-table now.  */
+    let sub = gobj.priv.subtables[conn_id];
+    if(sub) {
         try {
-            let row = table.getRow(conn_id + CHILD_SEP + svc_key);
+            let row = sub.getRow(svc_key);
             if(row) {
-                row.update({_checked: now_checked});
+                row.update({selected: now_checked});
             }
         } catch(e) {
-            log_warning(`${GCLASS_NAME}: table mid-rebuild: ${e}`);
+            log_warning(`${GCLASS_NAME}: sub-table mid-rebuild: ${e}`);
         }
     }
     return 0;
@@ -1008,9 +1037,8 @@ function ac_remove_conn(gobj, event, kw, src)
  *  The answer to that confirmation.
  *
  *  Remove in config + reload via setData — NOT Tabulator's row.delete():
- *  deleting a dataTree PARENT row (a connection with service sub-rows)
- *  crashes Tabulator in styleRow ("classList undefined") while it
- *  re-renders the orphaned child elements.
+ *  a row carries a sub-table of its own, and reloading is what rebuilds
+ *  (and destroys) them cleanly.
  ***************************************************************/
 function ac_confirm_remove_conn(gobj, event, kw, src)
 {
