@@ -28,10 +28,14 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   `C_TREEDB_LINKS` discovers the yuno's **`C_NODE` / `C_TRANGER`** services
   automatically (one `services` command to `__yuno__`) and persists the WHOLE
   found list in the connection (`services`); the row's refresh button re-runs
-  it, preserving the selection. The services render as dataTree sub-rows
-  whose checkbox edits each service's `selected` flag — only selected
-  services are offered in the pickers (Topics: `C_NODE` + `C_TRANGER`;
-  Graphs: `C_NODE` only). Discovery failures are reported above the table.
+  it, preserving the selection. The services of a connection are a table of
+  their OWN, nested in its row, with its own header (service / class / browse)
+  and only its own fields — as Tabulator dataTree children they were rows of the
+  CONNECTIONS table and wore ITS columns, so a service's name landed under
+  "Label" and its class and checkbox under two blank, unlabelled ones. Its
+  checkbox edits each service's `selected` flag — only selected services are
+  offered in the pickers (Topics: `C_NODE` + `C_TRANGER`; Graphs: `C_NODE`
+  only). Discovery failures are reported above the table.
 - **Transport:** `C_TREEDB_LINKS` owns one `C_IEVENT_CLI` per connection (and
   runs the discovery — it is a named service, so command answers route back
   to it). Every discovered service lives in the connected yuno and is
