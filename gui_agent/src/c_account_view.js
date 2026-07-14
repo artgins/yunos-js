@@ -39,6 +39,8 @@ import pkg from "../package.json";
 
 import {deploy_info} from "./conf/deploy.js";
 import {current_theme} from "./theme.js";
+import {yui_shell_of, yui_shell_language_changed} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+
 import {current_locale, switch_locale} from "./locales/locales.js";
 import {app_set_theme} from "./c_app.js";
 import {agent_login_username, agent_login_is_logged_in} from "./c_agent_login.js";
@@ -248,7 +250,17 @@ function build_preference(gobj)
         lang,
         function(v) {
             switch_locale(v);
-            refresh_language(document.body, t);
+            /*  The SHELL fans it out: it re-translates the document and
+             *  publishes EV_LANGUAGE_CHANGED, so the views that build DOM
+             *  imperatively (the Tabulator tables above all — their headers,
+             *  paginator and formatters are drawn ONCE) can re-render what no
+             *  data-i18n attribute can reach.  */
+            let shell = yui_shell_of(gobj);
+            if(shell) {
+                yui_shell_language_changed(shell);
+            } else {
+                refresh_language(document.body, t);
+            }
             render(gobj);
         }
     );
@@ -292,7 +304,7 @@ function build_preference(gobj)
      *  opt-in polling exception, applied live by the open stats views.  */
     let stats_refresh = config ? agent_config_get_stats_refresh(config) : 2;
     let $refresh_sel = createElement2(
-        ["select", {"aria-label": t("stats refresh")},
+        ["select", {"aria-label": t("stats refresh"), "data-i18n-aria-label": "stats refresh"},
             [0, 1, 2, 5, 10, 30].map((s) => ["option", {value: String(s)}, (s === 0 ? t("off") : `${s} s`)]),
             {change: (e) => {
                 if(config) {
@@ -313,7 +325,8 @@ function build_preference(gobj)
     function font_button(icon, title_key, at_limit, on_click)
     {
         let attrs = {type: "button", class: "button",
-                     title: t(title_key), "aria-label": t(title_key)};
+                     title: t(title_key), "aria-label": t(title_key),
+                     "data-i18n-title": title_key, "data-i18n-aria-label": title_key};
         if(at_limit) {
             attrs.disabled = "disabled";
         }
@@ -395,7 +408,7 @@ function build_shortkeys(gobj)
                     ["span", {class: "has-text-grey is-family-monospace is-size-7",
                               style: "flex:1; min-width:0; word-break:break-all;"}, shortkeys[this_key]],
                     ["button", {class: "button is-small is-ghost", type: "button",
-                                title: t("remove shortkey")},
+                                title: t("remove shortkey"), "data-i18n-title": "remove shortkey"},
                         [["span", {class: "icon is-small"}, [["span", {class: "yi-trash"}, ""]]]],
                         {click: function() {
                             if(config) {

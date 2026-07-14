@@ -283,7 +283,8 @@ function build_dom(gobj)
 
     priv.$refresh = createElement2(
         ["button", {class: "button is-small", type: "button",
-                    title: t("refresh"), "aria-label": t("refresh")},
+                    title: t("refresh"), "aria-label": t("refresh"),
+                    "data-i18n-title": "refresh", "data-i18n-aria-label": "refresh"},
             [["span", {class: "icon is-small"}, [["i", {class: "yi-arrows-rotate"}]]]],
             {click: () => render_cards(gobj)}]
     );
@@ -353,7 +354,8 @@ function render_cards(gobj)
          *  title carries the meaning — mobile-friendly).  */
         let $reset = createElement2(
             ["button", {class: "button is-small is-white STATS_RESET", type: "button",
-                        title: t("reset stats"), "aria-label": t("reset stats")},
+                        title: t("reset stats"), "aria-label": t("reset stats"),
+                        "data-i18n-title": "reset stats", "data-i18n-aria-label": "reset stats"},
                 [["span", {class: "icon is-small"}, [["i", {class: "yi-broom"}]]]],
                 {click: () => request_reset_for(gobj, tgt.node, tgt.yuno_id)}]
         );

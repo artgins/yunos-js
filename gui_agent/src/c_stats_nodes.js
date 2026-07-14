@@ -29,6 +29,8 @@ import {
     gobj_parent, gobj_name,
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_subscribe_event,
+    gobj_unsubscribe_event,
+    gobj_short_name,
     gobj_find_service,
     createElement2,
     refresh_language,
@@ -38,7 +40,10 @@ import {
     kw_get_str,
 } from "@yuneta/gobj-js";
 
-import i18next, {t} from "i18next";
+import {t} from "i18next";
+
+import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
@@ -136,13 +141,10 @@ function mt_start(gobj)
     render_state(gobj);
     request_agents(gobj);
 
-    priv.on_lang = () => {
-        let table = gobj_read_attr(gobj, "tabulator");
-        if(table && table._ready) {
-            table.setColumns(make_columns(gobj));
-        }
-    };
-    i18next.on("languageChanged", priv.on_lang);
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
 }
 
 /***************************************************************
@@ -151,9 +153,9 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     let priv = gobj.priv;
-    if(priv.on_lang) {
-        i18next.off("languageChanged", priv.on_lang);
-        priv.on_lang = null;
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
     let table = gobj_read_attr(gobj, "tabulator");
     if(table) {
@@ -346,7 +348,8 @@ function build_dom(gobj)
         class:        "input",
         type:         "text",
         placeholder:  t("search nodes"),
-        "aria-label": t("search nodes")
+        "aria-label": t("search nodes"),
+        "data-i18n-aria-label": "search nodes"
     }, null, {
         input: () => apply_filter(gobj)
     }]);
@@ -465,6 +468,7 @@ function create_table(gobj)
     let priv = gobj.priv;
 
     let settings = {
+        ...yui_tabulator_lang(t),   /*  Tabulator's OWN chrome, in our language  */
         index:                 "_key",
         layout:                "fitColumns",
         maxHeight:             "100%",
@@ -723,6 +727,38 @@ function ac_mt_command_answer(gobj, event, kw, src)
 
 
 
+
+/***************************************************************
+ *  The language changed (the shell publishes it).
+ *
+ *  refresh_language() reaches every node that CARRIES its key; a Tabulator
+ *  does not: its column headers, its paginator, its placeholder and whatever
+ *  its formatters paint come from t() at RENDER time and are drawn ONCE. Hand
+ *  the table the new language and rebuild its columns.
+ ***************************************************************/
+function ac_language_changed(gobj, event, kw, src)
+{
+    let table = gobj_read_attr(gobj, "tabulator");
+    if(!table) {
+        return 0;
+    }
+    yui_tabulator_relocalize(table, t);
+    try {
+        table.options.placeholder = t("no nodes");
+        table.setColumns(make_columns(gobj));
+    } catch(e) {
+        log_error(`${gobj_short_name(gobj)}: cannot re-render the table: ${e}`);
+        return -1;
+    }
+    let $c = gobj_read_attr(gobj, "$container");
+    if($c) {
+        refresh_language($c, t);
+    }
+    return 0;
+}
+
+
+
                     /***************************
                      *              FSM
                      ***************************/
@@ -749,6 +785,7 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const states = [
         ["ST_IDLE", [
+            ["EV_LANGUAGE_CHANGED",     ac_language_changed,    null],
             ["EV_ON_OPEN",              ac_on_open,                null],
             ["EV_ON_CLOSE",             ac_on_close,               null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,      null],
@@ -760,6 +797,7 @@ function create_gclass(gclass_name)
      *          Events
      *---------------------------------------------*/
     const event_types = [
+        ["EV_LANGUAGE_CHANGED",     0],
         ["EV_ON_OPEN",              0],
         ["EV_ON_CLOSE",             0],
         ["EV_MT_COMMAND_ANSWER",    0],

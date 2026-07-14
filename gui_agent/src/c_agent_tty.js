@@ -418,13 +418,15 @@ function build_dom(gobj)
     /*  Font size A− / A+ (icon-only; a title carries the meaning on mobile).  */
     priv.$font_dec = createElement2(
         ["button", {class: "button is-small", type: "button", style: "margin-left:auto;",
-                    title: t("font smaller"), "aria-label": t("font smaller")},
+                    title: t("font smaller"), "aria-label": t("font smaller"),
+                    "data-i18n-title": "font smaller", "data-i18n-aria-label": "font smaller"},
             ["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-minus"}]]],
             {click: () => change_font_size(gobj, -1)}]
     );
     priv.$font_inc = createElement2(
         ["button", {class: "button is-small", type: "button",
-                    title: t("font larger"), "aria-label": t("font larger")},
+                    title: t("font larger"), "aria-label": t("font larger"),
+                    "data-i18n-title": "font larger", "data-i18n-aria-label": "font larger"},
             ["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-plus"}]]],
             {click: () => change_font_size(gobj, +1)}]
     );
@@ -433,7 +435,8 @@ function build_dom(gobj)
      *  stays legible (icon-only) on a narrow toolbar.  */
     priv.$reconnect = createElement2(
         ["button", {class: "button is-small", type: "button",
-                    title: t("reconnect"), "aria-label": t("reconnect")},
+                    title: t("reconnect"), "aria-label": t("reconnect"),
+                    "data-i18n-title": "reconnect", "data-i18n-aria-label": "reconnect"},
             [
                 ["span", {class: "icon is-small"}, [["i", {class: "yi-arrows-rotate"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "reconnect"}, "Reconnect"]

@@ -22,6 +22,21 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_agent): the same i18n audit, and a raw key that was on screen all
+  along.** The node tabs of every workspace rendered as the RAW KEY (`nodes`, not
+  `Nodos`): `yui_shell_set_submenu` builds fresh nav DOM, after the app's
+  one-time `refresh_language`, and nobody translated it — the bug only hid
+  because switching language re-translates the document. Beyond that, the same
+  three shapes as gui_treedb: 20 tooltips built with `t()` and no
+  `data-i18n-title` (measured: "Limpiar" stayed on an English UI), three
+  Tabulator tables whose chrome (paginator, placeholder) never went through i18n
+  at all and whose formatters are drawn once, and a `add` key DUPLICATED in both
+  locale files. The language switch now goes through the library contract
+  (`yui_shell_language_changed` → `EV_LANGUAGE_CHANGED`), which also replaces the
+  raw `i18next.on("languageChanged")` listeners two views had wired outside their
+  FSM. `validate-locales` is the hardened one (no duplicates; every key used —
+  including the gobj-ui modules it mounts — must be defined).
+
 - **fix(gui_treedb): the language switch is the shell's now, and 46 strings were
   never translated at all.** The whole gobj-ui treedb + graph editor asked for
   keys this app defines nowhere — `edit`, `new`, `delete`, `paste`, `unlink`,

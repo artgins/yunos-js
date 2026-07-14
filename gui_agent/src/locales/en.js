@@ -19,6 +19,22 @@ const en = {
 
     translation: {
         /* dialogs */
+        /*  Tabulator's own chrome (paginator, notices): the keys of
+            gobj-ui's yui_tabulator_i18n.js.  */
+        "loading": "Loading",
+        "page size": "Page Size",
+        "show page": "Show Page",
+        "first": "First",
+        "first page": "First Page",
+        "last": "Last",
+        "last page": "Last Page",
+        "prev": "Prev",
+        "prev page": "Previous Page",
+        "next": "Next",
+        "next page": "Next Page",
+        "all": "All",
+        "filter column": "filter column...",
+        "no data available": "No data available",
         "yes":               "Yes",
         "no":                "No",
         "ok":                "OK",
@@ -82,7 +98,6 @@ const en = {
         "command template":  "command (use $1, $2 … for args)",
         "no shortkeys yet":  "No shortkeys defined",
         "remove shortkey":   "Remove shortkey",
-        "add":               "Add",
         "missing key":       "Missing key=",
         "missing command":   "Missing command=",
         "shortkey not found": "Shortkey not found",

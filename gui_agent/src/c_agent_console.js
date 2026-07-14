@@ -41,6 +41,9 @@ import {
 
 import {t} from "i18next";
 
+import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
@@ -379,7 +382,8 @@ function build_ui(gobj)
      *  on mobile the in-input ✕ sits under the typing thumb and gets tapped
      *  by accident. Wipes the command AND the response panel. */
     let $clear = createElement2(
-        ["button", {class: "CONSOLE_CLEAR button", type: "button", title: t("clear")},
+        ["button", {class: "CONSOLE_CLEAR button", type: "button", title: t("clear"),
+                    "data-i18n-title": "clear"},
             [["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]]]]
     );
     $clear.addEventListener("click", () => clear_console(gobj));
@@ -405,7 +409,7 @@ function build_ui(gobj)
 
     let $copy = createElement2(
         ["button", {class: "CONSOLE_COPY button is-small is-ghost", type: "button",
-                    title: t("copy response")},
+                    title: t("copy response"), "data-i18n-title": "copy response"},
             [["span", {class: "icon is-small"}, [["i", {class: "yi-copy"}]]]]]
     );
     $copy.disabled = true;
@@ -876,7 +880,9 @@ function fill_hist_popover(gobj)
     for(let e of entries) {
         let $add = createElement2(
             ["button", {class: "button is-small is-ghost", type: "button",
-                        title: t("add to shortkeys"), "aria-label": t("add to shortkeys")},
+                        title: t("add to shortkeys"), "aria-label": t("add to shortkeys"),
+                        "data-i18n-title": "add to shortkeys",
+                        "data-i18n-aria-label": "add to shortkeys"},
                 [["span", {class: "icon is-small"}, [["i", {class: "yi-plus"}]]]]]);
         $add.addEventListener("click", (ev) => {
             ev.preventDefault();
@@ -885,7 +891,9 @@ function fill_hist_popover(gobj)
         });
         let $del = createElement2(
             ["button", {class: "button is-small is-ghost", type: "button",
-                        title: t("remove from history"), "aria-label": t("remove from history")},
+                        title: t("remove from history"), "aria-label": t("remove from history"),
+                        "data-i18n-title": "remove from history",
+                        "data-i18n-aria-label": "remove from history"},
                 [["span", {class: "icon is-small"}, [["i", {class: "yi-xmark"}]]]]]);
         $del.addEventListener("click", (ev) => {
             ev.preventDefault();
@@ -1256,6 +1264,7 @@ function render_table(gobj, schema, data)
     priv.$data.appendChild(host);
 
     priv.tabulator = new Tabulator(host, {
+        ...yui_tabulator_lang(t),   /*  Tabulator's OWN chrome, in our language  */
         data:           data,
         layout:         "fitDataFill",
         columns:        make_columns_from_schema(schema),
@@ -1736,6 +1745,25 @@ function ac_mt_command_answer(gobj, event, kw, src)
 
 
 
+
+/***************************************************************
+ *  The language changed (the shell publishes it): the answer table is a
+ *  Tabulator — headers, paginator, placeholder and formatters are drawn ONCE,
+ *  from t() at render time, and no data-i18n attribute reaches them.
+ ***************************************************************/
+function ac_language_changed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    yui_tabulator_relocalize(priv.tabulator, t);
+    let $c = gobj_read_attr(gobj, "$container");
+    if($c) {
+        refresh_language($c, t);
+    }
+    return 0;
+}
+
+
+
                     /***************************
                      *              FSM
                      ***************************/
@@ -1768,6 +1796,7 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const states = [
         ["ST_IDLE", [
+            ["EV_LANGUAGE_CHANGED",     ac_language_changed,   null],
             ["EV_ON_OPEN",           ac_on_open,           null],
             ["EV_ON_CLOSE",          ac_on_close,          null],
             ["EV_ON_OPEN_ERROR",     ac_on_open_error,     null],
@@ -1780,6 +1809,7 @@ function create_gclass(gclass_name)
      *          Events
      *---------------------------------------------*/
     const event_types = [
+        ["EV_LANGUAGE_CHANGED",     0],
         ["EV_ON_OPEN",           0],
         ["EV_ON_CLOSE",          0],
         ["EV_ON_OPEN_ERROR",     0],

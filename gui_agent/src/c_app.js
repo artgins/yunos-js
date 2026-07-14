@@ -474,6 +474,7 @@ function rebuild_workspace_tabs(gobj, ws)
             });
         }
         yui_shell_set_submenu(priv.shell, ws, items);
+        translate_nav(gobj);
         return;
     }
 
@@ -505,6 +506,20 @@ function rebuild_workspace_tabs(gobj, ws)
         });
     }
     yui_shell_set_submenu(priv.shell, ws, items);
+    translate_nav(gobj);
+}
+
+/***************************************************************
+ *  The submenu DOM is BRAND NEW: translate it.
+ *
+ *  yui_shell_set_submenu builds fresh nav elements, after the app's one-time
+ *  refresh_language, so their i18n labels rendered as the RAW KEY — the node
+ *  tabs read "nodes", not "Nodos", until the user happened to switch language
+ *  (which is what re-translates the document, and was hiding the bug).
+ ***************************************************************/
+function translate_nav(gobj)
+{
+    refresh_language(document.body, t);
 }
 
 /*  Rebuild every wired workspace (on session-open and list-agents). */
