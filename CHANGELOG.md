@@ -22,6 +22,28 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the services sub-table was built, then clipped away.** It
+  only appeared if you happened to resize the window. A Tabulator builds
+  ASYNCHRONOUSLY, so when the rowFormatter returns, the row is still one line
+  tall — and that is the height the connections table measured itself with: with
+  a `maxHeight` set it pins its tableholder to an inline `height`, and it counts
+  only CELL heights (`Row.calcHeight()` never sees a rowFormatter's own DOM). The
+  sub-table landed below that height and was clipped; a window resize was the
+  only thing that re-ran the measurement. The parent is now re-measured when the
+  sub-table is really built (`tableBuilt`), coalesced to one measure per frame —
+  a *measure*, not a `redraw()`: a redraw detaches every row to re-render it, and
+  a Tabulator detached mid-flight comes back blank, so it would destroy the very
+  sub-tables it was meant to reveal. The sub-table also takes its NATURAL width
+  now (`fitDataTable`), not the connections table's — stretched to full width it
+  read as a second header row of its parent. It lives in a BLOCK holder with the
+  Tabulator in a child div (Tabulator's own nested-table shape): `fitDataTable`
+  styles the table element `display: inline-block`, so built straight into the
+  row it laid out INLINE with the cells, off past their right edge. Destroying a
+  sub-table no longer throws either (*"ResizeObserver.unobserve: Argument 1 is
+  not an object"*): the parent empties the row element first, so Tabulator's
+  `unobserve(element.parentNode)` hit a null parent and aborted the rest of
+  `destroy()`, leaking observers and listeners on every redraw.
+
 - **fix(gui_treedb): the services of a connection are a table of their OWN.** As
   Tabulator dataTree children they were rows of the CONNECTIONS table and
   therefore wore ITS columns: a service's name landed under "Label", its gclass

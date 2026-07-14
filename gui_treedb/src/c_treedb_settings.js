@@ -112,6 +112,7 @@ let PRIVATE_DATA = {
     $scan_errors: null,   /*  refresh failure report area  */
     $import_file: null,   /*  hidden <input type=file> of the Import button  */
     subtables:    null,   /*  conn_id -> the services Tabulator inside its row  */
+    resize_pending: false,/*  a parent re-measure is already queued for this frame  */
 };
 let __gclass__ = null;
 
@@ -440,17 +441,29 @@ function build_services_subtable(gobj, row)
         return;     /*  never scanned, or an empty yuno: no sub-table at all  */
     }
 
-    /*  Indented under its connection, so the nesting is visible without a
-     *  tree control; the width follows the row.  */
+    /*  Two elements, not one — the same shape Tabulator's own nested-table
+     *  example uses, and both halves are load-bearing:
+     *
+     *  - $holder is a BLOCK div: the row's cells are inline-blocks, so only a
+     *    block breaks the line and puts the sub-table UNDER its connection. The
+     *    Tabulator element itself cannot do that job: `fitDataTable` styles it
+     *    `display: inline-block` (that is how it shrinks to its data), so
+     *    building the table straight into $row's child laid it out INLINE with
+     *    the cells — off past their right edge, out of sight.
+     *  - $table is what the sub-Tabulator owns, and it takes its NATURAL width:
+     *    a services table stretched to the width of the connections table reads
+     *    as a second header row of it. max-width is only the mobile guard.  */
     let $holder = createElement2(
         ["div", {class: "SETTINGS_SUBTABLE",
                  style: "margin: 0.25rem 0 0.5rem 2rem; max-width: calc(100% - 2.5rem);"},
             []]);
+    let $table = createElement2(["div", {class: "SETTINGS_SUBTABLE_TABLE"}, []]);
+    $holder.appendChild($table);
     $row.appendChild($holder);
 
-    let sub = new Tabulator($holder, {
+    let sub = new Tabulator($table, {
         ...yui_tabulator_lang(t),
-        layout:         "fitColumns",
+        layout:         "fitDataTable",
         index:          "key",
         data:           services.map((svc) => ({
             key:      svc.key,
@@ -460,14 +473,14 @@ function build_services_subtable(gobj, row)
         })),
         columnDefaults: {headerHozAlign: "left", headerSort: false, resizable: false},
         columns: [
-            {title: t("service"), field: "service", minWidth: 180, widthGrow: 3,
+            {title: t("service"), field: "service", minWidth: 160,
                 formatter: (cell) => {
                     let $s = document.createElement("span");
                     $s.classList.add("SETTINGS_SERVICE", "has-text-weight-semibold");
                     $s.textContent = cell.getValue();
                     return $s;
                 }},
-            {title: t("class"), field: "gclass", width: 130,
+            {title: t("class"), field: "gclass", minWidth: 120,
                 formatter: (cell) => {
                     let $tag = document.createElement("span");
                     $tag.classList.add("tag", "is-size-7", "is-light",
@@ -476,7 +489,7 @@ function build_services_subtable(gobj, row)
                     $tag.textContent = cell.getValue();
                     return $tag;
                 }},
-            {title: t("browse"), field: "selected", width: 120, hozAlign: "center",
+            {title: t("browse"), field: "selected", minWidth: 100, hozAlign: "center",
                 formatter: (cell) => {
                     let on = !!cell.getValue();
                     return `<span class="icon SETTINGS_SERVICE_CHECK" role="checkbox" `
@@ -492,13 +505,56 @@ function build_services_subtable(gobj, row)
     });
     priv.subtables[conn_id] = sub;
 
-    /*  The row was laid out before the sub-table existed: give it back its
-     *  real height, or the services are clipped to one line.  */
+    /*  A Tabulator builds ASYNCHRONOUSLY, so when this returns the row is still
+     *  one line tall — and that is the height the parent measured itself with:
+     *  with a maxHeight set it pins its tableholder to an inline `height` taken
+     *  from the rows it knows about, and it counts only CELL heights (a
+     *  rowFormatter's own DOM is invisible to Row.calcHeight()). The sub-table
+     *  then lands BELOW that height and is clipped away — the parent only got it
+     *  right once a window resize happened to re-run its measurement.
+     *
+     *  So re-measure the parent ourselves once the sub-table is really built:
+     *  normalizeHeight() for the row's cells, and the tableholder re-measure the
+     *  window resize was doing for us (resize_parent).  */
     sub.on("tableBuilt", () => {
         try {
             row.normalizeHeight();
+            resize_parent(gobj);
         } catch(e) {
             log_warning(`${GCLASS_NAME}: row gone: ${e}`);
+        }
+    });
+}
+
+/***************************************************************
+ *  Re-measure the connections table after its rows grew a sub-table.
+ *
+ *  ONLY the measurement (`adjustTableSize` clears the tableholder's inline
+ *  height and takes it again from the real DOM) — NOT a `redraw()`: a redraw
+ *  detaches every row element to re-render it, and a Tabulator that is
+ *  detached mid-flight comes back blank, so the sub-tables would be the very
+ *  thing it destroyed. This is exactly what the window resize was doing.
+ *
+ *  Coalesced: N connections finish building N sub-tables, and one measure at
+ *  the end of the frame accounts for all of them.
+ ***************************************************************/
+function resize_parent(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.resize_pending) {
+        return;
+    }
+    priv.resize_pending = true;
+    requestAnimationFrame(() => {
+        priv.resize_pending = false;
+        let table = gobj_read_attr(gobj, "tabulator");
+        if(!table || !table.rowManager) {
+            return;
+        }
+        try {
+            table.rowManager.adjustTableSize();
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: table gone on resize: ${e}`);
         }
     });
 }
@@ -515,6 +571,16 @@ function drop_subtable(gobj, conn_id)
     }
     delete priv.subtables[conn_id];
     try {
+        /*  The parent re-renders a row by emptying its element, so by now the
+         *  sub-table's own element is usually DETACHED — and Tabulator tears its
+         *  ResizeObserver down with `unobserve(element.parentNode)`, which throws
+         *  on a null parent ("Argument 1 is not an object") and leaves the rest
+         *  of destroy() unrun: observers alive, listeners alive, table leaked.
+         *  Give it a parent to be unobserved from — a scratch div nobody sees.  */
+        let $el = sub.element;
+        if($el && !$el.parentNode) {
+            document.createElement("div").appendChild($el);
+        }
         sub.destroy();
     } catch(e) {
         log_warning(`${GCLASS_NAME}: sub-table already gone: ${e}`);
