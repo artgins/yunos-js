@@ -25,11 +25,11 @@
  *          All Rights Reserved.
  ***********************************************************************/
 import {
-    SDATA, SDATA_END, data_type_t, event_flag_t,
+    SDATA, SDATA_END, data_type_t,
     gclass_create, log_error, log_warning, gobj_short_name,
     gobj_read_attr, gobj_write_str_attr,
     gobj_create_service, gobj_create_pure_child,
-    gobj_subscribe_event, gobj_send_event, gobj_publish_event,
+    gobj_subscribe_event, gobj_send_event,
     gobj_change_state,
     gobj_find_service,
     gobj_start_tree, gobj_stop_tree, gobj_destroy, gobj_is_running,
@@ -49,6 +49,7 @@ import {
     yui_shell_set_toolbar_item_icon,
     yui_shell_set_submenu,
     yui_shell_navigate,
+    yui_shell_language_changed,
 } from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {
@@ -860,8 +861,16 @@ function ac_toggle_theme(gobj, event, kw, src)
 function ac_toggle_language(gobj, event, kw, src)
 {
     switch_locale(current_locale() === "es" ? "en" : "es");
-    refresh_language(document.body, t);
-    gobj_publish_event(gobj, "EV_LANGUAGE_CHANGED", {locale: current_locale()});
+
+    /*  The SHELL fans it out: it re-translates the document and publishes
+     *  EV_LANGUAGE_CHANGED to every view that subscribed — ours AND the
+     *  gobj-ui ones it mounts (their Tabulator chrome is drawn once and has
+     *  to be told). One contract, in the library, instead of an event per
+     *  app.  */
+    let priv = gobj.priv;
+    if(priv.shell) {
+        yui_shell_language_changed(priv.shell);
+    }
     return 0;
 }
 
@@ -1188,9 +1197,7 @@ function create_gclass(gclass_name)
         ["EV_SELECTED_TREEDBS_CHANGED", 0],
         ["EV_CONNECTIONS_CHANGED",      0],
         ["EV_NAV_ITEM_CLOSE",   0],
-        ["EV_ROUTE_CHANGED",    0],
-        /*  output: the views that build DOM with t() re-render on it  */
-        ["EV_LANGUAGE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
+        ["EV_ROUTE_CHANGED",    0]
     ];
 
     __gclass__ = gclass_create(

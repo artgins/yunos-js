@@ -22,6 +22,20 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the language switch is the shell's now, and 46 strings were
+  never translated at all.** The whole gobj-ui treedb + graph editor asked for
+  keys this app defines nowhere — `edit`, `new`, `delete`, `paste`, `unlink`,
+  `zoom in`, … — and i18next answers an unknown key with the key ITSELF, so they
+  rendered as raw lower-case English, in both languages. 46 keys added (+13 for
+  Tabulator's paginator, which never went through i18n at all: "Page Size",
+  "First", "Prev"…). Two keys were DUPLICATED in the locale files (`last`,
+  `loading`) — an object literal keeps the last one and says nothing, so a stale
+  entry silently overrode the new one. The app now switches its i18next and calls
+  `yui_shell_language_changed(shell)`: the SHELL fans the fact out to every view
+  it mounts, this app's and the library's alike (see gobj-ui's changelog).
+  `validate-locales` grew two rules — no duplicate keys, and every key used in
+  the source (this app's AND the gobj-ui views it mounts, both quote styles)
+  must be defined.
 - **fix(gui_treedb): a language switch reaches EVERY view, and a missing key can
   no longer hide.** Same audit applied to the rest of the SPA: the **picker** is
   built entirely with `t()` and nobody told it the language had changed (it

@@ -50,7 +50,6 @@ import {
     gobj_subscribe_event,
     gobj_unsubscribe_event,
     gobj_find_service,
-    gobj_default_service,
     gobj_send_event,
     gobj_parent,
     gobj_is_destroying,
@@ -62,6 +61,8 @@ import {t} from "i18next";
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {yui_shell_confirm_yesno} from "@yuneta/gobj-ui/src/shell_modals.js";
+import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 
 import {
     treedb_config_get_connections,
@@ -161,11 +162,11 @@ function mt_start(gobj)
     /*  The table's headers, its placeholder and everything its formatters
      *  paint (the connect/refresh tooltips, the service checkbox, the status
      *  dot) are rendered by Tabulator from OUR t() calls — no i18n key lives in
-     *  that DOM, so refresh_language() cannot reach it. The app root publishes
-     *  the switch and the action re-renders the table.  */
-    let app = gobj_default_service();
-    if(app) {
-        gobj_subscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
+     *  that DOM, so refresh_language() cannot reach it. The shell publishes the
+     *  switch and the action re-renders the table.  */
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
 
     /*  The shell has appended $container by now, so the table div is in
@@ -186,9 +187,9 @@ function mt_stop(gobj)
         gobj_unsubscribe_event(links, "EV_TREEDB_SCAN_ERROR", {}, gobj);
     }
 
-    let app = gobj_default_service();
-    if(app) {
-        gobj_unsubscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
 
     let table = gobj_read_attr(gobj, "tabulator");
@@ -736,6 +737,7 @@ function create_table(gobj)
     }
 
     let settings = {
+        ...yui_tabulator_lang(t),
         index:          "id",
         layout:         "fitColumns",
         maxHeight:      "70vh",
@@ -854,6 +856,7 @@ function ac_language_changed(gobj, event, kw, src)
         return 0;
     }
     try {
+        yui_tabulator_relocalize(table, t);
         table.options.placeholder = t("no connections - click add connection");
         table.setColumns(make_columns(gobj));
         reload_table(gobj);     /*  re-renders the rows through the formatters  */

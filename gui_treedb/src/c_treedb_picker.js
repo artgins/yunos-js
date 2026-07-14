@@ -24,7 +24,6 @@ import {
     gobj_subscribe_event,
     gobj_unsubscribe_event,
     gobj_find_service,
-    gobj_default_service,
     gobj_send_event,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
@@ -120,11 +119,10 @@ function mt_start(gobj)
     /*  This whole view is BUILT with t() (the status lines, the hints, the
      *  service labels), so a language switch is a re-render — nothing here
      *  carries an i18n key that refresh_language could reach on its own. The
-     *  app root publishes it; it is the DEFAULT service, so gobj_default_service()
-     *  (gobj_find_service("app") returns null for it).  */
-    let app = gobj_default_service();
-    if(app) {
-        gobj_subscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
+     *  shell publishes it.  */
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
 
     render(gobj);
@@ -146,9 +144,9 @@ function mt_stop(gobj)
         gobj_unsubscribe_event(links, "EV_ON_CLOSE", {}, gobj);
         gobj_unsubscribe_event(links, "EV_ON_OPEN_ERROR", {}, gobj);
     }
-    let app = gobj_default_service();
-    if(app) {
-        gobj_unsubscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
 }
 

@@ -86,8 +86,7 @@ import {
     gobj_change_state,
     gobj_command,
     gobj_current_state, gobj_is_destroying,
-    gobj_create_service, gobj_find_service, gobj_default_service,
-    gobj_destroy, is_gobj,
+    gobj_create_service, gobj_find_service, gobj_destroy, is_gobj,
     createElement2, refresh_language,
     msg_iev_get_stack,
     kw_get_str, kw_get_dict,
@@ -98,6 +97,7 @@ import {t} from "i18next";
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {yui_shell_show_modal, yui_shell_popup_layer} from "@yuneta/gobj-ui/src/shell_modals.js";
+import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {
@@ -474,13 +474,11 @@ function mt_start(gobj)
         gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
     }
 
-    /*  The app root publishes the language switch. It is the DEFAULT service,
-     *  which gobj_create_default_service does NOT register by name — so it is
-     *  reached with gobj_default_service(), never gobj_find_service("app")
-     *  (which returns null for it).  */
-    let app = gobj_default_service();
-    if(app) {
-        gobj_subscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
+    /*  The SHELL publishes the language switch (yui_shell_language_changed):
+     *  one contract for every view it mounts, ours and the library's.  */
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
 
     /*  Mounted with no session (link still down): stay in ST_DISCONNECTED and
@@ -503,9 +501,9 @@ function mt_stop(gobj)
     if(links) {
         gobj_unsubscribe_event(links, "EV_ON_OPEN", {}, gobj);
     }
-    let app = gobj_default_service();
-    if(app) {
-        gobj_unsubscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
     reject_pending(gobj, "view stopped");
     close_all_cards(gobj);
@@ -1100,6 +1098,7 @@ function open_keys_picker(gobj)
      *  a sort of it on the main thread. The backend does it (list-keys with
      *  rkey / order / desc / from / limit) and the browser holds one page.  */
     let picker = new Tabulator($tbl, {
+        ...yui_tabulator_lang(t),   /*  Tabulator's own chrome (paginator) too  */
         height:         mobile ? "min(60vh, 460px)" : "100%",
         index:          "key",     /*  row identity: updateData() finds by it  */
         layout:         "fitColumns",
@@ -2173,6 +2172,7 @@ function mount_rows_table(gobj, card, $table)
     arm_iterator(gobj, card);
 
     let table = new Tabulator($table, {
+        ...yui_tabulator_lang(t),
         height:         CARD_TABLE_HEIGHT,
         layout:         "fitDataFill",
         placeholder:    t("no records"),
@@ -2222,6 +2222,7 @@ function mount_live_table(gobj, card, $table)
     card.rt_id = null;
 
     let table = new Tabulator($table, {
+        ...yui_tabulator_lang(t),
         height:         CARD_TABLE_HEIGHT,
         layout:         "fitDataFill",
         placeholder:    t("waiting for records"),
@@ -3485,6 +3486,7 @@ function ac_language_changed(gobj, event, kw, src)
             /*  The picker's headers ARE ours (t() at column-build time), so
              *  hand it a fresh set; the page comes back with the counter in the
              *  new language.  */
+            yui_tabulator_relocalize(priv.picker_tbl, t);
             priv.picker_tbl.setColumns(picker_columns(gobj, is_mobile()));
             priv.picker_tbl.replaceData();
         } catch(e) {
@@ -3506,6 +3508,7 @@ function retranslate_table(gobj, card)
     if(!table) {
         return;
     }
+    yui_tabulator_relocalize(table, t);     /*  its paginator, its notices  */
     try {
         if(card.mode === "rows") {
             table.replaceData();    /*  re-fetch: the footer is rebuilt with it  */
