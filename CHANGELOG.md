@@ -22,6 +22,18 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): a language switch reaches EVERY view, and a missing key can
+  no longer hide.** Same audit applied to the rest of the SPA: the **picker** is
+  built entirely with `t()` and nobody told it the language had changed (it
+  re-renders on EV_LANGUAGE_CHANGED now); **Settings** had its export/import
+  tooltips set with `t()` (they carry `data-i18n-title` now) and its whole
+  Tabulator — column headers, placeholder, and every string its formatters paint
+  (connect/disconnect, refresh services, connected, browse this service, clone,
+  remove) — rendered ONCE, so the table is re-rendered in the action. And its
+  `label` column header used a key **no locale defined**: i18next answers an
+  unknown key with the key itself, so it read "label" in both languages and
+  looked translated. `validate-locales` now fails on any key used in the source
+  and defined in no locale — the check that would have caught it.
 - **fix(gui_treedb): a language switch reaches the open cards.** `refresh_language()`
   re-translates every node that CARRIES its key, and a card was full of strings
   that did not: its title was one string composed with `t()` at create time

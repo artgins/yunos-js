@@ -50,6 +50,7 @@ import {
     gobj_subscribe_event,
     gobj_unsubscribe_event,
     gobj_find_service,
+    gobj_default_service,
     gobj_send_event,
     gobj_parent,
     gobj_is_destroying,
@@ -157,6 +158,16 @@ function mt_start(gobj)
                   `Settings will not see a connection open, close or scan`);
     }
 
+    /*  The table's headers, its placeholder and everything its formatters
+     *  paint (the connect/refresh tooltips, the service checkbox, the status
+     *  dot) are rendered by Tabulator from OUR t() calls — no i18n key lives in
+     *  that DOM, so refresh_language() cannot reach it. The app root publishes
+     *  the switch and the action re-renders the table.  */
+    let app = gobj_default_service();
+    if(app) {
+        gobj_subscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
+
     /*  The shell has appended $container by now, so the table div is in
      *  the DOM and Tabulator can attach.  */
     create_table(gobj);
@@ -173,6 +184,11 @@ function mt_stop(gobj)
         gobj_unsubscribe_event(links, "EV_ON_CLOSE", {}, gobj);
         gobj_unsubscribe_event(links, "EV_TREEDB_SCAN_DONE", {}, gobj);
         gobj_unsubscribe_event(links, "EV_TREEDB_SCAN_ERROR", {}, gobj);
+    }
+
+    let app = gobj_default_service();
+    if(app) {
+        gobj_unsubscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
 
     let table = gobj_read_attr(gobj, "tabulator");
@@ -243,7 +259,9 @@ function build_ui(gobj)
     let $export = createElement2(
         ["button", {class: "button is-small ml-2 SETTINGS_EXPORT",
                     title: t("download the connections as a json file"),
-                    "aria-label": t("export")},
+                    "aria-label": t("export"),
+                    "data-i18n-title": "download the connections as a json file",
+                    "data-i18n-aria-label": "export"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-download"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "export"}, t("export")]
@@ -278,7 +296,9 @@ function build_ui(gobj)
     let $import = createElement2(
         ["button", {class: "button is-small ml-2 SETTINGS_IMPORT",
                     title: t("add the connections of a json file"),
-                    "aria-label": t("import")},
+                    "aria-label": t("import"),
+                    "data-i18n-title": "add the connections of a json file",
+                    "data-i18n-aria-label": "import"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-plus"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "import"}, t("import")]
@@ -816,6 +836,34 @@ function ac_scan_error(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The language changed: re-translate what carries its key, and re-render
+ *  what does not. The whole Tabulator is the second kind — its column
+ *  headers, its placeholder and every string its formatters paint (connect /
+ *  disconnect, refresh services, connected, browse this service, clone,
+ *  remove) come from t() at RENDER time, so a fresh set of columns and a
+ *  reformat is what puts them in the new language.
+ ***************************************************************/
+function ac_language_changed(gobj, event, kw, src)
+{
+    let $c = gobj_read_attr(gobj, "$container");
+    if($c) {
+        refresh_language($c, t);
+    }
+    let table = gobj_read_attr(gobj, "tabulator");
+    if(!table) {
+        return 0;
+    }
+    try {
+        table.options.placeholder = t("no connections - click add connection");
+        table.setColumns(make_columns(gobj));
+        reload_table(gobj);     /*  re-renders the rows through the formatters  */
+    } catch(e) {
+        log_warning(`${GCLASS_NAME}: table gone: ${e}`);
+    }
+    return 0;
+}
+
+/***************************************************************
  *  Add a blank connection row (the user fills it in place; every cell
  *  edit persists the whole table).
  ***************************************************************/
@@ -1149,6 +1197,7 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",             ac_conn_status,          null],
             ["EV_TREEDB_SCAN_DONE",     ac_scan_done,            null],
             ["EV_TREEDB_SCAN_ERROR",    ac_scan_error,           null],
+            ["EV_LANGUAGE_CHANGED",     ac_language_changed,     null],
             /*  user actions: every click of the table crosses the machine  */
             ["EV_ADD_CONN",             ac_add_conn,             null],
             ["EV_CLONE_CONN",           ac_clone_conn,           null],
@@ -1168,6 +1217,7 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",             0],
         ["EV_TREEDB_SCAN_DONE",     0],
         ["EV_TREEDB_SCAN_ERROR",    0],
+        ["EV_LANGUAGE_CHANGED",     0],
         ["EV_ADD_CONN",             0],
         ["EV_CLONE_CONN",           0],
         ["EV_TOGGLE_SERVICE",       0],

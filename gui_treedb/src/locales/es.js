@@ -29,6 +29,7 @@ const es = {
         /* etiquetas de UI (llamadas vía t() en c_yuneta_gui.js) */
         "cause":                              "Motivo",
         "user":                               "Usuario",
+        "label": "Etiqueta",
         "url":                                "URL",
         "remote service":                     "Servicio remoto",
         "connection to backend refused":      "Conexión al backend rechazada",

@@ -29,6 +29,7 @@ const en = {
         /* free-text UI labels (called via t() in c_yuneta_gui.js) */
         "cause":                              "Cause",
         "user":                               "User",
+        "label": "Label",
         "url":                                "URL",
         "remote service":                     "Remote service",
         "connection to backend refused":      "Connection to backend refused",

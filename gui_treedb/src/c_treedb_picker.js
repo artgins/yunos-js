@@ -24,6 +24,7 @@ import {
     gobj_subscribe_event,
     gobj_unsubscribe_event,
     gobj_find_service,
+    gobj_default_service,
     gobj_send_event,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
@@ -116,6 +117,16 @@ function mt_start(gobj)
                   `the picker will not see a connection open or fail`);
     }
 
+    /*  This whole view is BUILT with t() (the status lines, the hints, the
+     *  service labels), so a language switch is a re-render — nothing here
+     *  carries an i18n key that refresh_language could reach on its own. The
+     *  app root publishes it; it is the DEFAULT service, so gobj_default_service()
+     *  (gobj_find_service("app") returns null for it).  */
+    let app = gobj_default_service();
+    if(app) {
+        gobj_subscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
+
     render(gobj);
 }
 
@@ -134,6 +145,10 @@ function mt_stop(gobj)
         gobj_unsubscribe_event(links, "EV_ON_OPEN", {}, gobj);
         gobj_unsubscribe_event(links, "EV_ON_CLOSE", {}, gobj);
         gobj_unsubscribe_event(links, "EV_ON_OPEN_ERROR", {}, gobj);
+    }
+    let app = gobj_default_service();
+    if(app) {
+        gobj_unsubscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
 }
 
@@ -415,6 +430,8 @@ function create_gclass(gclass_name)
             ["EV_ON_OPEN",                  ac_refresh, null],
             ["EV_ON_CLOSE",                 ac_refresh, null],
             ["EV_ON_OPEN_ERROR",            ac_refresh, null],
+            /*  a language switch is a re-render: this view is built with t()  */
+            ["EV_LANGUAGE_CHANGED",         ac_refresh, null],
             ["EV_MANAGE_CONNECTIONS",       ac_manage_connections, null]
         ]]
     ];
@@ -425,6 +442,7 @@ function create_gclass(gclass_name)
         ["EV_ON_OPEN",                  0],
         ["EV_ON_CLOSE",                 0],
         ["EV_ON_OPEN_ERROR",            0],
+        ["EV_LANGUAGE_CHANGED",         0],
         ["EV_MANAGE_CONNECTIONS",       0]
     ];
 
