@@ -218,8 +218,6 @@ const es = {
         "quarter": "Trimestre",
         "semester": "Semestre",
         "decade": "Década",
-        "last 24h": "Últimas 24h",
-        "last 7 days": "Últimos 7 días",
         "today": "Hoy",
         "yesterday": "Ayer",
         "tomorrow": "Mañana",

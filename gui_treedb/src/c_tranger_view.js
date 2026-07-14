@@ -176,18 +176,16 @@ const MOBILE_COLS = 4;
  *  decade, 15min…) is one line away for the app that reports by quarter —
  *  this one does not.
  *
- *  The two ROLLING windows are how a live key is actually read ("what came
- *  in since yesterday"), and they are not buckets: they end at now and leave
- *  the upper input EMPTY — an open end, so the iterator keeps matching what
- *  lands while the card is on screen. Reopening a card filtered by one
- *  restores as "custom" (a half-open range is no bucket), which is honest:
- *  the inputs carry exactly what was queried.
+ *  No ROLLING windows here ("last 24h", "last 7 days"): in THIS use case they
+ *  are redundant — "day" and "week" already answer the question, and a rolling
+ *  window is not a bucket (it leaves the upper bound open, so a card re-filtered
+ *  from one restores as "custom"). The picker still offers them to an app that
+ *  wants them; this one does not.
  *
  *  Two more modes come from the picker itself: "All" (no bounds: the full
  *  key) and "Custom" (the two datetime-local inputs, for the range no bucket
  *  has — an incident between 18:03 and 18:07).  */
 const PERIOD_MODES = ["hour", "day", "week", "month", "year"];
-const ROLLING_MODES = ["24h", "7d"];
 
 /*  Table height inside a card (its own pager sits below): follows the
  *  viewport, capped — a short screen must not be eaten by one card.  */
@@ -1728,7 +1726,6 @@ function build_time_block(gobj, match_cond, span, units)
 
     let picker = gobj_create_pure_child("period", "C_YUI_PERIOD", {
         periods:       PERIOD_MODES,
-        rolling:       ROLLING_MODES,
         with_span:     true,
         /*  No "custom" MODE: the two inputs below are always there, so a mode
          *  whose whole job was to reveal them has nothing left to do.
@@ -1973,12 +1970,20 @@ function build_rows_options_form(gobj, match_cond, editing, span, units)
     let card = (title, subtitle, logical, body) => createElement2(
         ["div", {class: `card mb-4 TRANGER_OPT_CARD ${logical}`},
             [
+                /*  Title and subtitle on ONE line (Bulma's .card-header-title is
+                 *  already a flex row; the `is-block` they used to carry is what
+                 *  stacked them): three of these headers sit above a dialog that
+                 *  scrolls on a phone, and a second line each was 3 lines of
+                 *  vertical budget spent on nothing. It wraps on a narrow screen
+                 *  rather than overflow.  */
                 ["header", {class: "card-header"},
-                    [["div", {class: "card-header-title is-block"},
+                    [["div", {class: "card-header-title is-flex-wrap-wrap"},
                         [
-                            ["span", {class: "is-block", "data-i18n": title}, t(title)],
-                            ["span", {class: "is-block is-size-7 has-text-weight-normal " +
-                                             "has-text-grey", "data-i18n": subtitle},
+                            ["span", {class: "TRANGER_OPT_CARD_TITLE",
+                                      "data-i18n": title}, t(title)],
+                            ["span", {class: "ml-2 is-size-7 has-text-weight-normal " +
+                                             "has-text-grey TRANGER_OPT_CARD_SUBTITLE",
+                                      "data-i18n": subtitle},
                                 t(subtitle)]
                         ]
                     ]]

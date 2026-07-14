@@ -22,18 +22,24 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
-- **feat(gui_treedb): the Rows time picker gains "Month" and the rolling
-  windows.** The granularity strip was hour/day/week/year — for a key
-  holding a month and a half of data, the natural unit between week and
-  year was the one missing. And a live key is actually read with "what
-  came in since yesterday": the picker offers "Last 24h" / "Last 7 days"
-  (C_YUI_PERIOD rolling modes), which fill "from" and leave "to" EMPTY —
-  an open end, so the iterator keeps matching what lands while the card
-  is on screen. Reopening a card filtered by one restores as "custom" (a
-  half-open range is no bucket), the inputs carrying exactly what was
-  queried. Rides the gobj-ui period polish (overflow-menu dismiss,
-  app-language calendar, week-number gutter, bucket hover-preview, strip
-  edge fades).
+- **fix(gui_treedb): the Rows options headers take one line, not two.** Each
+  of the three cards stacked its title over its subtitle (`is-block` on a
+  `.card-header-title`, which is a flex row to begin with) — three wasted lines
+  above a dialog that scrolls on a phone. They now sit side by side, wrapping
+  only if the screen is too narrow for both.
+
+- **feat(gui_treedb): the Rows time picker gains "Month".** The granularity
+  strip was hour/day/week/year — for a key holding a month and a half of
+  data, the natural unit between week and year was the one missing. The
+  rolling windows ("Last 24h" / "Last 7 days") that shipped alongside it in
+  the same unreleased range were dropped again before release: in THIS use
+  case they are redundant (day and week already answer the question) and a
+  rolling window is not a bucket — it leaves the upper bound open, so a card
+  re-filtered from one restores as "custom". C_YUI_PERIOD still offers them
+  to any app that declares them. Rides the gobj-ui period polish
+  (overflow-menu dismiss, app-language calendar, week-number gutter, bucket
+  hover-preview, strip edge fades, and the phone-scroll fix that the longer
+  strip exposed).
 
 - **fix(gui_treedb, gui_agent): review follow-ups on the tranger/i18n series.**
   Findings of a full review of the range, each verified in code:
