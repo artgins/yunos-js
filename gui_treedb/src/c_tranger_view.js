@@ -2305,16 +2305,20 @@ function mount_live_table(gobj, card, $table)
 }
 
 /***************************************************************
- *  The subscription filter of a Live card. A whole-topic card must NOT
- *  filter by key: the events carry the record's REAL key, so a `key: ""`
- *  filter would match nothing and the card would never see a record.
+ *  The subscription filter of a Live card: its OWN FEED, by `rt_id`.
+ *
+ *  Filtering by topic+key instead made two cards double each other's rows:
+ *  the backend publishes a record once per open FEED (each publish carrying
+ *  the rt_id of the feed that produced it), but a topic+key filter matches
+ *  EVERY publish of that key — so with a per-key Live card and a whole-topic
+ *  Live card open on the same key, each publish landed in BOTH subscriptions
+ *  and each card painted it twice. The rt_id ADDRESSES the record (c_tranger
+ *  says so: "a subscriber filters on its own rt_id"), and a card's feed is
+ *  its own: one publish, one frame, one row.
  ***************************************************************/
 function live_filter(card)
 {
-    if(card.key === ALL_KEYS) {
-        return {topic_name: card.topic};
-    }
-    return {topic_name: card.topic, key: card.key};
+    return {rt_id: card.rt_id};
 }
 
 /***************************************************************
@@ -3484,15 +3488,29 @@ function rearm_live_card(gobj, card)
 
     close_rt(gobj, card.rt_id);      /*  no-op if the session already died  */
 
+    /*  The subscription is filtered by the feed's rt_id, and a re-arm mints a
+     *  NEW one: the old subscription would sit filtering on a DEAD feed and the
+     *  card would go silent after a reconnect. Drop it before opening the new
+     *  feed, and take a fresh one on the new id.  */
+    let service = gobj_read_str_attr(gobj, "treedb_name");
+    if(card.subscribed) {
+        gobj_unsubscribe_event(remote, "EV_TRANGER_RECORD_ADDED",
+            {__service__: service, __filter__: live_filter(card)}, gobj);
+        card.subscribed = false;
+    }
+
     card.rt_id = `spa-${priv.tok}-rt-${++priv.iter_seq}`;
 
     gobj_command(remote, "open-rt",
         {
-            service:    gobj_read_str_attr(gobj, "treedb_name"),
+            service:    service,
             rt_id:      card.rt_id,
             topic_name: card.topic,
             key:        card.key
         }, gobj);
+    gobj_subscribe_event(remote, "EV_TRANGER_RECORD_ADDED",
+        {__service__: service, __filter__: live_filter(card)}, gobj);
+    card.subscribed = true;
 }
 
 /************************************************************

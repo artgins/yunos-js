@@ -22,6 +22,21 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): a Live card subscribed to the KEY, not to its own feed, so
+  two cards doubled each other's rows.** With a per-key Live card and a
+  whole-topic Live card open on the same key, every record appeared TWICE in
+  both. The backend publishes a record once per open FEED, each publish carrying
+  the `rt_id` of the feed that produced it — but the card subscribed with a
+  `{topic_name, key}` filter, which matches EVERY publish of that key, so each
+  publish landed in BOTH subscriptions and each card painted it twice (a record
+  of a key with only one card open arrived once — which is what gave the bug
+  away). A card now filters on its OWN feed (`{rt_id}`), exactly as c_tranger
+  prescribes: one publish, one frame, one row. Re-arming a card after a
+  reconnect mints a NEW rt_id, so it now re-subscribes on it — with the old
+  filter that did not matter, with this one the card would have gone silent.
+  (The backend was ALSO duplicating: see timeranger2 in the SDK's CHANGELOG —
+  both fixes are needed.)
+
 - **fix(gui_treedb): a dropped session was not a state, so the Tranger view kept
   offering what it could no longer do.** With the link down, the Keys button
   still looked alive; pressing it built the picker's Tabulator against a dead
