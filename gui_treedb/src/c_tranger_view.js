@@ -1639,19 +1639,29 @@ function collect_rows_match_cond(form)
 }
 
 /***************************************************************
- *  Open the Rows-options dialog for `key`. Confirming closes the options
- *  dialog and opens the Rows card with the chosen match_cond; the Keys
- *  picker window stays open (its Rows button turns active).
+ *  The Rows-options dialog. One dialog for the two ways in:
+ *
+ *    - a key with no card yet (`card` null): confirming OPENS a Rows card
+ *      with the chosen conditions (the Keys picker stays up, its Rows
+ *      button turns active);
+ *    - an OPEN card (`card` given): the same form, preloaded with what
+ *      that card is showing; confirming APPLIES the conditions in place.
+ *
+ *  Only the confirm button and the event it makes differ — the fields, the
+ *  span bounds and the units are the same either way.
  ***************************************************************/
-function open_rows_options(gobj, key)
+function open_rows_options(gobj, key, card)
 {
     let shell = yui_shell_of(gobj);
     if(!shell) {
         log_error(`${gobj_short_name(gobj)}: no shell, cannot open the Rows options`);
         return;
     }
+    let editing = !!card;
     let form = build_rows_options_form(
-        null, false, key_span(gobj, key), topic_time_units(gobj));
+        editing ? card.match_cond : null, editing,
+        key_span(gobj, key), topic_time_units(gobj));
+
     let opt_modal = yui_shell_show_modal(shell, form.$box, {
         dialog: true,
         logical_class: "TRANGER_ROWS_OPTIONS",
@@ -1663,39 +1673,50 @@ function open_rows_options(gobj, key)
         if(opt_modal && typeof opt_modal.close === "function") {
             opt_modal.close();
         }
-        gobj_send_event(gobj, "EV_OPEN_CARD",
+        gobj_send_event(gobj,
+            editing ? "EV_APPLY_MATCH_COND" : "EV_OPEN_CARD",
             {key: key, mode: "rows", match_cond: match_cond}, gobj);
     });
 }
 
 /***************************************************************
- *  Edit the match conditions of an OPEN Rows card: the same dialog,
- *  preloaded with what the card is currently showing. Confirming applies
- *  them in place (the card stays, its data is re-fetched).
+ *  Arm a Rows card's SERVER-side iterator: a fresh id, the card's match
+ *  conditions, and `open-iterator`. The id is new every time because an
+ *  iterator is a SNAPSHOT — its row index is built when it is opened — so
+ *  re-reading one is never how a card is refreshed, re-armed after a
+ *  reconnect, or re-filtered.
+ *
+ *  The CALLER closes the previous iterator (when there is one to close):
+ *  a first mount has none, and a mount whose link died must not close an
+ *  id the backend never knew.
+ *
+ *  Returns true when it was armed. On a dead link it leaves iterator_id
+ *  NULL — an id that was never opened would make the next close-iterator
+ *  name an iterator the backend never had, and its error answer paints a
+ *  misleading banner.
  ***************************************************************/
-function open_card_options(gobj, card)
+function arm_iterator(gobj, card)
 {
-    let shell = yui_shell_of(gobj);
-    if(!shell) {
-        log_error(`${gobj_short_name(gobj)}: no shell, cannot open the card options`);
-        return;
+    let priv = gobj.priv;
+    let remote = live_transport(gobj);
+    if(!remote) {
+        log_error(`${gobj_short_name(gobj)}: no session, iterator not armed ` +
+                  `for '${card.topic}' ('${card.key}')`);
+        card.iterator_id = null;
+        return false;
     }
-    let form = build_rows_options_form(
-        card.match_cond, true, key_span(gobj, card.key), topic_time_units(gobj));
-    let opt_modal = yui_shell_show_modal(shell, form.$box, {
-        dialog: true,
-        logical_class: "TRANGER_ROWS_OPTIONS",
-        title:  `${card.key} · ${t("rows")}`,
-        t:      t
-    });
-    form.$open.addEventListener("click", () => {
-        let match_cond = collect_rows_match_cond(form);
-        if(opt_modal && typeof opt_modal.close === "function") {
-            opt_modal.close();
-        }
-        gobj_send_event(gobj, "EV_APPLY_MATCH_COND",
-            {key: card.key, mode: card.mode, match_cond: match_cond}, gobj);
-    });
+
+    card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
+
+    let iter_kw = {
+        service:     gobj_read_str_attr(gobj, "treedb_name"),
+        iterator_id: card.iterator_id,
+        topic_name:  card.topic,
+        key:         card.key
+    };
+    Object.assign(iter_kw, card.match_cond || {});
+    gobj_command(remote, "open-iterator", iter_kw, gobj);
+    return true;
 }
 
 /***************************************************************
@@ -1708,26 +1729,12 @@ function open_card_options(gobj, card)
  ***************************************************************/
 function apply_card_match_cond(gobj, card, match_cond)
 {
-    let priv = gobj.priv;
-    let remote = live_transport(gobj);
-    if(!remote) {
-        log_error(`${gobj_short_name(gobj)}: no session, cannot apply match conditions`);
-        return;
-    }
-
     close_iterator(gobj, card.iterator_id);
 
     card.match_cond = match_cond || {};
-    card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
-
-    let iter_kw = {
-        service:     gobj_read_str_attr(gobj, "treedb_name"),
-        iterator_id: card.iterator_id,
-        topic_name:  card.topic,
-        key:         card.key
-    };
-    Object.assign(iter_kw, card.match_cond);
-    gobj_command(remote, "open-iterator", iter_kw, gobj);
+    if(!arm_iterator(gobj, card)) {
+        return;     /*  Error already logged  */
+    }
 
     persist_view(gobj, card);   /*  upsert: the saved view carries match_cond  */
 
@@ -2005,34 +2012,13 @@ function add_card(gobj, key, mode, match_cond, restoring)
  ***************************************************************/
 function mount_rows_table(gobj, card, $table)
 {
-    let priv = gobj.priv;
-    let remote = live_transport(gobj);
-    let service = gobj_read_str_attr(gobj, "treedb_name");
-
-    if(!remote) {
-        /*  The link went down between add_card()'s check and here: mount the
-         *  table anyway (the card is persisted) — EV_ON_OPEN re-arms it. Leave
-         *  iterator_id NULL: an id that was never opened would make the re-arm
-         *  close-iterator an iterator the backend never knew, and its error
-         *  answer paints a misleading banner.  */
-        log_error(`${gobj_short_name(gobj)}: no session, iterator not armed for '${card.topic}'`);
-        card.iterator_id = null;
-    } else {
-        card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
-
-        /*  Arm the iterator FIRST; the Tabulator's first get-page (fired on
-         *  build) is processed after it by the remote's FIFO command order.
-         *  The chosen match_cond pre-filters the index, so total_rows / paging
-         *  already reflect it.  */
-        let iter_kw = {
-            service:     service,
-            iterator_id: card.iterator_id,
-            topic_name:  card.topic,
-            key:         card.key
-        };
-        Object.assign(iter_kw, card.match_cond || {});
-        gobj_command(remote, "open-iterator", iter_kw, gobj);
-    }
+    /*  Arm the iterator FIRST; the Tabulator's first get-page (fired on build)
+     *  is processed after it by the remote's FIFO command order. The chosen
+     *  match_cond pre-filters the index, so total_rows / paging already
+     *  reflect it. A link that went down between add_card()'s check and here
+     *  leaves it unarmed (logged): the table is mounted anyway — the card is
+     *  persisted, and EV_ON_OPEN re-arms it.  */
+    arm_iterator(gobj, card);
 
     let table = new Tabulator($table, {
         height:         CARD_TABLE_HEIGHT,
@@ -2820,7 +2806,7 @@ function ac_picker_closed(gobj, event, kw, src)
  ************************************************************/
 function ac_open_options(gobj, event, kw, src)
 {
-    open_rows_options(gobj, (kw && kw.key) || "");
+    open_rows_options(gobj, (kw && kw.key) || "", null);
     return 0;
 }
 
@@ -2849,7 +2835,7 @@ function ac_open_card_options(gobj, event, kw, src)
     if(!card) {
         return -1;      /*  Error already logged  */
     }
-    open_card_options(gobj, card);
+    open_rows_options(gobj, card.key, card);
     return 0;
 }
 
@@ -3243,28 +3229,14 @@ function ac_show_record(gobj, event, kw, src)
  ************************************************************/
 function rearm_rows_card(gobj, card)
 {
-    let priv = gobj.priv;
-    let remote = live_transport(gobj);
-    if(!remote) {
-        log_error(`${gobj_short_name(gobj)}: no session, cannot re-arm the Rows card of '${card.topic}'`);
-        return;
-    }
-
     /*  Drop the previous iterator: on a Refresh it is alive and would linger
      *  on the backend; after a reconnect it is already gone and the close is
      *  a harmless no-op there.  */
     close_iterator(gobj, card.iterator_id);
 
-    card.iterator_id = `spa-${priv.tok}-${++priv.iter_seq}`;
-
-    let iter_kw = {
-        service:     gobj_read_str_attr(gobj, "treedb_name"),
-        iterator_id: card.iterator_id,
-        topic_name:  card.topic,
-        key:         card.key
-    };
-    Object.assign(iter_kw, card.match_cond || {});
-    gobj_command(remote, "open-iterator", iter_kw, gobj);
+    if(!arm_iterator(gobj, card)) {
+        return;     /*  Error already logged  */
+    }
     if(card.tabulator) {
         try {
             card.tabulator.replaceData();
