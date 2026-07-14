@@ -29,6 +29,17 @@
  *
  *      A view: builds its own `$container` for the shell to mount.
  *
+ *      Every click of the table is an EVENT (the SPA's contract: a DOM
+ *      handler's only job is to make one). A Tabulator `cellClick` — the
+ *      service checkbox, the refresh, the connect/disconnect, the ✕ — sends
+ *      EV_TOGGLE_SERVICE / EV_REFRESH_SERVICES / EV_TOGGLE_CONN_ENABLED /
+ *      EV_REMOVE_CONN carrying IDENTITIES (conn_id, svc_key: a kw must stay
+ *      plain JSON), and the work happens in the action. Even the removal's
+ *      confirmation comes back as one (EV_CONFIRM_REMOVE_CONN), so no state
+ *      is mutated inside a promise's `.then`. Widget plumbing that is not an
+ *      action stays a plain call (the `cellEdited` → persist of the inline
+ *      editor, the formatters).
+ *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
@@ -41,6 +52,7 @@ import {
     gobj_find_service,
     gobj_send_event,
     gobj_parent,
+    gobj_is_destroying,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
 
@@ -443,67 +455,21 @@ function persist(gobj)
 }
 
 /***************************************************************
- *  Add a blank connection row and persist.
+ *  Repaint one row of the table (its formatters read the live
+ *  connection/link state, so a state change is a reformat). Silent when
+ *  the row is gone — the table may be mid-rebuild.
  ***************************************************************/
-function add_row(gobj)
+function reformat_row(gobj, row_id)
 {
     let table = gobj_read_attr(gobj, "tabulator");
     if(!table) {
         return;
     }
-    table.addRow({
-        id: new_id(), label: "", url: "",
-        remote_yuno_role: "", remote_yuno_service: ""
-    }, false).then(() => {
-        persist(gobj);
-    });
-}
-
-/***************************************************************
- *  Toggle a service sub-row's checkbox: flip that service's
- *  `selected` flag in the connection's persisted `services`.
- ***************************************************************/
-function toggle_service(gobj, row)
-{
-    let d = row.getData();
-    let config = gobj_find_service("treedb_config", false);
-    let conn = config ? treedb_config_get_connection(config, d._conn_id) : null;
-    if(!conn || !d._svc) {
-        return;
-    }
-    let now_checked = false;
-    let list = treedb_config_conn_services(conn).map((s) => {
-        let selected = s.selected;
-        if(s.key === d._svc.key) {
-            selected = !selected;
-            now_checked = selected;
-        }
-        return {service: s.service, gclass: s.gclass, selected: selected};
-    });
-    gobj_send_event(config, "EV_SET_CONN_SERVICES",
-        {conn_id: d._conn_id, services: list}, gobj);
-    row.update({_checked: now_checked});
-}
-
-/***************************************************************
- *  Refresh the discovered services of a connection row (re-runs the
- *  discovery done automatically on the first connect).
- ***************************************************************/
-function refresh_services(gobj, row)
-{
-    let d = row.getData();
-    if(d._child) {
-        return;
-    }
-    let links = gobj_find_service("treedb_links", false);
-    if(!links) {
-        log_error(`${GCLASS_NAME}: treedb_links service not found`);
-        return;
-    }
-    show_scan_errors(gobj, []);
-    treedb_links_scan(links, d.id);
     try {
-        row.reformat();
+        let row = table.getRow(row_id);
+        if(row) {
+            row.reformat();
+        }
     } catch(e) {
         log_warning(`${GCLASS_NAME}: table mid-rebuild: ${e}`);
     }
@@ -589,13 +555,17 @@ function make_columns(gobj)
              + `<i class="${icon}"></i></span>`;
     }
 
+    /*  A cellClick is an OS notification: its only job is to make an event.
+     *  The kw carries IDENTITIES (conn_id, svc_key) — never the row or the
+     *  cell: a kw must stay plain JSON (the machine trace serializes it).  */
     function check_click(e, cell)
     {
         let d = cell.getData();
         if(!d._child) {
             return;
         }
-        toggle_service(gobj, cell.getRow());
+        gobj_send_event(gobj, "EV_TOGGLE_SERVICE",
+            {conn_id: d._conn_id, svc_key: d._svc.key}, gobj);
     }
 
     function refresh_formatter(cell)
@@ -619,11 +589,7 @@ function make_columns(gobj)
         if(d._child) {
             return;
         }
-        let links = gobj_find_service("treedb_links", false);
-        if(links && treedb_links_is_scanning(links, d.id)) {
-            return;
-        }
-        refresh_services(gobj, cell.getRow());
+        gobj_send_event(gobj, "EV_REFRESH_SERVICES", {conn_id: d.id}, gobj);
     }
 
     function connect_formatter(cell)
@@ -648,18 +614,7 @@ function make_columns(gobj)
         if(d._child) {
             return;
         }
-        let config = gobj_find_service("treedb_config", false);
-        let conn = config ? treedb_config_get_connection(config, d.id) : null;
-        if(!conn) {
-            return;
-        }
-        gobj_send_event(config, "EV_SET_CONN_ENABLED",
-            {conn_id: d.id, enabled: !conn.enabled}, gobj);
-        try {
-            cell.getRow().reformat();
-        } catch(err) {
-            log_warning(`${GCLASS_NAME}: table mid-rebuild: ${err}`);
-        }
+        gobj_send_event(gobj, "EV_TOGGLE_CONN_ENABLED", {conn_id: d.id}, gobj);
     }
 
     function status_formatter(cell)
@@ -709,33 +664,7 @@ function make_columns(gobj)
         if(d._child) {
             return;
         }
-        let shell = gobj_parent(gobj);
-        yui_shell_confirm_yesno(shell, "are you sure", {
-            title:     "remove",
-            type:      "danger",
-            yes_label: "yes",
-            no_label:  "no",
-            t:         t
-        }).then((yes) => {
-            if(!yes) {
-                return;
-            }
-            /*
-             *  Remove in config + reload via setData — NOT Tabulator's
-             *  row.delete(): deleting a dataTree PARENT row (a connection
-             *  with service sub-rows) crashes Tabulator in styleRow
-             *  ("classList undefined") while it re-renders the orphaned
-             *  child elements.
-             */
-            let config = gobj_find_service("treedb_config", false);
-            if(config) {
-                let list = treedb_config_get_connections(config)
-                    .filter((c) => c && c.id !== d.id);
-                gobj_send_event(config, "EV_SET_CONNECTIONS",
-                    {connections: list}, gobj);
-            }
-            reload_table(gobj);
-        });
+        gobj_send_event(gobj, "EV_REMOVE_CONN", {conn_id: d.id}, gobj);
     }
 
     /*
@@ -888,11 +817,165 @@ function ac_scan_error(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Add a blank connection row.
+ *  Add a blank connection row (the user fills it in place; every cell
+ *  edit persists the whole table).
  ***************************************************************/
 function ac_add_conn(gobj, event, kw, src)
 {
-    add_row(gobj);
+    let config = gobj_find_service("treedb_config", false);
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service, cannot add`);
+        return -1;
+    }
+    let blank = {
+        id:                  new_id(),
+        label:               "",
+        url:                 "",
+        remote_yuno_role:    "",
+        remote_yuno_service: "",
+        enabled:             false,   /*  nothing this SPA creates auto-connects  */
+        services:            []
+    };
+    gobj_send_event(config, "EV_SET_CONNECTIONS",
+        {connections: treedb_config_get_connections(config).concat([blank])}, gobj);
+    reload_table(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Flip a service's `selected` flag (its sub-row checkbox): the
+ *  connection's whole service list is rewritten with that one toggled.
+ ***************************************************************/
+function ac_toggle_service(gobj, event, kw, src)
+{
+    let conn_id = (kw && kw.conn_id) || "";
+    let svc_key = (kw && kw.svc_key) || "";
+    let config = gobj_find_service("treedb_config", false);
+    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
+    if(!conn || !svc_key) {
+        log_error(`${gobj_short_name(gobj)}: no service '${svc_key}' of ` +
+                  `connection '${conn_id}' to toggle`);
+        return -1;
+    }
+
+    let now_checked = false;
+    let list = treedb_config_conn_services(conn).map((s) => {
+        let selected = s.selected;
+        if(s.key === svc_key) {
+            selected = !selected;
+            now_checked = selected;
+        }
+        return {service: s.service, gclass: s.gclass, selected: selected};
+    });
+    gobj_send_event(config, "EV_SET_CONN_SERVICES",
+        {conn_id: conn_id, services: list}, gobj);
+
+    let table = gobj_read_attr(gobj, "tabulator");
+    if(table) {
+        try {
+            let row = table.getRow(conn_id + CHILD_SEP + svc_key);
+            if(row) {
+                row.update({_checked: now_checked});
+            }
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: table mid-rebuild: ${e}`);
+        }
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  Re-run the service discovery of a connection (the same scan the first
+ *  connect does automatically).
+ ***************************************************************/
+function ac_refresh_services(gobj, event, kw, src)
+{
+    let conn_id = (kw && kw.conn_id) || "";
+    let links = gobj_find_service("treedb_links", false);
+    if(!links) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_links service, cannot refresh`);
+        return -1;
+    }
+    if(treedb_links_is_scanning(links, conn_id)) {
+        return 0;   /*  its scan is already in flight: a second click is a no-op  */
+    }
+    show_scan_errors(gobj, []);
+    treedb_links_scan(links, conn_id);
+    reformat_row(gobj, conn_id);    /*  paint the refresh icon as busy  */
+    return 0;
+}
+
+/***************************************************************
+ *  The connect / disconnect button: flip the connection's connect INTENT.
+ *  The app root reconciles the transports on the change.
+ ***************************************************************/
+function ac_toggle_conn_enabled(gobj, event, kw, src)
+{
+    let conn_id = (kw && kw.conn_id) || "";
+    let config = gobj_find_service("treedb_config", false);
+    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
+    if(!conn) {
+        log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' to connect`);
+        return -1;
+    }
+    gobj_send_event(config, "EV_SET_CONN_ENABLED",
+        {conn_id: conn_id, enabled: !conn.enabled}, gobj);
+    reformat_row(gobj, conn_id);
+    return 0;
+}
+
+/***************************************************************
+ *  The ✕ of a connection row: ask first (removing a connection drops its
+ *  open tabs and its saved Tranger views with it). The confirm's resolved
+ *  promise is an OS notification like any other — it becomes an event, and
+ *  the removal happens in ITS action, never in the `.then`.
+ ***************************************************************/
+function ac_remove_conn(gobj, event, kw, src)
+{
+    let conn_id = (kw && kw.conn_id) || "";
+    let shell = gobj_parent(gobj);
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot confirm the removal`);
+        return -1;
+    }
+    yui_shell_confirm_yesno(shell, "are you sure", {
+        title:     "remove",
+        type:      "danger",
+        yes_label: "yes",
+        no_label:  "no",
+        t:         t
+    }).then((yes) => {
+        if(gobj_is_destroying(gobj)) {
+            return;     /*  Settings left while the dialog was up  */
+        }
+        gobj_send_event(gobj, "EV_CONFIRM_REMOVE_CONN",
+            {conn_id: conn_id, yes: !!yes}, gobj);
+    });
+    return 0;
+}
+
+/***************************************************************
+ *  The answer to that confirmation.
+ *
+ *  Remove in config + reload via setData — NOT Tabulator's row.delete():
+ *  deleting a dataTree PARENT row (a connection with service sub-rows)
+ *  crashes Tabulator in styleRow ("classList undefined") while it
+ *  re-renders the orphaned child elements.
+ ***************************************************************/
+function ac_confirm_remove_conn(gobj, event, kw, src)
+{
+    if(!kw || !kw.yes) {
+        return 0;   /*  the user said no  */
+    }
+    let conn_id = kw.conn_id || "";
+    let config = gobj_find_service("treedb_config", false);
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service, cannot remove`);
+        return -1;
+    }
+    let list = treedb_config_get_connections(config).filter((c) => c && c.id !== conn_id);
+    gobj_send_event(config, "EV_SET_CONNECTIONS", {connections: list}, gobj);
+    reload_table(gobj);
     return 0;
 }
 
@@ -1063,29 +1146,39 @@ function create_gclass(gclass_name)
 
     const states = [
         ["ST_IDLE", [
-            ["EV_ON_OPEN",            ac_conn_status,     null],
-            ["EV_ON_CLOSE",           ac_conn_status,     null],
-            ["EV_TREEDB_SCAN_DONE",   ac_scan_done,       null],
-            ["EV_TREEDB_SCAN_ERROR",  ac_scan_error,      null],
-            /*  user actions  */
-            ["EV_ADD_CONN",           ac_add_conn,        null],
-            ["EV_CLONE_CONN",         ac_clone_conn,      null],
-            ["EV_EXPORT_CONNS",       ac_export_conns,    null],
-            ["EV_PICK_IMPORT_FILE",   ac_pick_import_file,null],
-            ["EV_IMPORT_CONNS",       ac_import_conns,    null]
+            ["EV_ON_OPEN",              ac_conn_status,          null],
+            ["EV_ON_CLOSE",             ac_conn_status,          null],
+            ["EV_TREEDB_SCAN_DONE",     ac_scan_done,            null],
+            ["EV_TREEDB_SCAN_ERROR",    ac_scan_error,           null],
+            /*  user actions: every click of the table crosses the machine  */
+            ["EV_ADD_CONN",             ac_add_conn,             null],
+            ["EV_CLONE_CONN",           ac_clone_conn,           null],
+            ["EV_TOGGLE_SERVICE",       ac_toggle_service,       null],
+            ["EV_REFRESH_SERVICES",     ac_refresh_services,     null],
+            ["EV_TOGGLE_CONN_ENABLED",  ac_toggle_conn_enabled,  null],
+            ["EV_REMOVE_CONN",          ac_remove_conn,          null],
+            ["EV_CONFIRM_REMOVE_CONN",  ac_confirm_remove_conn,  null],
+            ["EV_EXPORT_CONNS",         ac_export_conns,         null],
+            ["EV_PICK_IMPORT_FILE",     ac_pick_import_file,     null],
+            ["EV_IMPORT_CONNS",         ac_import_conns,         null]
         ]]
     ];
 
     const event_types = [
-        ["EV_ON_OPEN",           0],
-        ["EV_ON_CLOSE",          0],
-        ["EV_TREEDB_SCAN_DONE",  0],
-        ["EV_TREEDB_SCAN_ERROR", 0],
-        ["EV_ADD_CONN",          0],
-        ["EV_CLONE_CONN",        0],
-        ["EV_EXPORT_CONNS",      0],
-        ["EV_PICK_IMPORT_FILE",  0],
-        ["EV_IMPORT_CONNS",      0]
+        ["EV_ON_OPEN",              0],
+        ["EV_ON_CLOSE",             0],
+        ["EV_TREEDB_SCAN_DONE",     0],
+        ["EV_TREEDB_SCAN_ERROR",    0],
+        ["EV_ADD_CONN",             0],
+        ["EV_CLONE_CONN",           0],
+        ["EV_TOGGLE_SERVICE",       0],
+        ["EV_REFRESH_SERVICES",     0],
+        ["EV_TOGGLE_CONN_ENABLED",  0],
+        ["EV_REMOVE_CONN",          0],
+        ["EV_CONFIRM_REMOVE_CONN",  0],
+        ["EV_EXPORT_CONNS",         0],
+        ["EV_PICK_IMPORT_FILE",     0],
+        ["EV_IMPORT_CONNS",         0]
     ];
 
     __gclass__ = gclass_create(
