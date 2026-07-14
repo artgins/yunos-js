@@ -12,6 +12,16 @@
  *      `jwt` (the BFF cookie cannot travel cross-origin — see c_login.js /
  *      YUNO_AUTH.md §2.2).
  *
+ *      Every MUTATION of this service is an EVENT (the same split
+ *      C_TREEDB_CONFIG makes): EV_SYNC_CONNECTIONS, EV_SET_TOKEN,
+ *      EV_REOPEN_CONN, EV_REJECT_CONN, EV_SCAN_CONN, EV_CLOSE_ALL. They used
+ *      to be exported functions the app root and Settings called directly, so
+ *      the transport lifecycle — the part of this SPA that actually fails:
+ *      opens, NAKs, token refreshes, reopens — happened entirely OUTSIDE the
+ *      machine and left nothing in its trace. The READS stay plain exported
+ *      functions (treedb_links_get_iev / is_connected / is_scanning /
+ *      get_open_error): they change no state and there is nothing to audit.
+ *
  *      Responsibilities:
  *        - lifecycle of the per-connection C_IEVENT_CLIs (create/start/
  *          stop/destroy), keyed by connection id;
@@ -129,7 +139,7 @@ function mt_start(gobj)
  ***************************************************************/
 function mt_stop(gobj)
 {
-    treedb_links_close_all(gobj);
+    do_close_all(gobj);
 }
 
 /***************************************************************
@@ -137,7 +147,7 @@ function mt_stop(gobj)
  ***************************************************************/
 function mt_destroy(gobj)
 {
-    treedb_links_close_all(gobj);
+    do_close_all(gobj);
 }
 
 
@@ -156,7 +166,7 @@ function mt_destroy(gobj)
  *  identity_card. C_IEVENT_CLI reads `jwt` at identity-card send time,
  *  so updating the attr is enough — no need to recreate a connected iev.
  ***************************************************************/
-function treedb_links_set_token(gobj, token)
+function do_set_token(gobj, token)
 {
     let priv = gobj.priv;
     priv.token = token || "";
@@ -173,7 +183,7 @@ function treedb_links_set_token(gobj, token)
  *  conn = {id, url, remote_yuno_role, remote_yuno_service}.
  *  Returns the transport gobj, or null on bad input.
  ***************************************************************/
-function treedb_links_ensure(gobj, conn)
+function do_ensure(gobj, conn)
 {
     let priv = gobj.priv;
     if(!conn || !conn.id || !conn.url) {
@@ -258,7 +268,7 @@ function conn_coords(conn)
  *  configured-but-disabled connection never opens a transport, so
  *  editing a row never auto-connects.
  ***************************************************************/
-function treedb_links_sync(gobj, connections)
+function do_sync(gobj, connections)
 {
     let priv = gobj.priv;
     let wanted = {};
@@ -269,14 +279,14 @@ function treedb_links_sync(gobj, connections)
         wanted[conn.id] = true;
         let e = priv.conns[conn.id];
         if(!e) {
-            treedb_links_ensure(gobj, conn);
+            do_ensure(gobj, conn);
         } else if(e.coords !== conn_coords(conn)) {
-            treedb_links_reopen(gobj, conn);
+            do_reopen(gobj, conn);
         }
     }
     for(let id of Object.keys(priv.conns)) {
         if(!wanted[id]) {
-            treedb_links_close(gobj, id);
+            do_close(gobj, id);
         }
     }
 }
@@ -312,13 +322,13 @@ function treedb_links_get_open_error(gobj, conn_id)
  *  give-up path closed the transport in silence and the picker sat on
  *  "Connecting…" forever for a connection nobody was even retrying.
  ***************************************************************/
-function treedb_links_reject(gobj, conn_id, reason)
+function do_reject(gobj, conn_id, reason)
 {
     let priv = gobj.priv;
     let e = priv.conns[conn_id];
     let url = e ? String(e.coords || "").split("|")[0] : "";
 
-    treedb_links_close(gobj, conn_id);      /*  drops open_errors[conn_id]  */
+    do_close(gobj, conn_id);      /*  drops open_errors[conn_id]  */
 
     priv.open_errors[conn_id] = {
         url:      url,
@@ -356,7 +366,7 @@ function treedb_links_is_connected(gobj, conn_id)
  *  answers are routed back by service name and the shell mounts views as
  *  pure children.
  ***************************************************************/
-function treedb_links_scan(gobj, conn_id)
+function do_scan(gobj, conn_id)
 {
     let priv = gobj.priv;
     let e = priv.conns[conn_id];
@@ -458,7 +468,7 @@ function finish_scan(gobj, conn_id, error)
 /***************************************************************
  *  Tear down one connection's transport.
  ***************************************************************/
-function treedb_links_close(gobj, conn_id)
+function do_close(gobj, conn_id)
 {
     let priv = gobj.priv;
     delete priv.open_errors[conn_id];
@@ -482,14 +492,14 @@ function treedb_links_close(gobj, conn_id)
 /***************************************************************
  *  Tear down every connection.
  ***************************************************************/
-function treedb_links_close_all(gobj)
+function do_close_all(gobj)
 {
     let priv = gobj.priv;
     if(!priv.conns) {
         return;
     }
     for(let conn_id of Object.keys(priv.conns)) {
-        treedb_links_close(gobj, conn_id);
+        do_close(gobj, conn_id);
     }
 }
 
@@ -498,10 +508,10 @@ function treedb_links_close_all(gobj)
  *  triggered by a NAK). Recreating — vs reconfiguring — is required
  *  because C_IEVENT_CLI bakes wanted_yuno_* at mt_create.
  ***************************************************************/
-function treedb_links_reopen(gobj, conn)
+function do_reopen(gobj, conn)
 {
-    treedb_links_close(gobj, conn && conn.id);
-    return treedb_links_ensure(gobj, conn);
+    do_close(gobj, conn && conn.id);
+    return do_ensure(gobj, conn);
 }
 
 
@@ -538,6 +548,60 @@ function republish(gobj, src, event, kw)
 
 
 
+/***************************************************************
+ *  The mutations. Every one of them used to be an exported function the
+ *  app root (or Settings) called straight into: the opens, the closes, the
+ *  reopen after a token refresh, the give-up on a rejected backend — the
+ *  whole transport lifecycle — happened outside the machine.
+ ***************************************************************/
+function ac_sync_connections(gobj, event, kw, src)
+{
+    do_sync(gobj, (kw && kw.connections) || []);
+    return 0;
+}
+
+function ac_set_token(gobj, event, kw, src)
+{
+    do_set_token(gobj, (kw && kw.token) || "");
+    return 0;
+}
+
+/***************************************************************
+ *  Recreate ONE connection's transport (the app root after a token
+ *  refresh). The kw carries the id, not the connection: a kw is plain
+ *  JSON and the config is the source of the coordinates anyway.
+ ***************************************************************/
+function ac_reopen_conn(gobj, event, kw, src)
+{
+    let conn_id = (kw && kw.conn_id) || "";
+    let config = gobj_find_service("treedb_config", false);
+    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
+    if(!conn) {
+        log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' to reopen`);
+        return -1;
+    }
+    do_reopen(gobj, conn);
+    return 0;
+}
+
+function ac_reject_conn(gobj, event, kw, src)
+{
+    do_reject(gobj, (kw && kw.conn_id) || "", (kw && kw.reason) || "");
+    return 0;
+}
+
+function ac_scan_conn(gobj, event, kw, src)
+{
+    do_scan(gobj, (kw && kw.conn_id) || "");
+    return 0;
+}
+
+function ac_close_all(gobj, event, kw, src)
+{
+    do_close_all(gobj);
+    return 0;
+}
+
 function ac_on_open(gobj, event, kw, src)
 {
     let priv = gobj.priv;
@@ -554,7 +618,7 @@ function ac_on_open(gobj, event, kw, src)
         let config = gobj_find_service("treedb_config", false);
         let conn = config ? treedb_config_get_connection(config, conn_id) : null;
         if(conn && !treedb_config_conn_services(conn).length) {
-            treedb_links_scan(gobj, conn_id);
+            do_scan(gobj, conn_id);
         }
     }
     return ret;
@@ -681,11 +745,19 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const states = [
         ["ST_IDLE", [
+            /*  from the transports  */
             ["EV_ON_OPEN",            ac_on_open,            null],
             ["EV_ON_CLOSE",           ac_on_close,           null],
             ["EV_ON_ID_NAK",          ac_on_id_nak,          null],
             ["EV_ON_OPEN_ERROR",      ac_on_open_error,      null],
-            ["EV_MT_COMMAND_ANSWER",  ac_mt_command_answer,  null]
+            ["EV_MT_COMMAND_ANSWER",  ac_mt_command_answer,  null],
+            /*  the mutations (the app root, Settings)  */
+            ["EV_SYNC_CONNECTIONS",   ac_sync_connections,   null],
+            ["EV_SET_TOKEN",          ac_set_token,          null],
+            ["EV_REOPEN_CONN",        ac_reopen_conn,        null],
+            ["EV_REJECT_CONN",        ac_reject_conn,        null],
+            ["EV_SCAN_CONN",          ac_scan_conn,          null],
+            ["EV_CLOSE_ALL",          ac_close_all,          null]
         ]]
     ];
 
@@ -703,7 +775,14 @@ function create_gclass(gclass_name)
         ["EV_ON_OPEN_ERROR",      out],
         ["EV_TREEDB_SCAN_DONE",   out],
         ["EV_TREEDB_SCAN_ERROR",  out],
-        ["EV_MT_COMMAND_ANSWER",  event_flag_t.EVF_PUBLIC_EVENT]
+        ["EV_MT_COMMAND_ANSWER",  event_flag_t.EVF_PUBLIC_EVENT],
+        /*  input: the mutations  */
+        ["EV_SYNC_CONNECTIONS",   0],
+        ["EV_SET_TOKEN",          0],
+        ["EV_REOPEN_CONN",        0],
+        ["EV_REJECT_CONN",        0],
+        ["EV_SCAN_CONN",          0],
+        ["EV_CLOSE_ALL",          0]
     ];
 
     __gclass__ = gclass_create(
@@ -735,18 +814,13 @@ function register_c_treedb_links()
     return create_gclass(GCLASS_NAME);
 }
 
+/*
+ *  Only the READS are exported: the mutations are events (see the header).
+ */
 export {
     register_c_treedb_links,
-    treedb_links_set_token,
-    treedb_links_ensure,
-    treedb_links_sync,
     treedb_links_get_iev,
     treedb_links_get_open_error,
-    treedb_links_reject,
     treedb_links_is_connected,
-    treedb_links_scan,
     treedb_links_is_scanning,
-    treedb_links_close,
-    treedb_links_close_all,
-    treedb_links_reopen,
 };

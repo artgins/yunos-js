@@ -7,7 +7,9 @@
  *        1. Owns the BFF login flow (C_TREEDB_LOGIN), the connection config
  *           (C_TREEDB_CONFIG) and the per-connection transports
  *           (C_TREEDB_LINKS).
- *        2. Shows the pre-shell login screen when there is no session.
+ *        2. Shows the pre-shell login screen when there is no session
+ *           (ST_LOGGED_OUT) and the shell once there is one (ST_SESSION):
+ *           the session is a STATE, not an `if(priv.shell)`.
  *        3. Builds the declarative shell (C_YUI_SHELL) on login and tears it
  *           down on logout.
  *        4. Forwards the access_token (from /auth/token) onto every link so
@@ -28,6 +30,7 @@ import {
     gobj_read_attr, gobj_write_str_attr,
     gobj_create_service, gobj_create_pure_child,
     gobj_subscribe_event, gobj_send_event,
+    gobj_change_state,
     gobj_find_service,
     gobj_start_tree, gobj_stop_tree, gobj_destroy, gobj_is_running,
     createElement2, refresh_language,
@@ -58,13 +61,8 @@ import {
 } from "./c_treedb_config.js";
 
 import {
-    treedb_links_set_token,
-    treedb_links_sync,
     treedb_links_get_iev,
     treedb_links_is_connected,
-    treedb_links_reopen,
-    treedb_links_reject,
-    treedb_links_close_all,
 } from "./c_treedb_links.js";
 
 import {setup_dev, dev_window_was_open} from "@yuneta/gobj-ui/src/yui_dev.js";
@@ -538,7 +536,7 @@ function sync_connections(gobj)
         }
     }
 
-    treedb_links_sync(links, conns);
+    gobj_send_event(links, "EV_SYNC_CONNECTIONS", {connections: conns}, gobj);
 }
 
 /***************************************************************
@@ -562,8 +560,11 @@ function ws_from_route(route)
 
 
 /***************************************************************
- *  Login accepted (fresh or restored). Forward the token onto the
- *  links, build the shell, open every configured connection.
+ *  Login accepted (fresh or restored): the session begins. Forward the
+ *  token onto the links, build the shell, open every configured
+ *  connection. ST_SESSION is what makes the shell chrome, the routing and
+ *  the connection events reachable at all — with no session, a
+ *  EV_ROUTE_CHANGED or a EV_ON_OPEN can only be a bug, and now it says so.
  ***************************************************************/
 function ac_login_accepted(gobj, event, kw, src)
 {
@@ -571,10 +572,12 @@ function ac_login_accepted(gobj, event, kw, src)
         gobj_write_str_attr(gobj, "username", kw.username);
     }
     hide_login_screen(gobj);
+    gobj_change_state(gobj, "ST_SESSION");
 
     let links = gobj_find_service("treedb_links", false);
     if(links) {
-        treedb_links_set_token(links, (kw && kw.access_token) || "");
+        gobj_send_event(links, "EV_SET_TOKEN",
+            {token: (kw && kw.access_token) || ""}, gobj);
     }
 
     build_shell(gobj);
@@ -598,7 +601,8 @@ function ac_login_refreshed(gobj, event, kw, src)
     let config = gobj_find_service("treedb_config", false);
     let links = gobj_find_service("treedb_links", false);
     if(links) {
-        treedb_links_set_token(links, (kw && kw.access_token) || "");
+        gobj_send_event(links, "EV_SET_TOKEN",
+            {token: (kw && kw.access_token) || ""}, gobj);
     }
     for(let conn_id of Object.keys(priv.nak_conns)) {
         let conn = config ? treedb_config_get_connection(config, conn_id) : null;
@@ -606,7 +610,7 @@ function ac_login_refreshed(gobj, event, kw, src)
             /*  Mark it "refreshed once": a repeat NAK after this reopen is a
              *  genuine rejection, caught in ac_on_id_nak (no more looping). */
             priv.nak_recovered[conn_id] = true;
-            treedb_links_reopen(links, conn);
+            gobj_send_event(links, "EV_REOPEN_CONN", {conn_id: conn_id}, gobj);
         }
     }
     priv.nak_conns = {};
@@ -674,7 +678,8 @@ function ac_on_id_nak(gobj, event, kw, src)
             /*  Not a bare close: a close leaves NO trace and the picker sits on
              *  "Connecting…" for a connection nobody is retrying. Reject it —
              *  the transport goes and the cause stays visible.  */
-            treedb_links_reject(links, conn_id, reason);
+            gobj_send_event(links, "EV_REJECT_CONN",
+                {conn_id: conn_id, reason: reason}, gobj);
         }
 
         /*  Clear the user's connect intent too. Closing the transport alone was
@@ -716,24 +721,61 @@ function ac_restore_failed(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Login refused / refresh failed. If a shell is up, session expired
- *  mid-use → tear down + back to login; else paint the error.
+ *  Reset the token-recovery bookkeeping (leaving a session, whichever
+ *  way).
  ***************************************************************/
-function ac_login_denied(gobj, event, kw, src)
+function forget_nak_state(gobj)
 {
     let priv = gobj.priv;
     priv.refreshing = false;
     priv.nak_conns = {};
     priv.nak_recovered = {};
+}
+
+/***************************************************************
+ *  The BFF refused the credentials (ST_LOGGED_OUT): paint the error on
+ *  the login form. There is no shell and no link to tear down — which is
+ *  the whole reason this is a STATE and no longer an `if(priv.shell)`
+ *  inside one action doing both jobs.
+ ***************************************************************/
+function ac_login_denied(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    forget_nak_state(gobj);
+
+    let msg = (kw && (kw.error || kw.error_code)) || t("login failed");
+    show_login_screen(gobj);
+    if(priv.login_ui) {
+        priv.login_ui.set_busy(false);
+        priv.login_ui.set_error(`${t("login failed")}: ${msg}`);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  The BFF said NO to a session that WAS alive (ST_SESSION): the refresh
+ *  token is dead. Tear the session down — shell, transports — and go back
+ *  to the login form with the cause.
+ *
+ *  The links are closed BEFORE the state change on purpose: closing a
+ *  transport publishes its EV_ON_CLOSE, and that event is only declared in
+ *  ST_SESSION (a connection event has no meaning with no session). Leaving
+ *  ST_SESSION first would make each one a loud "event not defined".
+ ***************************************************************/
+function ac_session_expired(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    forget_nak_state(gobj);
+
     let msg = (kw && (kw.error || kw.error_code)) || t("login failed");
 
-    if(priv.shell) {
-        destroy_shell(gobj);
-        let links = gobj_find_service("treedb_links", false);
-        if(links) {
-            treedb_links_close_all(links);
-        }
+    destroy_shell(gobj);
+    let links = gobj_find_service("treedb_links", false);
+    if(links) {
+        gobj_send_event(links, "EV_CLOSE_ALL", {}, gobj);
     }
+    gobj_change_state(gobj, "ST_LOGGED_OUT");
+
     show_login_screen(gobj);
     if(priv.login_ui) {
         priv.login_ui.set_busy(false);
@@ -778,15 +820,21 @@ function ac_logout(gobj, event, kw, src)
 
 /***************************************************************
  *  Logout done — tear down shell + links, back to login.
+ *
+ *  Same order as ac_session_expired: the transports are closed while we
+ *  are still in ST_SESSION (their EV_ON_CLOSE is only declared there), and
+ *  the state changes after.
  ***************************************************************/
 function ac_logout_done(gobj, event, kw, src)
 {
+    forget_nak_state(gobj);
     gobj_write_str_attr(gobj, "username", "");
     destroy_shell(gobj);
     let links = gobj_find_service("treedb_links", false);
     if(links) {
-        treedb_links_close_all(links);
+        gobj_send_event(links, "EV_CLOSE_ALL", {}, gobj);
     }
+    gobj_change_state(gobj, "ST_LOGGED_OUT");
     show_login_screen(gobj);
     return 0;
 }
@@ -1069,19 +1117,38 @@ function create_gclass(gclass_name)
         return -1;
     }
 
+    /*
+     *  The app has two lives, and they were both crammed into one ST_IDLE
+     *  with the session kept in `priv.shell`: ac_login_denied asked
+     *  `if(priv.shell)` to tell "the password is wrong" from "your session
+     *  died while you were working". They are STATES.
+     *
+     *  ST_LOGGED_OUT — no session: the login screen. The only events that can
+     *                  legitimately land are the login service's answers.
+     *  ST_SESSION    — a session: the shell is up, the transports are open.
+     *                  The chrome, the routing, the workspace tabs and the
+     *                  connection events live HERE, so any of them arriving
+     *                  with no session fails LOUDLY and names its sender
+     *                  instead of running against a shell that is not there.
+     */
     const states = [
-        ["ST_IDLE", [
+        ["ST_LOGGED_OUT", [
             ["EV_LOGIN_ACCEPTED",   ac_login_accepted,  null],
+            ["EV_LOGIN_DENIED",     ac_login_denied,    null],
+            ["EV_RESTORE_FAILED",   ac_restore_failed,  null]
+        ]],
+        ["ST_SESSION", [
             ["EV_LOGIN_REFRESHED",  ac_login_refreshed, null],
             ["EV_REFRESH_FAILED",   ac_refresh_failed,  null],
-            ["EV_LOGIN_DENIED",     ac_login_denied,    null],
-            ["EV_RESTORE_FAILED",   ac_restore_failed,  null],
+            /*  the BFF said no to a session that WAS alive  */
+            ["EV_LOGIN_DENIED",     ac_session_expired, null],
+            ["EV_LOGOUT",           ac_logout,          null],
             ["EV_LOGOUT_DONE",      ac_logout_done,     null],
+            /*  connections  */
             ["EV_ON_OPEN",          ac_on_open,         null],
             ["EV_ON_CLOSE",         ac_on_close,        null],
             ["EV_ON_ID_NAK",        ac_on_id_nak,       null],
             /*  shell chrome  */
-            ["EV_LOGOUT",           ac_logout,          null],
             ["EV_TOGGLE_THEME",     ac_toggle_theme,    null],
             ["EV_TOGGLE_LANGUAGE",  ac_toggle_language, null],
             ["EV_OPEN_DEVTOOLS",    ac_open_devtools,   null],

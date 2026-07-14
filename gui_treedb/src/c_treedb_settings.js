@@ -74,7 +74,6 @@ import {
 import {
     treedb_links_is_connected,
     treedb_links_is_scanning,
-    treedb_links_scan,
 } from "./c_treedb_links.js";
 
 
@@ -900,7 +899,7 @@ function ac_refresh_services(gobj, event, kw, src)
         return 0;   /*  its scan is already in flight: a second click is a no-op  */
     }
     show_scan_errors(gobj, []);
-    treedb_links_scan(links, conn_id);
+    gobj_send_event(links, "EV_SCAN_CONN", {conn_id: conn_id}, gobj);
     reformat_row(gobj, conn_id);    /*  paint the refresh icon as busy  */
     return 0;
 }
