@@ -183,6 +183,18 @@ const STYLE_CSS = `
 .C_TRANGER_VIEW .TRANGER_DASHBOARD {
     flex: 1 1 auto; min-height: 0; overflow-y: auto;
 }
+/*  The chrome of the view — the topic tabs, the toolbar, the error banner —
+    must NEVER shrink: the only thing that gives is the dashboard, which has
+    its own scroll. A flex item defaults to flex-shrink:1, so with cards in the
+    dashboard the browser stole height from the tabs too (42px -> 22px): the
+    active tab rose ~10px and, because Bulma's .tabs is overflow:hidden, its top
+    border was CLIPPED. flex:0 0 auto is the fix, and min-height:0 on the
+    dashboard (above) is what lets it absorb every pixel instead.  */
+.C_TRANGER_VIEW .TRANGER_TOPICS,
+.C_TRANGER_VIEW .TRANGER_TOOLBAR,
+.C_TRANGER_VIEW .TRANGER_ERROR {
+    flex: 0 0 auto;
+}
 /*  The card IS a Bulma .box: spacing is the mb-6 helper on the element (3rem,
     the top of Bulma's scale — a stack of tables needs a wide gutter to read as
     separate objects). Bulma has no shadow helper, so the depth comes from its

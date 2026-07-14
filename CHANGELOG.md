@@ -22,6 +22,13 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the topic tabs no longer shrink under an open card.** With
+  cards in the dashboard the tab strip rose ~10px and the top border of the
+  active tab disappeared: the tabs are a flex item, a flex item shrinks by
+  default, and the browser took 20 of their 42px (Bulma's `.tabs` is
+  `overflow:hidden`, so what it took it clipped). The view's chrome — tabs,
+  toolbar, error banner — is `flex: 0 0 auto` now: the only thing that gives is
+  the dashboard, which has its own scroll.
 - **feat(gui_treedb): the "Live topic" button says what it does, and undoes it.**
   Its label was hidden on a phone (`is-hidden-mobile`), leaving a bare dot that
   tells a mobile user nothing — and it is exactly the button a mobile user wants.
