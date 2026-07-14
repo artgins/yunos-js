@@ -13,6 +13,11 @@
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
+import {
+    epoch_to_local_input,
+    local_input_to_epoch,
+    fmt_epoch,
+} from "@yuneta/gobj-ui/src/yui_time.js";
 
 /***************************************************************
  *              Constants
@@ -33,64 +38,28 @@ const SF_TM_MS = 0x0200;    /*  sf_tm_ms: tm is in milliseconds  */
 
 
 /***************************************************************
- *  Epoch (topic unit) <-> the LOCAL wall-clock string a `datetime-local`
- *  input takes ("YYYY-MM-DDTHH:MM:SS", step=1 so seconds survive).
- *  Empty / unparseable → 0 (unset), which is exactly how the iterator
- *  reads an absent condition.
- ***************************************************************/
-function to_epoch(v, ms)
-{
-    if(!v) {
-        return 0;
-    }
-    let parsed = Date.parse(v);
-    if(Number.isNaN(parsed)) {
-        return 0;
-    }
-    return ms ? parsed : Math.floor(parsed / 1000);
-}
-
-function epoch_to_local_input(value, ms)
-{
-    if(!value) {
-        return "";
-    }
-    let d = new Date(ms ? value : value * 1000);
-    let pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-           `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-/***************************************************************
- *  Format a tranger timestamp for the t / tm columns. `ms` says the value
- *  is in milliseconds (the topic set sf_t_ms / sf_tm_ms); otherwise it is
- *  in seconds.
+ *  Epoch (topic unit) <-> the LOCAL wall clock.
  *
- *  LOCAL wall-clock, like the time pickers and the span caption of the
- *  Rows options: those are `datetime-local`, so rendering the columns in
- *  UTC put the same instant on two different clocks in one card — asking
- *  for "from 18:55" (local) returned rows the table labelled 16:55.
+ *  These three were written here, and they were the third copy of the
+ *  same code in the tree. They now live in gobj-ui (`yui_time.js`),
+ *  where C_YUI_PERIOD and any other project can reach them; what is
+ *  left here are the names this view has always called them by.
  *
- *  A MILLISECOND topic keeps its milliseconds here (.SSS). The pickers do
- *  not — `datetime-local` tops out at seconds — but the columns are what
- *  you READ, and a topic that went to the trouble of setting sf_t_ms
- *  usually appends several records inside the same second.
+ *  What they do has NOT changed, and the reasons stand:
+ *
+ *    - the wall clock is LOCAL, like the time pickers and the span
+ *      caption: rendering the columns in UTC put the same instant on two
+ *      different clocks in one card (a range asked "from 18:55" local
+ *      returned rows the table labelled 16:55);
+ *    - a MILLISECOND topic keeps its milliseconds in a COLUMN (.SSS) and
+ *      loses them in a PICKER (`datetime-local` tops out at seconds) —
+ *      a topic that went to the trouble of setting sf_t_ms usually
+ *      appends several records inside the same second;
+ *    - empty / unparseable → 0 (unset), which is exactly how the
+ *      iterator reads an absent condition.
  ***************************************************************/
-function fmt_ts(value, ms)
-{
-    if(!value) {
-        return "";
-    }
-    try {
-        let s = epoch_to_local_input(value, ms).replace("T", " ");
-        if(ms) {
-            s += `.${String(value % 1000).padStart(3, "0")}`;
-        }
-        return s;
-    } catch(e) {
-        return String(value);
-    }
-}
+const to_epoch = local_input_to_epoch;
+const fmt_ts = fmt_epoch;
 
 /***************************************************************
  *  Flatten a tranger record for the records table: metadata columns

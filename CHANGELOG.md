@@ -22,6 +22,51 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): the Rows options pick a PERIOD, not two timestamps.** The
+  time range of a Rows card was two `datetime-local` inputs per axis plus a row
+  of preset buttons — the user had to type two instants that agreed with each
+  other, and "the week before last" meant doing calendar arithmetic by hand.
+  The dialog is now TWO cards — **Time** and **Rows and flags**. There is ONE
+  date gadget, not one per axis: a record carries two timestamps but nobody asks
+  "stored last week AND reported in march", so the axis is CHOSEN (`t` · stored /
+  `tm` · happened) and the single navigator is re-aimed at it — its unit (a topic
+  may keep `t` in seconds and `tm` in milliseconds), the extent the key covers on
+  that clock, and the conditions of the card being edited. Only the chosen axis
+  reaches the iterator; a leftover range on the abandoned clock would quietly cut
+  the answer down.
+
+  Pick a granularity (All · Hour · Day · Week · Year), then walk it with a big
+  `|< < LABEL > >|` row (which STAYS, greyed out, in the modes with nothing to
+  walk — vanishing, it re-flowed the card under the cursor on every click).
+  Reopening a card's options brings back exactly what it was opened with: the
+  axis, the granularity and the range. The label says where you are in words ("Yesterday",
+  "This week", "Week 27", "July", "2025") and opens a calendar; under it, the
+  two timestamps it resolves to. `|<` / `>|` jump to the oldest / newest records
+  the key holds — its real extent bounds the navigator, so an arrow that could
+  only paint empty buckets is greyed out, and a period that falls outside the
+  key says so ("the key has no records in this period") BEFORE you open an empty
+  card.
+
+  Nothing was lost, and there is no "Custom" mode: the **from/to inputs are
+  always on screen, and they ARE the answer**. A granularity FILLS them ("Week"
+  → `2026-07-13 00:00:00 → 2026-07-19 23:59:59`), "All" empties them (the full
+  key), and the user is free to nudge them from there ("that week, but from
+  wednesday") — what leaves the dialog is what they say, so a hand-typed range
+  is honoured instead of being overwritten by the bucket it came from. One place
+  shows the range and it is the editable one.
+
+  A range that already exists — a card being re-filtered, a shared link, a
+  restored view — comes back as the period it WAS: a range whose ends land
+  exactly on a bucket's boundaries is recognized as that bucket
+  (`infer_period`), and anything else opens in Custom, where the user left it.
+  The pickers are pure children of the view, created with the dialog and
+  destroyed with it, and every move crosses the FSM (`EV_PERIOD_CHANGED`).
+
+  `tranger_helpers.js` no longer carries its own date arithmetic: `to_epoch`,
+  `epoch_to_local_input` and `fmt_ts` now delegate to gobj-ui's `yui_time.js`,
+  where the other projects can reach them. Behaviour is unchanged — the 29
+  existing tests pass against the library implementation.
+
 - **fix(gui_treedb): a Live card subscribed to the KEY, not to its own feed, so
   two cards doubled each other's rows.** With a per-key Live card and a
   whole-topic Live card open on the same key, every record appeared TWICE in

@@ -86,7 +86,9 @@ import {
     gobj_change_state,
     gobj_command,
     gobj_current_state, gobj_is_destroying,
-    gobj_create_service, gobj_find_service, gobj_destroy, is_gobj,
+    gobj_create_service, gobj_create_pure_child, gobj_find_service,
+    gobj_start, gobj_stop, gobj_destroy, is_gobj,
+    gobj_read_integer_attr,
     createElement2, refresh_language,
     msg_iev_get_stack,
     kw_get_str, kw_get_dict,
@@ -99,6 +101,7 @@ import {TabulatorFull as Tabulator} from "tabulator-tables";
 import {yui_shell_show_modal, yui_shell_popup_layer} from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {epoch_to_ms, infer_period} from "@yuneta/gobj-ui/src/yui_time.js";
 
 import {
     treedb_config_get_tranger_views,
@@ -112,6 +115,7 @@ import {
     SF_TM_MS,
     to_epoch,
     epoch_to_local_input,
+    fmt_ts,
     flatten_record,
     op_filter,
     encode_seg,
@@ -162,16 +166,20 @@ const MOBILE_COLS = 4;
  *  unit (seconds, or milliseconds when the topic's system_flag says so) is
  *  what SF_T_MS / SF_TM_MS decide — see tranger_helpers.js.  */
 
-/*  Quick ranges offered by the modal, as a span BACK FROM NOW (seconds).
- *  "today" is special-cased (it starts at local midnight, not N seconds
- *  ago) and so is "span" (the key's own extent).  */
-const TIME_PRESETS = [
-    {id: "1h",    label: "last hour",   secs: 3600},
-    {id: "24h",   label: "last 24h",    secs: 24 * 3600},
-    {id: "7d",    label: "last 7 days", secs: 7 * 24 * 3600},
-    {id: "today", label: "today",       secs: 0},
-    {id: "span",  label: "full span",   secs: 0}
-];
+/*  The granularities the Rows options offer per axis, handed to C_YUI_PERIOD
+ *  (gobj-ui): a bucket is (unit, count), so this list is the whole
+ *  configuration — the arrows, the labels and the calendar come with it.
+ *
+ *  These four are what a LOG is read with, and the set is deliberately SHORT:
+ *  a strip the eye takes in at once beats one that holds every bucket the
+ *  library can build. The rest of the catalog (quarter, semester, bimester,
+ *  decade, 15min…) is one line away for the app that reports by quarter —
+ *  this one does not.
+ *
+ *  Two more modes come from the picker itself: "All" (no bounds: the full
+ *  key) and "Custom" (the two datetime-local inputs, for the range no bucket
+ *  has — an incident between 18:03 and 18:07).  */
+const PERIOD_MODES = ["hour", "day", "week", "year"];
 
 /*  Table height inside a card (its own pager sits below): follows the
  *  viewport, capped — a short screen must not be eaten by one card.  */
@@ -393,6 +401,10 @@ let PRIVATE_DATA = {
     picker_win:  null,   /*  C_YUI_WINDOW hosting the Keys picker, desktop (or null)  */
     picker_modal: null,  /*  shell modal hosting the Keys picker, mobile (or null)  */
     picker_tbl:  null,   /*  the picker's Tabulator (or null)  */
+    rows_options: null,  /*  the Rows-options form while its dialog is up:
+                             {$box, inputs, ranges, $open}. `ranges` holds the
+                             two C_YUI_PERIOD pure children (t / tm), which die
+                             with the dialog  */
     $tabs:       null,
     $live_btn:   null,   /*  toolbar "Live topic" toggle (its dot = card open)  */
     $meta:       null,
@@ -517,6 +529,7 @@ function mt_stop(gobj)
     reject_pending(gobj, "view stopped");
     close_all_cards(gobj);
     close_picker(gobj);
+    close_rows_options(gobj);
 
     /*  A stopped view knows NOTHING: leaving the topic list, the keys and the
      *  selected topic behind meant a stop→start cycle re-entered with the
@@ -1520,119 +1533,285 @@ function key_span(gobj, key)
 }
 
 /***************************************************************
- *  One time-range block of the modal: from/to pickers bounded to what the
- *  key actually holds, the preset buttons, and the span caption.
+ *  The mode the picker must OPEN on, for a range that already exists
+ *  (a card being re-filtered, a shared link, a restored view).
+ *
+ *  A match_cond carries numbers, not intentions: the two bounds of "week
+ *  27" are indistinguishable from any other pair. So we ASK the algebra —
+ *  a range whose ends land exactly on a bucket's boundaries IS that
+ *  bucket, and comes back as it. Everything else was typed by hand and
+ *  opens in "custom", where the user left it.
+ *
+ *  A range that is no bucket — typed by hand, or half-open — restores as
+ *  "custom": no granularity lit, the arrows dead, and the two inputs
+ *  carrying exactly what was queried. Lighting a granularity that does not
+ *  match would claim the user asked for something else.
+ ***************************************************************/
+function restore_period_mode(from_val, to_val, ms)
+{
+    if(!from_val && !to_val) {
+        return {mode: "span", anchor: Date.now()};
+    }
+
+    let from_ms = epoch_to_ms(from_val, ms);
+    let to_ms = epoch_to_ms(to_val, ms);
+
+    if(from_ms && to_ms) {
+        /*  Only among the modes the control OFFERS: recognizing a range as a
+         *  quarter the strip does not carry would name a mode that is not
+         *  there. Compared in the TOPIC's unit — a seconds topic stored the
+         *  bucket's end truncated, and a millisecond comparison never matched
+         *  it (every saved week came back as a hand-typed range).  */
+        let got = infer_period(from_val, to_val, PERIOD_MODES, ms);
+        if(got) {
+            return {mode: got.period.id, anchor: got.anchor};
+        }
+    }
+    return {mode: "custom", anchor: from_ms || Date.now()};
+}
+
+/***************************************************************
+ *  One time-range block of the modal: a C_YUI_PERIOD navigator, whose
+ *  "custom" mode reveals the two datetime-local inputs this view has
+ *  always had (bounded to what the key actually holds).
  *
  *  `axis` is "t" (persistence) or "tm" (message origin) — they are two
  *  independent match conditions and the iterator ANDs them, so each gets
- *  its own block instead of a selector that would let the user express
- *  only one of the two.
+ *  its own picker instead of a selector that would let the user express
+ *  only one of the two. The picker is a PURE CHILD of the view (created
+ *  with the dialog, destroyed with it — pure children are not auto-started,
+ *  so it is started here), and it publishes EV_PERIOD_CHANGED back into
+ *  this FSM.
  *
- *  Returns {$block, $from, $to}.
+ *  Returns {$block, gobj, $from, $to, $resolved, ms}.
  ***************************************************************/
-function build_time_range_block(axis, from_val, to_val, ms, span_from, span_to)
+function build_time_block(gobj, match_cond, span, units)
 {
-    let up = axis.toUpperCase();
-    let mk = (which, val) => createElement2(
-        ["input", {class: `input TRANGER_OPT_${which}_${up}`,
-                   type: "datetime-local", step: "1",
-                   /*  Bounded to the key's real extent: a range outside it can
-                    *  only ever return zero rows, and the bounds double as a
-                    *  hint of what there is to look at.  */
-                   min: epoch_to_local_input(span_from, ms),
-                   max: epoch_to_local_input(span_to, ms),
-                   value: epoch_to_local_input(val, ms)}]);
+    let mc = match_cond || {};
 
-    let $from = mk("FROM", from_val);
-    let $to = mk("TO", to_val);
+    /*  ONE axis, chosen. A record carries two timestamps and the iterator
+     *  would happily AND both ranges, but nobody asks "stored last week AND
+     *  reported in march" — you look at a log through ONE clock, and asking
+     *  the user to fill two was asking them to answer a question they did not
+     *  have. Which clock IS a real question, though, and a backfilled topic
+     *  answers it differently: `t` is when the record landed, `tm` is when the
+     *  thing it reports happened, and they can be hours apart.  */
+    let axis = mc.from_tm || mc.to_tm ? "tm" : "t";
 
-    let $presets = createElement2(
-        ["div", {class: `is-flex is-flex-wrap-wrap TRANGER_OPT_PRESETS_${up}`}, []]);
-    for(let preset of TIME_PRESETS) {
-        let $btn = createElement2(
-            ["button", {class: "button is-small is-light mr-1 mt-1 " +
-                               `TRANGER_OPT_PRESET TRANGER_OPT_PRESET_${preset.id.toUpperCase()}`,
-                        type: "button", title: t(preset.label),
-                        "aria-label": t(preset.label)},
-                [["span", {i18n: preset.label}, t(preset.label)]]
-            ]);
-        $btn.addEventListener("click", () => {
-            apply_time_preset(preset, $from, $to, ms, span_from, span_to);
+    let $from = createElement2(
+        ["input", {class: "input TRANGER_OPT_FROM", type: "datetime-local", step: "1"}]);
+    let $to = createElement2(
+        ["input", {class: "input TRANGER_OPT_TO", type: "datetime-local", step: "1"}]);
+
+    /*  Typing in them is an answer too: the hint must follow what the inputs
+     *  now say, not what the granularity last resolved to.  */
+    for(let $input of [$from, $to]) {
+        $input.addEventListener("change", () => {
+            gobj_send_event(gobj, "EV_TIME_RANGE_TYPED", {}, gobj);
         });
-        $presets.appendChild($btn);
     }
-    let $clear = createElement2(
-        ["button", {class: "button is-small is-light mr-1 mt-1 TRANGER_OPT_PRESET_CLEAR",
-                    type: "button", title: t("clear"), "aria-label": t("clear"),
-                        "data-i18n-title": "clear", "data-i18n-aria-label": "clear"},
-            [["span", {i18n: "clear"}, t("clear")]]
-        ]);
-    $clear.addEventListener("click", () => {
-        $from.value = "";
-        $to.value = "";
-    });
-    $presets.appendChild($clear);
 
-    let caption = (span_from && span_to)
-        ? `${epoch_to_local_input(span_from, ms).replace("T", " ")} → ` +
-          `${epoch_to_local_input(span_to, ms).replace("T", " ")}`
-        : t("span unknown");
-
-    let $block = createElement2(
-        ["div", {class: `TRANGER_OPT_RANGE TRANGER_OPT_RANGE_${up}`},
+    /*  ALWAYS on screen, and it IS the answer: the granularity fills these
+     *  two with the bucket it resolves to, and the user is free to nudge them
+     *  from there ("that week, but from wednesday"). One place shows the
+     *  range, and it is the editable one — a read-only copy of the same two
+     *  timestamps next to it was noise.  */
+    let $range = createElement2(
+        ["div", {class: "mt-2 TRANGER_OPT_CUSTOM"},
             [
-                ["p", {class: "label mb-1", i18n: axis === "t" ? "t persistence" : "tm message origin"},
-                    t(axis === "t" ? "t persistence" : "tm message origin")],
                 ["div", {class: "columns is-mobile is-multiline mb-0"},
                     [
                         ["div", {class: "column is-half"},
                             [
-                                ["label", {class: "label is-small mb-1", i18n: "from"}, t("from")],
+                                ["label", {class: "label is-small mb-1", "data-i18n": "from"},
+                                    t("from")],
                                 ["div", {class: "control"}, [$from]]
                             ]
                         ],
                         ["div", {class: "column is-half"},
                             [
-                                ["label", {class: "label is-small mb-1", i18n: "to"}, t("to")],
+                                ["label", {class: "label is-small mb-1", "data-i18n": "to"},
+                                    t("to")],
                                 ["div", {class: "control"}, [$to]]
                             ]
                         ]
                     ]
                 ],
-                $presets,
-                ["p", {class: "is-size-7 has-text-grey mt-1 TRANGER_OPT_SPAN"}, caption]
             ]
         ]);
 
-    return {$block: $block, $from: $from, $to: $to};
+    let picker = gobj_create_pure_child("period", "C_YUI_PERIOD", {
+        periods:       PERIOD_MODES,
+        with_span:     true,
+        /*  No "custom" MODE: the two inputs below are always there, so a mode
+         *  whose whole job was to reveal them has nothing left to do.
+         *  No resolved line either — the inputs say the same thing, and they
+         *  can be edited.  */
+        with_custom:   false,
+        with_resolved: false
+    }, gobj);
+    gobj_start(picker);
+
+    /*  The picker prints the two timestamps it resolves to; what IT cannot
+     *  know is whether the key holds anything there. This line does.  */
+    let $hint = createElement2(
+        ["p", {class: "is-size-7 has-text-centered mt-1 TRANGER_OPT_HINT"}, ""]);
+    /*  It closes the "which clock" half of the card: the gap under it is what
+     *  separates that question from the "which period" one below.  */
+    let $extent = createElement2(
+        ["p", {class: "is-size-7 has-text-grey-light has-text-centered mb-5 " +
+                      "TRANGER_OPT_SPAN"}, ""]);
+
+    let $axis_btns = {};
+    let $axis = createElement2(
+        ["div", {class: "buttons has-addons is-centered mb-2 TRANGER_OPT_AXIS"}, []]);
+
+    for(let id of ["t", "tm"]) {
+        let $btn = createElement2(
+            ["button", {class: `button TRANGER_OPT_AXIS_BTN ` +
+                               `TRANGER_OPT_AXIS_${id.toUpperCase()}`, type: "button",
+                        /*  The short name is the BUTTON; what it means is the
+                         *  line under the pair. Two full sentences side by side
+                         *  wrapped into an unreadable block on a phone.  */
+                        title: t(id === "t" ? "t persistence" : "tm message origin"),
+                        "data-i18n-title": id === "t" ? "t persistence" : "tm message origin"},
+                [["span", {"data-i18n": id === "t" ? "axis t" : "axis tm"},
+                    t(id === "t" ? "axis t" : "axis tm")]]
+            ]);
+        $btn.addEventListener("click", () => {
+            gobj_send_event(gobj, "EV_SET_TIME_AXIS", {axis: id}, gobj);
+        });
+        $axis_btns[id] = $btn;
+        $axis.appendChild($btn);
+    }
+
+    let $why = createElement2(
+        ["p", {class: "is-size-7 has-text-grey has-text-centered mb-1 " +
+                      "TRANGER_OPT_AXIS_WHY"}, ""]);
+
+    /*  The warning sits right under the axis it is about: a period that finds
+     *  nothing is a fact about THIS clock, and at the bottom of the card it
+     *  read like a footnote to the whole form.  */
+    let $block = createElement2(
+        ["div", {class: "TRANGER_OPT_RANGE"},
+            [$axis, $why, $extent, $hint, gobj_read_attr(picker, "$container"), $range]]);
+
+    let time = {
+        $block: $block, gobj: picker, axis: axis, $range: $range,
+        $from: $from, $to: $to, $hint: $hint, $extent: $extent,
+        $axis_btns: $axis_btns, $why: $why,
+        span: span, units: units, match_cond: mc
+    };
+
+    apply_time_axis(time, axis);
+    return time;
 }
 
 /***************************************************************
- *  Fill a range block from a quick preset. "span" is the key's own
- *  extent; "today" starts at local midnight; the rest are a window back
- *  from now. The `to` end is left OPEN for the now-relative ones — an
- *  iterator with no to_t keeps matching records that land while the card
- *  is open, and pinning it to "now" would silently exclude them.
+ *  Point the picker at one axis: its UNIT (a topic may keep t in seconds
+ *  and tm in milliseconds), the extent the key covers on THAT axis, and
+ *  the bounds the two custom inputs accept.
+ *
+ *  The mode is re-derived from the match conditions of that axis, so
+ *  reopening a card filtered by `tm` comes back on `tm`, showing the
+ *  period it was filtered by — and switching axes does not silently carry
+ *  a range that belonged to the other clock.
  ***************************************************************/
-function apply_time_preset(preset, $from, $to, ms, span_from, span_to)
+function apply_time_axis(time, axis)
 {
-    if(preset.id === "span") {
-        $from.value = epoch_to_local_input(span_from, ms);
-        $to.value = epoch_to_local_input(span_to, ms);
-        return;
+    let mc = time.match_cond;
+    let ms = axis === "t" ? time.units.t_ms : time.units.tm_ms;
+    let span_from = axis === "t" ? time.span.fr_t : time.span.fr_tm;
+    let span_to = axis === "t" ? time.span.to_t : time.span.to_tm;
+    let from_val = axis === "t" ? mc.from_t : mc.from_tm;
+    let to_val = axis === "t" ? mc.to_t : mc.to_tm;
+
+    time.axis = axis;
+    time.ms = ms;
+    time.span_from = span_from;
+    time.span_to = span_to;
+
+    for(let id in time.$axis_btns) {
+        let on = (id === axis);
+        time.$axis_btns[id].classList.toggle("is-link", on);
+        time.$axis_btns[id].classList.toggle("is-active", on);
+    }
+    time.$why.textContent = t(axis === "t"
+        ? "when the record was stored"
+        : "when the event actually happened");
+
+    /*  Bounded to the key's real extent: a range outside it can only ever
+     *  return zero rows, and the bounds double as a hint of what there is
+     *  to look at.  */
+    time.$from.min = epoch_to_local_input(span_from, ms);
+    time.$from.max = epoch_to_local_input(span_to, ms);
+    time.$to.min = time.$from.min;
+    time.$to.max = time.$from.max;
+    time.$from.value = epoch_to_local_input(from_val, ms);
+    time.$to.value = epoch_to_local_input(to_val, ms);
+
+    time.$extent.textContent = (span_from && span_to)
+        ? `${t("the key holds")} ${epoch_to_local_input(span_from, ms).replace("T", " ")}` +
+          ` → ${epoch_to_local_input(span_to, ms).replace("T", " ")}`
+        : t("span unknown");
+
+    /*  Re-aim the picker: the attrs, then ONE event to make it re-read them.
+     *  EV_REFRESH and not EV_SET_MODE on purpose — EV_SET_MODE publishes, and
+     *  this runs while the dialog is still being BUILT (and again on an axis
+     *  click, where the answer is not ready either). Nothing was asked yet.  */
+    let start = restore_period_mode(from_val, to_val, ms);
+    gobj_write_attr(time.gobj, "ms", ms);
+    gobj_write_attr(time.gobj, "min", span_from);
+    gobj_write_attr(time.gobj, "max", span_to);
+    gobj_write_attr(time.gobj, "mode", start.mode);
+    gobj_write_attr(time.gobj, "anchor", start.anchor);
+    gobj_send_event(time.gobj, "EV_REFRESH", {}, time.gobj);
+}
+
+/***************************************************************
+ *  Write what the picker resolved into the two inputs: they ARE the range
+ *  that will be asked for, and the granularity is only a fast way to fill
+ *  them. "All" empties them (no bounds = the full key).
+ ***************************************************************/
+function sync_time_inputs(time)
+{
+    let from = gobj_read_integer_attr(time.gobj, "from");
+    let to = gobj_read_integer_attr(time.gobj, "to");
+
+    time.$from.value = epoch_to_local_input(from, time.ms);
+    time.$to.value = epoch_to_local_input(to, time.ms);
+}
+
+/***************************************************************
+ *  Warn when the chosen period lands where the key has NOTHING.
+ *
+ *  The picker resolves a name into two timestamps; only the view knows the
+ *  extent the key actually covers. A bucket entirely outside it can only
+ *  ever open an empty card — and an empty card is indistinguishable from a
+ *  broken query, so say it BEFORE opening it.
+ ***************************************************************/
+function paint_hint(time)
+{
+    let $hint = time.$hint;
+    $hint.classList.remove("has-text-warning-dark");
+    $hint.textContent = "";
+
+    if(!time.span_from || !time.span_to) {
+        return;                     /*  the key's extent is unknown: no claim  */
+    }
+    /*  Read the INPUTS, not the picker: they are what will be asked for, and
+     *  the user may have nudged them off the bucket.  */
+    let from = to_epoch(time.$from.value, time.ms);
+    let to = to_epoch(time.$to.value, time.ms);
+    if(!from && !to) {
+        return;                     /*  the full key: never empty  */
     }
 
-    let from_ms;
-    if(preset.id === "today") {
-        let d = new Date();
-        d.setHours(0, 0, 0, 0);
-        from_ms = d.getTime();
-    } else {
-        from_ms = Date.now() - preset.secs * 1000;
+    let misses = (to && to < time.span_from) || (from && from > time.span_to);
+    if(misses) {
+        $hint.classList.add("has-text-warning-dark");
+        $hint.textContent = t("the key has no records in this period");
     }
-
-    $from.value = epoch_to_local_input(ms ? from_ms : Math.floor(from_ms / 1000), ms);
-    $to.value = "";
 }
 
 /***************************************************************
@@ -1651,7 +1830,7 @@ function apply_time_preset(preset, $from, $to, ms, span_from, span_to)
  *  apply to this one) — the fields are the same either way.
  *  Returns {$box, inputs, ranges, $open}.
  ***************************************************************/
-function build_rows_options_form(match_cond, editing, span, units)
+function build_rows_options_form(gobj, match_cond, editing, span, units)
 {
     let mc = match_cond || {};
 
@@ -1659,10 +1838,7 @@ function build_rows_options_form(match_cond, editing, span, units)
         ["input", {class: `input ${cls}`, type: type, placeholder: ph || "",
                    value: (val === 0 || val === undefined || val === null) ? "" : String(val)}]);
 
-    let range_t = build_time_range_block("t", mc.from_t, mc.to_t, units.t_ms,
-                        span.fr_t, span.to_t);
-    let range_tm = build_time_range_block("tm", mc.from_tm, mc.to_tm, units.tm_ms,
-                        span.fr_tm, span.to_tm);
+    let time = build_time_block(gobj, mc, span, units);
 
     let inputs = {
         from_rowid:  mk_input("TRANGER_OPT_FROM_ROWID",  "number", t("1-based; negative = from end"),
@@ -1675,10 +1851,6 @@ function build_rows_options_form(match_cond, editing, span, units)
                         mc.user_flag_mask_notset)
     };
 
-    let ranges = {
-        t:  {$from: range_t.$from,  $to: range_t.$to,  ms: units.t_ms},
-        tm: {$from: range_tm.$from, $to: range_tm.$to, ms: units.tm_ms}
-    };
 
     /*  The iterator can index the key from the END (open-iterator's
      *  `backward`). In a log that is what you almost always want — the last
@@ -1705,32 +1877,65 @@ function build_rows_options_form(match_cond, editing, span, units)
             ]
         ]);
 
-    let $box = createElement2(
-        ["div", {class: "TRANGER_ROWS_OPTIONS",
-                 style: "width:min(92vw, 460px); max-width:100%;"},
+    /*  THREE cards, because the form asks three different questions and a
+     *  single column of fields made them look like one. The two time axes are
+     *  NOT variants of each other — `t` is when a record was stored, `tm` is
+     *  when the thing it reports happened, and they can be hours apart after a
+     *  backfill — so each gets its own card and its own navigator, and the
+     *  third holds what is not time at all.  */
+    let card = (title, subtitle, logical, body) => createElement2(
+        ["div", {class: `card mb-4 TRANGER_OPT_CARD ${logical}`},
             [
-                ["p", {class: "is-size-7 has-text-grey mb-3", i18n: "leave blank for the full key"},
-                    t("leave blank for the full key")],
-                range_t.$block,
-                ["hr", {class: "my-3"}, ""],
-                range_tm.$block,
-                ["hr", {class: "my-3"}, ""],
-                ["div", {class: "columns is-mobile is-multiline"},
-                    [
-                        ["div", {class: "column is-half"}, [field("from rowid", inputs.from_rowid)]],
-                        ["div", {class: "column is-half"}, [field("to rowid", inputs.to_rowid)]],
-                        ["div", {class: "column is-half"}, [field("user-flag mask set", inputs.mask_set)]],
-                        ["div", {class: "column is-half"}, [field("user-flag mask clear", inputs.mask_notset)]]
-                    ]
+                ["header", {class: "card-header"},
+                    [["div", {class: "card-header-title is-block"},
+                        [
+                            ["span", {class: "is-block", "data-i18n": title}, t(title)],
+                            ["span", {class: "is-block is-size-7 has-text-weight-normal " +
+                                             "has-text-grey", "data-i18n": subtitle},
+                                t(subtitle)]
+                        ]
+                    ]]
                 ],
-                ["label", {class: "checkbox is-block mt-2 TRANGER_OPT_BACKWARD_FIELD"},
-                    [$backward,
-                     ["span", {class: "ml-2", i18n: "newest first"}, t("newest first")]]],
-                ["div", {class: "has-text-right mt-2 TRANGER_OPT_ACTIONS"}, [$open]]
+                ["div", {class: "card-content p-3"}, body]
             ]
         ]);
 
-    return {$box: $box, inputs: inputs, ranges: ranges, $open: $open};
+    let $box = createElement2(
+        /*  Fill the dialog. A hand-picked width narrower than the shell's
+         *  own (640px) just left a band of dead space down the right side;
+         *  the dialog is already the thing that decides how wide a popup may
+         *  be, and it is responsive.  */
+        ["div", {class: "TRANGER_ROWS_OPTIONS", style: "width:100%;"},
+            [
+                card("time", "which clock, and which period",
+                     "TRANGER_OPT_CARD_TIME", [time.$block]),
+
+                card("rows and flags", "leave blank for the full key",
+                     "TRANGER_OPT_CARD_REST",
+                    [
+                        ["div", {class: "columns is-mobile is-multiline"},
+                            [
+                                ["div", {class: "column is-half"},
+                                    [field("from rowid", inputs.from_rowid)]],
+                                ["div", {class: "column is-half"},
+                                    [field("to rowid", inputs.to_rowid)]],
+                                ["div", {class: "column is-half"},
+                                    [field("user-flag mask set", inputs.mask_set)]],
+                                ["div", {class: "column is-half"},
+                                    [field("user-flag mask clear", inputs.mask_notset)]]
+                            ]
+                        ],
+                        ["label", {class: "checkbox is-block mt-2 TRANGER_OPT_BACKWARD_FIELD"},
+                            [$backward,
+                             ["span", {class: "ml-2", "data-i18n": "newest first"},
+                                t("newest first")]]]
+                    ]),
+
+                ["div", {class: "has-text-centered TRANGER_OPT_ACTIONS"}, [$open]]
+            ]
+        ]);
+
+    return {$box: $box, inputs: inputs, time: time, $open: $open};
 }
 
 /***************************************************************
@@ -1741,19 +1946,27 @@ function build_rows_options_form(match_cond, editing, span, units)
 function collect_rows_match_cond(form)
 {
     let inputs = form.inputs;
-    let ranges = form.ranges;
+    let time = form.time;
     let mc = {};
 
-    for(let axis of ["t", "tm"]) {
-        let range = ranges[axis];
-        let from = to_epoch(range.$from.value, range.ms);
-        if(from) {
-            mc[`from_${axis}`] = from;
-        }
-        let to = to_epoch(range.$to.value, range.ms);
-        if(to) {
-            mc[`to_${axis}`] = to;
-        }
+    /*  ONE axis: the one the user chose. The other one carries no condition
+     *  at all — the iterator ANDs whatever it is given, and a leftover range
+     *  on the abandoned clock would quietly cut the answer down.  */
+    let from;
+    let to;
+
+    /*  The INPUTS are the answer. The granularity filled them (and a click on
+     *  another one refills them), but what leaves this dialog is what they say
+     *  — so a range nudged by hand off the bucket is honoured instead of being
+     *  silently overwritten by the bucket it came from.  */
+    from = to_epoch(time.$from.value, time.ms);
+    to = to_epoch(time.$to.value, time.ms);
+
+    if(from) {
+        mc[`from_${time.axis}`] = from;
+    }
+    if(to) {
+        mc[`to_${time.axis}`] = to;
     }
 
     let fr = parseInt(inputs.from_rowid.value, 10);
@@ -1797,17 +2010,39 @@ function open_rows_options(gobj, key, card)
         log_error(`${gobj_short_name(gobj)}: no shell, cannot open the Rows options`);
         return;
     }
+    let priv = gobj.priv;
     let editing = !!card;
-    let form = build_rows_options_form(
+
+    /*  A dialog already up owns a picker gobj named `period`: building a
+     *  second one under the same parent would collide on the name. It cannot
+     *  happen through the UI (the dialog is modal), so if it does, something
+     *  else opened it.  */
+    if(priv.rows_options) {
+        log_error(`${gobj_short_name(gobj)}: the Rows options are already open`);
+        return;
+    }
+
+    let form = build_rows_options_form(gobj,
         editing ? card.match_cond : null, editing,
         key_span(gobj, key), topic_time_units(gobj));
+
+    priv.rows_options = form;
+    paint_hint(form.time);
 
     let opt_modal = yui_shell_show_modal(shell, form.$box, {
         dialog: true,
         logical_class: "TRANGER_ROWS_OPTIONS",
         title:  `${key} · ${t("rows")}`,
-        t:      t
+        t:      t,
+        /*  EVERY way out of the dialog lands here (the X, Escape, the
+         *  backdrop, and the confirm button's own close()), so this is the
+         *  one place the pickers die. A child gobj outliving its DOM is a
+         *  leak the next dialog would trip over by name.  */
+        on_close: () => {
+            close_rows_options(gobj);
+        }
     });
+
     form.$open.addEventListener("click", () => {
         let match_cond = collect_rows_match_cond(form);
         if(opt_modal && typeof opt_modal.close === "function") {
@@ -1817,6 +2052,34 @@ function open_rows_options(gobj, key, card)
             editing ? "EV_APPLY_MATCH_COND" : "EV_OPEN_CARD",
             {key: key, mode: "rows", match_cond: match_cond}, gobj);
     });
+}
+
+/***************************************************************
+ *  The Rows options are gone: destroy the two picker gobjs with them.
+ *  Idempotent — the confirm path closes the modal itself, and the modal
+ *  calls back here.
+ ***************************************************************/
+function close_rows_options(gobj)
+{
+    let priv = gobj.priv;
+    let form = priv.rows_options;
+    if(!form) {
+        return;
+    }
+    priv.rows_options = null;
+
+    let time = form.time;
+    if(time && is_gobj(time.gobj)) {
+        /*  STOP, then destroy — the picker was STARTED when it was built.
+         *  gobj_destroy() raises the `destroying` flag BEFORE it tries to stop
+         *  a still-running gobj, so its own stop is then refused ("gobj NULL or
+         *  DESTROYED"): closing the dialog logged four errors and skipped
+         *  mt_stop entirely. (mt_destroy still tore the calendar down, so
+         *  nothing leaked — but a gclass is entitled to have its mt_stop run,
+         *  and a screenful of framework errors hides the next real one.)  */
+        gobj_stop(time.gobj);
+        gobj_destroy(time.gobj);
+    }
 }
 
 /***************************************************************
@@ -3067,6 +3330,75 @@ function ac_open_card_options(gobj, event, kw, src)
 }
 
 /************************************************************
+ *  A time picker of the Rows options moved (a granularity, an arrow, a
+ *  date off its calendar). Nothing is queried yet — the dialog is still
+ *  open — but the user must SEE what the name they just picked resolves
+ *  to: "Week 27" is not two timestamps, and the iterator only takes two
+ *  timestamps.
+ *
+ *  Which axis moved is told by the SENDER (the picker is named after its
+ *  axis), not by the kw: a kw is plain JSON and the axis is already
+ *  encoded in the identity of the gobj that published.
+ ************************************************************/
+function ac_period_changed(gobj, event, kw, src)
+{
+    let form = gobj.priv.rows_options;
+    if(!form) {
+        /*  The dialog is gone but a picker still published: it outlived its
+         *  form, which is exactly the leak close_rows_options() prevents.  */
+        log_error(`${gobj_short_name(gobj)}: EV_PERIOD_CHANGED with no Rows options open`);
+        return -1;
+    }
+
+    sync_time_inputs(form.time);
+    paint_hint(form.time);
+    return 0;
+}
+
+/************************************************************
+ *  The user typed a range by hand, off whatever bucket had filled the
+ *  inputs. Nothing to re-resolve — the inputs already ARE the answer — but
+ *  the "no records in this period" warning was computed from the OLD values
+ *  and must follow.
+ ************************************************************/
+function ac_time_range_typed(gobj, event, kw, src)
+{
+    let form = gobj.priv.rows_options;
+    if(!form) {
+        log_error(`${gobj_short_name(gobj)}: EV_TIME_RANGE_TYPED with no Rows options open`);
+        return -1;
+    }
+    paint_hint(form.time);
+    return 0;
+}
+
+/************************************************************
+ *  The user picked the other clock: `t` (when the record was stored) or
+ *  `tm` (when the thing it reports happened).
+ *
+ *  It is not a cosmetic toggle: the two axes have their own UNIT (a topic
+ *  may keep t in seconds and tm in milliseconds), their own extent for the
+ *  key, and their own conditions in the card being edited. The picker is
+ *  re-aimed at all three.
+ ************************************************************/
+function ac_set_time_axis(gobj, event, kw, src)
+{
+    let form = gobj.priv.rows_options;
+    if(!form) {
+        log_error(`${gobj_short_name(gobj)}: EV_SET_TIME_AXIS with no Rows options open`);
+        return -1;
+    }
+    if(kw.axis !== "t" && kw.axis !== "tm") {
+        log_error(`${gobj_short_name(gobj)}: not a time axis: ${kw.axis}`);
+        return -1;
+    }
+
+    apply_time_axis(form.time, kw.axis);
+    paint_hint(form.time);
+    return 0;
+}
+
+/************************************************************
  *  Apply new match conditions to an open Rows card.
  ************************************************************/
 function ac_apply_match_cond(gobj, event, kw, src)
@@ -3584,6 +3916,16 @@ function ac_language_changed(gobj, event, kw, src)
         retranslate_table(gobj, card);
     }
 
+    /*  The Rows options may be up: the time pickers compose their labels
+     *  ("Week 27", a month name) at build time, so no attribute can reach
+     *  them — they re-render on the event, like every widget's chrome.  */
+    if(priv.rows_options) {
+        let time = priv.rows_options.time;
+        gobj_send_event(time.gobj, "EV_LANGUAGE_CHANGED", {}, gobj);
+        apply_time_axis(time, time.axis);       /*  its labels are t()-composed  */
+        paint_hint(time);
+    }
+
     if(priv.picker_tbl) {
         try {
             /*  The picker's headers ARE ours (t() at column-build time), so
@@ -3764,6 +4106,9 @@ function create_gclass(gclass_name)
             ["EV_PICKER_CLOSED",        ac_picker_closed,         null],
             ["EV_OPEN_OPTIONS",         ac_open_options,          null],
             ["EV_OPEN_CARD_OPTIONS",    ac_open_card_options,     null],
+            ["EV_SET_TIME_AXIS",        ac_set_time_axis,         null],
+            ["EV_TIME_RANGE_TYPED",     ac_time_range_typed,      null],
+            ["EV_PERIOD_CHANGED",       ac_period_changed,        null],
             ["EV_APPLY_MATCH_COND",     ac_apply_match_cond,      null],
             ["EV_OPEN_CARD",            ac_open_card,             null],
             ["EV_CLOSE_CARD",           ac_close_card,            null],
@@ -3795,6 +4140,9 @@ function create_gclass(gclass_name)
         ["EV_PICKER_CLOSED",        0],
         ["EV_OPEN_OPTIONS",         0],
         ["EV_OPEN_CARD_OPTIONS",    0],
+        ["EV_SET_TIME_AXIS",        0],
+        ["EV_TIME_RANGE_TYPED",     0],
+        ["EV_PERIOD_CHANGED",       0],
         ["EV_APPLY_MATCH_COND",     0],
         ["EV_OPEN_CARD",            0],
         ["EV_CLOSE_CARD",           0],
