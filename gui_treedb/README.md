@@ -125,7 +125,13 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   action, so the `machine` trace IS the execution log. `C_TRANGER_VIEW` models
   its life as states (`ST_DISCONNECTED` → `ST_LOADING_TOPICS` →
   `ST_TOPIC_SELECTED`), so an action arriving with no topic fails LOUDLY naming
-  its sender instead of no-opping a button; `C_TREEDB_CONFIG`'s **mutations are
+  its sender instead of no-opping a button. **The session is one of those
+  states, and the link has two edges**: the view watches `EV_ON_OPEN` *and*
+  `EV_ON_CLOSE` on `C_TREEDB_LINKS`, so a dropped backend sends it back to
+  `ST_DISCONNECTED` — cards torn down but kept PERSISTED, picker closed, toolbar
+  DISABLED (with no session the user actions are not declared at all, so the
+  button must not be pressable in the first place) — and the reconnect returns to
+  the same topic and reopens the saved cards by itself. `C_TREEDB_CONFIG`'s **mutations are
   events** (its reads stay plain functions). Two consequences worth keeping in
   mind when extending it: a `kw` must be **plain JSON** (the trace serializes
   it — pass `{key, mode}`, never a widget or a DOM node), and widget plumbing
