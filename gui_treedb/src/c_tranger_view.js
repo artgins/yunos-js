@@ -469,9 +469,16 @@ function mt_start(gobj)
      *  `__subscribing__` (c_ievent_cli's send_remote_subscription), and
      *  asking a C_TRANGER for an event it does not publish breaks the
      *  session — topics/list-keys stop arriving and the view goes blank.  */
+    /*  BOTH edges of the link, not only the rising one: watching EV_ON_OPEN
+     *  alone left the view sitting in ST_TOPIC_SELECTED after the session died,
+     *  with a toolbar that still looked alive — the Keys button then built its
+     *  picker against a dead session and Tabulator painted a "Data Load Error"
+     *  over the honest "no session" log. A dropped link is a STATE, and
+     *  EV_ON_CLOSE is what says so.  */
     let links = gobj_find_service("treedb_links", false);
     if(links) {
         gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
+        gobj_subscribe_event(links, "EV_ON_CLOSE", {}, gobj);
     }
 
     /*  The SHELL publishes the language switch (yui_shell_language_changed):
@@ -486,6 +493,7 @@ function mt_start(gobj)
      *  "no session" and NOTHING ever retried — the view stayed empty for the
      *  rest of its life.  */
     if(!live_transport(gobj)) {
+        set_toolbar_enabled(gobj, false);
         return;
     }
     gobj_change_state(gobj, "ST_LOADING_TOPICS");
@@ -500,6 +508,7 @@ function mt_stop(gobj)
     let links = gobj_find_service("treedb_links", false);
     if(links) {
         gobj_unsubscribe_event(links, "EV_ON_OPEN", {}, gobj);
+        gobj_unsubscribe_event(links, "EV_ON_CLOSE", {}, gobj);
     }
     let shell = yui_shell_of(gobj);
     if(shell) {
@@ -904,6 +913,28 @@ function render_tabs(gobj)
 }
 
 /***************************************************************
+ *  The toolbar follows the SESSION: with no link there is nothing to ask
+ *  and nothing to browse, so its buttons are disabled — the same answer
+ *  the connection picker gives (a disabled checkbox), and the reason the
+ *  cursor says "not allowed" instead of the view failing on the click.
+ *
+ *  Not cosmetic: in ST_DISCONNECTED the FSM does not declare the user
+ *  actions at all (by design — no session, nothing to open), so a click
+ *  that got through would be a loud "Event NOT DEFINED in state" for what
+ *  is a perfectly legitimate thing for a user to try.
+ ***************************************************************/
+function set_toolbar_enabled(gobj, enabled)
+{
+    let $c = gobj_read_attr(gobj, "$container");
+    if(!$c) {
+        return;
+    }
+    for(let $btn of $c.querySelectorAll(".TRANGER_KEYS_BTN, .TRANGER_LIVE_TOPIC_BTN")) {
+        $btn.disabled = !enabled;
+    }
+}
+
+/***************************************************************
  *  Select a topic: mark its tab, drop any open cards, (re)load its
  *  keys for the picker, publish the selection for the URL deep link.
  *  The work of ac_select_topic (which owns the state change).
@@ -920,6 +951,7 @@ function do_select_topic(gobj, topic_name)
     render_tabs(gobj);
     show_error(gobj, "");
     update_meta(gobj);
+    set_toolbar_enabled(gobj, true);
 
     /*  Two bounded queries instead of the whole key list: how many keys the
      *  topic has (the toolbar count), and which of the SAVED views still point
@@ -2879,6 +2911,7 @@ function ac_transport_open(gobj, event, kw, src)
             }
         }
     }
+    set_toolbar_enabled(gobj, true);
     for(let card of priv.cards) {
         if(card.mode === "rows") {
             rearm_rows_card(gobj, card);
@@ -2886,6 +2919,50 @@ function ac_transport_open(gobj, event, kw, src)
             rearm_live_card(gobj, card);
         }
     }
+    return 0;
+}
+
+/************************************************************
+ *  The link went down: there is no session, so there is nothing to browse.
+ *
+ *  Without this the view stayed in ST_TOPIC_SELECTED with a live-looking
+ *  toolbar: opening the Keys picker then built its Tabulator against a dead
+ *  session, whose `ajaxRequestFunc` rejected at once — "no session, cannot
+ *  list keys" in the log and a "Data Load Error" painted over the picker.
+ *
+ *  The picker goes (its rows and its paginator belong to the session that
+ *  died); the cards are torn down but stay PERSISTED, exactly as a topic
+ *  switch does — EV_ON_OPEN asks for the topics again and the saved views
+ *  reopen themselves. `pending_seg` carries the topic the user was on, so the
+ *  reconnect comes back to it instead of falling back to the first one.
+ ************************************************************/
+function ac_transport_closed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let conn_id = gobj_read_str_attr(gobj, "conn_id");
+
+    if(kw && kw.conn_id && kw.conn_id !== conn_id) {
+        return 0;   /*  another connection  */
+    }
+
+    reject_pending(gobj, "session closed");
+    close_all_cards(gobj);      /*  teardown: they stay persisted  */
+    close_picker(gobj);
+    set_toolbar_enabled(gobj, false);
+
+    priv.pending_seg = priv.cur_topic || "";
+    priv.topics = null;
+    priv.topic_flags = {};
+    priv.keys = null;
+    priv.key_spans = {};
+    priv.keys_total = 0;
+    priv.wanted_views = null;
+    priv.cur_topic = "";
+    render_tabs(gobj);
+    update_meta(gobj);
+    show_error(gobj, "disconnected - connect in settings");
+
+    gobj_change_state(gobj, "ST_DISCONNECTED");
     return 0;
 }
 
@@ -3641,6 +3718,7 @@ function create_gclass(gclass_name)
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
             ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
+            ["EV_ON_CLOSE",             ac_transport_closed,      null],
             ["EV_SHOW",                 ac_show,                  null],
             ["EV_LANGUAGE_CHANGED",     ac_language_changed,      null]
         ]],
@@ -3649,6 +3727,7 @@ function create_gclass(gclass_name)
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
             ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
+            ["EV_ON_CLOSE",             ac_transport_closed,      null],
             ["EV_SHOW",                 ac_show,                  null],
             ["EV_LANGUAGE_CHANGED",     ac_language_changed,      null],
             ["EV_SELECT_TOPIC",         ac_select_topic,          null]
@@ -3658,6 +3737,7 @@ function create_gclass(gclass_name)
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
             ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
+            ["EV_ON_CLOSE",             ac_transport_closed,      null],
             ["EV_SHOW",                 ac_show,                  null],
             ["EV_LANGUAGE_CHANGED",     ac_language_changed,      null],
             ["EV_SELECT_TOPIC",         ac_select_topic,          null],
@@ -3688,6 +3768,7 @@ function create_gclass(gclass_name)
         ["EV_TRANGER_RECORD_ADDED", event_flag_t.EVF_PUBLIC_EVENT],
         ["EV_PAGE_TIMEOUT",         0],
         ["EV_ON_OPEN",              0],
+        ["EV_ON_CLOSE",             0],
         ["EV_LANGUAGE_CHANGED",     0],
         ["EV_TOPIC_SELECTED",       event_flag_t.EVF_OUTPUT_EVENT],
         ["EV_SHOW",                 0],

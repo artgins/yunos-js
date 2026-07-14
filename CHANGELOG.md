@@ -22,6 +22,25 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): a dropped session was not a state, so the Tranger view kept
+  offering what it could no longer do.** With the link down, the Keys button
+  still looked alive; pressing it built the picker's Tabulator against a dead
+  session, whose `ajaxRequestFunc` rejected at once — *"no session, cannot list
+  keys"* in the log and a *"Data Load Error"* painted over the picker.
+  `C_TRANGER_VIEW` subscribed to `EV_ON_OPEN` **only**: it learnt that the link
+  came up, never that it went down, and sat in ST_TOPIC_SELECTED with a dead
+  transport. It now watches BOTH edges (`EV_ON_CLOSE` too, published by
+  `C_TREEDB_LINKS`): on close it rejects what is in flight, tears the cards down
+  (they stay PERSISTED, as a topic switch does), closes the picker, disables the
+  toolbar, says *"Disconnected — connect it in Settings"* and returns to
+  ST_DISCONNECTED — where the user actions are not declared at all, by design.
+  `pending_seg` carries the topic the user was on, so the reconnect
+  (`EV_ON_OPEN`) comes back to it and the saved cards reopen themselves instead
+  of falling back to the first topic. Verified by KILLING the backend yuno
+  (`kill-yuno`) with a card open and restarting it (`run-yuno` + `play-yuno`):
+  the view goes disconnected with the buttons dead, the Keys click does nothing,
+  and on restart the topic, the toolbar and the card come back on their own.
+
 - **fix(gui_treedb): a treedb tab was created with an attr its gclass does not
   have.** Opening a `C_NODE` service raised *"GClass Attribute NOT FOUND:
   C_YUI_TREEDB_TOPICS, attr conn_id"* + *"json2data() FAILED"*: `C_TREEDB_VIEW`
