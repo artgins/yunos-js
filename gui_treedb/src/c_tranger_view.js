@@ -170,16 +170,24 @@ const MOBILE_COLS = 4;
  *  (gobj-ui): a bucket is (unit, count), so this list is the whole
  *  configuration — the arrows, the labels and the calendar come with it.
  *
- *  These four are what a LOG is read with, and the set is deliberately SHORT:
+ *  These five are what a LOG is read with, and the set is deliberately SHORT:
  *  a strip the eye takes in at once beats one that holds every bucket the
  *  library can build. The rest of the catalog (quarter, semester, bimester,
  *  decade, 15min…) is one line away for the app that reports by quarter —
  *  this one does not.
  *
+ *  The two ROLLING windows are how a live key is actually read ("what came
+ *  in since yesterday"), and they are not buckets: they end at now and leave
+ *  the upper input EMPTY — an open end, so the iterator keeps matching what
+ *  lands while the card is on screen. Reopening a card filtered by one
+ *  restores as "custom" (a half-open range is no bucket), which is honest:
+ *  the inputs carry exactly what was queried.
+ *
  *  Two more modes come from the picker itself: "All" (no bounds: the full
  *  key) and "Custom" (the two datetime-local inputs, for the range no bucket
  *  has — an incident between 18:03 and 18:07).  */
-const PERIOD_MODES = ["hour", "day", "week", "year"];
+const PERIOD_MODES = ["hour", "day", "week", "month", "year"];
+const ROLLING_MODES = ["24h", "7d"];
 
 /*  Table height inside a card (its own pager sits below): follows the
  *  viewport, capped — a short screen must not be eaten by one card.  */
@@ -1720,6 +1728,7 @@ function build_time_block(gobj, match_cond, span, units)
 
     let picker = gobj_create_pure_child("period", "C_YUI_PERIOD", {
         periods:       PERIOD_MODES,
+        rolling:       ROLLING_MODES,
         with_span:     true,
         /*  No "custom" MODE: the two inputs below are always there, so a mode
          *  whose whole job was to reveal them has nothing left to do.

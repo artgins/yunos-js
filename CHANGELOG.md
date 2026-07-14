@@ -22,6 +22,19 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): the Rows time picker gains "Month" and the rolling
+  windows.** The granularity strip was hour/day/week/year — for a key
+  holding a month and a half of data, the natural unit between week and
+  year was the one missing. And a live key is actually read with "what
+  came in since yesterday": the picker offers "Last 24h" / "Last 7 days"
+  (C_YUI_PERIOD rolling modes), which fill "from" and leave "to" EMPTY —
+  an open end, so the iterator keeps matching what lands while the card
+  is on screen. Reopening a card filtered by one restores as "custom" (a
+  half-open range is no bucket), the inputs carrying exactly what was
+  queried. Rides the gobj-ui period polish (overflow-menu dismiss,
+  app-language calendar, week-number gutter, bucket hover-preview, strip
+  edge fades).
+
 - **fix(gui_treedb, gui_agent): review follow-ups on the tranger/i18n series.**
   Findings of a full review of the range, each verified in code:
   - **gui_agent: the toolbar language toggle reaches the tables again.**

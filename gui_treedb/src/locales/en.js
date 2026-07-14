@@ -217,6 +217,8 @@ const en = {
         "quarter": "Quarter",
         "semester": "Semester",
         "decade": "Decade",
+        "last 24h": "Last 24h",
+        "last 7 days": "Last 7 days",
         "today": "Today",
         "yesterday": "Yesterday",
         "tomorrow": "Tomorrow",
