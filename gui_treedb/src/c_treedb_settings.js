@@ -821,6 +821,15 @@ function create_table(gobj)
         index:          "id",
         layout:         "fitColumns",
         maxHeight:      "70vh",
+        /*  A row of this table is TALLER than its cells — it carries the
+         *  connection's services sub-table. The VIRTUAL renderer assumes the
+         *  opposite: opening a cell editor it scrolls the row's BOTTOM into view
+         *  (Edit.focusScrollAdjust), which with a sub-table below the cells means
+         *  scrolling the cell you are editing off the top of the table — the
+         *  caret stayed in a field nobody could see. The basic renderer renders
+         *  every row in flow and does not do that; the connections of one browser
+         *  are a handful of rows, so there is nothing to virtualize anyway.  */
+        renderVertical: "basic",
         placeholder:    t("no connections - click add connection"),
         columnDefaults: {headerHozAlign: "left", resizable: true},
         columns:        make_columns(gobj),

@@ -22,6 +22,20 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): clicking a cell to edit it scrolled the cell out of view.**
+  The caret stayed in a field nobody could see; scrolling back up showed it,
+  still in edit. A row of the connections table is TALLER than its cells — it
+  carries the connection's services sub-table — and Tabulator's VIRTUAL renderer
+  assumes the opposite: opening a cell editor, `Edit.focusScrollAdjust()` scrolls
+  the row's BOTTOM into view, which with a sub-table under the cells scrolls the
+  cell being edited off the TOP of the table (measured: the tableholder jumped
+  100px, taking the input from y=183 to y=83, above the table's own top edge —
+  and it only bites when the table is shorter than the row, i.e. a short viewport
+  or devtools open, which is why it was not seen at once). The table now renders
+  with `renderVertical: "basic"`, which renders every row in flow and never does
+  that; the connections of one browser are a handful of rows, so there was
+  nothing to virtualize anyway.
+
 - **fix(gui_treedb): the services sub-table was built, then clipped away.** It
   only appeared if you happened to resize the window. A Tabulator builds
   ASYNCHRONOUSLY, so when the rowFormatter returns, the row is still one line
