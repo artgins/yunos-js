@@ -22,6 +22,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): the "Live topic" button says what it does, and undoes it.**
+  Its label was hidden on a phone (`is-hidden-mobile`), leaving a bare dot that
+  tells a mobile user nothing — and it is exactly the button a mobile user wants.
+  The label is shown at every width now. It also TOGGLES, like the per-key Live
+  buttons of the Keys picker: a click opens the whole-topic card, another closes
+  it, and the dot is **green while it is open and colourless while it is not**,
+  so the toolbar says whether you are following the topic right now (the title
+  follows: "Follow every key of the topic" / "Stop following the topic").
 - **refactor(gui_treedb): the machine sees the whole SPA now.** Three places kept
   outside the FSM what the FSM exists to make visible.
     - **Settings**: Add / Clone / Export / Import were events, but the four

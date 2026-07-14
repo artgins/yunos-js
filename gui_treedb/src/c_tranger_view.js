@@ -232,6 +232,16 @@ const STYLE_CSS = `
 .TRANGER_KEY_LIVE.is-success .TRANGER_LIVE_DOT {
     background: #fff; opacity: 1;
 }
+/*  The toolbar's "Live topic" button toggles the whole-topic card and says
+    so with the same language: colourless dot while it is closed, green while
+    it is open. The BUTTON is not recoloured — it is a toolbar button, not a
+    row action, and the dot is the state.  */
+.TRANGER_LIVE_TOPIC_BTN .TRANGER_LIVE_DOT {
+    background: currentColor; opacity: 0.4;
+}
+.TRANGER_LIVE_TOPIC_BTN.is-live .TRANGER_LIVE_DOT {
+    background: #48c774; opacity: 1;
+}
 /*  Tabulator's footer is one nowrap flex row: counter + paginator (flex:1,
     basis 0). On a narrow (mobile) width the paginator just shrinks and its
     page-size + First/Prev/Next/Last clip off the right — flex-wrap can't
@@ -338,6 +348,7 @@ let PRIVATE_DATA = {
     picker_modal: null,  /*  shell modal hosting the Keys picker, mobile (or null)  */
     picker_tbl:  null,   /*  the picker's Tabulator (or null)  */
     $tabs:       null,
+    $live_btn:   null,   /*  toolbar "Live topic" toggle (its dot = card open)  */
     $meta:       null,
     $error:      null,
     $dashboard:  null,   /*  cards column  */
@@ -510,20 +521,29 @@ function build_ui(gobj)
     /*  Live on the WHOLE topic: `open-rt` takes an empty key as "every key of
      *  the topic". Following a busy topic used to mean opening one Live card
      *  per key — and you cannot even do that for a topic whose keys are
-     *  created as the data arrives.  */
+     *  created as the data arrives.
+     *
+     *  The label is shown on a PHONE too (no is-hidden-mobile): this is the
+     *  one button of the toolbar whose use is not guessable from its icon —
+     *  a bare dot says nothing — and it is exactly what a mobile user wants
+     *  to reach. It TOGGLES, like the picker's per-key Live buttons: the dot
+     *  is green while the card is open and colourless while it is not, so
+     *  the button says whether you are following the topic right now.  */
     let $live_btn = createElement2(
         ["button", {class: "button ml-2 TRANGER_LIVE_TOPIC_BTN",
                     title: t("live on the whole topic"),
                     "aria-label": t("live on the whole topic")},
             [
                 ["span", {class: "TRANGER_LIVE_DOT mr-2"}, ""],
-                ["span", {class: "is-hidden-mobile", i18n: "live topic"},
-                    t("live topic")]
+                ["span", {i18n: "live topic"}, t("live topic")]
             ]
         ]);
     $live_btn.addEventListener("click", () => {
-        gobj_send_event(gobj, "EV_OPEN_CARD", {key: ALL_KEYS, mode: "live"}, gobj);
+        let open = !!find_card(gobj, ALL_KEYS, "live");
+        gobj_send_event(gobj, open ? "EV_CLOSE_CARD" : "EV_OPEN_CARD",
+            {key: ALL_KEYS, mode: "live"}, gobj);
     });
+    priv.$live_btn = $live_btn;
 
     let $meta = createElement2(
         ["span", {class: "is-size-7 has-text-grey ml-3 TRANGER_META"}, ""]);
@@ -1095,12 +1115,33 @@ function close_picker(gobj)
 }
 
 /***************************************************************
+ *  The toolbar's "Live topic" button reflects the whole-topic Live card:
+ *  its dot is GREEN while that card is open and colourless while it is
+ *  not, and its title says what a click will do (it toggles).
+ ***************************************************************/
+function paint_live_topic_btn(gobj)
+{
+    let priv = gobj.priv;
+    let $btn = priv.$live_btn;
+    if(!$btn) {
+        return;
+    }
+    let open = !!find_card(gobj, ALL_KEYS, "live");
+    $btn.classList.toggle("is-live", open);
+
+    let label = open ? t("stop following the topic") : t("live on the whole topic");
+    $btn.title = label;
+    $btn.setAttribute("aria-label", label);
+}
+
+/***************************************************************
  *  Re-run the picker's per-row action formatters so the Rows/Live buttons
  *  reflect the current open-card set (called after a card opens/closes).
  ***************************************************************/
 function refresh_picker_actions(gobj)
 {
     let priv = gobj.priv;
+    paint_live_topic_btn(gobj);     /*  same trigger: the open-card set changed  */
     if(!priv.picker_tbl) {
         return;
     }

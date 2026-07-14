@@ -173,6 +173,7 @@ const es = {
         "choose the columns to show": "Elegir las columnas a mostrar",
         "no topics": "Sin topics",
         "live topic": "Live del topic",
+        "stop following the topic": "Dejar de seguir el topic",
         "live on the whole topic": "Seguir todas las keys del topic",
         "all keys": "Todas las keys",
         "newest first": "Más recientes primero (indexar la key desde el final)",
