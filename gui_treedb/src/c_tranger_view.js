@@ -1703,7 +1703,12 @@ function build_time_block(gobj, match_cond, span, units)
     let $range = createElement2(
         ["div", {class: "mt-2 TRANGER_OPT_CUSTOM"},
             [
-                ["div", {class: "columns is-mobile is-multiline mb-0"},
+                /*  NO `is-mobile`: that is the class that keeps columns side by
+                 *  side on a phone, and half a phone is not enough for a
+                 *  `datetime-local` — the control kept its width and CLIPPED the
+                 *  value, so neither end of the range could be read. Stacked
+                 *  below 769px, side by side above it.  */
+                ["div", {class: "columns is-multiline mb-0"},
                     [
                         ["div", {class: "column is-half"},
                             [

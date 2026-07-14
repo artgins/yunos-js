@@ -22,6 +22,15 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the custom range was unreadable on a phone.** Its two
+  columns carried `is-mobile`, the class that keeps columns side by side below
+  769px — half of a 360px screen leaves a `datetime-local` 176px wide, and the
+  native control silently CLIPS: the field read `07/15/2026, 06…`, with the
+  time (the whole point of a custom range) cut off, in both `from` and `to`.
+  They now stack on a phone (352px each, `06:03:42 PM` fully visible) and stay
+  side by side from tablet up. The rowid/mask inputs keep their two-up grid —
+  a number does fit in half a phone.
+
 - **fix(gui_treedb): the Rows options headers take one line, not two.** Each
   of the three cards stacked its title over its subtitle (`is-block` on a
   `.card-header-title`, which is a flex row to begin with) — three wasted lines
