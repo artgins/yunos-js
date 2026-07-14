@@ -238,15 +238,29 @@ function build_hosted_view(gobj, remote)
     let priv = gobj.priv;
     let view_gclass = gobj_read_attr(gobj, "view_gclass");
 
+    /*  The kw of a create must only carry attrs the gclass DECLARES: an unknown
+     *  one fails the whole load ("GClass Attribute NOT FOUND" + "json2data()
+     *  FAILED"), so the view came up without the attrs that came after it.
+     *
+     *  `conn_id` is C_TRANGER_VIEW's own (it scopes the key-views it persists
+     *  per connection). The treedb view is gobj-ui's C_YUI_TREEDB_TOPICS — a
+     *  library gclass that neither declares it nor needs it: it reaches its
+     *  backend through `gobj_remote_yuno`, like every other consumer of the
+     *  library. So it is passed to the view that HAS it, and no unused attr is
+     *  added to the shared library to paper over the mismatch.  */
+    let kw = {
+        gobj_remote_yuno: remote,
+        treedb_name:      gobj_read_attr(gobj, "treedb_name"),
+        system:           gobj_read_attr(gobj, "system")
+    };
+    if(view_gclass === "C_TRANGER_VIEW") {
+        kw.conn_id = gobj_read_attr(gobj, "conn_id");
+    }
+
     let view = gobj_create_service(
         service_name(gobj),
         view_gclass,
-        {
-            gobj_remote_yuno: remote,
-            treedb_name:      gobj_read_attr(gobj, "treedb_name"),
-            conn_id:          gobj_read_attr(gobj, "conn_id"),
-            system:           gobj_read_attr(gobj, "system")
-        },
+        kw,
         gobj
     );
     priv.view = view;

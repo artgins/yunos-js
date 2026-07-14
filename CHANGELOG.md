@@ -22,6 +22,16 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): a treedb tab was created with an attr its gclass does not
+  have.** Opening a `C_NODE` service raised *"GClass Attribute NOT FOUND:
+  C_YUI_TREEDB_TOPICS, attr conn_id"* + *"json2data() FAILED"*: `C_TREEDB_VIEW`
+  passed `conn_id` in the create kw of EVERY hosted view, and an unknown attr
+  fails the whole kw load. `conn_id` belongs to `C_TRANGER_VIEW` (it scopes the
+  key-views it persists per connection); gobj-ui's `C_YUI_TREEDB_TOPICS` neither
+  declares nor needs it — it reaches its backend through `gobj_remote_yuno`, like
+  every other consumer of the library. It is now passed only to the view that has
+  it, rather than adding an unused attr to the shared library.
+
 - **fix(gui_treedb): the topic was selected before the state said so, and the
   restored cards never opened.** Entering a Tranger tab (or refreshing on one)
   raised *"Event NOT DEFINED in state: C_TRANGER_VIEW, ST_LOADING_TOPICS,
