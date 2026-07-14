@@ -22,6 +22,15 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): a card's header no longer runs off the card on a phone.** A
+  Rows card carries six buttons in its head (options, columns, export, share,
+  refresh, close), each `is-flex-shrink-0` on a row that could not wrap: at 390px
+  the card is 332px wide and the head was 400px — the ✕ ended 60px OUTSIDE the
+  box. The actions are one block now (so they wrap as a group, not one button at
+  a time), right-aligned by `margin-left:auto`, and on a phone they take a second
+  line of the head with tighter gutters so all six fit on it — the buttons keep
+  their height, so the touch target does not shrink. Desktop is unchanged: one
+  line, as before.
 - **fix(gui_treedb): the topic tabs no longer shrink under an open card.** With
   cards in the dashboard the tab strip rose ~10px and the top border of the
   active tab disappeared: the tabs are a flex item, a flex item shrinks by

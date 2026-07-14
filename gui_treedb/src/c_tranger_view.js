@@ -220,6 +220,39 @@ const STYLE_CSS = `
     border-bottom: 1px solid var(--bulma-border, #dbdbdb);
     border-top-left-radius: var(--bulma-box-radius);
     border-top-right-radius: var(--bulma-box-radius);
+    /*  A phone cannot fit the title AND six icon buttons on one line: the head
+        WRAPS instead of running off the card. row-gap keeps the two lines apart
+        when it does; on a desktop there is only ever one line and nothing here
+        changes.  */
+    flex-wrap: wrap;
+    row-gap: 0.4rem;
+}
+/*  The actions travel as ONE block (so they wrap together, not one button at a
+    time) and stay right-aligned — margin-left:auto does what the old flex:1
+    spacer did, and keeps doing it when the block is alone on the second line.  */
+.C_TRANGER_VIEW .TRANGER_CARD_ACTIONS {
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+/*  The title is what gives: it ellipsizes instead of pushing the actions out
+    (min-width:0 is what lets a flex item shrink below its content).  */
+.C_TRANGER_VIEW .TRANGER_CARD_TITLE {
+    min-width: 0;
+}
+/*  On a phone the actions land on their own line, and there they must fit in
+    ONE: with the desktop gutters the sixth button (the ✕) fell to a third line
+    on its own. Tighter horizontal padding and gaps — the button KEEPS its
+    height, so the touch target stays ~40px, which is the point of the icon-only
+    mobile buttons in the first place.  */
+@media (max-width: 768px) {
+    .C_TRANGER_VIEW .TRANGER_CARD_ACTIONS > span {
+        margin-left: 0.25rem !important;
+    }
+    .C_TRANGER_VIEW .TRANGER_CARD_ACTIONS .button {
+        padding-left: 0.55em;
+        padding-right: 0.55em;
+    }
 }
 .C_TRANGER_VIEW .TRANGER_CARD_TABLE .tabulator {
     border-bottom-left-radius: calc(var(--bulma-box-radius) - 0.25rem);
@@ -2011,18 +2044,31 @@ function add_card(gobj, key, mode, match_cond, restoring)
                   title: t("column filters apply to the loaded rows only"),
                   "aria-label": t("column filters apply to the loaded rows only")},
             [["i", {class: "yi-circle-info"}]]]);
-    head_children.push(["span", {class: "TRANGER_CARD_SPACER", style: "flex:1 1 auto;"}, ""]);
+    /*  The actions are ONE block, not six loose children of the head.
+     *
+     *  Loose, they could not wrap as a group: a Rows card carries six buttons
+     *  (options, columns, export, share, refresh, close), each is-flex-shrink-0,
+     *  and on a phone they simply ran off the right edge of the card — measured
+     *  at 390px: card 332px wide, head content 400px, the close button ending 60px
+     *  OUTSIDE the box. As a block they wrap to a second line of the head when
+     *  they do not fit (see the CSS), still right-aligned (margin-left:auto —
+     *  which also replaces the old flex:1 spacer).  */
+    let action_children = [];
     if($options) {
-        head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$options]]);
+        action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$options]]);
     }
     if($pause) {
-        head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$pause]]);
+        action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$pause]]);
     }
-    head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$cols]]);
-    head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$export]]);
-    head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$share]]);
-    head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$action]]);
-    head_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$close]]);
+    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$cols]]);
+    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$export]]);
+    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$share]]);
+    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$action]]);
+    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$close]]);
+    head_children.push(
+        ["div", {class: "TRANGER_CARD_ACTIONS is-flex is-align-items-center"},
+            action_children]);
+
     let $head = createElement2(
         ["div", {class: "TRANGER_CARD_HEAD is-flex is-align-items-center p-2"},
             head_children]);
