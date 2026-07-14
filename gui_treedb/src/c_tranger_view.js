@@ -314,6 +314,14 @@ let PRIVATE_DATA = {
     keys:        null,   /*  the picker's CURRENT PAGE: [{key, records, fr_t,
                              to_t, fr_tm, to_tm}]. NOT every key of the topic —
                              the backend filters/sorts/pages them  */
+    key_spans:   null,   /*  key -> {fr_t, to_t, fr_tm, to_tm} of the CURRENT
+                             topic, remembered from EVERY list-keys answer (a
+                             page, the count, the saved-view check). The picker's
+                             page cannot be the source: a card restored from a
+                             link or from the saved set opens without the picker
+                             ever being built, and a key of another page is not
+                             in it either — the Rows options then lost their
+                             bounds and the "full span" preset  */
     keys_total:  0,      /*  how many keys the topic has (list-keys total_rows)  */
     wanted_views: null,  /*  views waiting for their keys to be confirmed  */
     cards:       null,   /*  [{key, mode, iterator_id, tabulator, $el}]  */
@@ -359,6 +367,7 @@ function mt_create(gobj)
     priv.pending_seg = "";
     priv.pending_card = null;
     priv.keys = null;
+    priv.key_spans = {};
     priv.keys_total = 0;
     priv.wanted_views = null;
     priv.cards = [];
@@ -438,6 +447,7 @@ function mt_stop(gobj)
     priv.topics = null;
     priv.topic_flags = {};
     priv.keys = null;
+    priv.key_spans = {};
     priv.keys_total = 0;
     priv.wanted_views = null;
     priv.cur_topic = "";
@@ -733,7 +743,11 @@ function request_keys_page(gobj, page, size, rkey, order, desc)
                 desc:       desc ? 1 : 0,
                 from:       (page - 1) * size + 1,
                 limit:      size,
-                __md_command__: {req_id: req_id, purpose: "page"}
+                /*  The topic travels so a page of a topic the user has since
+                 *  left can be told apart from the current one: its rows would
+                 *  otherwise land in the key/span state of the NEW topic.  */
+                __md_command__: {req_id: req_id, purpose: "page",
+                                 topic_name: priv.cur_topic}
             }, gobj);
     });
 }
@@ -820,6 +834,7 @@ function do_select_topic(gobj, topic_name)
     close_picker(gobj);     /*  keys are per-topic; reopen for the new one  */
     priv.cur_topic = topic_name;
     priv.keys = null;
+    priv.key_spans = {};    /*  spans are per topic  */
     priv.keys_total = 0;
     render_tabs(gobj);
     show_error(gobj, "");
@@ -1315,25 +1330,53 @@ function topic_time_units(gobj)
 }
 
 /***************************************************************
+ *  Remember the time span of every key a `list-keys` answer carried
+ *  (every row of every answer has them — a page of the picker, the count
+ *  query, the saved-view check), keyed by the STRINGIFIED key: a topic
+ *  with numeric keys answers with numbers while every caller hands us a
+ *  string.
+ *
+ *  The picker's current page cannot be the source of a span: a card
+ *  restored from the saved set or from a shared link opens before the
+ *  picker is ever built, and a key that lives on another page of it is not
+ *  there either. Both used to open their Rows options with no bounds and a
+ *  dead "full span" preset.
+ ***************************************************************/
+function remember_key_spans(gobj, rows)
+{
+    let priv = gobj.priv;
+    if(!priv.key_spans) {
+        priv.key_spans = {};
+    }
+    for(let row of (Array.isArray(rows) ? rows : [])) {
+        if(!row || row.key === undefined || row.key === null) {
+            continue;
+        }
+        priv.key_spans[String(row.key)] = {
+            fr_t:  row.fr_t  || 0,
+            to_t:  row.to_t  || 0,
+            fr_tm: row.fr_tm || 0,
+            to_tm: row.to_tm || 0
+        };
+    }
+}
+
+/***************************************************************
  *  The time span of a key, as `list-keys` reported it:
  *  {fr_t, to_t, fr_tm, to_tm}, each in the topic's own unit and 0 when
- *  the backend did not report it (older c_tranger). Never null — an
- *  all-zeros span reads as "unknown", which every caller already handles
- *  as "no bounds".
+ *  the backend did not report it (older c_tranger) or when no answer has
+ *  named that key yet. Never null — an all-zeros span reads as "unknown",
+ *  which every caller already handles as "no bounds".
  ***************************************************************/
 function key_span(gobj, key)
 {
     let priv = gobj.priv;
-    /*  Compare STRINGIFIED, like every other key lookup here: a topic with
-     *  numeric keys answers `list-keys` with numbers while every caller (the
-     *  picker's cell data) hands us a string — the miss silently dropped the
-     *  pickers' min/max bounds and the "full span" preset.  */
-    let row = (priv.keys || []).find((k) => String(k.key) === String(key));
+    let span = (priv.key_spans || {})[String(key)];
     return {
-        fr_t:  (row && row.fr_t)  || 0,
-        to_t:  (row && row.to_t)  || 0,
-        fr_tm: (row && row.fr_tm) || 0,
-        to_tm: (row && row.to_tm) || 0
+        fr_t:  (span && span.fr_t)  || 0,
+        to_t:  (span && span.to_t)  || 0,
+        fr_tm: (span && span.fr_tm) || 0,
+        to_tm: (span && span.to_tm) || 0
     };
 }
 
@@ -2527,6 +2570,13 @@ function ac_mt_command_answer(gobj, event, kw, src)
             pend.reject(new Error(comment || "list-keys failed"));
             return 0;
         }
+        if(kw_command.topic_name !== priv.cur_topic) {
+            /*  A page of a topic the user has left: its table is gone with the
+             *  picker. Benign race, not an error — but it must not overwrite
+             *  the keys and the spans of the topic showing now.  */
+            pend.reject(new Error("stale topic"));
+            return 0;
+        }
         if(Array.isArray(data)) {
             /*  A backend older than the paged list-keys ignores from/limit and
              *  answers the whole key list, as it always did. Do not leave the
@@ -2539,6 +2589,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
                         `search or paging`);
             priv.keys = data;
             priv.keys_total = data.length;
+            remember_key_spans(gobj, data);
             update_meta(gobj);
             pend.resolve({data: priv.keys, last_page: 1, last_row: priv.keys_total});
             return 0;
@@ -2547,6 +2598,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
         let page = data || {};
         priv.keys = Array.isArray(page.data) ? page.data : [];
         priv.keys_total = Math.max(0, page.total_rows || 0);
+        remember_key_spans(gobj, priv.keys);
         update_meta(gobj);
         pend.resolve({
             data:      priv.keys,
@@ -2613,11 +2665,18 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 priv.keys_total = Array.isArray(data)
                     ? data.length
                     : ((data && data.total_rows) || 0);
+                remember_key_spans(gobj,
+                    Array.isArray(data) ? data : (data && data.data));
                 update_meta(gobj);
                 break;
             }
             if(purpose === "restore") {
-                restore_saved_views(gobj, Array.isArray(data) ? data : []);
+                /*  The rows of the saved-view check carry the span of every key
+                 *  a restored card is about to open on: this is what gives that
+                 *  card's Rows options their bounds without the picker.  */
+                let rows = Array.isArray(data) ? data : [];
+                remember_key_spans(gobj, rows);
+                restore_saved_views(gobj, rows);
                 break;
             }
 

@@ -22,6 +22,20 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): a card restored from a link had no time span.** Since the
+  Keys picker started paging in the backend, the browser only holds ONE PAGE of
+  the topic's keys — and that page was what `key_span()` read the key's extent
+  from. So every card that opens WITHOUT the picker (one restored from the saved
+  set, one arriving in a shared link) opened its Rows options with no `min`/`max`
+  on the time pickers, the caption on "span unknown" and the **"full span" preset
+  dead**; so did any key living on another page of the picker. The span of every
+  key a `list-keys` answer names is now remembered per topic — from ALL THREE of
+  them: a page of the picker, the key count, and the saved-view check (which is
+  precisely the answer that names the keys a restored card is about to open on).
+  Verified in a browser against a live backend: the same restored card that
+  opened blank now offers the key's real extent and fills it from the preset.
+  A page of a topic the user has since LEFT is also discarded now — its rows used
+  to land in the keys and the spans of the topic showing.
 - **fix(gui_treedb): the bugs that survive a reconnect.** Seven failures found
   auditing the SPA against the backend it talks to; they share a shape —
   something that only bites when the link, the answer or the data is not what
