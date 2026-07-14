@@ -22,6 +22,19 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the topic was selected before the state said so, and the
+  restored cards never opened.** Entering a Tranger tab (or refreshing on one)
+  raised *"Event NOT DEFINED in state: C_TRANGER_VIEW, ST_LOADING_TOPICS,
+  EV_OPEN_CARD"* and the saved cards stayed shut. `ac_select_topic()` did the
+  work of selecting the topic BEFORE `gobj_change_state("ST_TOPIC_SELECTED")`,
+  and that work — `do_select_topic()` → `ask_saved_views()` — can answer
+  SYNCHRONOUSLY, so `restore_views()` sent EV_OPEN_CARD from inside the same
+  call, while the view was still in ST_LOADING_TOPICS, which does not declare it
+  (only ST_TOPIC_SELECTED does — by design: no topic, no cards). The state change
+  now comes first: the topic IS selected the moment the view commits to it, and
+  the work of selecting it follows. The loud FSM error was right — the fix is the
+  ordering, not a new action in ST_LOADING_TOPICS.
+
 - **fix(gui_treedb): clicking a cell to edit it scrolled the cell out of view.**
   The caret stayed in a field nobody could see; scrolling back up showed it,
   still in edit. A row of the connections table is TALLER than its cells — it

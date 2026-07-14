@@ -2904,8 +2904,16 @@ function ac_select_topic(gobj, event, kw, src)
                   `(from ${src ? gobj_short_name(src) : "?"})`);
         return -1;
     }
-    do_select_topic(gobj, topic);
+    /*  The state change comes FIRST, and it is not cosmetic: do_select_topic()
+     *  asks for the saved views, and that answer can come back SYNCHRONOUSLY
+     *  (an already-loaded key list, nothing to query) — restore_views() then
+     *  sends EV_OPEN_CARD from inside this very call. Selecting the topic
+     *  before declaring the state left that event arriving in
+     *  ST_LOADING_TOPICS, which does not declare it: *"Event NOT DEFINED in
+     *  state"*, and the restored cards never opened. The topic IS selected the
+     *  moment we commit to it; the work of selecting it comes after.  */
     gobj_change_state(gobj, "ST_TOPIC_SELECTED");
+    do_select_topic(gobj, topic);
     return 0;
 }
 
