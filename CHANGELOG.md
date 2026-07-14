@@ -22,6 +22,32 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **refactor(gui_treedb): the machine sees the whole SPA now.** Three places kept
+  outside the FSM what the FSM exists to make visible.
+    - **Settings**: Add / Clone / Export / Import were events, but the four
+      clicks INSIDE the table — the service checkbox, the refresh, the
+      connect/disconnect, the ✕ — called their work straight from Tabulator's
+      `cellClick`, and the removal mutated the config inside the confirm's
+      `.then`. They are `EV_TOGGLE_SERVICE` / `EV_REFRESH_SERVICES` /
+      `EV_TOGGLE_CONN_ENABLED` / `EV_REMOVE_CONN` (+ `EV_CONFIRM_REMOVE_CONN`)
+      now, carrying identities, never the row.
+    - **C_TREEDB_APP** kept the session in `priv.shell` — `if(priv.shell)` was
+      what told "the password is wrong" from "your session died while you were
+      working". Two states now: `ST_LOGGED_OUT` / `ST_SESSION`, so the shell
+      chrome, the routing and the connection events cannot even be delivered
+      with no session.
+    - **C_TREEDB_LINKS** mutated by exported function (set_token, sync, reopen,
+      reject, scan, close_all), so the part of this SPA that actually fails —
+      the opens, the NAKs, the token refreshes — happened outside the machine.
+      They are events; the reads stay plain functions, the split
+      `C_TREEDB_CONFIG` already makes.
+- **refactor(gui_treedb): one way to arm an iterator, one Rows-options dialog.**
+  The `open-iterator` kw was built in three places (first mount, re-arm, edit of
+  the match conditions) and the options dialog existed twice (open a card / edit
+  an open one). 94 lines out, no behaviour changed. The backend-shape parsing of
+  `list-keys` / `get-page` (the paged envelope vs the plain array of an older
+  backend) and the key-span map moved to `tranger_helpers.js`, where the tests
+  can reach them: the suite is 29 now.
 - **fix(gui_treedb): a card restored from a link had no time span.** Since the
   Keys picker started paging in the backend, the browser only holds ONE PAGE of
   the topic's keys — and that page was what `key_span()` read the key's extent

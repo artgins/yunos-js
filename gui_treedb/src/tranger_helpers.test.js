@@ -20,6 +20,9 @@ import {
     op_filter,
     encode_seg,
     decode_seg,
+    parse_keys_answer,
+    spans_from_rows,
+    parse_records_page,
 } from "./tranger_helpers.js";
 
 
@@ -193,5 +196,84 @@ describe("the URL segment of a view", () => {
     it("round-trips a non-ASCII key", () => {
         let seg = encode_seg("lecturas", {key: "año-ñ-日本", mode: "rows", match_cond: {}});
         expect(decode_seg(seg).card.key).toBe("año-ñ-日本");
+    });
+});
+
+/***************************************************************
+ *  The shapes a backend can answer with — the compatibility surface the
+ *  view has no other guard for.
+ ***************************************************************/
+describe("a list-keys answer", () => {
+    const PAGE = {
+        total_rows: 408894,
+        pages: 27260,
+        data: [
+            {key: "DVES_40C768", records: 12, fr_t: 100, to_t: 200, fr_tm: 90, to_tm: 190},
+            {key: "nmap", records: 1, fr_t: 300, to_t: 300, fr_tm: 0, to_tm: 0}
+        ]
+    };
+
+    it("reads the paged envelope of a current backend", () => {
+        const a = parse_keys_answer(PAGE);
+        expect(a.whole_list).toBe(false);
+        expect(a.rows.length).toBe(2);
+        expect(a.total_rows).toBe(408894);
+        expect(a.pages).toBe(27260);
+    });
+
+    it("reads the plain array of a backend older than the paging, as ONE page", () => {
+        const a = parse_keys_answer(PAGE.data);
+        expect(a.whole_list).toBe(true);       /*  what makes the view warn  */
+        expect(a.rows.length).toBe(2);
+        expect(a.total_rows).toBe(2);
+        expect(a.pages).toBe(1);
+    });
+
+    it("survives an empty or malformed answer instead of painting a broken pager", () => {
+        for(const bad of [null, undefined, {}, {data: "nonsense"}, []]) {
+            const a = parse_keys_answer(bad);
+            expect(a.rows).toEqual([]);
+            expect(a.total_rows).toBe(0);
+            expect(a.pages).toBe(1);
+        }
+    });
+});
+
+describe("the key spans of an answer", () => {
+    it("keys the span of every row it names", () => {
+        const spans = spans_from_rows([
+            {key: "a", fr_t: 10, to_t: 20, fr_tm: 5, to_tm: 15},
+            {key: "b", fr_t: 30, to_t: 40, fr_tm: 0, to_tm: 0}
+        ]);
+        expect(spans.a).toEqual({fr_t: 10, to_t: 20, fr_tm: 5, to_tm: 15});
+        expect(spans.b.to_t).toBe(40);
+    });
+
+    it("STRINGIFIES a numeric key — the miss that lost the Rows options' bounds", () => {
+        const spans = spans_from_rows([{key: 1234, fr_t: 10, to_t: 20}]);
+        expect(spans["1234"]).toBeDefined();
+        expect(spans["1234"].fr_t).toBe(10);
+        expect(spans["1234"].fr_tm).toBe(0);   /*  a span the backend did not report  */
+    });
+
+    it("ignores a row with no key, and a non-list", () => {
+        expect(spans_from_rows([{records: 3}, null])).toEqual({});
+        expect(spans_from_rows(null)).toEqual({});
+    });
+});
+
+describe("a get-page answer", () => {
+    it("carries the EXACT row count, so the pager does not estimate (and lie)", () => {
+        const p = parse_records_page({total_rows: 408894, pages: 4089, data: [{a: 1}]});
+        expect(p.records.length).toBe(1);
+        expect(p.last_row).toBe(408894);
+        expect(p.last_page).toBe(4089);
+    });
+
+    it("degrades to an empty page, never to NaN in the pager", () => {
+        const p = parse_records_page(null);
+        expect(p.records).toEqual([]);
+        expect(p.last_row).toBe(0);
+        expect(p.last_page).toBe(1);
     });
 });

@@ -271,6 +271,81 @@ function decode_seg(seg)
     }
 }
 
+/***************************************************************
+ *  What a `list-keys` answer carries, whatever the backend's age.
+ *
+ *  A backend with the paged list-keys answers an ENVELOPE
+ *  ({total_rows, pages, data}); one older than it ignores from/limit and
+ *  answers the plain ARRAY of every key, as it always did. Both are
+ *  legitimate, and the view must not go blank for the second — it shows
+ *  the lot as a single page (and warns that the server-side search and
+ *  paging are not there). `whole_list` is what says which one it was.
+ ***************************************************************/
+function parse_keys_answer(data)
+{
+    if(Array.isArray(data)) {
+        return {
+            rows:       data,
+            total_rows: data.length,
+            pages:      1,
+            whole_list: true
+        };
+    }
+    let page = data || {};
+    let rows = Array.isArray(page.data) ? page.data : [];
+    return {
+        rows:       rows,
+        total_rows: Math.max(0, page.total_rows || 0),
+        pages:      Math.max(1, page.pages || 1),
+        whole_list: false
+    };
+}
+
+/***************************************************************
+ *  The time span of every key a `list-keys` answer names, as a map keyed
+ *  by the STRINGIFIED key: a topic with numeric keys answers with numbers
+ *  while every caller (a Tabulator cell, a persisted view, a shared link)
+ *  hands a string. The miss is what used to drop the Rows options' bounds.
+ *
+ *  Every row of every list-keys answer carries them (fr_t/to_t, fr_tm/to_tm)
+ *  — a page of the picker, the key count, the saved-view check — and a key
+ *  the browser only ever sees in ONE of the three (a restored card's) needs
+ *  its span just as much.
+ ***************************************************************/
+function spans_from_rows(rows)
+{
+    let spans = {};
+    for(let row of (Array.isArray(rows) ? rows : [])) {
+        if(!row || row.key === undefined || row.key === null) {
+            continue;
+        }
+        spans[String(row.key)] = {
+            fr_t:  row.fr_t  || 0,
+            to_t:  row.to_t  || 0,
+            fr_tm: row.fr_tm || 0,
+            to_tm: row.to_tm || 0
+        };
+    }
+    return spans;
+}
+
+/***************************************************************
+ *  A `get-page` answer, in the shape Tabulator's remote pagination wants.
+ *
+ *  `last_row` is the exact row count and it MATTERS: without it Tabulator
+ *  ESTIMATES the total as last_page * page_size (its remoteRowCountEstimate)
+ *  and the counter lies — "Showing 390001-100 of 100 rows".
+ ***************************************************************/
+function parse_records_page(data)
+{
+    let page = data || {};
+    return {
+        records:   Array.isArray(page.data) ? page.data : [],
+        last_page: Math.max(1, page.pages || 1),
+        last_row:  Math.max(0, page.total_rows || 0)
+    };
+}
+
 export {
     SF_T_MS,
     SF_TM_MS,
@@ -281,4 +356,7 @@ export {
     op_filter,
     encode_seg,
     decode_seg,
+    parse_keys_answer,
+    spans_from_rows,
+    parse_records_page,
 };

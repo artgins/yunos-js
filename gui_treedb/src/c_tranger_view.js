@@ -115,6 +115,9 @@ import {
     op_filter,
     encode_seg,
     decode_seg,
+    parse_keys_answer,
+    parse_records_page,
+    spans_from_rows,
 } from "./tranger_helpers.js";
 
 
@@ -1345,20 +1348,7 @@ function topic_time_units(gobj)
 function remember_key_spans(gobj, rows)
 {
     let priv = gobj.priv;
-    if(!priv.key_spans) {
-        priv.key_spans = {};
-    }
-    for(let row of (Array.isArray(rows) ? rows : [])) {
-        if(!row || row.key === undefined || row.key === null) {
-            continue;
-        }
-        priv.key_spans[String(row.key)] = {
-            fr_t:  row.fr_t  || 0,
-            to_t:  row.to_t  || 0,
-            fr_tm: row.fr_tm || 0,
-            to_tm: row.to_tm || 0
-        };
-    }
+    priv.key_spans = Object.assign(priv.key_spans || {}, spans_from_rows(rows));
 }
 
 /***************************************************************
@@ -2518,19 +2508,13 @@ function ac_mt_command_answer(gobj, event, kw, src)
                           `${comment || "(no comment)"}`);
                 pend.reject(new Error(comment || "get-page failed"));
             } else {
-                let page = data || {};
+                let page = parse_records_page(data);
                 /*  NOT `.map(flatten_record)`: map would hand it the INDEX as
                  *  its second argument, which is the key parameter.  */
-                let rows = (Array.isArray(page.data) ? page.data : [])
-                    .map((rec) => flatten_record(rec));
-                /*  `last_row` is the exact row count: without it Tabulator
-                 *  ESTIMATES the total as last_page * page_size (its
-                 *  remoteRowCountEstimate) and the counter lies — "Showing
-                 *  390001-100 of 100 rows".  */
                 pend.resolve({
-                    data:      rows,
-                    last_page: Math.max(1, page.pages || 1),
-                    last_row:  Math.max(0, page.total_rows || 0)
+                    data:      page.records.map((rec) => flatten_record(rec)),
+                    last_page: page.last_page,
+                    last_row:  page.last_row
                 });
             }
         }
@@ -2563,7 +2547,8 @@ function ac_mt_command_answer(gobj, event, kw, src)
             pend.reject(new Error("stale topic"));
             return 0;
         }
-        if(Array.isArray(data)) {
+        let answer = parse_keys_answer(data);
+        if(answer.whole_list) {
             /*  A backend older than the paged list-keys ignores from/limit and
              *  answers the whole key list, as it always did. Do not leave the
              *  picker empty for that: show the lot as a single page. The search
@@ -2573,23 +2558,15 @@ function ac_mt_command_answer(gobj, event, kw, src)
             log_warning(`${GCLASS_NAME}: this backend answers list-keys with the ` +
                         `whole key list (no rkey/from/limit): no server-side key ` +
                         `search or paging`);
-            priv.keys = data;
-            priv.keys_total = data.length;
-            remember_key_spans(gobj, data);
-            update_meta(gobj);
-            pend.resolve({data: priv.keys, last_page: 1, last_row: priv.keys_total});
-            return 0;
         }
-
-        let page = data || {};
-        priv.keys = Array.isArray(page.data) ? page.data : [];
-        priv.keys_total = Math.max(0, page.total_rows || 0);
-        remember_key_spans(gobj, priv.keys);
+        priv.keys = answer.rows;
+        priv.keys_total = answer.total_rows;
+        remember_key_spans(gobj, answer.rows);
         update_meta(gobj);
         pend.resolve({
-            data:      priv.keys,
-            last_page: Math.max(1, page.pages || 1),
-            last_row:  priv.keys_total
+            data:      answer.rows,
+            last_page: answer.pages,
+            last_row:  answer.total_rows
         });
         return 0;
     }
@@ -2648,11 +2625,9 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 /*  `limit=1` was asked, so the answer is the paged envelope —
                  *  unless the backend is older than it, in which case it is the
                  *  whole key list and its length IS the count.  */
-                priv.keys_total = Array.isArray(data)
-                    ? data.length
-                    : ((data && data.total_rows) || 0);
-                remember_key_spans(gobj,
-                    Array.isArray(data) ? data : (data && data.data));
+                let counted = parse_keys_answer(data);
+                priv.keys_total = counted.total_rows;
+                remember_key_spans(gobj, counted.rows);
                 update_meta(gobj);
                 break;
             }
