@@ -25,11 +25,11 @@
  *          All Rights Reserved.
  ***********************************************************************/
 import {
-    SDATA, SDATA_END, data_type_t,
+    SDATA, SDATA_END, data_type_t, event_flag_t,
     gclass_create, log_error, log_warning, gobj_short_name,
     gobj_read_attr, gobj_write_str_attr,
     gobj_create_service, gobj_create_pure_child,
-    gobj_subscribe_event, gobj_send_event,
+    gobj_subscribe_event, gobj_send_event, gobj_publish_event,
     gobj_change_state,
     gobj_find_service,
     gobj_start_tree, gobj_stop_tree, gobj_destroy, gobj_is_running,
@@ -849,10 +849,19 @@ function ac_toggle_theme(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  The language changed. refresh_language() re-translates every node that
+ *  CARRIES its key (data-i18n / data-i18n-title / data-i18n-aria-label),
+ *  but a view that composed a string with t() at build time — a card title,
+ *  a row counter, a Tabulator header — holds no key and cannot be reached
+ *  that way. So say it happened: the views that build DOM imperatively
+ *  subscribe and re-render their own translated parts.
+ ***************************************************************/
 function ac_toggle_language(gobj, event, kw, src)
 {
     switch_locale(current_locale() === "es" ? "en" : "es");
     refresh_language(document.body, t);
+    gobj_publish_event(gobj, "EV_LANGUAGE_CHANGED", {locale: current_locale()});
     return 0;
 }
 
@@ -1179,7 +1188,9 @@ function create_gclass(gclass_name)
         ["EV_SELECTED_TREEDBS_CHANGED", 0],
         ["EV_CONNECTIONS_CHANGED",      0],
         ["EV_NAV_ITEM_CLOSE",   0],
-        ["EV_ROUTE_CHANGED",    0]
+        ["EV_ROUTE_CHANGED",    0],
+        /*  output: the views that build DOM with t() re-render on it  */
+        ["EV_LANGUAGE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
     ];
 
     __gclass__ = gclass_create(

@@ -86,7 +86,8 @@ import {
     gobj_change_state,
     gobj_command,
     gobj_current_state, gobj_is_destroying,
-    gobj_create_service, gobj_find_service, gobj_destroy, is_gobj,
+    gobj_create_service, gobj_find_service, gobj_default_service,
+    gobj_destroy, is_gobj,
     createElement2, refresh_language,
     msg_iev_get_stack,
     kw_get_str, kw_get_dict,
@@ -473,6 +474,15 @@ function mt_start(gobj)
         gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
     }
 
+    /*  The app root publishes the language switch. It is the DEFAULT service,
+     *  which gobj_create_default_service does NOT register by name — so it is
+     *  reached with gobj_default_service(), never gobj_find_service("app")
+     *  (which returns null for it).  */
+    let app = gobj_default_service();
+    if(app) {
+        gobj_subscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
+
     /*  Mounted with no session (link still down): stay in ST_DISCONNECTED and
      *  let EV_ON_OPEN ask for the topics. Before the FSM this path just logged
      *  "no session" and NOTHING ever retried — the view stayed empty for the
@@ -492,6 +502,10 @@ function mt_stop(gobj)
     let links = gobj_find_service("treedb_links", false);
     if(links) {
         gobj_unsubscribe_event(links, "EV_ON_OPEN", {}, gobj);
+    }
+    let app = gobj_default_service();
+    if(app) {
+        gobj_unsubscribe_event(app, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
     reject_pending(gobj, "view stopped");
     close_all_cards(gobj);
@@ -553,7 +567,8 @@ function build_ui(gobj)
 
     let $keys_btn = createElement2(
         ["button", {class: "button TRANGER_KEYS_BTN",
-                    title: t("keys"), "aria-label": t("keys")},
+                    title: t("keys"), "aria-label": t("keys"),
+                    "data-i18n-title": "keys", "data-i18n-aria-label": "keys"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-table"}]]],
                 ["span", {i18n: "keys"}, t("keys")]
@@ -948,6 +963,31 @@ function is_mobile()
 }
 
 /***************************************************************
+ *  The Keys picker's columns. A function, not a literal, because its
+ *  headers are OURS (t() at build time): a language switch hands the table
+ *  a fresh set (see ac_language_changed) — a Tabulator header cannot be
+ *  re-translated in place.
+ *
+ *  Compact widths on a phone: fitColumns cannot shrink a column below its
+ *  minWidth/width, so the desktop set (150+110+160) overflows a ~300px sheet
+ *  and Tabulator adds a horizontal scrollbar — two-axis scrolling inside a
+ *  modal. The action buttons go icon-only there (their labels are
+ *  is-hidden-mobile), hence the narrower column.
+ ***************************************************************/
+function picker_columns(gobj, mobile)
+{
+    return [
+        {title: t("key"), field: "key", minWidth: mobile ? 100 : 150,
+            headerFilter: "input"},
+        {title: t("records"), field: "records", width: mobile ? 70 : 110,
+            hozAlign: "right"},
+        {title: t("actions"), field: "_act", headerSort: false,
+            width: mobile ? 96 : 160,
+            formatter: (cell) => build_key_actions(gobj, cell)}
+    ];
+}
+
+/***************************************************************
  *  Keys picker: a Tabulator of the topic's keys (sorted by record count,
  *  header-filtered). Each row's "Rows" / "Live" buttons are colored ONLY
  *  while that view is open for the key (they toggle it off on click).
@@ -1090,15 +1130,7 @@ function open_keys_picker(gobj)
          *  ~300px sheet and Tabulator adds a horizontal scrollbar — two-axis
          *  scrolling inside a modal. The action buttons go icon-only there
          *  (their labels are is-hidden-mobile), hence the narrower column.  */
-        columns: [
-            {title: t("key"), field: "key", minWidth: mobile ? 100 : 150,
-                headerFilter: "input"},
-            {title: t("records"), field: "records", width: mobile ? 70 : 110,
-                hozAlign: "right"},
-            {title: t("actions"), field: "_act", headerSort: false,
-                width: mobile ? 96 : 160,
-                formatter: (cell) => build_key_actions(gobj, cell)}
-        ]
+        columns: picker_columns(gobj, mobile)
     });
     priv.picker_tbl = picker;
 
@@ -1500,7 +1532,8 @@ function build_time_range_block(axis, from_val, to_val, ms, span_from, span_to)
     }
     let $clear = createElement2(
         ["button", {class: "button is-small is-light mr-1 mt-1 TRANGER_OPT_PRESET_CLEAR",
-                    type: "button", title: t("clear"), "aria-label": t("clear")},
+                    type: "button", title: t("clear"), "aria-label": t("clear"),
+                        "data-i18n-title": "clear", "data-i18n-aria-label": "clear"},
             [["span", {i18n: "clear"}, t("clear")]]
         ]);
     $clear.addEventListener("click", () => {
@@ -1879,7 +1912,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
 
     let $close = createElement2(
         ["button", {class: "button TRANGER_CARD_CLOSE",
-                    title: t("close"), "aria-label": t("close")},
+                    title: t("close"), "aria-label": t("close"),
+                        "data-i18n-title": "close", "data-i18n-aria-label": "close"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "close"}, t("close")]
@@ -1896,7 +1930,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
     if(mode === "rows") {
         $options = createElement2(
             ["button", {class: "button TRANGER_CARD_OPTIONS",
-                        title: t("options"), "aria-label": t("options")},
+                        title: t("options"), "aria-label": t("options"),
+                        "data-i18n-title": "options", "data-i18n-aria-label": "options"},
                 [
                     ["span", {class: "icon"}, [["i", {class: "yi-cog"}]]],
                     ["span", {class: "is-hidden-mobile", i18n: "options"}, t("options")]
@@ -1915,7 +1950,9 @@ function add_card(gobj, key, mode, match_cond, restoring)
     let $export = createElement2(
         ["button", {class: "button TRANGER_CARD_EXPORT",
                     title: t("download the rows loaded in this table as csv"),
-                    "aria-label": t("export")},
+                    "aria-label": t("export"),
+                    "data-i18n-title": "download the rows loaded in this table as csv",
+                    "data-i18n-aria-label": "export"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-download"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "export"}, t("export")]
@@ -1931,7 +1968,9 @@ function add_card(gobj, key, mode, match_cond, restoring)
     let $share = createElement2(
         ["button", {class: "button TRANGER_CARD_SHARE",
                     title: t("copy a link to this card"),
-                    "aria-label": t("share")},
+                    "aria-label": t("share"),
+                    "data-i18n-title": "copy a link to this card",
+                    "data-i18n-aria-label": "share"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-link"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "share"}, t("share")]
@@ -1950,7 +1989,9 @@ function add_card(gobj, key, mode, match_cond, restoring)
     let $cols = createElement2(
         ["button", {class: "button TRANGER_CARD_COLUMNS",
                     title: t("choose the columns to show"),
-                    "aria-label": t("columns")},
+                    "aria-label": t("columns"),
+                    "data-i18n-title": "choose the columns to show",
+                    "data-i18n-aria-label": "columns"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-table"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "columns"}, t("columns")]
@@ -1987,7 +2028,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
     if(mode === "rows") {
         $action = createElement2(
             ["button", {class: "button TRANGER_CARD_REFRESH",
-                        title: t("refresh"), "aria-label": t("refresh")},
+                        title: t("refresh"), "aria-label": t("refresh"),
+                        "data-i18n-title": "refresh", "data-i18n-aria-label": "refresh"},
                 [
                     ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
                     ["span", {class: "is-hidden-mobile", i18n: "refresh"}, t("refresh")]
@@ -2018,15 +2060,32 @@ function add_card(gobj, key, mode, match_cond, restoring)
             ["span", {class: "TRANGER_LIVE_DOT ml-1 mr-2 is-flex-shrink-0",
                       title: t("live")}, ""]);
     }
-    let title = key === ALL_KEYS ? t("all keys") : key;
-    head_children.push(["span", {class: "TRANGER_CARD_TITLE"}, `${title} · ${t(mode)}`]);
+    /*  The title is not one composed string any more: "<key> · <mode>" built
+     *  with t() at create time carried no i18n key, so refresh_language() had
+     *  nothing to grab and the card stayed "DVES_40C768 · Filas" in an English
+     *  session for the rest of its life. The translatable HALVES carry their
+     *  own key ("all keys", "rows"/"live"); the key of the topic is data and
+     *  is not translated.  */
+    let title_children = [];
+    if(key === ALL_KEYS) {
+        title_children.push(["span", {i18n: "all keys"}, t("all keys")]);
+    } else {
+        title_children.push(["span", {}, key]);
+    }
+    /*  The gap is CSS, not text: createElement2 TRIMS a text node, so neither
+     *  " · " nor a hard space survives — the separator would land glued to both
+     *  halves.  */
+    title_children.push(["span", {class: "mx-1"}, "·"]);
+    title_children.push(["span", {i18n: mode}, t(mode)]);
+    head_children.push(["span", {class: "TRANGER_CARD_TITLE"}, title_children]);
 
     /*  Live has no pager, so no "Showing x of N" footer: without this the
      *  rolling buffer is a black box (is it 12 rows or the 500 cap?).  */
     if(mode === "live") {
         card.$count = createElement2(
             ["span", {class: "TRANGER_CARD_COUNT tag is-light ml-2 is-flex-shrink-0",
-                      title: t("rows buffered - oldest are dropped at the cap")},
+                      title: t("rows buffered - oldest are dropped at the cap"),
+                      "data-i18n-title": "rows buffered - oldest are dropped at the cap"},
                 `0 / ${card.live_max}`]);
         head_children.push(card.$count);
     }
@@ -2036,13 +2095,17 @@ function add_card(gobj, key, mode, match_cond, restoring)
      *  is not left with column filters and no idea of their scope.  */
     head_children.push(
         ["span", {class: "TRANGER_CARD_FILTERHINT is-size-7 has-text-grey ml-2 is-hidden-mobile",
-                  title: t("column filters apply to the loaded rows only")},
+                  title: t("column filters apply to the loaded rows only"),
+                  "data-i18n-title": "column filters apply to the loaded rows only",
+                  i18n: "filters loaded rows"},
             t("filters loaded rows")]);
     head_children.push(
         ["span", {class: "TRANGER_CARD_FILTERHINT_ICON icon is-small has-text-grey ml-2 " +
                          "is-flex-shrink-0 is-hidden-tablet",
                   title: t("column filters apply to the loaded rows only"),
-                  "aria-label": t("column filters apply to the loaded rows only")},
+                  "aria-label": t("column filters apply to the loaded rows only"),
+                  "data-i18n-title": "column filters apply to the loaded rows only",
+                  "data-i18n-aria-label": "column filters apply to the loaded rows only"},
             [["i", {class: "yi-circle-info"}]]]);
     /*  The actions are ONE block, not six loose children of the head.
      *
@@ -3382,6 +3445,82 @@ function ac_show(gobj, event, kw, src)
 }
 
 /************************************************************
+ *  The language changed (the app root publishes it after switching).
+ *
+ *  refresh_language() reaches every node that CARRIES its key (data-i18n,
+ *  data-i18n-title, data-i18n-aria-label) — the buttons, the hints, the
+ *  halves of a card title. What it cannot reach is what t() COMPOSED at
+ *  render time and left as a plain string:
+ *
+ *    - the toolbar meta ("5 keys · 1 views"), rebuilt by update_meta;
+ *    - the buttons whose label depends on STATE (pause/resume, the Live
+ *      topic toggle): their key changes with the state, so they are
+ *      repainted, not re-translated;
+ *    - everything Tabulator rendered — the row counter ("Showing 1-100 of
+ *      409194 rows"), the placeholders, the picker's column headers. A
+ *      table re-renders those from OUR functions, so re-setting its columns
+ *      and re-asking for its page is what puts them in the new language.
+ ************************************************************/
+function ac_language_changed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    let $c = gobj_read_attr(gobj, "$container");
+    if($c) {
+        refresh_language($c, t);
+    }
+    update_meta(gobj);
+    paint_live_topic_btn(gobj);
+
+    for(let card of priv.cards) {
+        if(card.mode === "live") {
+            paint_pause_button(card);
+            update_live_count(card);
+        }
+        retranslate_table(gobj, card);
+    }
+
+    if(priv.picker_tbl) {
+        try {
+            /*  The picker's headers ARE ours (t() at column-build time), so
+             *  hand it a fresh set; the page comes back with the counter in the
+             *  new language.  */
+            priv.picker_tbl.setColumns(picker_columns(gobj, is_mobile()));
+            priv.picker_tbl.replaceData();
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: picker gone: ${e}`);
+        }
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  Put a card's table back in the current language. A Rows card re-asks
+ *  for its page (that is what re-renders the footer counter through our
+ *  rows_counter()); a Live card has no pager — only its placeholder, and
+ *  only while it is empty.
+ ***************************************************************/
+function retranslate_table(gobj, card)
+{
+    let table = card.tabulator;
+    if(!table) {
+        return;
+    }
+    try {
+        if(card.mode === "rows") {
+            table.replaceData();    /*  re-fetch: the footer is rebuilt with it  */
+            return;
+        }
+        table.options.placeholder = t("waiting for records");
+        if(table.getDataCount() === 0) {
+            table.redraw(true);
+        }
+    } catch(e) {
+        log_warning(`${GCLASS_NAME}: table gone: ${e}`);
+    }
+}
+
+/************************************************************
  *  A remote realtime record arrived (subscribed by a Live card): route
  *  it to the matching live card(s) — newest on top.
  ************************************************************/
@@ -3491,7 +3630,8 @@ function create_gclass(gclass_name)
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
             ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
-            ["EV_SHOW",                 ac_show,                  null]
+            ["EV_SHOW",                 ac_show,                  null],
+            ["EV_LANGUAGE_CHANGED",     ac_language_changed,      null]
         ]],
         ["ST_LOADING_TOPICS", [
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
@@ -3499,6 +3639,7 @@ function create_gclass(gclass_name)
             ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
             ["EV_SHOW",                 ac_show,                  null],
+            ["EV_LANGUAGE_CHANGED",     ac_language_changed,      null],
             ["EV_SELECT_TOPIC",         ac_select_topic,          null]
         ]],
         ["ST_TOPIC_SELECTED", [
@@ -3507,6 +3648,7 @@ function create_gclass(gclass_name)
             ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
             ["EV_SHOW",                 ac_show,                  null],
+            ["EV_LANGUAGE_CHANGED",     ac_language_changed,      null],
             ["EV_SELECT_TOPIC",         ac_select_topic,          null],
             /*  user actions  */
             ["EV_OPEN_KEYS",            ac_open_keys,             null],
@@ -3535,6 +3677,7 @@ function create_gclass(gclass_name)
         ["EV_TRANGER_RECORD_ADDED", event_flag_t.EVF_PUBLIC_EVENT],
         ["EV_PAGE_TIMEOUT",         0],
         ["EV_ON_OPEN",              0],
+        ["EV_LANGUAGE_CHANGED",     0],
         ["EV_TOPIC_SELECTED",       event_flag_t.EVF_OUTPUT_EVENT],
         ["EV_SHOW",                 0],
         ["EV_SELECT_TOPIC",         0],

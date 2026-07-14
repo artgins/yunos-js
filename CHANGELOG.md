@@ -22,6 +22,17 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): a language switch reaches the open cards.** `refresh_language()`
+  re-translates every node that CARRIES its key, and a card was full of strings
+  that did not: its title was one string composed with `t()` at create time
+  (`"DVES_40C768 · Filas"` stayed Spanish in an English session for the rest of
+  its life), its tooltips were `title` attributes set with `t()`, and its footer
+  counter, placeholders and the Keys picker's headers were rendered ONCE by
+  Tabulator. The switch is an **event** now (`EV_LANGUAGE_CHANGED`, published by
+  the app root after switching): the translatable halves of a title carry their
+  own key, every tooltip carries `data-i18n-title`, and the view re-renders in
+  its action what no attribute can reach — the toolbar meta, the state-dependent
+  buttons (pause, Live topic) and the tables.
 - **fix(gui_treedb): a card's header no longer runs off the card on a phone.** A
   Rows card carries six buttons in its head (options, columns, export, share,
   refresh, close), each `is-flex-shrink-0` on a row that could not wrap: at 390px
