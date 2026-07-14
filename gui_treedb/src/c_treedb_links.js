@@ -452,6 +452,13 @@ function finish_scan(gobj, conn_id, error)
         if(!gobj_is_running(gobj)) {
             return;
         }
+        if(!priv.conns[conn_id]) {
+            /*  The connection died between the answer and this deferral
+             *  (a logout's EV_CLOSE_ALL fits in that one-macrotask window):
+             *  the scan belongs to the dead session, and storing it would
+             *  publish EV_CONNECTIONS_CHANGED into ST_LOGGED_OUT.  */
+            return;
+        }
         let config = gobj_find_service("treedb_config", false);
         if(config) {
             gobj_send_event(config, "EV_STORE_SCANNED_SERVICES",

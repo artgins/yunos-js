@@ -256,7 +256,15 @@ function build_ui(gobj)
 
     let $add = createElement2(
         ["button", {class: "button is-primary is-small SETTINGS_ADD", id: "treedb-settings-add",
-                    i18n: "add connection"}, "Add connection"]);
+                    title: t("add connection"),
+                    "aria-label": t("add connection"),
+                    "data-i18n-title": "add connection",
+                    "data-i18n-aria-label": "add connection"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-plus"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "add connection"}, t("add connection")]
+            ]
+        ]);
     $add.addEventListener("click", () => {
         gobj_send_event(gobj, "EV_ADD_CONN", {}, gobj);
     });

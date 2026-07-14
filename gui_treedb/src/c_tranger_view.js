@@ -397,9 +397,17 @@ let PRIVATE_DATA = {
                              previous session leaked on the backend  */
     iter_seq:    0,      /*  iterator_id uniquifier  */
     req_seq:     0,      /*  get-page request uniquifier  */
+    bumped:      null,   /*  key -> last rowid counted by bump_key_count: one
+                             physical append is DELIVERED once per feed alive
+                             on its key, and the count must move once  */
     pending:     null,   /*  req_id -> {resolve, reject} (get-page Promise bridge)  */
     picker_win:  null,   /*  C_YUI_WINDOW hosting the Keys picker, desktop (or null)  */
     picker_modal: null,  /*  shell modal hosting the Keys picker, mobile (or null)  */
+    picker_box:  null,   /*  the mobile sheet's content (its composed title is
+                             re-written on a language switch)  */
+    open_modals: null,   /*  transient modals (rows options / record / columns):
+                             swept when the session dies, retitled on language  */
+    error_key:   "",     /*  last show_error() key, re-rendered on language  */
     picker_tbl:  null,   /*  the picker's Tabulator (or null)  */
     rows_options: null,  /*  the Rows-options form while its dialog is up:
                              {$box, inputs, ranges, $open}. `ranges` holds the
@@ -411,7 +419,8 @@ let PRIVATE_DATA = {
     $error:      null,
     $dashboard:  null,   /*  cards column  */
     $copy_btn:   null,   /*  button awaiting clipboard feedback (or null)  */
-    copy_label:  "",     /*  its label, to restore after the feedback  */
+    copy_fb:     null,   /*  feedback being shown: {$btn, label} to restore  */
+    copy_timer:  null,   /*  its reset timer (cleared if another copy lands)  */
     $empty:      null,   /*  empty-dashboard hint  */
 };
 
@@ -446,6 +455,8 @@ function mt_create(gobj)
     priv.tok = Math.random().toString(36).slice(2, 10);
     priv.iter_seq = 0;
     priv.req_seq = 0;
+    priv.bumped = {};
+    priv.open_modals = [];
     priv.pending = {};
     priv.picker_win = null;
     priv.picker_modal = null;
@@ -529,7 +540,8 @@ function mt_stop(gobj)
     reject_pending(gobj, "view stopped");
     close_all_cards(gobj);
     close_picker(gobj);
-    close_rows_options(gobj);
+    close_view_modals(gobj);
+    close_rows_options(gobj);   /*  belt: idempotent if the sweep ran it  */
 
     /*  A stopped view knows NOTHING: leaving the topic list, the keys and the
      *  selected topic behind meant a stop→start cycle re-entered with the
@@ -672,6 +684,7 @@ function build_ui(gobj)
 function show_error(gobj, msg)
 {
     let priv = gobj.priv;
+    priv.error_key = msg || "";     /*  re-rendered on a language switch  */
     if(!priv.$error) {
         return;
     }
@@ -682,6 +695,70 @@ function show_error(gobj, msg)
     }
     priv.$error.textContent = t(msg);
     priv.$error.classList.remove("is-hidden");
+}
+
+/***************************************************************
+ *  Every transient modal of the view (Rows options, record, columns)
+ *  goes through here, for two reasons a bare yui_shell_show_modal cannot
+ *  cover:
+ *    - a dead session must SWEEP them (close_view_modals): a dialog that
+ *      survives its transport keeps sending events into ST_DISCONNECTED,
+ *      where its events are (rightly) not declared — every click a loud
+ *      "Event NOT DEFINED in state" on a corpse.
+ *    - a composed title (`${key} · ${t("rows")}`) cannot re-translate by
+ *      data-i18n (the composed string is no key): `title_fn` re-composes
+ *      it on EV_LANGUAGE_CHANGED.
+ ***************************************************************/
+function show_view_modal(gobj, shell, $content, opts)
+{
+    let priv = gobj.priv;
+    if(opts.title_fn) {
+        opts.title = opts.title_fn();
+    }
+    let caller_on_close = opts.on_close;
+    let entry = {modal: null, $content: $content, title_fn: opts.title_fn || null};
+    opts.on_close = () => {
+        let idx = priv.open_modals.indexOf(entry);
+        if(idx >= 0) {
+            priv.open_modals.splice(idx, 1);
+        }
+        if(caller_on_close) {
+            caller_on_close();
+        }
+    };
+    entry.modal = yui_shell_show_modal(shell, $content, opts);
+    priv.open_modals.push(entry);
+    return entry.modal;
+}
+
+function close_view_modals(gobj)
+{
+    let priv = gobj.priv;
+    let entries = (priv.open_modals || []).slice();
+    priv.open_modals = [];
+    for(let entry of entries) {
+        if(entry.modal && typeof entry.modal.close === "function") {
+            entry.modal.close();
+        }
+    }
+}
+
+/***************************************************************
+ *  Re-compose the composed titles a language switch cannot reach by
+ *  attribute: the open transient modals' (title_fn) and the mobile Keys
+ *  sheet's. The title node carries the composed string as its data-i18n
+ *  too, so the shell's document-wide refresh maps it to itself instead
+ *  of "translating" it away.
+ ***************************************************************/
+function retitle_modal($content, title)
+{
+    let $modal = $content && $content.closest ? $content.closest(".modal") : null;
+    let $title = $modal ? $modal.querySelector(".MODAL_TITLE") : null;
+    if(!$title) {
+        return;
+    }
+    $title.textContent = title;
+    $title.setAttribute("data-i18n", title);
 }
 
 /***************************************************************
@@ -1071,6 +1148,7 @@ function open_keys_picker(gobj)
             log_error(`${gobj_short_name(gobj)}: no shell, cannot open the Keys sheet`);
             return;
         }
+        priv.picker_box = $box;
         priv.picker_modal = yui_shell_show_modal(shell, $box, {
             dialog: true,
             logical_class: "TRANGER_KEYS_SHEET",
@@ -2029,10 +2107,10 @@ function open_rows_options(gobj, key, card)
     priv.rows_options = form;
     paint_hint(form.time);
 
-    let opt_modal = yui_shell_show_modal(shell, form.$box, {
+    let opt_modal = show_view_modal(gobj, shell, form.$box, {
         dialog: true,
         logical_class: "TRANGER_ROWS_OPTIONS",
-        title:  `${key} · ${t("rows")}`,
+        title_fn: () => `${key} · ${t("rows")}`,
         t:      t,
         /*  EVERY way out of the dialog lands here (the X, Escape, the
          *  backdrop, and the confirm button's own close()), so this is the
@@ -2134,8 +2212,14 @@ function apply_card_match_cond(gobj, card, match_cond)
 {
     close_iterator(gobj, card.iterator_id);
 
+    let prev_match_cond = card.match_cond;
     card.match_cond = match_cond || {};
     if(!arm_iterator(gobj, card)) {
+        /*  The card keeps running on its OLD conditions (the new iterator
+         *  never opened), so memory must say so too — otherwise the next
+         *  reconnect re-arms with conditions that were never applied while
+         *  the persisted view still holds the old ones.  */
+        card.match_cond = prev_match_cond;
         return;     /*  Error already logged  */
     }
 
@@ -2918,10 +3002,10 @@ function show_record_dialog(gobj, record, key)
     let $box = createElement2(
         ["div", {class: "TRANGER_RECORD_BOX"}, [$pre, $copy]]);
 
-    yui_shell_show_modal(shell, $box, {
+    show_view_modal(gobj, shell, $box, {
         dialog: true,
         logical_class: "TRANGER_RECORD_DIALOG",
-        title:  `${priv.cur_topic} · ${key === ALL_KEYS ? t("all keys") : key}`,
+        title_fn: () => `${priv.cur_topic} · ${key === ALL_KEYS ? t("all keys") : key}`,
         t:      t
     });
 }
@@ -3022,6 +3106,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
                         `search or paging`);
         }
         priv.keys = answer.rows;
+        priv.bumped = {};   /*  fresh snapshot: fresh dedupe watermarks  */
         priv.keys_total = answer.total_rows;
         remember_key_spans(gobj, answer.rows);
         update_meta(gobj);
@@ -3166,6 +3251,17 @@ function ac_transport_open(gobj, event, kw, src)
         return 0;
     }
 
+    if(gobj_current_state(gobj) === "ST_LOADING_TOPICS") {
+        /*  Reopened while the `topics` answer was in flight: that answer
+         *  belongs to the session that died — ask again. Falling through to
+         *  the re-arm path below would enable the toolbar with NO topic
+         *  selected (the half-armed view its guard exists to prevent) and
+         *  re-request nothing, wedging the view here if the answer was lost
+         *  to the flap.  */
+        request_topics(gobj);
+        return 0;
+    }
+
     if(priv.cur_topic) {
         request_keys_count(gobj, priv.cur_topic);
         if(priv.picker_tbl) {
@@ -3215,6 +3311,11 @@ function ac_transport_closed(gobj, event, kw, src)
     reject_pending(gobj, "session closed");
     close_all_cards(gobj);      /*  teardown: they stay persisted  */
     close_picker(gobj);
+    /*  The transient dialogs die with the session too: left up, the Rows
+     *  options (and friends) keep a form whose every control sends events
+     *  into ST_DISCONNECTED — a zombie whose clicks can only log errors.
+     *  Their on_close chain releases what they hold (the period pickers).  */
+    close_view_modals(gobj);
     set_toolbar_enabled(gobj, false);
 
     priv.pending_seg = priv.cur_topic || "";
@@ -3638,10 +3739,10 @@ function ac_open_columns(gobj, event, kw, src)
                 [$cb, ["span", {class: "ml-2"}, field]]]));
     }
 
-    yui_shell_show_modal(shell, $list, {
+    show_view_modal(gobj, shell, $list, {
         dialog: true,
         logical_class: "TRANGER_COLUMNS_DIALOG",
-        title: t("columns"),
+        title_fn: () => t("columns"),
         t: t
     });
     return 0;
@@ -3733,22 +3834,54 @@ function ac_copy_done(gobj, event, kw, src)
     let priv = gobj.priv;
     let ok = !!(kw && kw.ok);
     let $btn = priv.$copy_btn;
+    priv.$copy_btn = null;
     if(!$btn) {
         return 0;
     }
+
+    /*  A feedback still pending on ANOTHER button is restored first: one
+     *  slot and two copies inside the window left the first button stuck
+     *  on "Copied" forever while its timer reset the second one early.  */
+    clear_copy_feedback(gobj);
+
     let $text = $btn.querySelector("span:not(.icon)");
+    let label = $text ? $text.textContent : "";
     if($text) {
-        priv.copy_label = $text.textContent;
         $text.textContent = ok ? t("copied") : t("copy failed");
     }
     $btn.classList.toggle("is-success", ok);
     $btn.classList.toggle("is-danger", !ok);
 
+    priv.copy_fb = {$btn: $btn, label: label};
     /*  A button stuck on "Copied" forever reads as a mode, not as feedback.  */
-    setTimeout(function() {
+    priv.copy_timer = setTimeout(function() {
         gobj_send_event(gobj, "EV_COPY_RESET", {}, gobj);
     }, COPY_FEEDBACK_MS);
     return 0;
+}
+
+/************************************************************
+ *  Restore the button wearing the copy feedback, and drop its timer.
+ *  Plain helper (no events): ac_copy_done needs it inline when a second
+ *  copy lands inside the feedback window.
+ ************************************************************/
+function clear_copy_feedback(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.copy_timer) {
+        clearTimeout(priv.copy_timer);
+        priv.copy_timer = null;
+    }
+    let fb = priv.copy_fb;
+    priv.copy_fb = null;
+    if(!fb || !fb.$btn || !fb.$btn.isConnected) {
+        return;     /*  its dialog / card is gone  */
+    }
+    let $text = fb.$btn.querySelector("span:not(.icon)");
+    if($text && fb.label) {
+        $text.textContent = fb.label;
+    }
+    fb.$btn.classList.remove("is-success", "is-danger");
 }
 
 /************************************************************
@@ -3756,17 +3889,7 @@ function ac_copy_done(gobj, event, kw, src)
  ************************************************************/
 function ac_copy_reset(gobj, event, kw, src)
 {
-    let priv = gobj.priv;
-    let $btn = priv.$copy_btn;
-    priv.$copy_btn = null;
-    if(!$btn || !$btn.isConnected) {
-        return 0;   /*  its dialog / card is gone  */
-    }
-    let $text = $btn.querySelector("span:not(.icon)");
-    if($text && priv.copy_label) {
-        $text.textContent = priv.copy_label;
-    }
-    $btn.classList.remove("is-success", "is-danger");
+    clear_copy_feedback(gobj);
     return 0;
 }
 
@@ -3908,6 +4031,20 @@ function ac_language_changed(gobj, event, kw, src)
     update_meta(gobj);
     paint_live_topic_btn(gobj);
 
+    /*  The long-lived error banner and the composed titles hold t()-built
+     *  text with no key to re-translate by: re-render them here.  */
+    if(priv.error_key) {
+        show_error(gobj, priv.error_key);
+    }
+    for(let entry of (priv.open_modals || [])) {
+        if(entry.title_fn) {
+            retitle_modal(entry.$content, entry.title_fn());
+        }
+    }
+    if(priv.picker_modal && priv.picker_box) {
+        retitle_modal(priv.picker_box, `${priv.cur_topic} · ${t("keys")}`);
+    }
+
     for(let card of priv.cards) {
         if(card.mode === "live") {
             paint_pause_button(card);
@@ -3987,26 +4124,30 @@ function ac_tranger_record_added(gobj, event, kw, src)
      *  arrives once per feed alive on that key — including feeds leaked by a
      *  session that died without close-rt. `rt_id` says which feed produced
      *  it: route it to THAT card and nothing else, so a foreign feed cannot
-     *  duplicate our rows. Backends older than the rt_id field send none:
-     *  fall back to topic+key (and to their duplicates).  */
+     *  duplicate our rows.
+     *
+     *  There is NO fallback for a payload without rt_id, on purpose: the
+     *  subscription is filtered by {rt_id} and kw_match_simple answers
+     *  no-match when the filter's key is ABSENT from the kw, so such a
+     *  publish never reaches this action — and no released backend can send
+     *  one anyway (open-rt and the rt_id field shipped together; a backend
+     *  without rt_id refuses open-rt itself, which the card surfaces as the
+     *  command error).  */
     for(let card of priv.cards) {
         if(card.mode !== "live") {
             continue;
         }
-        if(rt_id) {
-            if(card.rt_id === rt_id) {
-                push_live_record(card, record, key);
-            }
-            continue;
-        }
-        /*  A whole-topic card takes every key of its topic (that is what its
-         *  feed was opened on).  */
-        if(card.topic === topic && (card.key === ALL_KEYS || card.key === key)) {
+        if(rt_id && card.rt_id === rt_id) {
             push_live_record(card, record, key);
         }
     }
 
-    if(topic === priv.cur_topic) {
+    /*  The picker count tracks PHYSICAL appends, but this action runs once
+     *  per feed the record reached (a per-key card + a whole-topic card on
+     *  the same key = two deliveries of the same append): dedupe by rowid,
+     *  which the backend stamps per physical record.  */
+    let rowid = (kw && kw.rowid) || 0;
+    if(topic === priv.cur_topic && is_new_rowid(gobj, key, rowid)) {
         bump_key_count(gobj, key);
     }
     return 0;
@@ -4018,6 +4159,25 @@ function ac_tranger_record_added(gobj, event, kw, src)
  *  frozen until the picker is reopened. Only keys with an open Live
  *  card produce these events — the rest are refreshed on open.
  ************************************************************/
+/*  TRUE once per physical append: the backend stamps every published record
+ *  with its rowid, and rowids only grow within a key. The map resets with
+ *  each list-keys snapshot, so a reopened picker starts clean.  */
+function is_new_rowid(gobj, key, rowid)
+{
+    let priv = gobj.priv;
+    if(!rowid) {
+        return true;    /*  no rowid, no way to dedupe: count it  */
+    }
+    if(!priv.bumped) {
+        priv.bumped = {};
+    }
+    if(rowid <= (priv.bumped[key] || 0)) {
+        return false;
+    }
+    priv.bumped[key] = rowid;
+    return true;
+}
+
 function bump_key_count(gobj, key)
 {
     let priv = gobj.priv;
@@ -4077,6 +4237,8 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
             ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
+            ["EV_COPY_DONE",            ac_copy_done,             null],
+            ["EV_COPY_RESET",           ac_copy_reset,            null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
             ["EV_ON_CLOSE",             ac_transport_closed,      null],
             ["EV_SHOW",                 ac_show,                  null],
@@ -4086,6 +4248,8 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,     null],
             ["EV_TRANGER_RECORD_ADDED", ac_tranger_record_added,  null],
             ["EV_PAGE_TIMEOUT",         ac_page_timeout,          null],
+            ["EV_COPY_DONE",            ac_copy_done,             null],
+            ["EV_COPY_RESET",           ac_copy_reset,            null],
             ["EV_ON_OPEN",              ac_transport_open,        null],
             ["EV_ON_CLOSE",             ac_transport_closed,      null],
             ["EV_SHOW",                 ac_show,                  null],

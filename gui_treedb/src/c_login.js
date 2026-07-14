@@ -680,7 +680,19 @@ function create_gclass(gclass_name)
             ["EV_LOGIN_ACCEPTED",  ac_login_accepted,  "ST_LOGIN"],
             ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"],
             ["EV_RESTORE_FAILED",  ac_restore_failed,  "ST_LOGOUT"],
-            ["EV_WAKEUP",          ac_wakeup,          null]
+            ["EV_WAKEUP",          ac_wakeup,          null],
+            /*
+             *  Leftovers of a session logged out an instant ago: a refresh
+             *  or /auth/token fetch in flight at logout lands HERE when the
+             *  user re-submits the login within its latency (this state is
+             *  one EV_DO_LOGIN away from ST_LOGOUT, and a stalled BFF holds
+             *  the fetch for seconds). Their only producers belong to a
+             *  session, so in this state they can only be stale — dropped
+             *  exactly as ST_LOGOUT drops them.
+             */
+            ["EV_LOGIN_REFRESHED", ac_clear_session,   null],
+            ["EV_TOKEN_FETCHED",   ac_clear_session,   null],
+            ["EV_REFRESH_FAILED",  ac_clear_session,   null]
         ]],
 
         ["ST_LOGIN", [

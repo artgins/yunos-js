@@ -26,6 +26,7 @@ import {
     gobj_parent,
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_subscribe_event,
+    gobj_unsubscribe_event,
     gobj_find_service,
     createElement2,
     refresh_language,
@@ -33,7 +34,9 @@ import {
     msg_iev_read_key,
 } from "@yuneta/gobj-js";
 
-import i18next, {t} from "i18next";
+import {t} from "i18next";
+
+import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
@@ -135,12 +138,14 @@ function mt_start(gobj)
     watch_visibility(gobj);
     arm_poll(gobj);
 
-    priv.on_lang = () => {
-        let $c = gobj_read_attr(gobj, "$container");
-        refresh_language($c, t);
-        render_cards(gobj);
-    };
-    i18next.on("languageChanged", priv.on_lang);
+    /*  The stat cards compose their text at render time, so a language
+     *  switch must re-render them. Through the shell's event and the FSM —
+     *  never a raw i18next.on listener, whose work would be invisible to
+     *  the machine trace (this was the last one left after 91bf3e2).  */
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
 }
 
 /***************************************************************
@@ -154,9 +159,9 @@ function mt_stop(gobj)
         priv.vis_obs.disconnect();
         priv.vis_obs = null;
     }
-    if(priv.on_lang) {
-        i18next.off("languageChanged", priv.on_lang);
-        priv.on_lang = null;
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
 }
 
@@ -567,6 +572,20 @@ function ac_stats_refresh_changed(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The shell switched language: the cards compose their text at render
+ *  time, so re-render them in the new one.
+ ***************************************************************/
+function ac_language_changed(gobj, event, kw, src)
+{
+    let $c = gobj_read_attr(gobj, "$container");
+    if($c) {
+        refresh_language($c, t);
+    }
+    render_cards(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  Selection changed (all mode) — rebuild the card set.
  ***************************************************************/
 function ac_selected_nodes_changed(gobj, event, kw, src)
@@ -647,7 +666,8 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
             ["EV_MT_STATS_ANSWER",   ac_mt_stats_answer,   null],
             ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null],
-            ["EV_STATS_REFRESH_CHANGED",  ac_stats_refresh_changed,  null]
+            ["EV_STATS_REFRESH_CHANGED",  ac_stats_refresh_changed,  null],
+            ["EV_LANGUAGE_CHANGED",       ac_language_changed,       null]
         ]]
     ];
 
@@ -660,7 +680,8 @@ function create_gclass(gclass_name)
         ["EV_MT_COMMAND_ANSWER", 0],
         ["EV_MT_STATS_ANSWER",   0],
         ["EV_SELECTED_NODES_CHANGED", 0],
-        ["EV_STATS_REFRESH_CHANGED",  0]
+        ["EV_STATS_REFRESH_CHANGED",  0],
+        ["EV_LANGUAGE_CHANGED",       0]
     ];
 
     __gclass__ = gclass_create(

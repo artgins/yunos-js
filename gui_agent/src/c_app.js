@@ -42,6 +42,7 @@ import {
     yui_shell_set_connection_state,
     yui_shell_set_submenu,
     yui_shell_navigate,
+    yui_shell_language_changed,
 } from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_shell_show_modal} from "@yuneta/gobj-ui/src/shell_modals.js";
 
@@ -670,7 +671,10 @@ function ac_on_open_error(gobj, event, kw, src)
     if(priv.login_ui) {
         let url = (kw && kw.url) || "";
         priv.login_ui.set_busy(false);
-        priv.login_ui.set_error(
+        /*  A COMPOSER, not a string: the login screen's own language
+         *  quick-toggle re-runs it (repaint_error), so this long-lived
+         *  notice follows the switch — composed text carries no key.  */
+        priv.login_ui.set_error(() =>
             url ? `${t("cannot connect")} (${url}) — ${t("reconnecting")}`
                 : `${t("cannot connect")} — ${t("reconnecting")}`
         );
@@ -796,7 +800,19 @@ function ac_toggle_theme(gobj, event, kw, src)
 function ac_toggle_language(gobj, event, kw, src)
 {
     switch_locale(current_locale() === "es" ? "en" : "es");
-    refresh_language(document.body, t);
+
+    /*  The SHELL fans it out: it re-translates the document AND publishes
+     *  EV_LANGUAGE_CHANGED to every subscribed view — which is the only
+     *  path that reaches the Tabulator chrome (Nodes, Stats, the Console
+     *  answers): those tables draw their headers/paginator once, so a bare
+     *  refresh_language() left them in the old language. Same contract as
+     *  the account view's language segment.  */
+    let priv = gobj.priv;
+    if(priv.shell) {
+        yui_shell_language_changed(priv.shell);
+    } else {
+        refresh_language(document.body, t);
+    }
     return 0;
 }
 

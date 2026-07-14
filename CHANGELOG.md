@@ -22,6 +22,67 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb, gui_agent): review follow-ups on the tranger/i18n series.**
+  Findings of a full review of the range, each verified in code:
+  - **gui_agent: the toolbar language toggle reaches the tables again.**
+    91bf3e2 moved Nodes/Stats/Console off their raw `i18next.on` listeners
+    and onto the shell's `EV_LANGUAGE_CHANGED`, but only the account view
+    called `yui_shell_language_changed()` — the toolbar item did a bare
+    `refresh_language()`, so the Tabulator chrome (headers, paginator,
+    placeholders) stayed in the old language. The toolbar action now fans
+    out through the shell too, and `c_agent_stats` — the one view still on
+    a raw `i18next.on` listener — was migrated to the shell event + FSM
+    action, closing out what 91bf3e2 started.
+  - **gui_treedb: the "old backend" fallback of the Live cards was dead
+    code.** The subscription filters by `{rt_id}`, and `kw_match_simple`
+    answers no-match when the filter's key is absent from the kw — so a
+    publish without `rt_id` never reached the action and the topic+key
+    fallback branch was unreachable. It is REMOVED (with the misleading
+    comment): no released backend can send one anyway — `open-rt` and the
+    `rt_id` field shipped together, and a backend without them refuses
+    `open-rt` itself, which the card surfaces as the command error.
+  - **gui_treedb: a dead session sweeps the transient dialogs.** The Rows
+    options (and the record/columns dialogs) survived `EV_ON_CLOSE` as
+    zombies: every control kept sending events into `ST_DISCONNECTED`,
+    where they are (rightly) not declared. They now close with the session
+    — and their composed titles (`key · rows`), which no `data-i18n` can
+    re-translate, re-compose on `EV_LANGUAGE_CHANGED` (the mobile Keys
+    sheet's too), as does the long-lived error banner.
+  - **gui_treedb: the Keys picker count no longer inflates.** A physical
+    append is DELIVERED once per feed alive on its key (a per-key card +
+    a whole-topic card = two deliveries), and `bump_key_count` counted
+    every delivery: dedupe by the record's `rowid` watermark, per key.
+  - **gui_treedb: a reopen during `ST_LOADING_TOPICS` re-asks `topics`.**
+    It fell through to the re-arm path: toolbar enabled with no topic
+    selected, and a `topics` answer lost to the flap wedged the view.
+  - **both logins: `ST_WAIT_TOKEN` drops the leftovers of a session logged
+    out an instant ago** (a refresh / `/auth/token` fetch in flight when
+    the user logs out and re-submits within its latency), exactly as
+    `ST_LOGOUT` does — they used to raise *"Event NOT DEFINED in state"*.
+  - **gui_treedb: a stale discovery cannot land after logout** — the
+    deferred `EV_STORE_SCANNED_SERVICES` of `finish_scan` now checks its
+    connection is still open (a logout's close-all fits in the deferral's
+    one-macrotask window), so `EV_CONNECTIONS_CHANGED` cannot reach
+    `ST_LOGGED_OUT`.
+  - **gui_treedb: applying match conditions on a dead link no longer
+    desyncs memory from persistence** — the card's `match_cond` is only
+    replaced once the new iterator actually armed.
+  - Copy feedback: two copies inside the 1.5 s window left the first
+    button stuck on "Copied" forever; the pending feedback is restored
+    before the new one paints, and `EV_COPY_DONE`/`EV_COPY_RESET` are
+    declared in every state (they are async: a session can drop inside
+    the window). The gui_agent pre-shell "reconnecting" notice is now a
+    composer the login language toggle re-runs. The Settings
+    "Add connection" button carries its icon + mobile-hidden label like
+    its row siblings. `npm test` runs `vitest run` (no watch mode).
+
+- **feat(gui_treedb, gui_agent): every popup instance carries a logical
+  name.** (Backfilled entry: shipped earlier in this range as b46bc59 +
+  eefd348 without a changelog line.) The shell modals/windows accept a
+  `logical_class`, and both SPAs name every popup they open
+  (`TRANGER_ROWS_OPTIONS`, `TRANGER_KEYS_SHEET`, `SETTINGS_*`, …), so the
+  Inspector says WHICH dialog a node belongs to.
+
 - **feat(gui_treedb): the Rows options pick a PERIOD, not two timestamps.** The
   time range of a Rows card was two `datetime-local` inputs per axis plus a row
   of preset buttons — the user had to type two instants that agreed with each

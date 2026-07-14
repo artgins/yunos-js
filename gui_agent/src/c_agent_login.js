@@ -420,7 +420,15 @@ function create_gclass(gclass_name)
         ["ST_WAIT_TOKEN", [
             ["EV_DO_LOGIN",        ac_do_login,        null],
             ["EV_LOGIN_ACCEPTED",  ac_login_accepted,  "ST_LOGIN"],
-            ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"]
+            ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"],
+            /*
+             *  A refresh in flight at logout lands HERE when the user
+             *  re-submits the login within its latency (this state is one
+             *  EV_DO_LOGIN away from ST_LOGOUT). Its only producer belongs
+             *  to a session, so in this state it can only be stale —
+             *  dropped exactly as ST_LOGOUT drops it.
+             */
+            ["EV_LOGIN_REFRESHED", ac_clear_session,   null]
         ]],
         ["ST_LOGIN", [
             ["EV_DO_LOGOUT",       ac_do_logout,       null],

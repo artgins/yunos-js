@@ -41,7 +41,7 @@ function mount_login(opts)
     paint_i18n(root);
     paint_quick(root);
     let api = wire_form(root, on_submit);
-    wire_quick(root);
+    wire_quick(root, api);
 
     setTimeout(function() {
         let u = root.querySelector("input[name=username]");
@@ -163,13 +163,26 @@ function wire_form(root, on_submit)
     let user  = form.querySelector("input[name=username]");
     let pwd   = form.querySelector("input[name=password]");
 
+    /*  `msg` may be a COMPOSER (a function returning the text): a composed
+     *  error ("cannot connect (url) — reconnecting") has no single i18n key,
+     *  so the language quick-toggle re-runs the composer to re-translate it
+     *  (repaint_error below) instead of leaving it in the old language.  */
+    let last_error = null;
     function set_error(msg) {
-        alert.textContent = msg || "";
-        alert.hidden = !msg;
+        last_error = msg || null;
+        let text = (typeof msg === "function") ? msg() : (msg || "");
+        alert.textContent = text;
+        alert.hidden = !text;
     }
     function clear_error() {
+        last_error = null;
         alert.textContent = "";
         alert.hidden = true;
+    }
+    function repaint_error() {
+        if(typeof last_error === "function") {
+            set_error(last_error);
+        }
     }
     function set_busy(on) {
         form.querySelectorAll("input, button").forEach(function(el) {
@@ -204,7 +217,7 @@ function wire_form(root, on_submit)
                 {defaultValue: revealed ? "Show password" : "Hide password"}));
     });
 
-    return {set_error, clear_error, set_busy};
+    return {set_error, clear_error, set_busy, repaint_error};
 }
 
 
@@ -213,7 +226,7 @@ function wire_form(root, on_submit)
                      ***************************/
 
 
-function wire_quick(root)
+function wire_quick(root, api)
 {
     let theme_btn = root.querySelector("[data-quick=theme]");
     theme_btn.addEventListener("click", function() {
@@ -226,6 +239,9 @@ function wire_quick(root)
         switch_locale(current_locale() === "es" ? "en" : "es");
         paint_i18n(root);
         paint_quick(root);
+        if(api && api.repaint_error) {
+            api.repaint_error();    /*  composed errors carry no data-i18n  */
+        }
     });
 }
 
