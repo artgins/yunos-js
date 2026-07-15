@@ -22,6 +22,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): schema-graph landing (prototype).** The Topics workspace's
+  landing gains a toolbar toggle between the topic **cards** and a **schema
+  graph** — the treedb drawn as topics (nodes) + `hook`/`fkey` relationships
+  (edges), from the schema alone. Clicking a node opens that topic's table
+  (same hash route as the card). Registers gobj-ui's new `C_YUI_TREEDB_SCHEMA`.
+
 - **fix(gui_treedb): browser Back from a topic table / info panel returns to
   the cards grid.** `C_TREEDB_VIEW.ac_route_changed` ignored an empty subpath,
   so Back to the bare `/topics/db/<sel>` left the view on the previous topic

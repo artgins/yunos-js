@@ -48,6 +48,7 @@ import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
 import {register_c_yui_window_manager} from "@yuneta/gobj-ui/src/c_yui_window_manager.js";
 
 import {register_c_yui_treedb_topics}          from "@yuneta/gobj-ui/src/c_yui_treedb_topics.js";
+import {register_c_yui_treedb_schema}          from "@yuneta/gobj-ui/src/c_yui_treedb_schema.js";
 import {register_c_yui_treedb_topic_with_form} from "@yuneta/gobj-ui/src/c_yui_treedb_topic_with_form.js";
 import {register_c_yui_treedb_graph}           from "@yuneta/gobj-ui/src/c_yui_treedb_graph.js";
 import {register_c_g6_nodes_tree}              from "@yuneta/gobj-ui/src/c_g6_nodes_tree.js";
@@ -126,6 +127,7 @@ function main()
 
     /*  TreeDB editor gclasses (from gobj-ui)  */
     register_c_yui_treedb_topics();
+    register_c_yui_treedb_schema();
     register_c_yui_treedb_topic_with_form();
     register_c_yui_treedb_graph();
     register_c_g6_nodes_tree();

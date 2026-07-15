@@ -153,6 +153,8 @@ const en = {
         "system": "System",
         "column": "Column",
         "type": "Type",
+        "schema": "Schema",
+        "schema graph": "Schema graph",
         "settings": "Settings",
         "connections": "Connections",
         "add connection": "Add connection",

@@ -153,6 +153,8 @@ const es = {
         "system": "Sistema",
         "column": "Columna",
         "type": "Tipo",
+        "schema": "Esquema",
+        "schema graph": "Grafo de esquema",
         "settings": "Ajustes",
         "connections": "Conexiones",
         "add connection": "Añadir conexión",
