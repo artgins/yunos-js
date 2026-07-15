@@ -1045,7 +1045,8 @@ function set_toolbar_enabled(gobj, enabled)
     if(!$c) {
         return;
     }
-    for(let $btn of $c.querySelectorAll(".TRANGER_KEYS_BTN, .TRANGER_LIVE_TOPIC_BTN")) {
+    for(let $btn of $c.querySelectorAll(
+            ".TRANGER_KEYS_BTN, .TRANGER_LIVE_TOPIC_BTN, .TRANGER_JSON_BTN")) {
         $btn.disabled = !enabled;
     }
 }

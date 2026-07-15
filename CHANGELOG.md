@@ -22,6 +22,13 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): disable the tranger view's "Raw JSON" button off-session.**
+  `EV_OPEN_JSON` is declared only in `ST_TOPIC_SELECTED`, but the button was
+  left out of `set_toolbar_enabled`, so it stayed clickable in
+  `ST_DISCONNECTED` / `ST_LOADING_TOPICS` — a click there raised a loud
+  *"Event NOT DEFINED in state"*. It now follows the same session/topic gating
+  as the Keys and Live buttons.
+
 - **feat(gui_treedb): forward transport edges to the hosted treedb view.**
   `C_TREEDB_VIEW` now also watches `treedb_links` `EV_ON_CLOSE` (not only
   `EV_ON_OPEN`) and forwards both edges to its hosted view as
