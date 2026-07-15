@@ -22,6 +22,13 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): stop the C_YUI_JSON viewer before destroying it.**
+  `C_TRANGER_VIEW` destroyed the still-running Raw-JSON viewer gobj on close,
+  so `gobj_destroy()` raised the `destroying` flag before it could stop it —
+  logging *"Destroying a RUNNING gobj"* + *"gobj NULL or DESTROYED"* every
+  time. Now stops first (dismiss and teardown paths). Companion to the same
+  fix in gobj-ui's treedb views.
+
 - **feat(gui_treedb): "Raw JSON" viewer in the tranger view.** `C_TRANGER_VIEW`
   gains a toolbar button that opens the connected C_TRANGER service's whole
   tranger in the new `C_YUI_JSON` lazy tree viewer (moveable window on desktop,
