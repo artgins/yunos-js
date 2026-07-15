@@ -259,6 +259,11 @@ function build_hosted_view(gobj, remote)
     if(view_gclass === "C_TRANGER_VIEW") {
         kw.conn_id = gobj_read_attr(gobj, "conn_id");
     }
+    if(view_gclass === "C_YUI_TREEDB_TOPICS") {
+        /*  Land on a grid of topic cards (list->detail) instead of opening a
+         *  topic table straight away. Only this view declares the attr. */
+        kw.with_cards_landing = true;
+    }
 
     let view = gobj_create_service(
         service_name(gobj),
@@ -409,11 +414,24 @@ function ac_child_selected(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     let seg = kw && (kw.topic !== undefined ? kw.topic : kw.operation_mode);
-    if(!seg || seg === priv.seg) {
+    if(seg === priv.seg) {
         return 0;
     }
     let base_route = gobj_read_attr(gobj, "base_route");
     let shell = gobj_parent(gobj);
+    /*  An EMPTY topic means "back to the topic-cards grid" (TOPICS only): drop
+     *  the <topic> segment so a reload re-lands on the grid. A null/undefined
+     *  seg is just a stray echo — ignore it (keep the URL). */
+    if(seg === "") {
+        if(shell && base_route) {
+            priv.seg = "";
+            yui_shell_navigate(shell, base_route);
+        }
+        return 0;
+    }
+    if(!seg) {
+        return 0;
+    }
     if(shell && base_route) {
         priv.seg = seg;
         yui_shell_navigate(shell, `${base_route}/${seg}`);

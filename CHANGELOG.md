@@ -22,6 +22,15 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): topics open as a cards landing (list → detail).** The
+  Topics workspace now opens on a grid of topic cards; clicking a card opens
+  that topic's table (with the tabs bar for quick switching and a back-to-grid
+  button). Enabled by passing gobj-ui's new `C_YUI_TREEDB_TOPICS`
+  `with_cards_landing` when the hosted view is the topics view; the host
+  (`C_TREEDB_VIEW`) drops the `<topic>` URL segment on back so a reload
+  re-lands on the grid, while a deep-linked topic URL still opens straight into
+  its table.
+
 - **feat(gui_agent): clear (✕) on the shortkey add-form inputs.** The "key" and
   "command template" text inputs of the account view's shortkey editor now carry
   the standard `attach_clear` ✕ (the same norm as the nodes/stats search boxes),
