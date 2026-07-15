@@ -22,6 +22,10 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **chore(gui_treedb): drop the unused "tree json" locale keys.** The treedb
+  "Tree JSON" button was removed from gobj-ui before release; the en/es keys
+  that fed it are gone.
+
 - **fix(gui_treedb): disable the tranger view's "Raw JSON" button off-session.**
   `EV_OPEN_JSON` is declared only in `ST_TOPIC_SELECTED`, but the button was
   left out of `set_toolbar_enabled`, so it stayed clickable in
@@ -50,7 +54,7 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   adaptive modal sheet on mobile): the first `print-tranger` is collapsed, then
   the viewer drills in on demand (`EV_EXPAND_PATH` -> `print-tranger path=...`).
   main.js registers C_YUI_JSON; en/es locales gain the new keys. (The treedb
-  Raw/Tree JSON buttons live in gobj-ui's C_YUI_TREEDB_GRAPH / _TOPICS.)
+  Raw JSON buttons live in gobj-ui's C_YUI_TREEDB_GRAPH / _TOPICS.)
 
 - **fix(gui_treedb): the custom range was unreadable on a phone.** Its two
   columns carried `is-mobile`, the class that keeps columns side by side below
