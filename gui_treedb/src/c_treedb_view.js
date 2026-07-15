@@ -66,7 +66,7 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     view:         null,   /*  the hosted treedb view (a service)  */
-    sel_event:    null,   /*  child event bridged to the URL subpath  */
+    is_graph:     false,  /*  true for the GRAPH view (URL seg = focus topic)  */
     seg:          null,   /*  last applied/navigated subpath (dedup guard)  */
     rebind_timer: null,   /*  pending deferred transport rebind  */
 };
@@ -96,18 +96,22 @@ function mt_create(gobj)
     /*
      *  Bridge the hosted view's selection <-> the URL subpath so a reload /
      *  deep link restores it (ported from wattyzer's C_WZ_TREEDB):
-     *    - the view publishes its selection (CHILD model → delivered to us):
-     *      TOPICS → EV_TOPIC_SELECTED (topic), GRAPH → EV_OPERATION_MODE_CHANGED
-     *      (reading/edition/…). We navigate the shell to <base_route>/<seg>.
+     *    - the view publishes its TOPIC selection (CHILD model → delivered to
+     *      us via EV_TOPIC_SELECTED); we navigate the shell to
+     *      <base_route>/<seg>.
      *    - the shell publishes EV_ROUTE_CHANGED {base, subpath}; when `base` is
      *      OUR tab route we apply the subpath to the view. The `seg` dedup
      *      breaks the child→navigate→route_changed→child loop.
      *  The connection is already encoded in base_route (via the sel id), so no
      *  extra conn_id handling is needed here.
+     *
+     *  GRAPH: the URL segment is the FOCUS TOPIC (a topic card's graph icon /
+     *  a `.../graphs/db/<sel>/<topic>` deep link), applied via
+     *  EV_SET_FOCUS_TOPIC. The graph's operation mode is NOT routed — it stays
+     *  a persisted UI control (SDF_PERSIST). TOPICS: the segment is the topic,
+     *  or `<topic>/info` for the routed info panel.
      */
-    priv.sel_event = (view_gclass === "C_YUI_TREEDB_GRAPH")
-        ? "EV_OPERATION_MODE_CHANGED"
-        : "EV_TOPIC_SELECTED";
+    priv.is_graph = (view_gclass === "C_YUI_TREEDB_GRAPH");
 
     /*
      *  Resolve the live transport by connection id — a pointer cannot be
@@ -300,9 +304,9 @@ function apply_seg(gobj, seg)
     if(!priv.view || !seg) {
         return;
     }
-    if(priv.sel_event === "EV_OPERATION_MODE_CHANGED") {
-        gobj_send_event(priv.view, "EV_SET_OPERATION_MODE",
-            {operation_mode: seg}, gobj);
+    if(priv.is_graph) {
+        /*  GRAPH: focus the topic's nodes. */
+        gobj_send_event(priv.view, "EV_SET_FOCUS_TOPIC", {topic: seg}, gobj);
     } else if(seg.endsWith("/info")) {
         /*  TOPICS: `<topic>/info` opens the routed topic-info panel. */
         let topic = seg.slice(0, -"/info".length);
@@ -420,7 +424,14 @@ function rebind_hosted_view(gobj)
 function ac_child_selected(gobj, event, kw, src)
 {
     let priv = gobj.priv;
-    let seg = kw && (kw.topic !== undefined ? kw.topic : kw.operation_mode);
+    /*  Only a TOPIC selection is mirrored into the URL. A GRAPH's
+     *  operation-mode change (EV_OPERATION_MODE_CHANGED) is NOT routed —
+     *  the mode persists via SDF_PERSIST, and the graph's URL segment is
+     *  reserved for the focus topic (set by a topic card's graph icon). */
+    let seg = kw ? kw.topic : undefined;
+    if(seg === undefined) {
+        return 0;
+    }
     if(seg === priv.seg) {
         return 0;
     }

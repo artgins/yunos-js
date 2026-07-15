@@ -382,7 +382,7 @@ function rebuild_workspace_tabs(gobj, ws)
             target_kw.card_action_routes = {
                 info:  "#" + tab_route + "/{topic}/info",
                 table: "#" + tab_route + "/{topic}",
-                graph: "#" + db_tab_route("graphs", sel.id)
+                graph: "#" + db_tab_route("graphs", sel.id) + "/{topic}"
             };
         }
         items.push({

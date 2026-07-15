@@ -22,6 +22,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): the graph icon focuses the topic; info panel shows
+  metadata.** A topic card's graph icon now deep-links to
+  `#/graphs/db/<sel>/<topic>`; `C_TREEDB_VIEW` routes that segment to the graph
+  as a focus topic (`EV_SET_FOCUS_TOPIC`) — the graph centres on and highlights
+  that topic's nodes. The graph's operation mode is no longer in the URL (it
+  persists via its own attr). The routed info panel now leads with topic
+  metadata (version, system, pkey, tkey).
+
 - **feat(gui_treedb): topic cards get info / table / graph hash actions.** Each
   topic card now carries three real hash links: **table** (`…/<topic>`), **info**
   (`…/<topic>/info` — a routed, deep-linkable schema panel: pkey + columns with
