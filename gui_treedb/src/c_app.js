@@ -56,6 +56,7 @@ import {
     treedb_config_get_connections,
     treedb_config_get_connection,
     treedb_config_get_selected,
+    treedb_config_is_selected,
     treedb_config_get_active_tab,
     treedb_config_normalize_sel,
     treedb_config_conn_services,
@@ -508,6 +509,49 @@ function restore_tab_from_url(gobj)
             yui_shell_navigate(gobj.priv.shell, cur);
         }
     }, 0);
+}
+
+/***************************************************************
+ *  Auto-open a treedb in a workspace when a deep link (e.g. a topic
+ *  card's graph icon → /graphs/db/<sel>/<topic>) lands on a `<sel>`
+ *  not yet selected there. Rebuild that treedb's selection entry from
+ *  wherever it IS already selected (the workspace the card came from),
+ *  select it (its tab builds on the next EV_SELECTED_TREEDBS_CHANGED),
+ *  and return true so the caller can navigate to the full route.
+ *  Returns false when the id is unknown (nothing to open).
+ ***************************************************************/
+function auto_open_treedb(gobj, ws, sel_id_)
+{
+    let config = gobj_find_service("treedb_config", false);
+    if(!config || !sel_id_) {
+        return false;
+    }
+    if(treedb_config_is_selected(config, ws, sel_id_)) {
+        return false;   /*  already open here  */
+    }
+    /*  The card came from another workspace where this treedb IS selected;
+     *  find its persisted entry there. */
+    let entry = null;
+    for(let other of Object.keys(WORKSPACES)) {
+        entry = treedb_config_get_selected(config, other).find(
+            (s) => s && s.id === sel_id_);
+        if(entry) {
+            break;
+        }
+    }
+    if(!entry) {
+        return false;   /*  unknown treedb — leave the fallback to the picker  */
+    }
+    let n = treedb_config_normalize_sel(entry);
+    gobj_send_event(config, "EV_TOGGLE_SELECTED", {
+        workspace: ws,
+        sel: {
+            conn_id: n.conn_id,
+            svc:     {key: n.svc_key, service: n.service, gclass: n.gclass},
+            label:   n.label || n.service
+        }
+    }, gobj);
+    return true;
 }
 
 /***************************************************************
@@ -1098,6 +1142,19 @@ function ac_route_changed(gobj, event, kw, src)
             if(config) {
                 gobj_send_event(config, "EV_SET_ACTIVE_TAB",
                     {workspace: ws, id: sub}, gobj);
+            }
+            /*  Deep link to a treedb not open in THIS workspace (a topic
+             *  card's graph icon): auto-select it so its tab builds, then
+             *  jump to the full route (its focus topic / mode restores once
+             *  it mounts). No-op — falls back to the picker — if unknown or
+             *  already selected. */
+            if(auto_open_treedb(gobj, ws, sub)) {
+                let full = gobj_read_attr(gobj.priv.shell, "current_route") || "";
+                setTimeout(function() {
+                    if(gobj.priv.shell && full) {
+                        yui_shell_navigate(gobj.priv.shell, full);
+                    }
+                }, 0);
             }
             return 0;
         }

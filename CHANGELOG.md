@@ -28,7 +28,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   as a focus topic (`EV_SET_FOCUS_TOPIC`) — the graph centres on and highlights
   that topic's nodes. The graph's operation mode is no longer in the URL (it
   persists via its own attr). The routed info panel now leads with topic
-  metadata (version, system, pkey, tkey).
+  metadata (version, system, pkey, tkey). If the treedb isn't open in the
+  Graphs workspace yet, the graph icon **auto-opens** it there (reconstructing
+  its selection from the workspace it's already open in) and then lands on the
+  focused graph — no manual pick needed. (Generic: any deep link to a treedb
+  not open in its workspace now auto-opens it.)
 
 - **feat(gui_treedb): topic cards get info / table / graph hash actions.** Each
   topic card now carries three real hash links: **table** (`…/<topic>`), **info**
