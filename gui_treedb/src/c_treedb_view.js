@@ -32,6 +32,7 @@ import {
     gobj_parent, gobj_name,
     gobj_subscribe_event, gobj_unsubscribe_event, gobj_send_event,
     gobj_start, gobj_stop, gobj_destroy, gobj_is_running, gobj_is_destroying,
+    gobj_has_event,
     createElement2,
 } from "@yuneta/gobj-js";
 
@@ -154,6 +155,7 @@ function mt_start(gobj)
     let links = gobj_find_service("treedb_links", false);
     if(links) {
         gobj_subscribe_event(links, "EV_ON_OPEN", {}, gobj);
+        gobj_subscribe_event(links, "EV_ON_CLOSE", {}, gobj);
     }
 
     if(priv.view && !gobj_is_running(priv.view)) {
@@ -179,6 +181,7 @@ function mt_stop(gobj)
     let links = gobj_find_service("treedb_links", false);
     if(links) {
         gobj_unsubscribe_event(links, "EV_ON_OPEN", {}, gobj);
+        gobj_unsubscribe_event(links, "EV_ON_CLOSE", {}, gobj);
     }
     if(priv.view && gobj_is_running(priv.view)) {
         gobj_stop(priv.view);
@@ -455,6 +458,10 @@ function ac_transport_open(gobj, event, kw, src)
     if(!kw || kw.conn_id !== conn_id) {
         return 0;   /*  another connection  */
     }
+    /*  Tell the hosted view the session is up (re-enable its remote-only
+     *  toolbar actions) — also on a plain WS reconnect, which the rebind
+     *  below deliberately ignores. */
+    notify_view_transport(gobj, true);
     let links = gobj_find_service("treedb_links", false);
     let remote = links ? treedb_links_get_iev(links, conn_id) : null;
     if(!remote) {
@@ -471,6 +478,34 @@ function ac_transport_open(gobj, event, kw, src)
         rebind_hosted_view(gobj);
     }, 0);
     return 0;
+}
+
+/***************************************************************
+ *  C_TREEDB_LINKS → OUR connection dropped. Tell the hosted view so it can
+ *  disable its remote-only actions (the JSON viewers) right away.
+ ***************************************************************/
+function ac_transport_close(gobj, event, kw, src)
+{
+    let conn_id = gobj_read_attr(gobj, "conn_id");
+    if(!kw || kw.conn_id !== conn_id) {
+        return 0;   /*  another connection  */
+    }
+    notify_view_transport(gobj, false);
+    return 0;
+}
+
+/***************************************************************
+ *  Forward a transport edge to the hosted view, but only if it asks for
+ *  it (declares EV_TRANSPORT_STATE). The library views (C_YUI_TREEDB_*) do;
+ *  C_TRANGER_VIEW watches treedb_links itself and does NOT, so the guard
+ *  keeps it from getting a duplicate it never declared.
+ ***************************************************************/
+function notify_view_transport(gobj, connected)
+{
+    let priv = gobj.priv;
+    if(priv.view && gobj_has_event(priv.view, "EV_TRANSPORT_STATE", 0)) {
+        gobj_send_event(priv.view, "EV_TRANSPORT_STATE", {connected: connected}, gobj);
+    }
 }
 
 
@@ -502,7 +537,8 @@ function create_gclass(gclass_name)
             ["EV_TOPIC_SELECTED",         ac_child_selected, null],
             ["EV_OPERATION_MODE_CHANGED", ac_child_selected, null],
             ["EV_ROUTE_CHANGED",          ac_route_changed,  null],
-            ["EV_ON_OPEN",                ac_transport_open, null]
+            ["EV_ON_OPEN",                ac_transport_open, null],
+            ["EV_ON_CLOSE",               ac_transport_close, null]
         ]]
     ];
 
@@ -510,7 +546,8 @@ function create_gclass(gclass_name)
         ["EV_TOPIC_SELECTED",         0],
         ["EV_OPERATION_MODE_CHANGED", 0],
         ["EV_ROUTE_CHANGED",          0],
-        ["EV_ON_OPEN",                0]
+        ["EV_ON_OPEN",                0],
+        ["EV_ON_CLOSE",               0]
     ];
 
     __gclass__ = gclass_create(

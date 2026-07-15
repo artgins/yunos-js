@@ -22,6 +22,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): forward transport edges to the hosted treedb view.**
+  `C_TREEDB_VIEW` now also watches `treedb_links` `EV_ON_CLOSE` (not only
+  `EV_ON_OPEN`) and forwards both edges to its hosted view as
+  `EV_TRANSPORT_STATE {connected}` — but only if the view declares it
+  (`gobj_has_event` guard), so the self-managing `C_TRANGER_VIEW` is skipped.
+  This is what lets the library views (topics/graph) disable their JSON
+  viewers the moment the backend session drops and re-enable on reconnect.
+
 - **fix(gui_treedb): stop the C_YUI_JSON viewer before destroying it.**
   `C_TRANGER_VIEW` destroyed the still-running Raw-JSON viewer gobj on close,
   so `gobj_destroy()` raised the `destroying` flag before it could stop it —
