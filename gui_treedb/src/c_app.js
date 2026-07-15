@@ -386,6 +386,11 @@ function rebuild_workspace_tabs(gobj, ws)
                 graph: "#" + db_tab_route("graphs", sel.id) + "/{topic}"
             };
         }
+        /*  The graph view's "← topics" button jumps back to the sibling
+         *  topics tab (its cards grid). */
+        if(ws === "graphs" && view_gclass === "C_YUI_TREEDB_GRAPH") {
+            target_kw.back_route = "#" + db_tab_route("topics", sel.id);
+        }
         items.push({
             id:       "db-" + sel.id,
             name:     sel.label || sel.service || sel.treedb_name,

@@ -60,6 +60,7 @@ SDATA(data_type_t.DTP_BOOLEAN,  "system",      0,  false, "System treedb view"),
 SDATA(data_type_t.DTP_STRING,   "title",       0,  "",    "Tab title"),
 SDATA(data_type_t.DTP_STRING,   "base_route",  0,  "",    "This view's declared tab route (for the topic/mode deep link)"),
 SDATA(data_type_t.DTP_JSON,     "card_action_routes", 0, null, "Topic-card hash-route templates {info,table,graph} forwarded to C_YUI_TREEDB_TOPICS (topics workspace only)"),
+SDATA(data_type_t.DTP_STRING,   "back_route",  0,  "",    "Hash route for the graph view's '← topics' button, forwarded to C_YUI_TREEDB_GRAPH (graphs workspace only)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,  "Root HTML element (mounted by the shell)"),
 SDATA_END()
 ];
@@ -270,6 +271,10 @@ function build_hosted_view(gobj, remote)
         kw.with_cards_landing = true;
         kw.card_action_routes = gobj_read_attr(gobj, "card_action_routes");
     }
+    if(view_gclass === "C_YUI_TREEDB_GRAPH") {
+        /*  '← topics' button back to the topics grid (only this view declares it). */
+        kw.back_route = gobj_read_attr(gobj, "back_route");
+    }
 
     let view = gobj_create_service(
         service_name(gobj),
@@ -460,8 +465,13 @@ function ac_child_selected(gobj, event, kw, src)
 /***************************************************************
  *  Shell → route changed. Only react when `base` is OUR tab route (several
  *  treedb views are mounted at once — one per open tab); apply the subpath
- *  to the hosted view: TOPICS → show that topic; GRAPH → set that operation
- *  mode. The `seg` dedup skips re-applying a segment the child selected.
+ *  to the hosted view: TOPICS → show that topic (or `<topic>/info`), GRAPH →
+ *  focus that topic. The `seg` dedup skips re-applying a segment the child
+ *  selected. An EMPTY subpath (browser Back to the bare `/db/<sel>` from a
+ *  topic table / info panel / focused graph) resets the view to its home —
+ *  the topics grid, or a cleared graph focus. Without this, browser Back left
+ *  the view showing the previous topic (the "← Topics" button worked because
+ *  it drives the view directly, but Back only changed the URL).
  ***************************************************************/
 function ac_route_changed(gobj, event, kw, src)
 {
@@ -470,11 +480,19 @@ function ac_route_changed(gobj, event, kw, src)
     if(base !== gobj_read_attr(gobj, "base_route")) {
         return 0;   /*  not our tab  */
     }
-    let subpath = kw && kw.subpath;
-    if(!subpath || subpath === priv.seg || !priv.view) {
+    let subpath = (kw && kw.subpath) || "";
+    if(subpath === (priv.seg || "") || !priv.view) {
         return 0;
     }
     priv.seg = subpath;
+    if(subpath === "") {
+        if(priv.is_graph) {
+            gobj_send_event(priv.view, "EV_SET_FOCUS_TOPIC", {topic: ""}, gobj);
+        } else {
+            gobj_send_event(priv.view, "EV_SHOW", {href: ""}, gobj);
+        }
+        return 0;
+    }
     apply_seg(gobj, subpath);
     return 0;
 }

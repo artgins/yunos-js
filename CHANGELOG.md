@@ -22,6 +22,15 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): browser Back from a topic table / info panel returns to
+  the cards grid.** `C_TREEDB_VIEW.ac_route_changed` ignored an empty subpath,
+  so Back to the bare `/topics/db/<sel>` left the view on the previous topic
+  (the "← Topics" button worked because it drives the view directly). It now
+  resets the view to its home — the topics grid, or a cleared graph focus.
+  Also adds a **"← topics" button to the graph view** (via the graph's new
+  `back_route`), so a graph reached from a topic card's graph icon has an
+  in-UI way back to the grid.
+
 - **feat(gui_treedb): the graph icon focuses the topic; info panel shows
   metadata.** A topic card's graph icon now deep-links to
   `#/graphs/db/<sel>/<topic>`; `C_TREEDB_VIEW` routes that segment to the graph
