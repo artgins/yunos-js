@@ -22,6 +22,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): topic cards get info / table / graph hash actions.** Each
+  topic card now carries three real hash links: **table** (`…/<topic>`), **info**
+  (`…/<topic>/info` — a routed, deep-linkable schema panel: pkey + columns with
+  type and key relationship) and **graph** (`#/graphs/db/<sel>` — the treedb's
+  graph workspace). `C_TREEDB_VIEW` builds the route templates and parses the
+  `/info` sub-segment. (Per-topic graph *focus* — `#/graphs/db/<sel>/<topic>` —
+  is the next step.)
+
 - **feat(gui_treedb): topics open as a cards landing (list → detail).** The
   Topics workspace now opens on a grid of topic cards; clicking a card opens
   that topic's table (with the tabs bar for quick switching and a back-to-grid

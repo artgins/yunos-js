@@ -144,6 +144,12 @@ const es = {
         /* app chrome — nav, connection picker, settings (added 2026-07-10) */
         "topics": "Temas",
         "graphs": "Grafos",
+        "info": "Info",
+        "table": "Tabla",
+        "graph": "Grafo",
+        "pkey": "Clave primaria",
+        "column": "Columna",
+        "type": "Tipo",
         "settings": "Ajustes",
         "connections": "Conexiones",
         "add connection": "Añadir conexión",

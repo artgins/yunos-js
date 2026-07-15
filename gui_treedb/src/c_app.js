@@ -363,11 +363,33 @@ function rebuild_workspace_tabs(gobj, ws)
         /*  C_TRANGER services open the raw-records browser (Topics only —
          *  the picker doesn't offer them in Graphs).  */
         let view_gclass = (sel.gclass === "C_TRANGER") ? "C_TRANGER_VIEW" : spec.view;
+        let tab_route = db_tab_route(ws, sel.id);
+        let target_kw = {
+            view_gclass: view_gclass,
+            treedb_name: sel.service || sel.treedb_name,
+            workspace:   ws,
+            conn_id:     sel.conn_id,
+            /*  This tab's route, so the view can deep-link its
+             *  selected topic / operation mode as <base_route>/<seg>. */
+            base_route:  tab_route,
+            system:      false
+        };
+        /*  Topic-card hash actions (topics workspace, treedb topics view only):
+         *  each is a real hash link the shell routes. `{topic}` is filled per
+         *  card by the library. table/info stay in this workspace; graph
+         *  crosses to the sibling Graphs tab of the same treedb. */
+        if(ws === "topics" && view_gclass === "C_YUI_TREEDB_TOPICS") {
+            target_kw.card_action_routes = {
+                info:  "#" + tab_route + "/{topic}/info",
+                table: "#" + tab_route + "/{topic}",
+                graph: "#" + db_tab_route("graphs", sel.id)
+            };
+        }
         items.push({
             id:       "db-" + sel.id,
             name:     sel.label || sel.service || sel.treedb_name,
             icon:     (sel.gclass === "C_TRANGER") ? "yi-floppy-disk" : spec.icon,
-            route:    db_tab_route(ws, sel.id),
+            route:    tab_route,
             /*  Red label while the backend is dropped; the view stays mounted. */
             class:    connected ? "" : "yui-nav-disconnected",
             closable: true,
@@ -377,16 +399,7 @@ function rebuild_workspace_tabs(gobj, ws)
                  *  C_IEVENT_CLI can route its command answers back (a pure
                  *  shell child is not findable by gobj_find_service).  */
                 gclass:    "C_TREEDB_VIEW",
-                kw: {
-                    view_gclass: view_gclass,
-                    treedb_name: sel.service || sel.treedb_name,
-                    workspace:   ws,
-                    conn_id:     sel.conn_id,
-                    /*  This tab's route, so the view can deep-link its
-                     *  selected topic / operation mode as <base_route>/<seg>. */
-                    base_route:  db_tab_route(ws, sel.id),
-                    system:      false
-                },
+                kw: target_kw,
                 lifecycle: "keep_alive"
             }
         });

@@ -59,6 +59,7 @@ SDATA(data_type_t.DTP_STRING,   "conn_id",     0,  "",    "Connection id (resolv
 SDATA(data_type_t.DTP_BOOLEAN,  "system",      0,  false, "System treedb view"),
 SDATA(data_type_t.DTP_STRING,   "title",       0,  "",    "Tab title"),
 SDATA(data_type_t.DTP_STRING,   "base_route",  0,  "",    "This view's declared tab route (for the topic/mode deep link)"),
+SDATA(data_type_t.DTP_JSON,     "card_action_routes", 0, null, "Topic-card hash-route templates {info,table,graph} forwarded to C_YUI_TREEDB_TOPICS (topics workspace only)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,  "Root HTML element (mounted by the shell)"),
 SDATA_END()
 ];
@@ -261,8 +262,9 @@ function build_hosted_view(gobj, remote)
     }
     if(view_gclass === "C_YUI_TREEDB_TOPICS") {
         /*  Land on a grid of topic cards (list->detail) instead of opening a
-         *  topic table straight away. Only this view declares the attr. */
+         *  topic table straight away. Only this view declares the attrs. */
         kw.with_cards_landing = true;
+        kw.card_action_routes = gobj_read_attr(gobj, "card_action_routes");
     }
 
     let view = gobj_create_service(
@@ -301,7 +303,12 @@ function apply_seg(gobj, seg)
     if(priv.sel_event === "EV_OPERATION_MODE_CHANGED") {
         gobj_send_event(priv.view, "EV_SET_OPERATION_MODE",
             {operation_mode: seg}, gobj);
+    } else if(seg.endsWith("/info")) {
+        /*  TOPICS: `<topic>/info` opens the routed topic-info panel. */
+        let topic = seg.slice(0, -"/info".length);
+        gobj_send_event(priv.view, "EV_SHOW_TOPIC_INFO", {topic: topic}, gobj);
     } else {
+        /*  TOPICS: a bare `<topic>` opens its table. */
         gobj_send_event(priv.view, "EV_SHOW",
             {href: `${gobj_name(priv.view)}?${seg}`}, gobj);
     }
