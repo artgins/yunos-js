@@ -52,6 +52,7 @@ import {register_c_yui_treedb_topic_with_form} from "@yuneta/gobj-ui/src/c_yui_t
 import {register_c_yui_treedb_graph}           from "@yuneta/gobj-ui/src/c_yui_treedb_graph.js";
 import {register_c_g6_nodes_tree}              from "@yuneta/gobj-ui/src/c_g6_nodes_tree.js";
 import {register_c_yui_json_graph}             from "@yuneta/gobj-ui/src/c_yui_json_graph.js";
+import {register_c_yui_json}                   from "@yuneta/gobj-ui/src/c_yui_json.js";
 import {register_c_yui_period}                 from "@yuneta/gobj-ui/src/c_yui_period.js";
 
 import {register_c_treedb_config}   from "./c_treedb_config.js";
@@ -129,6 +130,7 @@ function main()
     register_c_yui_treedb_graph();
     register_c_g6_nodes_tree();
     register_c_yui_json_graph();
+    register_c_yui_json();       /*  lazy JSON tree viewer (raw tranger dumps)  */
     register_c_yui_period();     /*  date navigator of the Rows options  */
 
     /*  App root + config + login + links + picker  */

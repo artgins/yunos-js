@@ -411,6 +411,9 @@ let PRIVATE_DATA = {
     picker_modal: null,  /*  shell modal hosting the Keys picker, mobile (or null)  */
     picker_box:  null,   /*  the mobile sheet's content (its composed title is
                              re-written on a language switch)  */
+    json_gobj:   null,   /*  C_YUI_JSON viewer of the raw tranger (or null)  */
+    json_win:    null,   /*  C_YUI_WINDOW hosting it, desktop (or null)  */
+    json_modal:  null,   /*  shell modal hosting it, mobile (or null)  */
     open_modals: null,   /*  transient modals (rows options / record / columns):
                              swept when the session dies, retitled on language  */
     error_key:   "",     /*  last show_error() key, re-rendered on language  */
@@ -546,6 +549,7 @@ function mt_stop(gobj)
     reject_pending(gobj, "view stopped");
     close_all_cards(gobj);
     close_picker(gobj);
+    close_json_viewer(gobj);
     close_view_modals(gobj);
     close_rows_options(gobj);   /*  belt: idempotent if the sweep ran it  */
 
@@ -643,6 +647,22 @@ function build_ui(gobj)
     });
     priv.$live_btn = $live_btn;
 
+    /*  Inspect the service's raw tranger json in a lazy tree viewer
+     *  (print-tranger). A whole tranger can be huge, so the viewer drills
+     *  in on demand — see open_json_viewer / EV_EXPAND_PATH.  */
+    let $json_btn = createElement2(
+        ["button", {class: "button ml-2 TRANGER_JSON_BTN",
+                    title: t("raw json"), "aria-label": t("raw json"),
+                    "data-i18n-title": "raw json", "data-i18n-aria-label": "raw json"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-eye"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "raw json"}, t("raw json")]
+            ]
+        ]);
+    $json_btn.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_OPEN_JSON", {}, gobj);
+    });
+
     let $meta = createElement2(
         ["span", {class: "is-size-7 has-text-grey ml-3 TRANGER_META"}, ""]);
     priv.$meta = $meta;
@@ -672,7 +692,7 @@ function build_ui(gobj)
             [
                 ["div", {class: "tabs is-boxed mb-2 TRANGER_TOPICS"}, [$tabs]],
                 ["div", {class: "is-flex is-align-items-center mb-2 TRANGER_TOOLBAR"},
-                    [$keys_btn, $live_btn, $meta]],
+                    [$keys_btn, $live_btn, $json_btn, $meta]],
                 $error,
                 $dashboard
             ]
@@ -1317,6 +1337,173 @@ function close_picker(gobj)
             log_warning(`${GCLASS_NAME}: already gone: ${e}`);
         }
     }
+}
+
+/***************************************************************
+ *  Raw-tranger JSON viewer: a C_YUI_JSON driving its own DOM, hosted in a
+ *  moveable C_YUI_WINDOW on desktop / an adaptive modal sheet on mobile
+ *  (same presentation split as the Keys picker). It is a helper of THIS
+ *  view (CHILD model: it publishes EV_EXPAND_PATH back to us), single at a
+ *  time, and it is whole-service (topic-independent), so a topic switch
+ *  leaves it up — only a teardown / lost session closes it.
+ *
+ *  A tranger can be enormous, so the first fetch is collapsed
+ *  (print-tranger with lists/dicts limits) and the viewer drills in on
+ *  demand: EV_EXPAND_PATH -> print-tranger path=<path> -> EV_SUBTREE_LOADED.
+ ***************************************************************/
+function open_json_viewer(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.json_win || priv.json_modal) {
+        return;     /*  already open  */
+    }
+
+    let mobile = is_mobile();
+    let shell = yui_shell_of(gobj);
+    let service = gobj_read_str_attr(gobj, "treedb_name");
+
+    let jv = gobj_create_service(
+        `tranger-json-${priv.tok}`,
+        "C_YUI_JSON",
+        {
+            subscriber: gobj,       /*  publishes EV_EXPAND_PATH to us  */
+            title:      "raw json"
+        },
+        gobj
+    );
+    if(!jv) {
+        log_error(`${gobj_short_name(gobj)}: cannot create the JSON viewer`);
+        return;
+    }
+    priv.json_gobj = jv;
+    gobj_start(jv);
+    let $box = gobj_read_pointer_attr(jv, "$container");
+
+    if(mobile) {
+        if(!shell) {
+            log_error(`${gobj_short_name(gobj)}: no shell, cannot open the JSON sheet`);
+            close_json_viewer(gobj);
+            return;
+        }
+        priv.json_modal = yui_shell_show_modal(shell, $box, {
+            dialog:        true,
+            logical_class: "TRANGER_JSON_SHEET",
+            title:         `${service} · ${t("raw json")}`,
+            t:             t,
+            on_close: () => {
+                if(gobj_is_destroying(gobj)) {
+                    return;
+                }
+                gobj_send_event(gobj, "EV_JSON_CLOSED", {}, gobj);
+            }
+        });
+    } else {
+        let $win_parent = (shell && yui_shell_popup_layer(shell)) ||
+            (typeof document !== "undefined" && document.getElementById("top-layer")) ||
+            null;
+
+        priv.json_win = gobj_create_service(
+            `tranger-jsonwin-${priv.tok}`,
+            "C_YUI_WINDOW",
+            {
+                $parent:    $win_parent,
+                subscriber: null,
+                modal:      false,
+                showMax:    true,
+                showFooter: false,
+                resizable:  true,
+                center:     true,
+                auto_save_size_and_position: true,
+                width:      640,
+                height:     620,
+                logical_class: "TRANGER_JSON_WINDOW",
+                title:      `${service} · ${t("raw json")}`,
+                icon:       "yi-eye",
+                body:       $box,
+                manager:    null,
+                on_close: () => {
+                    if(gobj_is_destroying(gobj)) {
+                        return;
+                    }
+                    gobj_send_event(gobj, "EV_JSON_CLOSED", {}, gobj);
+                }
+            },
+            gobj
+        );
+        if(!priv.json_win) {
+            log_error(`${gobj_short_name(gobj)}: cannot create the JSON window`);
+            close_json_viewer(gobj);
+            return;
+        }
+    }
+
+    request_print_tranger(gobj, "");    /*  first fetch: whole tranger, collapsed  */
+}
+
+/***************************************************************
+ *  Close the JSON viewer (user dismiss / topic teardown / stop). Destroys
+ *  the viewer gobj and whichever presenter is up, then clears the refs.
+ ***************************************************************/
+function close_json_viewer(gobj)
+{
+    let priv = gobj.priv;
+    let jv = priv.json_gobj;
+    let win = priv.json_win;
+    let modal = priv.json_modal;
+
+    priv.json_gobj = null;
+    priv.json_win = null;
+    priv.json_modal = null;
+
+    if(win && is_gobj(win)) {
+        try {
+            gobj_destroy(win);
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
+        }
+    }
+    if(modal && typeof modal.close === "function") {
+        try {
+            modal.close();
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
+        }
+    }
+    if(jv && is_gobj(jv)) {
+        try {
+            gobj_destroy(jv);
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
+        }
+    }
+}
+
+/***************************************************************
+ *  Fetch the raw tranger (or one subtree, when `path` is set) as bounded,
+ *  drillable JSON. Collapsed at 100 so a huge tranger stays a small
+ *  payload full of `__collapsed__` stubs the viewer expands on demand.
+ ***************************************************************/
+function request_print_tranger(gobj, path)
+{
+    let priv = gobj.priv;
+    let remote = live_transport(gobj);
+    if(!remote) {
+        log_error(`${gobj_short_name(gobj)}: no session, cannot print-tranger`);
+        let jv = priv.json_gobj;
+        if(path && jv && is_gobj(jv) && !gobj_is_destroying(jv)) {
+            gobj_send_event(jv, "EV_SUBTREE_ERROR",
+                {path: path, error: t("no session")}, gobj);
+        }
+        return;
+    }
+    gobj_command(remote, "print-tranger",
+        {
+            service:     gobj_read_str_attr(gobj, "treedb_name"),
+            expanded:    1,
+            lists_limit: 100,
+            dicts_limit: 100,
+            path:        path || ""
+        }, gobj);
 }
 
 /***************************************************************
@@ -3137,6 +3324,36 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return 0;
     }
 
+    /*
+     *  print-tranger feeds the JSON viewer, correlated by the echoed `path`:
+     *  empty path is the first whole-tranger fetch (EV_SET_JSON), a set path
+     *  is a lazy drill (EV_SUBTREE_LOADED). Handled before the generic error
+     *  path so a failed drill marks its own branch instead of the whole view.
+     */
+    if(command === "print-tranger") {
+        let jv = priv.json_gobj;
+        if(!jv || !is_gobj(jv) || gobj_is_destroying(jv)) {
+            /*  Viewer closed before its answer landed: benign, not an error.  */
+            return 0;
+        }
+        let path = (kw_command && kw_command.path) || "";
+        if(result < 0) {
+            if(path) {
+                gobj_send_event(jv, "EV_SUBTREE_ERROR",
+                    {path: path, error: comment || "print-tranger failed"}, gobj);
+            } else {
+                show_error(gobj, comment || "print-tranger failed");
+            }
+            return 0;
+        }
+        if(path) {
+            gobj_send_event(jv, "EV_SUBTREE_LOADED", {path: path, json: data}, gobj);
+        } else {
+            gobj_send_event(jv, "EV_SET_JSON", {json: data}, gobj);
+        }
+        return 0;
+    }
+
     if(result < 0) {
         show_error(gobj, comment || `${command} failed`);
         return 0;
@@ -3330,6 +3547,7 @@ function ac_transport_closed(gobj, event, kw, src)
     reject_pending(gobj, "session closed");
     close_all_cards(gobj);      /*  teardown: they stay persisted  */
     close_picker(gobj);
+    close_json_viewer(gobj);    /*  its data source (the tranger) is gone  */
     /*  The transient dialogs die with the session too: left up, the Rows
      *  options (and friends) keep a form whose every control sends events
      *  into ST_DISCONNECTED — a zombie whose clicks can only log errors.
@@ -3407,6 +3625,47 @@ function ac_picker_closed(gobj, event, kw, src)
     }
     priv.picker_win = null;
     priv.picker_modal = null;
+    return 0;
+}
+
+/************************************************************
+ *  Open the raw-tranger JSON viewer.
+ ************************************************************/
+function ac_open_json(gobj, event, kw, src)
+{
+    open_json_viewer(gobj);
+    return 0;
+}
+
+/************************************************************
+ *  The viewer asked to load a collapsed subtree: re-issue print-tranger
+ *  for that path. The answer comes back through ac_mt_command_answer and
+ *  is fed to the viewer as EV_SUBTREE_LOADED / EV_SUBTREE_ERROR.
+ ************************************************************/
+function ac_json_expand_path(gobj, event, kw, src)
+{
+    request_print_tranger(gobj, (kw && kw.path) || "");
+    return 0;
+}
+
+/************************************************************
+ *  The JSON viewer was dismissed (X / dock / Escape / back), or torn
+ *  down by close_json_viewer(): release the viewer and clear the refs.
+ ************************************************************/
+function ac_json_closed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let jv = priv.json_gobj;
+    priv.json_gobj = null;
+    priv.json_win = null;
+    priv.json_modal = null;
+    if(jv && is_gobj(jv)) {
+        try {
+            gobj_destroy(jv);
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
+        }
+    }
     return 0;
 }
 
@@ -4287,6 +4546,9 @@ function create_gclass(gclass_name)
             /*  user actions  */
             ["EV_OPEN_KEYS",            ac_open_keys,             null],
             ["EV_PICKER_CLOSED",        ac_picker_closed,         null],
+            ["EV_OPEN_JSON",            ac_open_json,             null],
+            ["EV_EXPAND_PATH",          ac_json_expand_path,      null],
+            ["EV_JSON_CLOSED",          ac_json_closed,           null],
             ["EV_OPEN_OPTIONS",         ac_open_options,          null],
             ["EV_OPEN_CARD_OPTIONS",    ac_open_card_options,     null],
             ["EV_SET_TIME_AXIS",        ac_set_time_axis,         null],
@@ -4321,6 +4583,9 @@ function create_gclass(gclass_name)
         ["EV_SELECT_TOPIC",         0],
         ["EV_OPEN_KEYS",            0],
         ["EV_PICKER_CLOSED",        0],
+        ["EV_OPEN_JSON",            0],
+        ["EV_EXPAND_PATH",          0],
+        ["EV_JSON_CLOSED",          0],
         ["EV_OPEN_OPTIONS",         0],
         ["EV_OPEN_CARD_OPTIONS",    0],
         ["EV_SET_TIME_AXIS",        0],
