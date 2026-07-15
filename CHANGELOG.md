@@ -22,6 +22,18 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): keep the selected period granularity when switching the
+  Rows time axis.** In the Rows-options dialog the `t`/`tm` axis toggle
+  (`TRANGER_OPT_AXIS`) re-derived the picker mode from the *target* axis's own
+  match conditions, so switching clocks on a fresh card snapped the
+  `YUI_PERIOD_MODES` selection back to "All". The chosen granularity is now
+  preserved and re-resolved against the new clock — pick "month" on `t`, switch
+  to `tm`, and it stays "month" (the anchor is stored in milliseconds,
+  independent of the axis unit); the two inputs follow the picker's re-resolved
+  bounds rather than carrying the other clock's numbers. Same fix incidentally
+  stops a language switch from resetting the selected period. Reopening a
+  filtered card still restores the mode it was filtered by.
+
 - **chore(gui_treedb): drop the unused "tree json" locale keys.** The treedb
   "Tree JSON" button was removed from gobj-ui before release; the en/es keys
   that fed it are gone.

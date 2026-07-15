@@ -1994,12 +1994,22 @@ function build_time_block(gobj, match_cond, span, units)
  *  and tm in milliseconds), the extent the key covers on THAT axis, and
  *  the bounds the two custom inputs accept.
  *
- *  The mode is re-derived from the match conditions of that axis, so
- *  reopening a card filtered by `tm` comes back on `tm`, showing the
- *  period it was filtered by — and switching axes does not silently carry
- *  a range that belonged to the other clock.
+ *  On the initial build the mode is derived from the match conditions of
+ *  that axis, so reopening a card filtered by `tm` comes back on `tm`,
+ *  showing the period it was filtered by.
+ *
+ *  On an axis switch (`preserve_mode`) the granularity the user has
+ *  selected is KEPT and re-resolved against the new clock: picking "month"
+ *  on `t` and switching to `tm` stays on "month" (the anchor is stored in
+ *  milliseconds, independent of the axis unit). The absolute range is not
+ *  carried as-is — the inputs follow the picker's re-resolved bounds, never
+ *  the numbers that belonged to the other clock.
+ *
+ *  `keep_inputs` (a language refresh re-applying the same axis) re-renders
+ *  the composed labels without touching the two inputs — the user may have
+ *  typed a range by hand that matches no bucket.
  ***************************************************************/
-function apply_time_axis(time, axis)
+function apply_time_axis(time, axis, {preserve_mode=false, keep_inputs=false}={})
 {
     let mc = time.match_cond;
     let ms = axis === "t" ? time.units.t_ms : time.units.tm_ms;
@@ -2029,25 +2039,45 @@ function apply_time_axis(time, axis)
     time.$from.max = epoch_to_local_input(span_to, ms);
     time.$to.min = time.$from.min;
     time.$to.max = time.$from.max;
-    time.$from.value = epoch_to_local_input(from_val, ms);
-    time.$to.value = epoch_to_local_input(to_val, ms);
 
     time.$extent.textContent = (span_from && span_to)
         ? `${t("the key holds")} ${epoch_to_local_input(span_from, ms).replace("T", " ")}` +
           ` → ${epoch_to_local_input(span_to, ms).replace("T", " ")}`
         : t("span unknown");
 
+    /*  Which mode the picker opens on. Preserve the user's selection on an
+     *  axis switch; otherwise restore it from this axis's match conditions.  */
+    let mode;
+    let anchor;
+    if(preserve_mode) {
+        mode = gobj_read_attr(time.gobj, "mode");
+        anchor = gobj_read_integer_attr(time.gobj, "anchor");
+    } else {
+        let start = restore_period_mode(from_val, to_val, ms);
+        mode = start.mode;
+        anchor = start.anchor;
+    }
+
     /*  Re-aim the picker: the attrs, then ONE event to make it re-read them.
      *  EV_REFRESH and not EV_SET_MODE on purpose — EV_SET_MODE publishes, and
      *  this runs while the dialog is still being BUILT (and again on an axis
      *  click, where the answer is not ready either). Nothing was asked yet.  */
-    let start = restore_period_mode(from_val, to_val, ms);
     gobj_write_attr(time.gobj, "ms", ms);
     gobj_write_attr(time.gobj, "min", span_from);
     gobj_write_attr(time.gobj, "max", span_to);
-    gobj_write_attr(time.gobj, "mode", start.mode);
-    gobj_write_attr(time.gobj, "anchor", start.anchor);
+    gobj_write_attr(time.gobj, "mode", mode);
+    gobj_write_attr(time.gobj, "anchor", anchor);
     gobj_send_event(time.gobj, "EV_REFRESH", {}, time.gobj);
+
+    /*  Fill the two inputs to match. On a plain (re)build they carry this
+     *  axis's stored range; on an axis switch they follow the picker's
+     *  freshly re-resolved bounds; on a language refresh they are left alone.  */
+    if(!preserve_mode) {
+        time.$from.value = epoch_to_local_input(from_val, ms);
+        time.$to.value = epoch_to_local_input(to_val, ms);
+    } else if(!keep_inputs) {
+        sync_time_inputs(time);
+    }
 }
 
 /***************************************************************
@@ -3781,7 +3811,7 @@ function ac_set_time_axis(gobj, event, kw, src)
         return -1;
     }
 
-    apply_time_axis(form.time, kw.axis);
+    apply_time_axis(form.time, kw.axis, {preserve_mode: true});
     paint_hint(form.time);
     return 0;
 }
@@ -4346,7 +4376,8 @@ function ac_language_changed(gobj, event, kw, src)
     if(priv.rows_options) {
         let time = priv.rows_options.time;
         gobj_send_event(time.gobj, "EV_LANGUAGE_CHANGED", {}, gobj);
-        apply_time_axis(time, time.axis);       /*  its labels are t()-composed  */
+        apply_time_axis(time, time.axis,        /*  its labels are t()-composed  */
+            {preserve_mode: true, keep_inputs: true});
         paint_hint(time);
     }
 
