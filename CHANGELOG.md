@@ -22,6 +22,14 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): "Raw JSON" viewer in the tranger view.** `C_TRANGER_VIEW`
+  gains a toolbar button that opens the connected C_TRANGER service's whole
+  tranger in the new `C_YUI_JSON` lazy tree viewer (moveable window on desktop,
+  adaptive modal sheet on mobile): the first `print-tranger` is collapsed, then
+  the viewer drills in on demand (`EV_EXPAND_PATH` -> `print-tranger path=...`).
+  main.js registers C_YUI_JSON; en/es locales gain the new keys. (The treedb
+  Raw/Tree JSON buttons live in gobj-ui's C_YUI_TREEDB_GRAPH / _TOPICS.)
+
 - **fix(gui_treedb): the custom range was unreadable on a phone.** Its two
   columns carried `is-mobile`, the class that keeps columns side by side below
   769px — half of a 360px screen leaves a `datetime-local` 176px wide, and the
