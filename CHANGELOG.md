@@ -22,6 +22,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_agent): clear (✕) on the shortkey add-form inputs.** The "key" and
+  "command template" text inputs of the account view's shortkey editor now carry
+  the standard `attach_clear` ✕ (the same norm as the nodes/stats search boxes),
+  handy on mobile. Pairs with the gobj-ui rollout that makes the clear the norm
+  on every editable text field.
+
 - **fix(gui_treedb): keep the selected period granularity when switching the
   Rows time axis.** In the Rows-options dialog the `t`/`tm` axis toggle
   (`TRANGER_OPT_AXIS`) re-derived the picker mode from the *target* axis's own

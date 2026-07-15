@@ -40,6 +40,7 @@ import pkg from "../package.json";
 import {deploy_info} from "./conf/deploy.js";
 import {current_theme} from "./theme.js";
 import {yui_shell_of, yui_shell_language_changed} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
 
 import {current_locale, switch_locale} from "./locales/locales.js";
 import {app_set_theme} from "./c_app.js";
@@ -447,11 +448,17 @@ function build_shortkeys(gobj)
     $key.addEventListener("keydown", on_enter);
     $cmd.addEventListener("keydown", on_enter);
 
+    /*  NORM clear (✕) on both free-text inputs — handy on mobile.  */
+    let $key_control = ce(["div", {class: "control"}, [$key]]);
+    let $cmd_control = ce(["div", {class: "control is-expanded"}, [$cmd]]);
+    attach_clear($key_control, $key);
+    attach_clear($cmd_control, $cmd);
+
     let add_row = ce(
         ["div", {class: "field has-addons", style: "margin-top:0.75rem;"},
             [
-                ["div", {class: "control"}, [$key]],
-                ["div", {class: "control is-expanded"}, [$cmd]],
+                $key_control,
+                $cmd_control,
                 ["div", {class: "control"},
                     [["button", {class: "button is-small is-primary", type: "button"},
                         [
