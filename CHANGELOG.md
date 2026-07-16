@@ -22,6 +22,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **i18n(gui_treedb, gui_agent): site-map keys.** gobj-ui's site map gained
+  the "you are here" current-route marker and the "other routes" group; both
+  locales define the new keys (`you are here`, `other routes`) so they render
+  translated instead of falling back to the raw English key.
+
 - **feat(gui_agent): Site map in the account menu, before About.** Same entry
   gui_treedb already had (`EV_OPEN_SITEMAP` → `yui_shell_show_route_map`), so
   every v2 app documents its own navigation surface. gui_agent now also
