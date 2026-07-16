@@ -197,7 +197,7 @@ This yuno is JavaScript and deploys independently of the SDK (see
   (copies the visible traffic) and an **Expanded** JSON view with Schema/Data/
   Metadata section toggles in the Developer window.
 - **Account menu + adaptive dialogs.** The account (avatar) menu now holds **About**
-  (+ Developer + Sign out); **Settings** is a tab-less **rail** view (Preferences),
+  (+ Developer + **Site map** + Sign out); **Settings** is a tab-less **rail** view (Preferences),
   no longer duplicated in the menu. **About** opens as the standardized gobj-ui
   **adaptive dialog** (2.1.12): a centered card with the close **X top-right** on
   desktop, a full-screen sheet with a **back arrow top-left** on mobile; the popup
