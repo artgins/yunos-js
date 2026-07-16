@@ -22,6 +22,18 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_agent, gui_treedb): "Frontend view" in the account menu.** Both
+  consoles gained an entry below "developer" that toggles the live gobj tree of
+  the SPA itself (`C_YUI_GOBJ_TREE_JS`) in a floating window, peer of the
+  developer window — gobj-ui's new `setup_frontend_view()`, same toggle shape as
+  `setup_dev()` (`EV_OPEN_FRONTEND_VIEW` → `ac_open_frontend_view`, keeping the
+  account menu's `type:"event"` idiom). Neither app registered the tree gclass
+  before, so `main.js` now calls `register_c_yui_gobj_tree_js()`. Both locales
+  define `frontend view` plus the tree's own keys (`layout`, `gclass`,
+  `full name`, `name`, `status`, `state`, `parent`, `children`, `(collapsed)`) —
+  the library translates through the app's i18next, so mounting a gobj-ui
+  component makes its keys part of the app's locale contract.
+
 - **i18n(gui_treedb, gui_agent): site-map keys.** gobj-ui's site map gained
   the "you are here" current-route marker and the "other routes" group; both
   locales define the new keys (`you are here`, `other routes`) so they render

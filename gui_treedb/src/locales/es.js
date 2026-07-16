@@ -135,6 +135,16 @@ const es = {
 
         /* account menu + About dialog */
         "developer":                          "Desarrollador",
+        "frontend view":                      "Vista frontend",
+        /*  gobj tree (C_YUI_GOBJ_TREE_JS, the Frontend view window)  */
+        "gclass":             "GClass",
+        "full name":          "Nombre completo",
+        "name":               "Nombre",
+        "status":             "Estado",
+        "state":              "Estado",
+        "parent":             "Padre",
+        "children":           "Hijos",
+        "(collapsed)":        "(plegados)",
         "logout":                             "Cerrar sesión",
         "about":                              "Acerca de",
         "treedb console":                     "Consola TreeDB",

@@ -46,6 +46,7 @@ import {register_c_yui_shell}  from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {register_c_yui_nav}    from "@yuneta/gobj-ui/src/c_yui_nav.js";
 import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
 import {register_c_yui_window_manager} from "@yuneta/gobj-ui/src/c_yui_window_manager.js";
+import {register_c_yui_gobj_tree_js}   from "@yuneta/gobj-ui/src/c_yui_gobj_tree_js.js";
 
 import {register_c_yui_treedb_topics}          from "@yuneta/gobj-ui/src/c_yui_treedb_topics.js";
 import {register_c_yui_treedb_schema}          from "@yuneta/gobj-ui/src/c_yui_treedb_schema.js";
@@ -124,6 +125,7 @@ function main()
     register_c_yui_nav();
     register_c_yui_window();     /*  host for the developer panel  */
     register_c_yui_window_manager(); /*  dock/taskbar for windows (Developer monitor)  */
+    register_c_yui_gobj_tree_js();   /*  gobj tree of this yuno (Frontend view window)  */
 
     /*  TreeDB editor gclasses (from gobj-ui)  */
     register_c_yui_treedb_topics();

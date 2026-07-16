@@ -65,6 +65,8 @@ import {
     dev_window_was_open,
 } from "@yuneta/gobj-ui/src/yui_dev.js";
 
+import {setup_frontend_view} from "@yuneta/gobj-ui/src/yui_frontend_view.js";
+
 import {switch_locale, current_locale} from "./locales/locales.js";
 import {current_theme, apply_theme, toggle_theme} from "./theme.js";
 import {mount_login} from "./login.js";
@@ -258,6 +260,7 @@ function build_shell(gobj)
     gobj_subscribe_event(shell, "EV_TOGGLE_LANGUAGE", {}, gobj);
     gobj_subscribe_event(shell, "EV_LOGOUT",          {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_DEVTOOLS",   {}, gobj);
+    gobj_subscribe_event(shell, "EV_OPEN_FRONTEND_VIEW", {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_ABOUT",      {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_SITEMAP",    {}, gobj);
     /*  Multi-agent console: a tab's ✕ removes its node; landing on the
@@ -268,7 +271,7 @@ function build_shell(gobj)
     /*  Declare who handles each toolbar/account action, so the site map
      *  shows where it is implemented (ROUTING.md). */
     ["EV_TOGGLE_THEME", "EV_TOGGLE_LANGUAGE", "EV_LOGOUT", "EV_OPEN_DEVTOOLS",
-     "EV_OPEN_ABOUT", "EV_OPEN_SITEMAP"].forEach(function(ev) {
+     "EV_OPEN_FRONTEND_VIEW", "EV_OPEN_ABOUT", "EV_OPEN_SITEMAP"].forEach(function(ev) {
         yui_shell_register_event_handler(shell, ev, GCLASS_NAME);
     });
     gobj_start_tree(shell);
@@ -847,6 +850,26 @@ function ac_open_devtools(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Frontend view entry in the account menu — toggle the gobj-tree
+ *  window (the live gobj tree of this yuno in a C_YUI_WINDOW, peer
+ *  of the developer window). If it is up, tear it down; otherwise
+ *  open it. Destroying the window takes the tree child with it.
+ ***************************************************************/
+function ac_open_frontend_view(gobj, event, kw, src)
+{
+    let win = gobj_find_service("Frontend-View-Window", false);
+    if(win) {
+        if(gobj_is_running(win)) {
+            gobj_stop_tree(win);
+        }
+        gobj_destroy(win);
+        return 0;
+    }
+    setup_frontend_view(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  EV_OPEN_SITEMAP — the "Site map" entry in the account menu. Shows
  *  the app's route tree (the filesystem-like map of every reachable
  *  position), clickable + printable (ROUTING.md).
@@ -1115,6 +1138,7 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_THEME",     ac_toggle_theme,    null],
             ["EV_TOGGLE_LANGUAGE",  ac_toggle_language, null],
             ["EV_OPEN_DEVTOOLS",    ac_open_devtools,   null],
+            ["EV_OPEN_FRONTEND_VIEW", ac_open_frontend_view, null],
             ["EV_OPEN_SITEMAP",     ac_open_sitemap,    null],
             ["EV_OPEN_ABOUT",       ac_open_about,      null],
             /*  multi-agent console tabs  */
@@ -1143,6 +1167,7 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_THEME",     0],
         ["EV_TOGGLE_LANGUAGE",  0],
         ["EV_OPEN_DEVTOOLS",    0],
+        ["EV_OPEN_FRONTEND_VIEW", 0],
         ["EV_OPEN_SITEMAP",     0],
         ["EV_OPEN_ABOUT",       0],
         ["EV_SELECTED_NODES_CHANGED", 0],

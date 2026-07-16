@@ -45,6 +45,7 @@ import {register_c_yui_shell}  from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {register_c_yui_nav}    from "@yuneta/gobj-ui/src/c_yui_nav.js";
 import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
 import {register_c_yui_window_manager} from "@yuneta/gobj-ui/src/c_yui_window_manager.js";
+import {register_c_yui_gobj_tree_js} from "@yuneta/gobj-ui/src/c_yui_gobj_tree_js.js";
 
 import {register_c_app} from "./c_app.js";
 import {register_c_gui_agent_view} from "./c_gui_agent_view.js";
@@ -108,6 +109,7 @@ function main()
     register_c_yui_nav();
     register_c_yui_window();     // legacy window host for the developer panel
     register_c_yui_window_manager(); // dock/taskbar for windows (Developer monitor)
+    register_c_yui_gobj_tree_js();   // gobj tree of this yuno (Frontend view window)
 
     /*  App root + config + login + link services + views  */
     register_c_app();
