@@ -43,8 +43,10 @@ import {
     yui_shell_set_submenu,
     yui_shell_navigate,
     yui_shell_language_changed,
+    yui_shell_register_event_handler,
 } from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_shell_show_modal} from "@yuneta/gobj-ui/src/shell_modals.js";
+import {yui_shell_show_route_map} from "@yuneta/gobj-ui/src/shell_route_map.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
@@ -257,10 +259,18 @@ function build_shell(gobj)
     gobj_subscribe_event(shell, "EV_LOGOUT",          {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_DEVTOOLS",   {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_ABOUT",      {}, gobj);
+    gobj_subscribe_event(shell, "EV_OPEN_SITEMAP",    {}, gobj);
     /*  Multi-agent console: a tab's ✕ removes its node; landing on the
      *  console home redirects to the first open node tab. */
     gobj_subscribe_event(shell, "EV_NAV_ITEM_CLOSE",  {}, gobj);
     gobj_subscribe_event(shell, "EV_ROUTE_CHANGED",   {}, gobj);
+
+    /*  Declare who handles each toolbar/account action, so the site map
+     *  shows where it is implemented (ROUTING.md). */
+    ["EV_TOGGLE_THEME", "EV_TOGGLE_LANGUAGE", "EV_LOGOUT", "EV_OPEN_DEVTOOLS",
+     "EV_OPEN_ABOUT", "EV_OPEN_SITEMAP"].forEach(function(ev) {
+        yui_shell_register_event_handler(shell, ev, GCLASS_NAME);
+    });
     gobj_start_tree(shell);
 
     yui_shell_set_avatar_provider(shell, () => compute_initials(gobj));
@@ -837,6 +847,20 @@ function ac_open_devtools(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  EV_OPEN_SITEMAP — the "Site map" entry in the account menu. Shows
+ *  the app's route tree (the filesystem-like map of every reachable
+ *  position), clickable + printable (ROUTING.md).
+ ***************************************************************/
+function ac_open_sitemap(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.shell) {
+        yui_shell_show_route_map(priv.shell, {t: t});
+    }
+    return 0;
+}
+
+/***************************************************************
  *  EV_OPEN_ABOUT — the "About" entry in the account menu. Opens the
  *  About view (C_ACCOUNT_VIEW view=about) as the standardized adaptive
  *  dialog (desktop X top-right / mobile back top-left); the view gobj is
@@ -1091,6 +1115,7 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_THEME",     ac_toggle_theme,    null],
             ["EV_TOGGLE_LANGUAGE",  ac_toggle_language, null],
             ["EV_OPEN_DEVTOOLS",    ac_open_devtools,   null],
+            ["EV_OPEN_SITEMAP",     ac_open_sitemap,    null],
             ["EV_OPEN_ABOUT",       ac_open_about,      null],
             /*  multi-agent console tabs  */
             ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null],
@@ -1118,6 +1143,7 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_THEME",     0],
         ["EV_TOGGLE_LANGUAGE",  0],
         ["EV_OPEN_DEVTOOLS",    0],
+        ["EV_OPEN_SITEMAP",     0],
         ["EV_OPEN_ABOUT",       0],
         ["EV_SELECTED_NODES_CHANGED", 0],
         ["EV_STATS_LAYOUT_CHANGED", 0],

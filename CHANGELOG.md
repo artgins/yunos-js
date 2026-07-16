@@ -22,6 +22,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_agent): Site map in the account menu, before About.** Same entry
+  gui_treedb already had (`EV_OPEN_SITEMAP` → `yui_shell_show_route_map`), so
+  every v2 app documents its own navigation surface. gui_agent now also
+  declares its toolbar/account action handlers, so the map stamps `C_APP` on
+  them instead of leaving the handler column blank.
+
 - **fix(gui_treedb): the connections picker tags every service's gclass.** It
   only tagged `C_TRANGER`, leaving `C_NODE` rows bare — an untagged row read as
   "no class" rather than "a treedb". Every row now carries its gclass tag in the
