@@ -22,6 +22,23 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the Keys picker and Raw JSON windows are STOPPED before
+  destroy in the programmatic close paths** (`close_picker` /
+  `close_json_viewer`: topic switch, view teardown) — destroying a running
+  gobj logs two errors ("Destroying a RUNNING gobj" + "gobj NULL or
+  DESTROYED") and skips `mt_stop`; the ✕ path already stopped it, so the stop
+  is guarded with `gobj_is_running`.
+- **fix(gui_agent): the site map's `toolbar` group label was missing from
+  both locales** (gui_treedb had it) — it rendered as the raw lowercase key
+  and never changed language.
+- **chore(validate-locales): both apps' validators also scan
+  `data-i18n-placeholder`** (new gobj-js refresh_language support), so keys
+  used only in a placeholder are no longer invisible to the check.
+- **docs(changelog): backfill** — gui_treedb's site-map `matches` counter key
+  (both locales), `C_TREEDB_APP` declaring its action-event handlers for the
+  site map (the gui_agent half was listed, the gui_treedb half was not), and
+  the site-map account-menu icon switch to `yi-bars` + the `toolbar` locale
+  key that rode it.
 - **fix(gui_treedb): the Keys and Raw JSON windows were untitled, and their
   titles could not change language.** Both passed a `title` to `C_YUI_WINDOW`,
   but `title` only ever reached the dock chip, so the title bar painted

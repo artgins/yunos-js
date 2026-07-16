@@ -87,7 +87,7 @@ import {
     gobj_command,
     gobj_current_state, gobj_is_destroying,
     gobj_create_service, gobj_create_pure_child, gobj_find_service,
-    gobj_start, gobj_stop, gobj_destroy, is_gobj,
+    gobj_start, gobj_stop, gobj_destroy, is_gobj, gobj_is_running,
     gobj_read_integer_attr,
     createElement2, refresh_language,
     msg_iev_get_stack,
@@ -1302,6 +1302,14 @@ function close_picker(gobj)
     priv.picker_modal = null;
     if(win && is_gobj(win)) {
         try {
+            /*  STOP, then destroy — the window was STARTED on open, and
+             *  gobj_destroy() raises the `destroying` flag before it can
+             *  stop a running gobj, so destroying it straight logs two
+             *  errors and skips mt_stop.  The ✕ path already stopped it
+             *  (close_window) — guard. */
+            if(gobj_is_running(win)) {
+                gobj_stop(win);
+            }
             gobj_destroy(win);
         } catch(e) {
             log_warning(`${GCLASS_NAME}: already gone: ${e}`);
@@ -1439,6 +1447,14 @@ function close_json_viewer(gobj)
 
     if(win && is_gobj(win)) {
         try {
+            /*  STOP, then destroy — the window was STARTED on open, and
+             *  gobj_destroy() raises the `destroying` flag before it can
+             *  stop a running gobj, so destroying it straight logs two
+             *  errors and skips mt_stop.  The ✕ path already stopped it
+             *  (close_window) — guard. */
+            if(gobj_is_running(win)) {
+                gobj_stop(win);
+            }
             gobj_destroy(win);
         } catch(e) {
             log_warning(`${GCLASS_NAME}: already gone: ${e}`);

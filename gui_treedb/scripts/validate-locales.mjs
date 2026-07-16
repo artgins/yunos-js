@@ -138,8 +138,8 @@ function collect_used_keys() {
     const patterns = [
         /\bt\(\s*['"]([^'"]+)['"]/g,
         /\bi18n:\s*['"]([^'"]+)['"]/g,
-        /["']data-i18n(?:-title|-aria-label)?["']:\s*['"]([^'"]+)['"]/g,
-        /data-i18n(?:-title|-aria-label)?=["']([^"']+)["']/g
+        /["']data-i18n(?:-title|-aria-label|-placeholder)?["']:\s*['"]([^'"]+)['"]/g,
+        /data-i18n(?:-title|-aria-label|-placeholder)?=["']([^"']+)["']/g
     ];
     const scan = (url) => {
         const src = readFileSync(url, "utf8");

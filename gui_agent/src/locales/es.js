@@ -222,6 +222,7 @@ const es = {
         "print":             "Imprimir",
         "you are here":      "Estás aquí",
         "other routes":      "Otras rutas",
+        "toolbar":           "Barra de herramientas",
         "about":             "Acerca de",
         "agent console":     "Consola de agentes",
         "about description": "Consola web para operar agentes Yuneta a través del control center.",
