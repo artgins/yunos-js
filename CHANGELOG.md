@@ -22,6 +22,15 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+## 0.5.0 — 2026-07-17 — shipped with SDK 7.8.0
+
+Rides gobj-ui **4.0.0** and gobj-js **7.8.0**. Both SPAs are migrated to the
+five gobj-ui BREAKINGs (navigate pushes by default, `__yui_main__` theme
+retirement, window/modal `title` as an i18n key + `title_prefix`, the legacy
+`EV_RESIZE` path, minimize needing a window manager) — the routing/site-map,
+window-title and theme work in this section IS that migration. Verified green:
+vitest + both builds + the Playwright QA drivers.
+
 - **fix(gui_treedb): the Keys picker and Raw JSON windows are STOPPED before
   destroy in the programmatic close paths** (`close_picker` /
   `close_json_viewer`: topic switch, view teardown) — destroying a running
