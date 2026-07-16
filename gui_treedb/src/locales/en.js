@@ -157,6 +157,7 @@ const en = {
         "schema graph": "Schema graph",
         "site map": "Site map",
         "toolbar": "Toolbar",
+        "matches": "matches",
         "site map hint": "Every reachable position of the app is a URL. Click a route to jump there.",
         "print": "Print",
         "settings": "Settings",
