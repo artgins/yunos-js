@@ -1179,7 +1179,8 @@ function open_keys_picker(gobj)
         priv.picker_modal = yui_shell_show_modal(shell, $box, {
             dialog: true,
             logical_class: "TRANGER_KEYS_SHEET",
-            title:  `${priv.cur_topic} · ${t("keys")}`,
+            title_prefix: priv.cur_topic,
+            title:  "keys",
             t:      t,
             on_close: () => {
                 /*  A teardown (mt_stop / destroy) already released the picker
@@ -1217,7 +1218,8 @@ function open_keys_picker(gobj)
                 width:      560,
                 height:     520,
                 logical_class: "TRANGER_KEYS_WINDOW",
-                title:      `${priv.cur_topic} · ${t("keys")}`,
+                title_prefix: priv.cur_topic,
+                title:      "keys",
                 icon:       "yi-table",
                 body:       $box,
                 /*  No window manager: the Keys picker is a helper of THIS
@@ -1391,7 +1393,8 @@ function open_json_viewer(gobj)
         priv.json_modal = yui_shell_show_modal(shell, $box, {
             dialog:        true,
             logical_class: "TRANGER_JSON_SHEET",
-            title:         `${service} · ${t("raw json")}`,
+            title_prefix: service,
+            title:         "raw json",
             t:             t,
             on_close: () => {
                 if(gobj_is_destroying(gobj)) {
@@ -1420,7 +1423,8 @@ function open_json_viewer(gobj)
                 width:      640,
                 height:     620,
                 logical_class: "TRANGER_JSON_WINDOW",
-                title:      `${service} · ${t("raw json")}`,
+                title_prefix: service,
+                title:      "raw json",
                 icon:       "yi-eye",
                 body:       $box,
                 manager:    null,
