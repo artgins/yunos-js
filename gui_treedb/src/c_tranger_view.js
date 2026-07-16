@@ -409,8 +409,6 @@ let PRIVATE_DATA = {
     pending:     null,   /*  req_id -> {resolve, reject} (get-page Promise bridge)  */
     picker_win:  null,   /*  C_YUI_WINDOW hosting the Keys picker, desktop (or null)  */
     picker_modal: null,  /*  shell modal hosting the Keys picker, mobile (or null)  */
-    picker_box:  null,   /*  the mobile sheet's content (its composed title is
-                             re-written on a language switch)  */
     json_gobj:   null,   /*  C_YUI_JSON viewer of the raw tranger (or null)  */
     json_win:    null,   /*  C_YUI_WINDOW hosting it, desktop (or null)  */
     json_modal:  null,   /*  shell modal hosting it, mobile (or null)  */
@@ -731,18 +729,12 @@ function show_error(gobj, msg)
  *      survives its transport keeps sending events into ST_DISCONNECTED,
  *      where its events are (rightly) not declared — every click a loud
  *      "Event NOT DEFINED in state" on a corpse.
- *    - a composed title (`${key} · ${t("rows")}`) cannot re-translate by
- *      data-i18n (the composed string is no key): `title_fn` re-composes
- *      it on EV_LANGUAGE_CHANGED.
  ***************************************************************/
 function show_view_modal(gobj, shell, $content, opts)
 {
     let priv = gobj.priv;
-    if(opts.title_fn) {
-        opts.title = opts.title_fn();
-    }
     let caller_on_close = opts.on_close;
-    let entry = {modal: null, $content: $content, title_fn: opts.title_fn || null};
+    let entry = {modal: null};
     opts.on_close = () => {
         let idx = priv.open_modals.indexOf(entry);
         if(idx >= 0) {
@@ -767,24 +759,6 @@ function close_view_modals(gobj)
             entry.modal.close();
         }
     }
-}
-
-/***************************************************************
- *  Re-compose the composed titles a language switch cannot reach by
- *  attribute: the open transient modals' (title_fn) and the mobile Keys
- *  sheet's. The title node carries the composed string as its data-i18n
- *  too, so the shell's document-wide refresh maps it to itself instead
- *  of "translating" it away.
- ***************************************************************/
-function retitle_modal($content, title)
-{
-    let $modal = $content && $content.closest ? $content.closest(".modal") : null;
-    let $title = $modal ? $modal.querySelector(".MODAL_TITLE") : null;
-    if(!$title) {
-        return;
-    }
-    $title.textContent = title;
-    $title.setAttribute("data-i18n", title);
 }
 
 /***************************************************************
@@ -1175,7 +1149,6 @@ function open_keys_picker(gobj)
             log_error(`${gobj_short_name(gobj)}: no shell, cannot open the Keys sheet`);
             return;
         }
-        priv.picker_box = $box;
         priv.picker_modal = yui_shell_show_modal(shell, $box, {
             dialog: true,
             logical_class: "TRANGER_KEYS_SHEET",
@@ -2360,7 +2333,8 @@ function open_rows_options(gobj, key, card)
     let opt_modal = show_view_modal(gobj, shell, form.$box, {
         dialog: true,
         logical_class: "TRANGER_ROWS_OPTIONS",
-        title_fn: () => `${key} · ${t("rows")}`,
+        title_prefix: key,
+        title:  "rows",
         t:      t,
         /*  EVERY way out of the dialog lands here (the X, Escape, the
          *  backdrop, and the confirm button's own close()), so this is the
@@ -3255,7 +3229,13 @@ function show_record_dialog(gobj, record, key)
     show_view_modal(gobj, shell, $box, {
         dialog: true,
         logical_class: "TRANGER_RECORD_DIALOG",
-        title_fn: () => `${priv.cur_topic} · ${key === ALL_KEYS ? t("all keys") : key}`,
+        /*  Only the ALL_KEYS form has a translatable half. A real key is
+         *  data on both sides, so it composes into the prefix — there is
+         *  nothing there for a language switch to change. */
+        title_prefix: key === ALL_KEYS
+            ? priv.cur_topic
+            : `${priv.cur_topic} · ${key}`,
+        title:  key === ALL_KEYS ? "all keys" : "",
         t:      t
     });
 }
@@ -4067,7 +4047,7 @@ function ac_open_columns(gobj, event, kw, src)
     show_view_modal(gobj, shell, $list, {
         dialog: true,
         logical_class: "TRANGER_COLUMNS_DIALOG",
-        title_fn: () => t("columns"),
+        title:  "columns",
         t: t
     });
     return 0;
@@ -4356,18 +4336,12 @@ function ac_language_changed(gobj, event, kw, src)
     update_meta(gobj);
     paint_live_topic_btn(gobj);
 
-    /*  The long-lived error banner and the composed titles hold t()-built
-     *  text with no key to re-translate by: re-render them here.  */
+    /*  The long-lived error banner holds t()-built text with no key to
+     *  re-translate by: re-render it here. The dialog titles no longer need
+     *  it — `title_prefix` keeps the data half out of the key half, so the
+     *  shell's document-wide refresh re-translates them by attribute.  */
     if(priv.error_key) {
         show_error(gobj, priv.error_key);
-    }
-    for(let entry of (priv.open_modals || [])) {
-        if(entry.title_fn) {
-            retitle_modal(entry.$content, entry.title_fn());
-        }
-    }
-    if(priv.picker_modal && priv.picker_box) {
-        retitle_modal(priv.picker_box, `${priv.cur_topic} · ${t("keys")}`);
     }
 
     for(let card of priv.cards) {
