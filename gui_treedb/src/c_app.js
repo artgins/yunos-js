@@ -53,6 +53,7 @@ import {
 } from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {yui_shell_show_route_map} from "@yuneta/gobj-ui/src/shell_route_map.js";
+import {yui_shell_register_event_handler} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {
     treedb_config_get_connections,
@@ -256,6 +257,13 @@ function build_shell(gobj)
     gobj_subscribe_event(shell, "EV_OPEN_SITEMAP",    {}, gobj);
     gobj_subscribe_event(shell, "EV_NAV_ITEM_CLOSE",  {}, gobj);
     gobj_subscribe_event(shell, "EV_ROUTE_CHANGED",   {}, gobj);
+
+    /*  Declare who handles each toolbar/account action, so the site map
+     *  shows where it is implemented (ROUTING.md). */
+    ["EV_TOGGLE_THEME", "EV_TOGGLE_LANGUAGE", "EV_LOGOUT", "EV_OPEN_DEVTOOLS",
+     "EV_OPEN_ABOUT", "EV_OPEN_SITEMAP"].forEach(function(ev) {
+        yui_shell_register_event_handler(shell, ev, GCLASS_NAME);
+    });
     gobj_start_tree(shell);
 
     yui_shell_set_avatar_provider(shell, () => compute_initials(gobj));
