@@ -22,6 +22,31 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the Keys and Raw JSON windows were untitled, and their
+  titles could not change language.** Both passed a `title` to `C_YUI_WINDOW`,
+  but `title` only ever reached the dock chip, so the title bar painted
+  nothing: the Keys picker was anonymous and Raw JSON looked titled only
+  because `C_YUI_JSON` re-titled itself INSIDE the window body — which on
+  mobile, where the host dialog draws its own header, showed the title twice.
+  The viewers no longer pass `title` (the host titles them), and the composed
+  titles (`` `${topic} · ${t("keys")}` ``) are split into gobj-ui's new
+  `title_prefix` (the data half) + `title` (the key), so a language switch
+  re-translates the kind while the window is open. Needs gobj-ui with
+  `title_prefix`.
+- **refactor(gui_treedb): `title_fn`/`retitle_modal` retired.** The transient
+  dialogs (Rows options, Record, Columns) composed their titles and worked
+  around the consequence — `title_fn` re-composed on `EV_LANGUAGE_CHANGED`,
+  `retitle_modal` brute-forced it back with `$title.textContent`. That wiped
+  the prefix/kind spans the modal now builds, i.e. it fought the new mechanism.
+  All three use `title_prefix` + a key now (Columns never even composed: it was
+  `() => t("columns")`, a pure key). Gone with it: `priv.picker_box` and
+  `entry.$content`, write-only once nothing re-titled. `show_view_modal` stays
+  for its other job — sweeping open dialogs when the session dies.
+- **fix(gui_treedb): the Keys and Raw JSON windows are STARTED.** Created with
+  `gobj_create_service` and never started, they showed in every trace line as
+  `!!C_YUI_WINDOW^<name>` — the framework saying the gobj is not running.
+  Follows gobj-ui retiring the legacy `__yui_main__`/`EV_RESIZE` path, which
+  was the reason windows were left unstarted.
 - **feat(gui_agent, gui_treedb): "Frontend view" in the account menu.** Both
   consoles gained an entry below "developer" that toggles the live gobj tree of
   the SPA itself (`C_YUI_GOBJ_TREE_JS`) in a floating window, peer of the
