@@ -272,10 +272,16 @@ function build_hosted_view(gobj, remote)
         kw.with_cards_landing = true;
         kw.card_action_routes = gobj_read_attr(gobj, "card_action_routes");
         kw.landing_routes = gobj_read_attr(gobj, "landing_routes");
+        /*  Its own base route, so it can declare its sub-routes (topics,
+         *  /info, /schema) to the site map (ROUTING.md contributor). */
+        kw.base_route = gobj_read_attr(gobj, "base_route");
     }
     if(view_gclass === "C_YUI_TREEDB_GRAPH") {
         /*  '← topics' button back to the topics grid (only this view declares it). */
         kw.back_route = gobj_read_attr(gobj, "back_route");
+        /*  Its own base route, so it can declare its per-topic focus
+         *  sub-routes to the site map. */
+        kw.base_route = gobj_read_attr(gobj, "base_route");
     }
 
     let view = gobj_create_service(

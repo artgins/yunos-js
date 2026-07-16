@@ -22,6 +22,11 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): the site map shows each treedb's topics/info/schema.** The
+  treedb views now declare their view-owned sub-routes (per-topic table + info,
+  the schema landing; per-topic graph focus) to gobj-ui's sub-route registry, so
+  the Account → Site map tree is complete down to the leaves.
+
 - **feat(gui_treedb): routing fixes + a site-map viewer (ROUTING.md).** Browser
   Back now traverses topic/mode selections and "← topics" (user-move navigations
   push a history entry via `yui_shell_navigate(…, {push:true})`). The
