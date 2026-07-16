@@ -1240,6 +1240,7 @@ function open_keys_picker(gobj)
             log_error(`${gobj_short_name(gobj)}: cannot create Keys window`);
             return;
         }
+        gobj_start(priv.picker_win);
     }
 
     /*  The host (window body / modal sheet) is mounted synchronously, so
@@ -1442,6 +1443,7 @@ function open_json_viewer(gobj)
             close_json_viewer(gobj);
             return;
         }
+        gobj_start(priv.json_win);
     }
 
     request_print_tranger(gobj, "");    /*  first fetch: whole tranger, collapsed  */
