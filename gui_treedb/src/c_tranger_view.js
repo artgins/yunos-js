@@ -1367,8 +1367,10 @@ function open_json_viewer(gobj)
         `tranger-json-${priv.tok}`,
         "C_YUI_JSON",
         {
-            subscriber: gobj,       /*  publishes EV_EXPAND_PATH to us  */
-            title:      "raw json"
+            /*  No `title`: the host titles it — the window's title bar on
+             *  desktop, the dialog's header on mobile. The viewer's own
+             *  title would land INSIDE that host, doubling it.  */
+            subscriber: gobj        /*  publishes EV_EXPAND_PATH to us  */
         },
         gobj
     );
