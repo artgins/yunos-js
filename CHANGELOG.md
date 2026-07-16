@@ -22,6 +22,15 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **feat(gui_treedb): routing fixes + a site-map viewer (ROUTING.md).** Browser
+  Back now traverses topic/mode selections and "← topics" (user-move navigations
+  push a history entry via `yui_shell_navigate(…, {push:true})`). The
+  **Connections** tab is remembered as a resting position, so switching
+  workspaces and back returns to it instead of a treedb tab. The Topics **Schema**
+  landing is now a real route (`/topics/db/<sel>/schema`) — deep-linkable,
+  F5-safe, Back-friendly. New **Account → Site map** entry opens a printable,
+  clickable tree of the app's route map.
+
 - **feat(gui_treedb): schema-graph landing (prototype).** The Topics workspace's
   landing gains a toolbar toggle between the topic **cards** and a **schema
   graph** — the treedb drawn as topics (nodes) + `hook`/`fkey` relationships

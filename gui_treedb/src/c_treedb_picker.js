@@ -393,7 +393,7 @@ function ac_manage_connections(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: no shell, cannot open Settings`);
         return -1;
     }
-    yui_shell_navigate(shell, "/settings");
+    yui_shell_navigate(shell, "/settings", {push: true});   /*  user move  */
     return 0;
 }
 

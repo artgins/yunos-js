@@ -60,6 +60,7 @@ SDATA(data_type_t.DTP_BOOLEAN,  "system",      0,  false, "System treedb view"),
 SDATA(data_type_t.DTP_STRING,   "title",       0,  "",    "Tab title"),
 SDATA(data_type_t.DTP_STRING,   "base_route",  0,  "",    "This view's declared tab route (for the topic/mode deep link)"),
 SDATA(data_type_t.DTP_JSON,     "card_action_routes", 0, null, "Topic-card hash-route templates {info,table,graph} forwarded to C_YUI_TREEDB_TOPICS (topics workspace only)"),
+SDATA(data_type_t.DTP_JSON,     "landing_routes", 0, null, "Landing sub-view hashes {cards,schema} forwarded to C_YUI_TREEDB_TOPICS (topics workspace only)"),
 SDATA(data_type_t.DTP_STRING,   "back_route",  0,  "",    "Hash route for the graph view's '← topics' button, forwarded to C_YUI_TREEDB_GRAPH (graphs workspace only)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,  "Root HTML element (mounted by the shell)"),
 SDATA_END()
@@ -270,6 +271,7 @@ function build_hosted_view(gobj, remote)
          *  topic table straight away. Only this view declares the attrs. */
         kw.with_cards_landing = true;
         kw.card_action_routes = gobj_read_attr(gobj, "card_action_routes");
+        kw.landing_routes = gobj_read_attr(gobj, "landing_routes");
     }
     if(view_gclass === "C_YUI_TREEDB_GRAPH") {
         /*  '← topics' button back to the topics grid (only this view declares it). */
@@ -312,6 +314,9 @@ function apply_seg(gobj, seg)
     if(priv.is_graph) {
         /*  GRAPH: focus the topic's nodes. */
         gobj_send_event(priv.view, "EV_SET_FOCUS_TOPIC", {topic: seg}, gobj);
+    } else if(seg === "schema") {
+        /*  TOPICS: the schema-graph landing (a reserved segment). */
+        gobj_send_event(priv.view, "EV_SET_LANDING_VIEW", {view: "schema"}, gobj);
     } else if(seg.endsWith("/info")) {
         /*  TOPICS: `<topic>/info` opens the routed topic-info panel. */
         let topic = seg.slice(0, -"/info".length);
@@ -448,7 +453,8 @@ function ac_child_selected(gobj, event, kw, src)
     if(seg === "") {
         if(shell && base_route) {
             priv.seg = "";
-            yui_shell_navigate(shell, base_route);
+            /*  User move (← topics / back to grid): push a Back entry. */
+            yui_shell_navigate(shell, base_route, {push: true});
         }
         return 0;
     }
@@ -457,7 +463,9 @@ function ac_child_selected(gobj, event, kw, src)
     }
     if(shell && base_route) {
         priv.seg = seg;
-        yui_shell_navigate(shell, `${base_route}/${seg}`);
+        /*  User move (selected a topic / mode): push a Back entry so
+         *  browser Back returns to the previous topic / the grid. */
+        yui_shell_navigate(shell, `${base_route}/${seg}`, {push: true});
     }
     return 0;
 }

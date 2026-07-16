@@ -52,6 +52,8 @@ import {
     yui_shell_language_changed,
 } from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
+import {yui_shell_show_route_map} from "@yuneta/gobj-ui/src/shell_route_map.js";
+
 import {
     treedb_config_get_connections,
     treedb_config_get_connection,
@@ -79,6 +81,11 @@ import {deploy_info} from "./conf/deploy.js";
  *              Constants
  ***************************************************************/
 const GCLASS_NAME = "C_TREEDB_APP";
+
+/*  Sentinel active-tab id for the Connections (picker) tab, so it is a
+ *  first-class resting position remembered like any treedb tab — the URL
+ *  is the authority for "where you are" (ROUTING.md §3). */
+const CONNECTIONS_TAB = "__connections__";
 
 /*  The two workspaces and the treedb view each mounts.  */
 const WORKSPACES = {
@@ -246,6 +253,7 @@ function build_shell(gobj)
     gobj_subscribe_event(shell, "EV_LOGOUT",          {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_DEVTOOLS",   {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_ABOUT",      {}, gobj);
+    gobj_subscribe_event(shell, "EV_OPEN_SITEMAP",    {}, gobj);
     gobj_subscribe_event(shell, "EV_NAV_ITEM_CLOSE",  {}, gobj);
     gobj_subscribe_event(shell, "EV_ROUTE_CHANGED",   {}, gobj);
     gobj_start_tree(shell);
@@ -385,6 +393,11 @@ function rebuild_workspace_tabs(gobj, ws)
                 table: "#" + tab_route + "/{topic}",
                 graph: "#" + db_tab_route("graphs", sel.id) + "/{topic}"
             };
+            /*  The two landing sub-views are URL-addressable positions. */
+            target_kw.landing_routes = {
+                cards:  "#" + tab_route,
+                schema: "#" + tab_route + "/schema"
+            };
         }
         /*  The graph view's "← topics" button jumps back to the sibling
          *  topics tab (its cards grid). */
@@ -448,11 +461,15 @@ function workspace_first_route(gobj, ws)
         return !!iev &&
             (treedb_links_is_connected(links, s.conn_id) || !!priv.ever_connected[s.conn_id]);
     };
+    let active = config ? treedb_config_get_active_tab(config, ws) : "";
+    /*  The picker is a remembered resting position too (ROUTING.md §3). */
+    if(active === CONNECTIONS_TAB) {
+        return picker_route(ws);
+    }
     let open = selected.filter(has_tab);
     if(!open.length) {
         return picker_route(ws);
     }
-    let active = config ? treedb_config_get_active_tab(config, ws) : "";
     if(active && open.some((s) => s && s.id === active)) {
         return db_tab_route(ws, active);
     }
@@ -957,6 +974,20 @@ function ac_open_devtools(gobj, event, kw, src)
  *  top-left). Self-contained: no view gclass, just a DOM node handed
  *  to the shell modal. Idempotent toggle.
  ***************************************************************/
+/***************************************************************
+ *  EV_OPEN_SITEMAP — the "Site map" entry in the account menu. Shows
+ *  the app's route tree (the filesystem-like map of every reachable
+ *  position), clickable + printable (ROUTING.md).
+ ***************************************************************/
+function ac_open_sitemap(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.shell) {
+        yui_shell_show_route_map(priv.shell, {t: t});
+    }
+    return 0;
+}
+
 function ac_open_about(gobj, event, kw, src)
 {
     let priv = gobj.priv;
@@ -1116,6 +1147,18 @@ function ac_route_changed(gobj, event, kw, src)
      *  a real, resolved treedb tab (base === /<ws>/db/<sel>).  */
     gobj.priv.mounted_base = base;
 
+    /*  On the Connections (picker) tab → remember it as the active position,
+     *  so switching workspaces and back returns to Connections instead of
+     *  jumping to a treedb tab (the URL is the authority, ROUTING.md §3). */
+    if(base === picker_route(ws)) {
+        let config = gobj_find_service("treedb_config", false);
+        if(config) {
+            gobj_send_event(config, "EV_SET_ACTIVE_TAB",
+                {workspace: ws, id: CONNECTIONS_TAB}, gobj);
+        }
+        return 0;
+    }
+
     let prefix = db_home_route(ws) + "/";
     if(base.indexOf(prefix) === 0) {
         /*  A real, resolved treedb tab (base is /<ws>/db/<sel>) → remember it
@@ -1246,6 +1289,7 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_LANGUAGE",  ac_toggle_language, null],
             ["EV_OPEN_DEVTOOLS",    ac_open_devtools,   null],
             ["EV_OPEN_ABOUT",       ac_open_about,      null],
+            ["EV_OPEN_SITEMAP",     ac_open_sitemap,    null],
             /*  workspace tabs  */
             ["EV_SELECTED_TREEDBS_CHANGED", ac_selected_treedbs_changed, null],
             ["EV_CONNECTIONS_CHANGED",      ac_connections_changed,      null],
@@ -1269,6 +1313,7 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_LANGUAGE",  0],
         ["EV_OPEN_DEVTOOLS",    0],
         ["EV_OPEN_ABOUT",       0],
+        ["EV_OPEN_SITEMAP",     0],
         ["EV_SELECTED_TREEDBS_CHANGED", 0],
         ["EV_CONNECTIONS_CHANGED",      0],
         ["EV_NAV_ITEM_CLOSE",   0],
