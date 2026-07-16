@@ -160,6 +160,8 @@ const es = {
         "matches": "coincidencias",
         "site map hint": "Cada posición alcanzable de la app es una URL. Pulsa una ruta para ir allí.",
         "print": "Imprimir",
+        "you are here": "Estás aquí",
+        "other routes": "Otras rutas",
         "settings": "Ajustes",
         "connections": "Conexiones",
         "add connection": "Añadir conexión",

@@ -160,6 +160,8 @@ const en = {
         "matches": "matches",
         "site map hint": "Every reachable position of the app is a URL. Click a route to jump there.",
         "print": "Print",
+        "you are here": "You are here",
+        "other routes": "Other routes",
         "settings": "Settings",
         "connections": "Connections",
         "add connection": "Add connection",

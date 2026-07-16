@@ -211,6 +211,8 @@ const es = {
         "matches":           "coincidencias",
         "site map hint":     "Cada posición alcanzable de la app es una URL. Pulsa una ruta para ir allí.",
         "print":             "Imprimir",
+        "you are here":      "Estás aquí",
+        "other routes":      "Otras rutas",
         "about":             "Acerca de",
         "agent console":     "Consola de agentes",
         "about description": "Consola web para operar agentes Yuneta a través del control center.",

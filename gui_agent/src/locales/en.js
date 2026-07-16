@@ -211,6 +211,8 @@ const en = {
         "matches":           "matches",
         "site map hint":     "Every reachable position of the app is a URL. Click a route to jump there.",
         "print":             "Print",
+        "you are here":      "You are here",
+        "other routes":      "Other routes",
         "about":             "About",
         "agent console":     "Agent Console",
         "about description": "Browser console to operate Yuneta agents through the control center.",
