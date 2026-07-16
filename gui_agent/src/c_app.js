@@ -901,7 +901,9 @@ function ac_selected_nodes_changed(gobj, event, kw, src)
         let config = gobj_find_service("agent_config", false);
         let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
         if(!nodes.some((n) => n && n.id === id)) {
-            yui_shell_navigate(shell, workspace_first_route(gobj, ws));
+            /*  Fix-up after the current node tab was deselected — code decided
+             *  the move, so no Back entry (it would return to a dead tab). */
+            yui_shell_navigate(shell, workspace_first_route(gobj, ws), {replace: true});
         }
     }
     return 0;
@@ -920,7 +922,10 @@ function ac_stats_layout_changed(gobj, event, kw, src)
     if(shell && cur && ws_from_route(cur) === "statistics") {
         setTimeout(() => {
             if(gobj.priv.shell) {
-                yui_shell_navigate(gobj.priv.shell, workspace_first_route(gobj, "statistics"));
+                /*  Re-land after the Statistics layout changed under us: a
+                 *  normalization, not a user move — no Back entry. */
+                yui_shell_navigate(gobj.priv.shell,
+                    workspace_first_route(gobj, "statistics"), {replace: true});
             }
         }, 0);
     }
@@ -1011,9 +1016,11 @@ function ac_route_changed(gobj, event, kw, src)
         }
     }
     if(target) {
+        /*  Deferred so we don't re-enter navigate mid-publish. Normalizing a
+         *  bare/deep-linked workspace route onto its tab: no Back entry. */
         setTimeout(() => {
             if(gobj.priv.shell) {
-                yui_shell_navigate(gobj.priv.shell, target);
+                yui_shell_navigate(gobj.priv.shell, target, {replace: true});
             }
         }, 0);
     }

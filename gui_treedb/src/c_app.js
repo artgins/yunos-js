@@ -536,7 +536,8 @@ function restore_tab_from_url(gobj)
      *  view's selected topic / mode is restored too.  */
     setTimeout(function() {
         if(gobj.priv.shell) {
-            yui_shell_navigate(gobj.priv.shell, cur);
+            /*  Restore, not a user move: no Back entry. */
+            yui_shell_navigate(gobj.priv.shell, cur, {replace: true});
         }
     }, 0);
 }
@@ -1100,7 +1101,9 @@ function ac_selected_treedbs_changed(gobj, event, kw, src)
         let id = decode_tail(cur.slice(prefix.length).split("/")[0]);
         if(!selected.some((s) => s && s.id === id)) {
             let first = selected.length ? db_tab_route(ws, selected[0].id) : picker_route(ws);
-            yui_shell_navigate(shell, first);
+            /*  Fix-up after the current tab was deselected — code decided the
+             *  move, so no Back entry (it would return to a dead tab). */
+            yui_shell_navigate(shell, first, {replace: true});
         }
     }
     return 0;
@@ -1208,7 +1211,10 @@ function ac_route_changed(gobj, event, kw, src)
                 let full = gobj_read_attr(gobj.priv.shell, "current_route") || "";
                 setTimeout(function() {
                     if(gobj.priv.shell && full) {
-                        yui_shell_navigate(gobj.priv.shell, full);
+                        /*  Re-land on the route the user already asked for
+                         *  (the deep link) once its tab exists: no Back entry,
+                         *  the hash never changed. */
+                        yui_shell_navigate(gobj.priv.shell, full, {replace: true});
                     }
                 }, 0);
             }
@@ -1216,10 +1222,11 @@ function ac_route_changed(gobj, event, kw, src)
         }
         let target = workspace_first_route(gobj, ws);
         if(target && target !== base) {
-            /*  Deferred so we don't re-enter navigate mid-publish. */
+            /*  Deferred so we don't re-enter navigate mid-publish. Redirect of
+             *  a bare workspace route to its first tab: no Back entry. */
             setTimeout(function() {
                 if(gobj.priv.shell) {
-                    yui_shell_navigate(gobj.priv.shell, target);
+                    yui_shell_navigate(gobj.priv.shell, target, {replace: true});
                 }
             }, 0);
         }

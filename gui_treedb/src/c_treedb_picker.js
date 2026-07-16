@@ -279,11 +279,14 @@ function render_connection(gobj, conn)
                         }
                     }, gobj);
             });
+            /*  Tag EVERY service with its gclass, same colours as the
+             *  Settings table: tagging only C_TRANGER left C_NODE bare, so
+             *  an untagged row read as "no class" instead of "a treedb". */
             let $svc_label = [["span", {class: "ml-2"}, svc.service]];
-            if(svc.gclass === "C_TRANGER") {
-                $svc_label.push(["span",
-                    {class: "tag is-warning is-light is-size-7 ml-2"}, "C_TRANGER"]);
-            }
+            $svc_label.push(["span",
+                {class: "tag is-light is-size-7 ml-2 PICKER_SERVICE_GCLASS " +
+                        (svc.gclass === "C_TRANGER" ? "is-warning" : "is-info")},
+                svc.gclass]);
             $treedb_list.appendChild(createElement2(
                 ["label", {class: "checkbox is-block mb-1 PICKER_SERVICE"},
                     [$cb, ...$svc_label]]

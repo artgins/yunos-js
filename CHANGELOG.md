@@ -22,6 +22,19 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_treedb): the connections picker tags every service's gclass.** It
+  only tagged `C_TRANGER`, leaving `C_NODE` rows bare — an untagged row read as
+  "no class" rather than "a treedb". Every row now carries its gclass tag in the
+  same colours as the Settings table (`C_TRANGER` warning, the rest info).
+
+- **chore(gui_treedb, gui_agent): adopt gobj-ui's push-by-default navigation.**
+  gobj-ui flipped `yui_shell_navigate()` to push by default, so every
+  code-decided navigation here is now explicit: gui_treedb's four `c_app.js`
+  fix-ups (deselected tab, F5 re-land, deep-link auto-open, workspace → first
+  tab) and gui_agent's three redirects (deselected node, Statistics layout
+  change, deep-link normalization) pass `{replace:true}`. No user-visible change
+  in either SPA — without it each of those would have left a spurious Back entry.
+
 - **feat(gui_treedb): the site map shows each treedb's topics/info/schema.** The
   treedb views now declare their view-owned sub-routes (per-topic table + info,
   the schema landing; per-topic graph focus) to gobj-ui's sub-route registry, so
