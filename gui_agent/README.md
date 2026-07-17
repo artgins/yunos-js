@@ -258,7 +258,11 @@ This yuno is JavaScript and deploys independently of the SDK (see
 - **Nodes.** Compact searchable/sortable nodes list on Tabulator with
   active-row highlight and a single search+refresh toolbar line.
 - **Session.** Silent recovery after a sleep/reconnect NAK (refresh + reopen)
-  instead of dropping to the login screen.
+  instead of dropping to the login screen. A **transient** BFF outage during a
+  token refresh (unreachable / 5xx, e.g. while a node reboots) is likewise
+  ridden out: the session, shell, link and open views are kept and the refresh
+  retries with backoff (5s→60s) — only a real denial (4xx / `success:false`)
+  logs out. Mirrors the design gui_treedb already had.
 - **Developer monitor & window manager.** The avatar → **Developer** window was
   reworked (in gobj-ui) from a raw traffic dumper into a yuno-monitor console: a
   folding **bullet** traffic log, a persistent view selector (Detailed / Compact
