@@ -22,7 +22,8 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t,
-    gclass_create, log_error, log_info,
+    gclass_create, log_error, log_info, log_warning,
+    gobj_short_name,
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr, gobj_write_str_attr,
     gobj_create_service, gobj_create_pure_child,
     gobj_subscribe_event, gobj_send_event,
@@ -759,6 +760,20 @@ function ac_restore_failed(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Token refresh could not be MADE (BFF transiently down / 5xx). The
+ *  session is NOT over — the login service is backing off and will
+ *  retry — so keep the shell, the link and the open views up. Only a
+ *  real EV_LOGIN_DENIED tears the session down to the login form.
+ ***************************************************************/
+function ac_refresh_failed(gobj, event, kw, src)
+{
+    let secs = Math.round(((kw && kw.retry_ms) || 0) / 1000);
+    log_warning(`${gobj_short_name(gobj)}: token refresh failed ` +
+                `(${(kw && kw.error) || "?"}) — retrying in ${secs}s, session kept`);
+    return 0;
+}
+
+/***************************************************************
  *  Silent refresh ok — no UI change.
  ***************************************************************/
 function ac_login_refreshed(gobj, event, kw, src)
@@ -1126,6 +1141,7 @@ function create_gclass(gclass_name)
         ["ST_IDLE", [
             ["EV_LOGIN_ACCEPTED",   ac_login_accepted,  null],
             ["EV_LOGIN_REFRESHED",  ac_login_refreshed, null],
+            ["EV_REFRESH_FAILED",   ac_refresh_failed,  null],
             ["EV_LOGIN_DENIED",     ac_login_denied,    null],
             ["EV_RESTORE_FAILED",   ac_restore_failed,  null],
             ["EV_LOGOUT_DONE",      ac_logout_done,     null],
@@ -1156,6 +1172,7 @@ function create_gclass(gclass_name)
     const event_types = [
         ["EV_LOGIN_ACCEPTED",   0],
         ["EV_LOGIN_REFRESHED",  0],
+        ["EV_REFRESH_FAILED",   0],
         ["EV_LOGIN_DENIED",     0],
         ["EV_RESTORE_FAILED",   0],
         ["EV_LOGOUT_DONE",      0],

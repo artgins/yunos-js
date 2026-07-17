@@ -22,6 +22,20 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **fix(gui_agent): a transient BFF outage during token refresh no longer logs
+  the user out.** `C_AGENT_LOGIN.do_bff_refresh` treated ANY refresh failure —
+  including the BFF being briefly unreachable (fetch rejected / HTTP ≥500, e.g.
+  while the node reboots) — as `EV_LOGIN_DENIED`, which tore the shell down to
+  the login form (the "login flashes then vanishes" seen during a node bounce).
+  It now classifies transient failures and emits `EV_REFRESH_FAILED` instead:
+  the session, the shell, the control-center link and the open views are kept,
+  and the refresh retries with exponential backoff (5s→60s). Only a real denial
+  (4xx / `success:false`) still logs out. This ports the design `gui_treedb`
+  already had (`c_login.js`: `EV_REFRESH_FAILED` + `retry_ms` backoff, plus the
+  stale-drop of an in-flight refresh that resolves after logout). `C_APP` grows
+  a matching `ac_refresh_failed` (keep everything, log a warning) so the
+  now-published `EV_REFRESH_FAILED` is handled in `ST_IDLE`.
+
 ## 0.5.0 — 2026-07-17 — shipped with SDK 7.8.0
 
 Rides gobj-ui **4.0.0** and gobj-js **7.8.0**. Both SPAs are migrated to the

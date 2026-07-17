@@ -22,7 +22,7 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t, event_flag_t,
-    gclass_create, log_error, log_info,
+    gclass_create, log_error, log_info, log_warning,
     gobj_name, gobj_short_name,
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_change_state, gobj_current_state,
@@ -40,6 +40,14 @@ import {deploy_info} from "./conf/deploy.js";
  ***************************************************************/
 const GCLASS_NAME = "C_AGENT_LOGIN";
 
+/*
+ *  Transient refresh-failure backoff (BFF unreachable / 5xx / request
+ *  rejected): keep the session and retry, instead of tearing the shell down
+ *  to the login form for a failure that heals itself. Mirrors gui_treedb.
+ */
+const REFRESH_RETRY_MIN_MS = 5000;
+const REFRESH_RETRY_MAX_MS = 60000;
+
 
 /***************************************************************
  *              Attrs
@@ -54,6 +62,7 @@ SDATA_END()
 let PRIVATE_DATA = {
     gobj_timer:      null,
     timeout_refresh: 0,
+    retry_ms:        0,      /*  current transient-failure backoff (0 = none)  */
 };
 
 let __gclass__ = null;
@@ -189,6 +198,13 @@ async function do_bff_login(gobj, username, password)
 
 /***************************************************************
  *  POST /auth/refresh (reads refresh_token cookie, rotates cookies).
+ *
+ *  A TRANSIENT failure (BFF unreachable, 5xx, request rejected) does NOT
+ *  end the session: it becomes EV_REFRESH_FAILED, which backs off and
+ *  retries with the shell, the link and the open views left as they are.
+ *  Only the BFF answering "no" (4xx / success:false) is EV_LOGIN_DENIED.
+ *  A non-JSON body is a gateway/proxy page, never a verdict on the user:
+ *  4xx keeps its meaning (denied), 5xx and the rest are transport noise.
  ***************************************************************/
 function do_bff_refresh(gobj)
 {
@@ -196,21 +212,41 @@ function do_bff_refresh(gobj)
         method: "POST", credentials: "include",
         headers: {"Content-Type": "application/json"}
     })
-    .then(resp => resp.json().catch(() => ({})))
-    .then(data => {
-        if(data.success) {
-            gobj_send_event(gobj, "EV_LOGIN_REFRESHED", data, gobj);
-        } else {
-            gobj_send_event(gobj, "EV_LOGIN_DENIED", {
-                error_code: data.error_code || "refresh_denied",
-                error:      data.error || "Refresh denied"
-            }, gobj);
+    .then((resp) => resp.json()
+        .then((data) => ({
+            ok:        resp.ok,
+            status:    resp.status,
+            data:      data || {},
+            transient: !resp.ok && resp.status >= 500
+        }))
+        .catch(() => ({
+            ok:        false,
+            status:    resp.status,
+            data:      {},
+            transient: !(resp.status >= 400 && resp.status < 500)
+        })))
+    .catch((err) => ({
+        ok:        false,
+        status:    0,
+        data:      {error: err && err.message ? err.message : String(err)},
+        transient: true    /*  fetch rejected: offline, DNS, TLS  */
+    }))
+    .then(({ok, status, data, transient}) => {
+        if(transient) {
+            let reason = data.error || `HTTP ${status}`;
+            log_warning(`${gobj_short_name(gobj)}: BFF refresh could not be made ` +
+                `(${reason}) — retrying`);
+            gobj_send_event(gobj, "EV_REFRESH_FAILED", {error: reason}, gobj);
+            return;
         }
-    })
-    .catch(err => {
-        log_error(`${gobj_short_name(gobj)}: BFF refresh failed: ${err.message}`);
-        gobj_send_event(gobj, "EV_LOGIN_DENIED",
-            {error_code: "network_error", error: err.message}, gobj);
+        if(ok && data.success) {
+            gobj_send_event(gobj, "EV_LOGIN_REFRESHED", data, gobj);
+            return;
+        }
+        const error_code = data.error_code || `http_${status}`;
+        const error      = data.error || "Refresh denied";
+        log_info(`${gobj_short_name(gobj)}: BFF refresh denied: ${error_code} (${error})`);
+        gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error}, gobj);
     });
 }
 
@@ -272,6 +308,7 @@ function save_session_info(gobj, data)
     if(priv.timeout_refresh <= 0) {
         priv.timeout_refresh = 2;
     }
+    priv.retry_ms = 0;      /*  a refresh landed: the backoff starts over  */
     set_timeout(priv.gobj_timer, priv.timeout_refresh * 1000);
 }
 
@@ -368,6 +405,30 @@ function ac_do_refresh(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  The refresh could not be MADE (network down, BFF 5xx, request
+ *  rejected). The session is not denied — the refresh cookie is
+ *  untouched — so keep it, back off, and try again. Tearing the SPA
+ *  down to the login form on a blink of the network destroyed the
+ *  shell, closed the link and lost every open view, for a failure that
+ *  heals itself.
+ ***************************************************************/
+function ac_refresh_failed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    priv.retry_ms = priv.retry_ms
+        ? Math.min(priv.retry_ms * 2, REFRESH_RETRY_MAX_MS)
+        : REFRESH_RETRY_MIN_MS;
+    set_timeout(priv.gobj_timer, priv.retry_ms);
+
+    gobj_publish_event(gobj, "EV_REFRESH_FAILED", {
+        error:    (kw && kw.error) || "",
+        retry_ms: priv.retry_ms
+    });
+    return 0;
+}
+
 
 
 
@@ -415,7 +476,13 @@ function create_gclass(gclass_name)
              *  EV_LOGIN_REFRESHED success is discarded (we are logged out on
              *  purpose) instead of raising "event not defined".
              */
-            ["EV_LOGIN_REFRESHED", ac_clear_session,   null]
+            ["EV_LOGIN_REFRESHED", ac_clear_session,   null],
+            /*
+             *  And the transient failure of a refresh that was in flight when
+             *  the user logged out: no session left to keep alive, so it must
+             *  NOT re-arm the retry timer — just drop it.
+             */
+            ["EV_REFRESH_FAILED",  ac_clear_session,   null]
         ]],
         ["ST_WAIT_TOKEN", [
             ["EV_DO_LOGIN",        ac_do_login,        null],
@@ -428,12 +495,14 @@ function create_gclass(gclass_name)
              *  to a session, so in this state it can only be stale —
              *  dropped exactly as ST_LOGOUT drops it.
              */
-            ["EV_LOGIN_REFRESHED", ac_clear_session,   null]
+            ["EV_LOGIN_REFRESHED", ac_clear_session,   null],
+            ["EV_REFRESH_FAILED",  ac_clear_session,   null]
         ]],
         ["ST_LOGIN", [
             ["EV_DO_LOGOUT",       ac_do_logout,       null],
             ["EV_DO_REFRESH",      ac_do_refresh,      null],
             ["EV_LOGIN_REFRESHED", ac_login_refreshed, null],
+            ["EV_REFRESH_FAILED",  ac_refresh_failed,  null],
             ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"],
             ["EV_LOGOUT_DONE",     ac_logout_done,     "ST_LOGOUT"],
             ["EV_TIMEOUT",         ac_timeout,         null]
@@ -451,6 +520,7 @@ function create_gclass(gclass_name)
         ["EV_TIMEOUT",         0],
         ["EV_LOGIN_ACCEPTED",  out],
         ["EV_LOGIN_REFRESHED", out],
+        ["EV_REFRESH_FAILED",  out],
         ["EV_LOGIN_DENIED",    out],
         ["EV_LOGOUT_DONE",     out],
         ["EV_RESTORE_FAILED",  out]
