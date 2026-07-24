@@ -22,6 +22,12 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+- **chore(gui_treedb): bump `maplibre-gl` dev range to `^6.0.0`** to match
+  gobj-ui's peerDependency (v6, ESM-only). gui_treedb does not instantiate a map
+  (`C_YUI_MAP` is unused here — it only imports the map CSS and dedupes the lib),
+  so this is dedupe hygiene against a second maplibre copy, with no runtime
+  change.
+
 - **fix(gui_agent): a transient BFF outage during token refresh no longer logs
   the user out.** `C_AGENT_LOGIN.do_bff_refresh` treated ANY refresh failure —
   including the BFF being briefly unreachable (fetch rejected / HTTP ≥500, e.g.
