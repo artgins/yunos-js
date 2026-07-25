@@ -114,6 +114,8 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     $scan_errors: null,   /*  refresh failure report area  */
+    $help:        null,   /*  the how-to-use paragraph, folded by default  */
+    $help_btn:    null,   /*  the (i) that folds/unfolds it  */
     $import_file: null,   /*  hidden <input type=file> of the Import button  */
     subtables:    null,   /*  conn_id -> the services Tabulator inside its row  */
     resize_pending: false,/*  a parent re-measure is already queued for this frame  */
@@ -319,13 +321,41 @@ function build_ui(gobj)
                     "data-i18n-title": "add the connections of a json file",
                     "data-i18n-aria-label": "import"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-plus"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-upload"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "import"}, t("import")]
             ]
         ]);
     $import.addEventListener("click", () => {
         gobj_send_event(gobj, "EV_PICK_IMPORT_FILE", {}, gobj);
     });
+
+    /*  The how-to-use paragraph is long, and on a phone it pushed the table
+     *  itself below the fold. It lives behind this toggle, folded away until
+     *  asked for. Like every other control here, the click is an EVENT.  */
+    let $help_btn = createElement2(
+        ["button", {class: "button is-small ml-2 SETTINGS_HELP_TOGGLE",
+                    "aria-expanded": "false",
+                    title: t("show help"),
+                    "aria-label": t("show help"),
+                    "data-i18n-title": "show help",
+                    "data-i18n-aria-label": "show help"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-circle-info"}]]]
+            ]
+        ]);
+    $help_btn.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_TOGGLE_HELP", {}, gobj);
+    });
+    priv.$help_btn = $help_btn;
+
+    let $help = createElement2(
+        ["p", {class: "is-size-7 has-text-grey mb-3 is-hidden SETTINGS_HELP",
+               i18n: "connections help"},
+            "Edit cells inline. Each URL is a yuno's public wss endpoint " +
+            "(plus its role and service). Connect with the plug button — " +
+            "services are discovered on the first connect; check the ones " +
+            "to browse."]);
+    priv.$help = $help;
 
     let $scan_errors = createElement2(
         ["div", {class: "is-size-7 has-text-danger mb-2 is-hidden SETTINGS_SCAN_ERRORS"}, []]);
@@ -334,17 +364,22 @@ function build_ui(gobj)
     let $container = createElement2(
         ["div", {class: "C_TREEDB_SETTINGS ytreedb-settings p-4"},
             [
-                ["div", {class: "level mb-3"}, [
-                    ["div", {class: "level-left"}, [
-                        ["h2", {class: "title is-5", i18n: "connections"}, "Connections"]
+                /*  NOT Bulma's `.level`: below 769px it turns itself AND its
+                 *  two halves into `flex-direction: column`, so the three
+                 *  action buttons stacked one per line and ate the screen the
+                 *  table needed (`.level.is-mobile` does not fix it either —
+                 *  it only restores `display: flex`, leaving the halves in
+                 *  column). A plain flex row that wraps only if it must.  */
+                ["div", {class: "SETTINGS_HEADER is-flex is-align-items-center "
+                              + "is-justify-content-space-between is-flex-wrap-wrap mb-3"}, [
+                    ["div", {class: "SETTINGS_TITLE is-flex is-align-items-center"}, [
+                        ["h2", {class: "title is-5 mb-0", i18n: "connections"}, "Connections"],
+                        $help_btn
                     ]],
-                    ["div", {class: "level-right"}, [$add, $export, $import, $file]]
+                    ["div", {class: "SETTINGS_ACTIONS is-flex is-align-items-center"},
+                        [$add, $export, $import, $file]]
                 ]],
-                ["p", {class: "is-size-7 has-text-grey mb-3 SETTINGS_HELP", i18n: "connections help"},
-                    "Edit cells inline. Each URL is a yuno's public wss endpoint " +
-                    "(plus its role and service). Connect with the plug button — " +
-                    "services are discovered on the first connect; check the ones " +
-                    "to browse."],
+                $help,
                 $scan_errors,
                 ["div", {id: table_id}, []],
                 build_live_max_field(gobj)
@@ -1010,6 +1045,32 @@ function ac_language_changed(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The (i) beside the title: fold / unfold the how-to-use paragraph.
+ *
+ *  It is long, and on a phone it pushed the connections table below the
+ *  fold — so it starts folded and the icon asks for it. Transient on
+ *  purpose: this view is `lazy_destroy`, so every visit to Settings opens
+ *  on the table. Bulma's `is-hidden` carries `!important`, so the class is
+ *  what toggles (an inline `style.display` would lose to it).
+ ***************************************************************/
+function ac_toggle_help(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(!priv.$help || !priv.$help_btn) {
+        log_error(`${gobj_short_name(gobj)}: no help paragraph to fold`);
+        return -1;
+    }
+    let shown = !priv.$help.classList.toggle("is-hidden");
+    let key = shown ? "hide help" : "show help";
+    priv.$help_btn.setAttribute("aria-expanded", shown ? "true" : "false");
+    priv.$help_btn.setAttribute("title", t(key));
+    priv.$help_btn.setAttribute("aria-label", t(key));
+    priv.$help_btn.setAttribute("data-i18n-title", key);
+    priv.$help_btn.setAttribute("data-i18n-aria-label", key);
+    return 0;
+}
+
+/***************************************************************
  *  Add a blank connection row (the user fills it in place; every cell
  *  edit persists the whole table).
  ***************************************************************/
@@ -1389,6 +1450,7 @@ function create_gclass(gclass_name)
             ["EV_TREEDB_SCAN_ERROR",    ac_scan_error,           null],
             ["EV_LANGUAGE_CHANGED",     ac_language_changed,     null],
             /*  user actions: every click of the table crosses the machine  */
+            ["EV_TOGGLE_HELP",          ac_toggle_help,          null],
             ["EV_ADD_CONN",             ac_add_conn,             null],
             ["EV_CLONE_CONN",           ac_clone_conn,           null],
             ["EV_TOGGLE_SERVICE",       ac_toggle_service,       null],
@@ -1409,6 +1471,7 @@ function create_gclass(gclass_name)
         ["EV_TREEDB_SCAN_DONE",     0],
         ["EV_TREEDB_SCAN_ERROR",    0],
         ["EV_LANGUAGE_CHANGED",     0],
+        ["EV_TOGGLE_HELP",          0],
         ["EV_ADD_CONN",             0],
         ["EV_CLONE_CONN",           0],
         ["EV_TOGGLE_SERVICE",       0],

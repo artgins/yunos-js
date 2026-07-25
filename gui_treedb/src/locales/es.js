@@ -193,6 +193,8 @@ const es = {
         "connection closed": "Conexión cerrada",
         "services failed": "services falló",
         "bad services answer": "El yuno respondió a `services` con una forma inesperada",
+        "show help": "Mostrar la ayuda",
+        "hide help": "Ocultar la ayuda",
         "show services": "Mostrar los servicios de esta conexión",
         "hide services": "Ocultar los servicios de esta conexión",
         "browse this service": "Explorar este servicio",

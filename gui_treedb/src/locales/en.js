@@ -193,6 +193,8 @@ const en = {
         "connection closed": "Connection closed",
         "services failed": "services failed",
         "bad services answer": "The yuno answered `services` with an unexpected shape",
+        "show help": "Show the help",
+        "hide help": "Hide the help",
         "show services": "Show the services of this connection",
         "hide services": "Hide the services of this connection",
         "browse this service": "Browse this service",

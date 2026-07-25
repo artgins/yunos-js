@@ -34,6 +34,19 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
   sub-Tabulators with it. Folding also calls `normalizeHeight()`: the row is
   still pinned to the inline height it got while the sub-table hung under
   its cells, so without it the row keeps a hole.
+- **The Settings header is a flex row again on mobile, and the help text
+  folds behind an (i).** The header used Bulma's `.level`, which below 769px
+  turns itself AND both halves into `flex-direction: column`: the three
+  action buttons stacked one per line and ate the vertical space the table
+  needed (`.level.is-mobile` does not fix it — it restores `display: flex`
+  and leaves the halves in column). It is a plain flex row now, wrapping
+  only if it must. The how-to-use paragraph, five lines tall on a phone,
+  starts folded behind an (i) beside the title (`EV_TOGGLE_HELP`, transient:
+  this view is `lazy_destroy`, so every visit opens on the table).
+- **"Import" no longer wears the same icon as "Add connection".** Both were
+  `yi-plus`, which on mobile — where the labels drop — made them the same
+  picture. Import takes gobj-ui's new `yi-upload`, the pair of Export's
+  `yi-download`.
 - **A fresh connection starts folded, and the fold state is persisted** in
   its own `expanded_conns` attr of `C_TREEDB_CONFIG` (`{conn_id: true}`,
   absent = folded), pruned with the connection like its Tranger views. It is
