@@ -119,7 +119,9 @@ rule, visible-tab only) and **highlight** any counter that changed since the las
 refresh. Commands/Statistics require agent **≥ 7.7.0**; Terminal works on any
 version (needs the `open-console` authz — an admin role). Selecting a tab focuses
 its input (Commands) / xterm (Terminal); node tabs carry a green/red connection
-dot; the last-active tab is remembered per workspace. TreeDB is **not** part of
+dot; the last-active tab is remembered per workspace. Commands and Terminal both
+carry a per-tab **font-size** control (temporary) over a shared default set in
+Settings. TreeDB is **not** part of
 this app — it is the separate `gui_treedb` SPA. Time-series charts
 (`C_YUI_UPLOT`) over the live counters are a possible follow-up. See the
 `CHANGELOG.md` (repo root) for the per-cycle detail.
@@ -127,8 +129,29 @@ this app — it is the separate `gui_treedb` SPA. Time-series charts
 ## Changes
 
 This yuno is JavaScript and deploys independently of the SDK (see
-`deploy-com.sh`), so its changes live here rather than in the top-level
-`CHANGELOG.md`.
+`deploy-com.sh`). The per-release detail lives in this repo's own
+`CHANGELOG.md` (repo root); this section keeps the durable, feature-level
+summary.
+
+### 0.6.0
+
+- **Configurable console font size.** The Commands response pane
+  (`CONSOLE_RESPONSE_TEXT`) gained the size control the Terminal already had:
+  the `CONSOLE_STATUS_ROW` holds **A− / [N px] / A+** buttons that nudge **this
+  console's** live size — TEMPORARY and per-console, never persisted, so
+  reopening the tab returns to the default. The shared DEFAULT is a "Console
+  font size" stepper in **Settings**, persisted in
+  `localStorage["console_font_size"]`, clamped to [8, 28] (default 12); each
+  console seeds its live size from it on (re)open.
+- **Command history is one shared list across all nodes.** The store was
+  already global (`agent_config.cmd_history`), but each per-node console kept
+  the snapshot taken at open and persisted *that* on every add — so a command
+  run in one node clobbered history added from another (last-writer-wins) and
+  already-open consoles never saw each other's commands. Every point of use now
+  re-syncs from the shared store first (`sync_history_from_store`: add, remove,
+  recall start, history-popover open), so adds merge onto the latest global
+  list and Up/Down + the popover in any node reflect commands run in every
+  other node.
 
 ### 7.7.0 cycle
 
