@@ -106,6 +106,7 @@ const es = {
         "table":             "Tabla",
         "display mode":      "Respuestas de comandos",
         "terminal font size": "Tamaño de fuente del terminal",
+        "console font size": "Tamaño de fuente de la consola",
         "statistics layout": "Tarjetas de estadísticas",
         "stats one tab":     "Una pestaña",
         "stats tab per yuno": "Pestaña por yuno",

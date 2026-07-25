@@ -22,6 +22,26 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+## 0.6.0 — 2026-07-25
+
+- **feat(gui_agent): the console response font size is configurable**, mirroring
+  the Terminal's TTY_HOST control. The `CONSOLE_STATUS_ROW` gains A− / [N px] /
+  A+ buttons that nudge THIS console's live `CONSOLE_RESPONSE_TEXT` size — a
+  TEMPORARY, per-console change, never persisted, so reopening returns to the
+  default. The shared DEFAULT is set in Settings → a new "Console font size"
+  stepper (persisted in `localStorage["console_font_size"]`, clamped to [8, 28],
+  default 12); each console seeds its live size from that default on (re)open.
+
+- **fix(gui_agent): the console command history is a SINGLE shared list across
+  all nodes.** The store was already global (`agent_config.cmd_history`), but
+  each per-node console kept a snapshot taken at open and `add_history` persisted
+  that snapshot — so a command run in one node clobbered history added from
+  another (last-writer-wins), and already-open consoles never saw each other's
+  commands. History is now re-synced from the shared store at every point of use
+  (add, remove, recall start, history-popover open): adds merge onto the latest
+  global list instead of overwriting it, and Up/Down + the popover in any node
+  reflect commands run in every other node.
+
 - **chore(gui_treedb): bump `maplibre-gl` dev range to `^6.0.0`** to match
   gobj-ui's peerDependency (v6, ESM-only). gui_treedb does not instantiate a map
   (`C_YUI_MAP` is unused here — it only imports the map CSS and dedupes the lib),

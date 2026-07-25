@@ -106,6 +106,7 @@ const en = {
         "table":             "Table",
         "display mode":      "Command answers",
         "terminal font size": "Terminal font size",
+        "console font size": "Console font size",
         "statistics layout": "Statistics cards",
         "stats one tab":     "One tab",
         "stats tab per yuno": "Tab per yuno",

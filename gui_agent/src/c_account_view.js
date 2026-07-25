@@ -52,6 +52,13 @@ import {
     FONT_SIZE_MIN,
     FONT_SIZE_MAX,
 } from "./c_agent_tty.js";
+
+import {
+    get_console_font_size,
+    set_console_font_size,
+    CONSOLE_FONT_SIZE_MIN,
+    CONSOLE_FONT_SIZE_MAX,
+} from "./c_agent_console.js";
 import {
     agent_config_get_active_node,
     agent_config_get_display_mode,
@@ -346,6 +353,23 @@ function build_preference(gobj)
         ]
     ];
 
+    /*  Console font size — the shared DEFAULT for CONSOLE_RESPONSE_TEXT (same
+     *  persisted value the console's A− / A+ buttons seed from); open consoles
+     *  pick a change up on their next (re)open.  */
+    let console_font_size = get_console_font_size();
+    let console_font_seg = ["div", {class: "buttons has-addons"},
+        [
+            font_button("yi-magnifying-glass-minus", "font smaller",
+                console_font_size <= CONSOLE_FONT_SIZE_MIN,
+                function() { set_console_font_size(console_font_size - 1); render(gobj); }),
+            ["button", {type: "button", class: "button is-static", style: "min-width:4.5rem;"},
+                `${console_font_size} px`],
+            font_button("yi-magnifying-glass-plus", "font larger",
+                console_font_size >= CONSOLE_FONT_SIZE_MAX,
+                function() { set_console_font_size(console_font_size + 1); render(gobj); })
+        ]
+    ];
+
     function field(label_key, label_text, control)
     {
         return ["div", {class: "field", style: "margin-bottom:1.25rem;"},
@@ -367,7 +391,8 @@ function build_preference(gobj)
                         field("display mode", "Command answers", display_seg),
                         field("statistics layout", "Statistics cards", stats_layout_seg),
                         field("stats refresh", "Auto-refresh stats", stats_refresh_ctrl),
-                        field("terminal font size", "Terminal font size", font_seg)
+                        field("terminal font size", "Terminal font size", font_seg),
+                        field("console font size", "Console font size", console_font_seg)
                     ]
                 ],
                 build_shortkeys(gobj)

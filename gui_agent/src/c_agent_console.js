@@ -64,6 +64,15 @@ const GCLASS_NAME = "C_AGENT_CONSOLE";
 
 const HISTORY_MAX = 30;
 
+/*  CONSOLE_RESPONSE_TEXT font size (mirrors the Terminal's TTY_HOST control):
+ *  the persisted value is the shared DEFAULT, driven from Settings only; the
+ *  A− / A+ buttons in the status row nudge each console's LIVE size temporarily
+ *  (priv.font_size), never persisted. Clamped to [MIN, MAX]; DEFAULT matches
+ *  the historical hardcoded 12px.  */
+const CONSOLE_FONT_SIZE_DEFAULT = 12;
+const CONSOLE_FONT_SIZE_MIN     = 8;
+const CONSOLE_FONT_SIZE_MAX     = 28;
+
 /*  A few common agent commands seeded into the command completions, plus the
  *  local (client-side) shortkey-management commands so Tab-completion and the
  *  "?" popover surface them too.  */
@@ -407,6 +416,34 @@ function build_ui(gobj)
         ["p", {class: "CONSOLE_STATUS has-text-grey", style: "flex:1; min-width:0; margin:0;"}, ""]);
     priv.$status = $status;
 
+    /*  Seed this view's LIVE font size from the persisted default (Settings);
+     *  the A− / A+ buttons nudge only this copy — temporary, like the Terminal. */
+    priv.font_size = get_console_font_size();
+
+    /*  Font size A− / [N px] / A+ for CONSOLE_RESPONSE_TEXT: a TEMPORARY,
+     *  per-console nudge (the persisted default lives in Settings, mirroring the
+     *  Terminal's TTY_HOST control). Icon-only buttons with a title carrying the
+     *  meaning; is-small to match the adjacent copy button in this dense row. */
+    priv.$font_dec = createElement2(
+        ["button", {class: "CONSOLE_FONT_DEC button is-small is-ghost", type: "button",
+                    title: t("font smaller"), "aria-label": t("font smaller"),
+                    "data-i18n-title": "font smaller", "data-i18n-aria-label": "font smaller"},
+            [["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-minus"}]]]],
+            {click: () => change_console_font_size(gobj, -1)}]
+    );
+    priv.$font_size_label = createElement2(
+        ["span", {class: "CONSOLE_FONT_SIZE is-size-7 has-text-grey",
+                  style: "min-width:2.75rem; text-align:center;"},
+            priv.font_size + " px"]
+    );
+    priv.$font_inc = createElement2(
+        ["button", {class: "CONSOLE_FONT_INC button is-small is-ghost", type: "button",
+                    title: t("font larger"), "aria-label": t("font larger"),
+                    "data-i18n-title": "font larger", "data-i18n-aria-label": "font larger"},
+            [["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-plus"}]]]],
+            {click: () => change_console_font_size(gobj, +1)}]
+    );
+
     let $copy = createElement2(
         ["button", {class: "CONSOLE_COPY button is-small is-ghost", type: "button",
                     title: t("copy response"), "data-i18n-title": "copy response"},
@@ -420,7 +457,7 @@ function build_ui(gobj)
     let $status_row = createElement2(
         ["div", {class: "CONSOLE_STATUS_ROW",
                  style: "display:flex; align-items:center; gap:0.5rem;"},
-            [$status, $copy]]
+            [$status, priv.$font_dec, priv.$font_size_label, priv.$font_inc, $copy]]
     );
 
     /*  Command helper: shows the matched command's signature + description
@@ -467,6 +504,9 @@ function build_ui(gobj)
         ]
     );
     gobj_write_attr(gobj, "$container", $c);
+
+    /*  Seed the A− / A+ clamp-limit disabled state from the stored size.  */
+    apply_console_font_size(gobj);
 
     /*  Outside-click closes any open popover.  */
     priv.doc_click = (ev) => {
@@ -520,12 +560,31 @@ function normalize_history(list)
 }
 
 /***************************************************************
- *  Push a command onto the in-memory history: deduped — a re-run
- *  bumps the entry's count and moves it to the front (most recent).
+ *  Refresh priv.history from the GLOBAL persisted store. The command
+ *  history is a single shared list across every node's console; each
+ *  console keeps a working copy, so re-read the store before using it
+ *  to pick up commands run in OTHER node tabs (and reloads). Called at
+ *  every point of use: add, remove, recall start, popover open.
+ ***************************************************************/
+function sync_history_from_store(gobj)
+{
+    let priv = gobj.priv;
+    let config = gobj_read_attr(gobj, "config_svc");
+    if(config) {
+        priv.history = normalize_history(agent_config_get_history(config));
+    }
+}
+
+/***************************************************************
+ *  Push a command onto the SHARED history: deduped — a re-run bumps
+ *  the entry's count and moves it to the front (most recent). Merges
+ *  onto the latest global list first, so a command run here never
+ *  clobbers commands added from another node's console.
  ***************************************************************/
 function add_history(gobj, cmd)
 {
     let priv = gobj.priv;
+    sync_history_from_store(gobj);   /*  merge onto the latest shared list  */
     let idx = priv.history.findIndex((e) => e.cmd === cmd);
     let entry;
     if(idx >= 0) {
@@ -635,7 +694,16 @@ function set_input_value(gobj, text)
 function recall_history(gobj, dir)
 {
     let priv = gobj.priv;
-    if(!priv.$input || priv.history.length === 0) {
+    if(!priv.$input) {
+        return;
+    }
+    /*  Starting a fresh recall: refresh from the shared store so Up/Down
+     *  walks the latest history (incl. commands run in other node tabs).
+     *  Not mid-walk — that would shift the indices under hist_idx.  */
+    if(priv.hist_idx === -1) {
+        sync_history_from_store(gobj);
+    }
+    if(priv.history.length === 0) {
         return;
     }
     if(priv.hist_idx === -1 && dir > 0) {
@@ -802,6 +870,7 @@ function fill_help_popover(gobj)
 function remove_history(gobj, cmd)
 {
     let priv = gobj.priv;
+    sync_history_from_store(gobj);   /*  remove from the latest shared list  */
     let idx = priv.history.findIndex((e) => e.cmd === cmd);
     if(idx < 0) {
         return;
@@ -845,6 +914,7 @@ function fill_hist_popover(gobj)
     if(!$c) {
         return;
     }
+    sync_history_from_store(gobj);   /*  show the latest shared history  */
     $c.replaceChildren();
     if(priv.history.length === 0) {
         $c.appendChild(createElement2(
@@ -1050,6 +1120,95 @@ function show_comment(gobj, comment, result)
 }
 
 /***************************************************************
+ *  Read the persisted CONSOLE_RESPONSE_TEXT font size (clamped),
+ *  falling back to DEFAULT when unset or out of range.
+ ***************************************************************/
+function get_console_font_size()
+{
+    let v = parseInt(
+        kw_get_local_storage_value("console_font_size", CONSOLE_FONT_SIZE_DEFAULT, true), 10);
+    if(!(v >= CONSOLE_FONT_SIZE_MIN && v <= CONSOLE_FONT_SIZE_MAX)) {
+        return CONSOLE_FONT_SIZE_DEFAULT;
+    }
+    return v;
+}
+
+/***************************************************************
+ *  Persist the DEFAULT CONSOLE_RESPONSE_TEXT font size (clamped).
+ *  Driven from Settings → Preferences ONLY; the per-console A− / A+
+ *  buttons do not call this, so a toolbar nudge never changes the
+ *  default. A NaN input keeps the current value. Returns the stored
+ *  size.
+ ***************************************************************/
+function set_console_font_size(size)
+{
+    let n = parseInt(size, 10);
+    if(isNaN(n)) {
+        return get_console_font_size();
+    }
+    if(n < CONSOLE_FONT_SIZE_MIN) {
+        n = CONSOLE_FONT_SIZE_MIN;
+    }
+    if(n > CONSOLE_FONT_SIZE_MAX) {
+        n = CONSOLE_FONT_SIZE_MAX;
+    }
+    kw_set_local_storage_value("console_font_size", n);
+    return n;
+}
+
+/***************************************************************
+ *  Reflect THIS view's live font size (priv.font_size) onto the
+ *  response text and the A− / A+ controls (px readout + clamp-limit
+ *  disabled state). Safe to call before any answer is rendered.
+ ***************************************************************/
+function apply_console_font_size(gobj)
+{
+    let priv = gobj.priv;
+    let size = priv.font_size || get_console_font_size();
+
+    if(priv.$data) {
+        let $pre = priv.$data.querySelector(".CONSOLE_RESPONSE_TEXT");
+        if($pre) {
+            $pre.style.fontSize = size + "px";
+        }
+    }
+    if(priv.$font_size_label) {
+        priv.$font_size_label.textContent = size + " px";
+    }
+    if(priv.$font_dec) {
+        priv.$font_dec.disabled = size <= CONSOLE_FONT_SIZE_MIN;
+    }
+    if(priv.$font_inc) {
+        priv.$font_inc.disabled = size >= CONSOLE_FONT_SIZE_MAX;
+    }
+}
+
+/***************************************************************
+ *  A− / A+ toolbar buttons: nudge ONLY this view's live font size
+ *  (priv.font_size) and re-apply it — a TEMPORARY, per-console
+ *  change, never persisted, so reopening returns to the default set
+ *  in Settings. A no-op at the clamp limits. (Mirrors the Terminal's
+ *  per-tab change_font_size.)
+ ***************************************************************/
+function change_console_font_size(gobj, delta)
+{
+    let priv = gobj.priv;
+    let cur = priv.font_size || get_console_font_size();
+    let next = cur + delta;
+    if(next < CONSOLE_FONT_SIZE_MIN) {
+        next = CONSOLE_FONT_SIZE_MIN;
+    }
+    if(next > CONSOLE_FONT_SIZE_MAX) {
+        next = CONSOLE_FONT_SIZE_MAX;
+    }
+    if(next === cur) {
+        return;
+    }
+    priv.font_size = next;
+    apply_console_font_size(gobj);
+}
+
+/***************************************************************
  *  Render a command answer's payload into CONSOLE_RESPONSE.
  *
  *  Mirrors ycommand's display_webix_result mapped to the console:
@@ -1104,7 +1263,8 @@ function show_data(gobj, data, schema, raw, comment, result)
     priv.$data.appendChild(createElement2(
         ["pre", {class: "CONSOLE_RESPONSE_TEXT",
                  style: "margin:0; height:100%; overflow:auto; white-space:pre-wrap; " +
-                        "font-size:12px; padding:0.5rem;"},
+                        "font-size:" + (priv.font_size || get_console_font_size()) + "px; " +
+                        "padding:0.5rem;"},
             text]
     ));
     set_copy_enabled(gobj, true);   /*  there is text to copy now  */
@@ -1846,4 +2006,10 @@ function register_c_agent_console()
     return create_gclass(GCLASS_NAME);
 }
 
-export {register_c_agent_console};
+export {
+    register_c_agent_console,
+    get_console_font_size,
+    set_console_font_size,
+    CONSOLE_FONT_SIZE_MIN,
+    CONSOLE_FONT_SIZE_MAX,
+};
