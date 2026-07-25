@@ -22,7 +22,9 @@
  *      services automatically (`services` command) and persists the
  *      WHOLE found list in the connection's `services`; the refresh
  *      button of a row re-runs the discovery. The services of a connection
- *      render as a TABLE OF THEIR OWN, nested in its row, with its own
+ *      render as a TABLE OF THEIR OWN, nested in its row, FOLDED behind
+ *      the row's chevron (the fold state is persisted per connection, and
+ *      a fresh connection starts folded), with its own
  *      header (service / class / browse) and only its own fields — as
  *      dataTree children they were rows of THIS table and wore ITS columns:
  *      a service's name under "Label", its gclass and its checkbox under two
@@ -35,8 +37,9 @@
  *
  *      Every click of the table is an EVENT (the SPA's contract: a DOM
  *      handler's only job is to make one). A Tabulator `cellClick` — the
- *      service checkbox, the refresh, the connect/disconnect, the ✕ — sends
- *      EV_TOGGLE_SERVICE / EV_REFRESH_SERVICES / EV_TOGGLE_CONN_ENABLED /
+ *      service checkbox, the chevron, the refresh, the connect/disconnect,
+ *      the ✕ — sends EV_TOGGLE_SERVICE / EV_TOGGLE_CONN_EXPANDED /
+ *      EV_REFRESH_SERVICES / EV_TOGGLE_CONN_ENABLED /
  *      EV_REMOVE_CONN carrying IDENTITIES (conn_id, svc_key: a kw must stay
  *      plain JSON), and the work happens in the action. Even the removal's
  *      confirmation comes back as one (EV_CONFIRM_REMOVE_CONN), so no state
@@ -72,6 +75,7 @@ import {
     treedb_config_get_connections,
     treedb_config_get_connection,
     treedb_config_conn_services,
+    treedb_config_is_conn_expanded,
     treedb_config_get_live_max,
     LIVE_MAX_MIN,
     LIVE_MAX_MAX,
@@ -448,6 +452,9 @@ function build_services_subtable(gobj, row)
     if(!services.length) {
         return;     /*  never scanned, or an empty yuno: no sub-table at all  */
     }
+    if(!config || !treedb_config_is_conn_expanded(config, conn_id)) {
+        return;     /*  folded: the chevron of the row unfolds it  */
+    }
 
     /*  Two elements, not one — the same shape Tabulator's own nested-table
      *  example uses, and both halves are load-bearing:
@@ -707,6 +714,29 @@ function make_columns(gobj)
      *  A cellClick is an OS notification: its only job is to make an event, and
      *  the kw carries IDENTITIES (conn_id) — never the row or the cell: a kw
      *  must stay plain JSON (the machine trace serializes it).  */
+    function expand_formatter(cell)
+    {
+        let d = cell.getData();
+        let config = gobj_find_service("treedb_config", false);
+        let conn = config ? treedb_config_get_connection(config, d.id) : null;
+        let services = conn ? treedb_config_conn_services(conn) : [];
+        if(!services.length) {
+            return "";      /*  nothing discovered: there is no sub-table to fold  */
+        }
+        let expanded = config ? treedb_config_is_conn_expanded(config, d.id) : false;
+        let icon = expanded ? "yi-chevron-down" : "yi-chevron-right";
+        let title = expanded ? t("hide services") : t("show services");
+        return `<span class="icon SETTINGS_EXPAND" title="${title}" `
+             + `role="button" aria-expanded="${expanded ? "true" : "false"}" `
+             + `aria-label="${title}"><i class="${icon}"></i></span>`;
+    }
+
+    function expand_click(e, cell)
+    {
+        let d = cell.getData();
+        gobj_send_event(gobj, "EV_TOGGLE_CONN_EXPANDED", {conn_id: d.id}, gobj);
+    }
+
     function refresh_formatter(cell)
     {
         let d = cell.getData();
@@ -786,6 +816,8 @@ function make_columns(gobj)
      *  on desktop the widthGrow weights fill the extra width.
      */
     return [
+        {title: "", field: "_expand", width: 40, minWidth: 40, headerSort: false,
+            hozAlign: "center", formatter: expand_formatter, cellClick: expand_click},
         {title: t("label"),   field: "label",               editor: "input",
             minWidth: 220, widthGrow: 2},
         {title: t("url"),     field: "url",                 editor: "input",
@@ -1087,6 +1119,50 @@ function ac_toggle_conn_enabled(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The chevron of a connection row: fold / unfold its services
+ *  sub-table. The flag is persisted (C_TREEDB_CONFIG), so the page comes
+ *  back the way it was left.
+ *
+ *  Only THIS row is repainted: `reformat()` re-runs the rowFormatter,
+ *  which builds the sub-table or drops it. Folding also needs an explicit
+ *  normalizeHeight(): the row is still pinned to the inline height it was
+ *  given when the sub-table was under its cells, so without it the row
+ *  keeps a hole where the sub-table used to be. Unfolding does not — the
+ *  sub-table's own `tableBuilt` re-measures once it is really built.
+ ***************************************************************/
+function ac_toggle_conn_expanded(gobj, event, kw, src)
+{
+    let conn_id = (kw && kw.conn_id) || "";
+    let config = gobj_find_service("treedb_config", false);
+    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
+    if(!conn) {
+        log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' to fold`);
+        return -1;
+    }
+    let expanded = !treedb_config_is_conn_expanded(config, conn_id);
+    gobj_send_event(config, "EV_SET_CONN_EXPANDED",
+        {conn_id: conn_id, expanded: expanded}, gobj);
+
+    let table = gobj_read_attr(gobj, "tabulator");
+    if(!table) {
+        return 0;
+    }
+    try {
+        let row = table.getRow(conn_id);
+        if(row) {
+            row.reformat();
+            if(!expanded) {
+                row.normalizeHeight();
+                resize_parent(gobj);
+            }
+        }
+    } catch(e) {
+        log_warning(`${GCLASS_NAME}: table mid-rebuild: ${e}`);
+    }
+    return 0;
+}
+
+/***************************************************************
  *  The ✕ of a connection row: ask first (removing a connection drops its
  *  open tabs and its saved Tranger views with it). The confirm's resolved
  *  promise is an OS notification like any other — it becomes an event, and
@@ -1318,6 +1394,7 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_SERVICE",       ac_toggle_service,       null],
             ["EV_REFRESH_SERVICES",     ac_refresh_services,     null],
             ["EV_TOGGLE_CONN_ENABLED",  ac_toggle_conn_enabled,  null],
+            ["EV_TOGGLE_CONN_EXPANDED", ac_toggle_conn_expanded, null],
             ["EV_REMOVE_CONN",          ac_remove_conn,          null],
             ["EV_CONFIRM_REMOVE_CONN",  ac_confirm_remove_conn,  null],
             ["EV_EXPORT_CONNS",         ac_export_conns,         null],
@@ -1337,6 +1414,7 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_SERVICE",       0],
         ["EV_REFRESH_SERVICES",     0],
         ["EV_TOGGLE_CONN_ENABLED",  0],
+        ["EV_TOGGLE_CONN_EXPANDED", 0],
         ["EV_REMOVE_CONN",          0],
         ["EV_CONFIRM_REMOVE_CONN",  0],
         ["EV_EXPORT_CONNS",         0],

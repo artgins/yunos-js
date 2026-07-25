@@ -32,6 +32,11 @@
  *        - active_tabs: the last-active tab per workspace, so returning to a
  *          workspace (or a fresh load) restores it.
  *
+ *        - expanded_conns: which connections show their services sub-table
+ *          unfolded in Settings ({conn_id: true}; absent = folded, the
+ *          default). Pure view state, kept out of `connections` on purpose:
+ *          every change of that list makes the app root reconcile transports.
+ *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
@@ -64,6 +69,7 @@ SDATA(data_type_t.DTP_JSON,     "connections",      sdata_flag_t.SDF_PERSIST, "[
 SDATA(data_type_t.DTP_JSON,     "selected_treedbs", sdata_flag_t.SDF_PERSIST, "{}", "Open (conn,treedb) tabs per workspace: {workspace: [{id,conn_id,treedb_name,label}]}"),
 SDATA(data_type_t.DTP_JSON,     "active_tabs",      sdata_flag_t.SDF_PERSIST, "{}", "Last-active tab per workspace: {workspace: sel_id}"),
 SDATA(data_type_t.DTP_JSON,     "tranger_views",    sdata_flag_t.SDF_PERSIST, "{}", "Open Tranger key-views per connection: {conn_id: [{treedb_name,topic,key,mode,match_cond}]}"),
+SDATA(data_type_t.DTP_JSON,     "expanded_conns",   sdata_flag_t.SDF_PERSIST, "{}", "Connections whose services sub-table is unfolded in Settings: {conn_id: true}"),
 SDATA(data_type_t.DTP_INTEGER,  "live_max",         sdata_flag_t.SDF_PERSIST, 1000, "Rows kept in a Live card's rolling buffer (oldest dropped at the cap)"),
 SDATA_END()
 ];
@@ -327,7 +333,74 @@ function do_set_connections(gobj, list)
         write_tranger_views(gobj, tv);
     }
 
+    /*  Same for the fold state of a connection that is gone: an id is never
+     *  reused, so its entry would sit in localStorage forever.  */
+    let expanded = read_expanded_conns(gobj);
+    let folded = false;
+    for(let conn_id in expanded) {
+        if(!alive[conn_id]) {
+            delete expanded[conn_id];
+            folded = true;
+        }
+    }
+    if(folded) {
+        gobj_write_attr(gobj, "expanded_conns", expanded);
+        persist(gobj, "expanded_conns");
+    }
+
     gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: clean});
+}
+
+/***************************************************************
+ *  Which connections show their services sub-table unfolded in
+ *  Settings. Persisted so the page comes back the way it was left, and
+ *  dropped with the connection like the Tranger views below.
+ *
+ *  It lives in its OWN attr, not as a field of the connection, and it
+ *  publishes NOTHING: `connections` is the wiring (url, intent,
+ *  discovered services) and every change of it makes the app root
+ *  reconcile transports and the pickers refresh — a fold/unfold is a
+ *  view state that must not wake any of that. Shape: {conn_id: true};
+ *  only unfolded ones are stored, so the default is folded.
+ ***************************************************************/
+function read_expanded_conns(gobj)
+{
+    let raw = gobj_read_attr(gobj, "expanded_conns");
+    if(raw && typeof raw === "object" && !Array.isArray(raw)) {
+        return raw;
+    }
+    return {};
+}
+
+/***************************************************************
+ *  Is this connection's sub-table unfolded? (false when never touched)
+ ***************************************************************/
+function treedb_config_is_conn_expanded(gobj, conn_id)
+{
+    if(!conn_id) {
+        return false;
+    }
+    return !!read_expanded_conns(gobj)[conn_id];
+}
+
+/***************************************************************
+ *  Fold / unfold one connection's sub-table, persist. No event: the
+ *  caller repaints the row it just toggled.
+ ***************************************************************/
+function do_set_conn_expanded(gobj, conn_id, expanded)
+{
+    if(!conn_id) {
+        log_error(`${gobj_short_name(gobj)}: EV_SET_CONN_EXPANDED without conn_id`);
+        return;
+    }
+    let map = read_expanded_conns(gobj);
+    if(expanded) {
+        map[conn_id] = true;
+    } else {
+        delete map[conn_id];
+    }
+    gobj_write_attr(gobj, "expanded_conns", map);
+    persist(gobj, "expanded_conns");
 }
 
 /***************************************************************
@@ -648,6 +721,12 @@ function ac_set_conn_enabled(gobj, event, kw, src)
     return 0;
 }
 
+function ac_set_conn_expanded(gobj, event, kw, src)
+{
+    do_set_conn_expanded(gobj, (kw && kw.conn_id) || "", !!(kw && kw.expanded));
+    return 0;
+}
+
 function ac_toggle_selected(gobj, event, kw, src)
 {
     let sel = kw ? kw.sel : null;
@@ -733,6 +812,7 @@ function create_gclass(gclass_name)
             ["EV_SET_CONN_SERVICES",     ac_set_conn_services,     null],
             ["EV_STORE_SCANNED_SERVICES", ac_store_scanned_services, null],
             ["EV_SET_CONN_ENABLED",      ac_set_conn_enabled,      null],
+            ["EV_SET_CONN_EXPANDED",     ac_set_conn_expanded,     null],
             ["EV_TOGGLE_SELECTED",       ac_toggle_selected,       null],
             ["EV_REMOVE_SELECTED",       ac_remove_selected,       null],
             ["EV_SET_ACTIVE_TAB",        ac_set_active_tab,        null],
@@ -751,6 +831,7 @@ function create_gclass(gclass_name)
         ["EV_SET_CONN_SERVICES",        0],
         ["EV_STORE_SCANNED_SERVICES",   0],
         ["EV_SET_CONN_ENABLED",         0],
+        ["EV_SET_CONN_EXPANDED",        0],
         ["EV_TOGGLE_SELECTED",          0],
         ["EV_REMOVE_SELECTED",          0],
         ["EV_SET_ACTIVE_TAB",           0],
@@ -807,4 +888,5 @@ export {
     LIVE_MAX_MIN,
     LIVE_MAX_MAX,
     treedb_config_get_tranger_views,
+    treedb_config_is_conn_expanded,
 };

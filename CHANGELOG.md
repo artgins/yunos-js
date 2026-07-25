@@ -22,6 +22,28 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ## Unreleased
 
+### gui_treedb
+
+- **The services sub-table of a connection folds and unfolds** (Settings). A
+  chevron on the left of each connection row opens or closes its nested
+  services table; rows with nothing discovered yet show no chevron, since
+  there is no sub-table to fold. The click is an event
+  (`EV_TOGGLE_CONN_EXPANDED`) like every other action of that table, and the
+  action repaints ONLY the toggled row (`row.reformat()`), never a
+  `redraw()` — a redraw detaches every row element and takes the live
+  sub-Tabulators with it. Folding also calls `normalizeHeight()`: the row is
+  still pinned to the inline height it got while the sub-table hung under
+  its cells, so without it the row keeps a hole.
+- **A fresh connection starts folded, and the fold state is persisted** in
+  its own `expanded_conns` attr of `C_TREEDB_CONFIG` (`{conn_id: true}`,
+  absent = folded), pruned with the connection like its Tranger views. It is
+  deliberately NOT a field of `connections`: every change of that list makes
+  the app root reconcile transports and the pickers refresh, and a fold is
+  view state that must wake none of it — so this attr publishes nothing.
+  Collapsed by default is also the cheaper start: each sub-table is a
+  Tabulator with its own ResizeObserver and an async re-measure of the
+  parent.
+
 ## 0.6.0 — 2026-07-25
 
 - **feat(gui_agent): the console response font size is configurable**, mirroring
