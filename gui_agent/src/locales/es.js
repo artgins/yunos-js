@@ -222,6 +222,8 @@ const es = {
         "site map hint":     "Cada posición alcanzable de la app es una URL. Pulsa una ruta para ir allí.",
         "print":             "Imprimir",
         "you are here":      "Estás aquí",
+        "shown above":       "Mostrado arriba",
+        "show references":   "Mostrar referencias",
         "other routes":      "Otras rutas",
         "toolbar":           "Barra de herramientas",
         "about":             "Acerca de",

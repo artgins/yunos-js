@@ -1248,7 +1248,7 @@ function show_data(gobj, data, schema, raw, comment, result)
             text = data;
         } else {
             try {
-                text = JSON.stringify(data, null, 2);
+                text = JSON.stringify(data, null, 4);
             } catch(e) {
                 text = String(data);
             }

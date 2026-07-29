@@ -171,6 +171,8 @@ const en = {
         "site map hint": "Every reachable position of the app is a URL. Click a route to jump there.",
         "print": "Print",
         "you are here": "You are here",
+        "shown above": "Shown above",
+        "show references": "Show references",
         "other routes": "Other routes",
         "settings": "Settings",
         "connections": "Connections",
