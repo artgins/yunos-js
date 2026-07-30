@@ -24,6 +24,20 @@ this repo, outside yunetas, will not resolve those `file:` deps — by design.)
 
 ### gui_treedb
 
+- **Talk to the shell through `yui_shell_of()`, never through
+  `gobj_parent()`.** `ac_child_selected` (mirror the selected topic into the
+  URL) and `ac_remove_conn` (the confirm dialog) took the parent to be the
+  shell. That holds only while a view hangs off a route the shell itself
+  declares: under a `C_YUI_NODE` tree the parent is the NODE, which has no
+  `use_hash` and no `item_index` and does not declare `EV_ROUTE_REQUESTED`, so
+  the first topic-tab click logs three errors and dies in `navigate_to()` with
+  `item_index is undefined`. gui_treedb mounts on declared routes today, so
+  this was latent here — it is what actually broke yunovatios, whose treedb
+  views did move under a node tree. `yui_shell_of()` walks up to the
+  `C_YUI_SHELL` and holds for both hosts. The EV_ROUTE_CHANGED subscription in
+  `mt_start`/`mt_stop` keeps using the parent on purpose (a subscription goes
+  to whoever PUBLISHES) and its variable is now named `host` to keep the two
+  apart.
 - **The services sub-table of a connection folds and unfolds** (Settings). A
   chevron on the left of each connection row opens or closes its nested
   services table; rows with nothing discovered yet show no chevron, since

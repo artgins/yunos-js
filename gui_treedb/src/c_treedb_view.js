@@ -36,7 +36,7 @@ import {
     createElement2,
 } from "@yuneta/gobj-js";
 
-import {yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_shell_navigate, yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {treedb_links_get_iev} from "./c_treedb_links.js";
 
@@ -155,9 +155,15 @@ function mt_start(gobj)
      *  the old pointer would talk to a destroyed gobj forever (looks
      *  connected, never loads). ac_transport_open rebinds it in place.
      */
-    let shell = gobj_parent(gobj);
-    if(shell) {
-        gobj_subscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
+    /*  The HOST, not "the shell": this is a subscription, so it must go to
+     *  whoever PUBLISHES EV_ROUTE_CHANGED, which is the parent. (A C_YUI_NODE
+     *  host SENDS it instead of publishing it, so a view mounted under a node
+     *  tree would have to test gobj_has_output_event() before subscribing —
+     *  gui_treedb mounts on declared routes only, so the parent is the shell.)
+     *  To TALK to the shell use yui_shell_of() — see ac_child_selected. */
+    let host = gobj_parent(gobj);
+    if(host) {
+        gobj_subscribe_event(host, "EV_ROUTE_CHANGED", {}, gobj);
     }
     let links = gobj_find_service("treedb_links", false);
     if(links) {
@@ -180,10 +186,10 @@ function mt_stop(gobj)
         clearTimeout(priv.rebind_timer);
         priv.rebind_timer = null;
     }
-    /*  Unsubscribe the shell's EV_ROUTE_CHANGED while the parent is alive. */
-    let shell = gobj_parent(gobj);
-    if(shell) {
-        gobj_unsubscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
+    /*  Unsubscribe the host's EV_ROUTE_CHANGED while the parent is alive. */
+    let host = gobj_parent(gobj);
+    if(host) {
+        gobj_unsubscribe_event(host, "EV_ROUTE_CHANGED", {}, gobj);
     }
     let links = gobj_find_service("treedb_links", false);
     if(links) {
@@ -452,7 +458,13 @@ function ac_child_selected(gobj, event, kw, src)
         return 0;
     }
     let base_route = gobj_read_attr(gobj, "base_route");
-    let shell = gobj_parent(gobj);
+    /*  The SHELL, resolved by walking up — NOT the parent. Today the parent
+     *  IS the shell (this view is mounted on a declared route), but the day
+     *  it hangs off a C_YUI_NODE the parent is the node: no `use_hash`, no
+     *  `item_index`, no EV_ROUTE_REQUESTED, and navigate_to() dies on the
+     *  first tab click. That is exactly how it broke in yunovatios, whose
+     *  treedb views moved under a node tree. */
+    let shell = yui_shell_of(gobj);
     /*  An EMPTY topic means "back to the topic-cards grid" (TOPICS only): drop
      *  the <topic> segment so a reload re-lands on the grid. A null/undefined
      *  seg is just a stray echo — ignore it (keep the URL). */

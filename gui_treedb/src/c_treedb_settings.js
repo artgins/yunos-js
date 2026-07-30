@@ -58,7 +58,6 @@ import {
     gobj_unsubscribe_event,
     gobj_find_service,
     gobj_send_event,
-    gobj_parent,
     gobj_is_destroying,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
@@ -1232,7 +1231,7 @@ function ac_toggle_conn_expanded(gobj, event, kw, src)
 function ac_remove_conn(gobj, event, kw, src)
 {
     let conn_id = (kw && kw.conn_id) || "";
-    let shell = gobj_parent(gobj);
+    let shell = yui_shell_of(gobj);
     if(!shell) {
         log_error(`${gobj_short_name(gobj)}: no shell, cannot confirm the removal`);
         return -1;
