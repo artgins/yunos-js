@@ -27,7 +27,6 @@ import {
     SDATA, SDATA_END, data_type_t,
     gclass_create, log_error,
     gobj_read_attr, gobj_write_attr,
-    gobj_create_service,
     gobj_find_service,
     gobj_parent, gobj_name,
     gobj_subscribe_event, gobj_unsubscribe_event, gobj_send_event,
@@ -39,6 +38,12 @@ import {
 import {yui_shell_navigate, yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {treedb_links_get_iev} from "./c_treedb_links.js";
+/*  From the source file, not the barrel: this pair drags nothing in, and
+    the barrel re-exports the whole library (maps included).  */
+import {
+    yui_mount_service_view,
+    expose_view_container,
+} from "@yuneta/gobj-ui/src/c_yui_service_view.js";
 
 
 /***************************************************************
@@ -265,7 +270,6 @@ function build_hosted_view(gobj, remote)
      *  library. So it is passed to the view that HAS it, and no unused attr is
      *  added to the shared library to paper over the mismatch.  */
     let kw = {
-        gobj_remote_yuno: remote,
         treedb_name:      gobj_read_attr(gobj, "treedb_name"),
         system:           gobj_read_attr(gobj, "system")
     };
@@ -290,26 +294,26 @@ function build_hosted_view(gobj, remote)
         kw.base_route = gobj_read_attr(gobj, "base_route");
     }
 
-    let view = gobj_create_service(
-        service_name(gobj),
-        view_gclass,
-        kw,
-        gobj
-    );
+    /*  Creating it as a NAMED SERVICE and injecting the transport is
+     *  gobj-ui's yui_mount_service_view() since 5.5.0 — the same wrapper
+     *  had been written four times in three repos.  The transport goes in
+     *  already resolved: ours is per CONNECTION (treedb_links by conn_id),
+     *  not the app's single __remote_service__, and that resolution is app
+     *  logic that does not belong in the library.  */
+    let view = yui_mount_service_view(gobj, {
+        gclass:    view_gclass,
+        name:      service_name(gobj),
+        kw:        kw,
+        transport: remote
+    });
     priv.view = view;
     if(!view) {
-        log_error(`${GCLASS_NAME}: cannot create hosted view '${view_gclass}'`);
-        return null;
+        return null;    /* Error already logged */
     }
 
     /*  The treedb view builds its own $container in ITS mt_create; expose
      *  it as ours so the shell mounts/toggles the same DOM.  */
-    let $c = gobj_read_attr(view, "$container");
-    if(!$c) {
-        log_error(`${GCLASS_NAME}: hosted view '${view_gclass}' did not expose $container`);
-        $c = createElement2(["div", {}, ""]);
-    }
-    gobj_write_attr(gobj, "$container", $c);
+    expose_view_container(gobj, view);
     return view;
 }
 
