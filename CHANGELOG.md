@@ -21,6 +21,21 @@ on its own, outside the yunetas superproject.
 
 ## Unreleased
 
+### Both yunos
+
+- **The timers stay out of a `machine` trace.** Both `main.js` now carry the
+  block every C `main()` has, which the JS side had never had:
+
+  ```js
+  gobj_set_gclass_no_trace("C_TIMER", "machine", true);
+  gobj_set_global_no_trace("timer_periodic", true);
+  ```
+
+  `machine` traces every event by design — timers included, exactly as
+  `gobj.c` does it — so turning it on to follow a click drowned in the yuno's
+  one-second periodic tick. Needs `@yuneta/gobj-js ^7.9.9`, which adds the
+  missing `gobj_set_gclass_no_trace()`.
+
 ### gui_agent
 
 - **The console's copy button works for TABLE answers.** It was created

@@ -21,6 +21,8 @@
  ***********************************************************************/
 import {
     gobj_start_up,
+    gobj_set_gclass_no_trace,
+    gobj_set_global_no_trace,
     db_load_persistent_attrs,
     db_save_persistent_attrs,
     db_remove_persistent_attrs,
@@ -159,6 +161,15 @@ function main()
         null,                       // global_command_parser_fn
         null                        // global_stats_parser_fn
     );
+
+    /*------------------------------------------------*
+     *          Traces
+     *------------------------------------------------*/
+    /*  Avoid timer trace, too much information: `machine` traces every
+     *  event by design, so a one-second periodic tick buries whatever
+     *  you were following. Same block every C main() carries.  */
+    gobj_set_gclass_no_trace("C_TIMER", "machine", true);
+    gobj_set_global_no_trace("timer_periodic", true);
 
     /*------------------------------------------------*
      *          Create the __yuno__
