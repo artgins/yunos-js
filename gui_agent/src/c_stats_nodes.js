@@ -29,6 +29,10 @@ import {
     gobj_parent, gobj_name,
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_send_event,
+    gobj_create_pure_child,
+    gobj_start,
+    set_timeout,
+    clear_timeout,
     gobj_subscribe_event,
     gobj_unsubscribe_event,
     gobj_short_name,
@@ -54,7 +58,11 @@ import {
     stats_sel_id,
 } from "./c_agent_config.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
-import {yui_copy_table_json} from "@yuneta/gobj-ui/src/yui_clipboard.js";
+import {
+    yui_copy_table_json,
+    yui_button_mark_done,
+    yui_button_unmark,
+} from "@yuneta/gobj-ui/src/yui_clipboard.js";
 
 
 /***************************************************************
@@ -99,6 +107,8 @@ function mt_create(gobj)
 {
     let priv = gobj.priv;
     priv.table_id = `statnodes_table_${gobj_name(gobj)}`;
+
+    priv.gobj_timer = gobj_create_pure_child(gobj_name(gobj), "C_TIMER", {}, gobj);
     priv.nodes = [];              /*  parsed list-agents (node rows)  */
     priv.yunos = {};              /*  node id -> [yuno rows] (loaded)  */
     priv.render_pending = false;  /*  one-shot setData debounce  */
@@ -138,6 +148,8 @@ function mt_start(gobj)
 {
     let priv = gobj.priv;
 
+    gobj_start(priv.gobj_timer);
+
     build_dom(gobj);
     create_table(gobj);
     render_state(gobj);
@@ -154,6 +166,8 @@ function mt_start(gobj)
  ***************************************************************/
 function mt_stop(gobj)
 {
+    clear_timeout(gobj.priv.gobj_timer);
+
     let priv = gobj.priv;
     let shell = yui_shell_of(gobj);
     if(shell) {
@@ -389,6 +403,8 @@ function build_dom(gobj)
             click: () => gobj_send_event(gobj, "EV_COPY_JSON", {}, gobj)
         }]
     );
+
+    priv.$copy = $copy;
 
     priv.$toolbar = createElement2(
         ["div", {class: "STATS_TOOLBAR is-flex is-align-items-center mb-2", style: "gap:0.5rem;"}, [
@@ -673,12 +689,29 @@ function ac_copy_json(gobj, event, kw, src)
 {
     let tabulator = gobj_read_attr(gobj, "tabulator");
 
+    let priv = gobj.priv;
+
     yui_copy_table_json(tabulator).then(function(copied) {
         if(!copied) {
             log_error(`${gobj_short_name(gobj)}: nothing copied to the clipboard`);
+            return;
         }
+        /*  Say it happened: the clipboard gives no sign of its own.
+         *  Going back is EV_TIMEOUT, an FSM transition, not a hidden
+         *  setTimeout.  */
+        yui_button_mark_done(priv.$copy, t("copied"));
+        set_timeout(priv.gobj_timer, 1200);
     });
 
+    return 0;
+}
+
+/***************************************************************
+ *  The "copied" mark has had its moment.
+ ***************************************************************/
+function ac_timeout(gobj, event, kw, src)
+{
+    yui_button_unmark(gobj.priv.$copy);
     return 0;
 }
 
@@ -831,7 +864,8 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",             ac_on_close,               null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,      null],
             ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null],
-            ["EV_COPY_JSON",            ac_copy_json,              null]
+            ["EV_COPY_JSON",            ac_copy_json,              null],
+            ["EV_TIMEOUT",              ac_timeout,                null]
         ]]
     ];
 
@@ -844,7 +878,8 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",             0],
         ["EV_MT_COMMAND_ANSWER",    0],
         ["EV_SELECTED_NODES_CHANGED", 0],
-        ["EV_COPY_JSON",            0]
+        ["EV_COPY_JSON",            0],
+        ["EV_TIMEOUT",              0]
     ];
 
     __gclass__ = gclass_create(

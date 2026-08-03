@@ -23,6 +23,24 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **The console's copy button works for TABLE answers.** It was created
+  disabled and only re-enabled by the branch that renders a `<pre>`, so every
+  command that answers with a table — `top`, `list-yunos`, most of them — left
+  the button dead. Table answers now copy their rows as JSON, and the whole
+  view drops its private clipboard code (a fifth copy of it) for the shared
+  helpers.
+
+- **Each history row runs its command in one gesture.** Picking a line from
+  Recent/Frequent only dropped it in the input; running it meant aiming at
+  Execute afterwards. A ▶ button on the row does both, as `EV_RUN_HISTORY`
+  through the FSM. The rows also carry logical class names now
+  (`HISTORY_RUN` / `HISTORY_ADD` / `HISTORY_DEL`).
+
+- **Nodes and Statistics say "Copied"** for a moment after copying — a check
+  glyph and the word, restored by `EV_TIMEOUT` from each view's own `C_TIMER`,
+  not a loose `setTimeout`. A clipboard that works silently reads exactly like
+  one that failed.
+
 - **Nodes and Statistics hand their table over as JSON** (`@yuneta/gobj-ui`
   `^5.9.0`). A *Copy JSON* button in each toolbar puts on the clipboard what
   the user is looking at: the checked rows if any are checked, otherwise every

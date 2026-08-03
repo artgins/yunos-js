@@ -45,6 +45,7 @@ import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
+import {yui_copy_text, yui_copy_table_json} from "@yuneta/gobj-ui/src/yui_clipboard.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
@@ -948,8 +949,19 @@ function fill_hist_popover(gobj)
         entries.sort((a, b) => (b.count - a.count) || (b.last - a.last));
     }
     for(let e of entries) {
+        let $run = createElement2(
+            ["button", {class: "HISTORY_RUN button is-small is-ghost", type: "button",
+                        title: t("run this command"), "aria-label": t("run this command"),
+                        "data-i18n-title": "run this command",
+                        "data-i18n-aria-label": "run this command"},
+                [["span", {class: "icon is-small"}, [["i", {class: "yi-play"}]]]]]);
+        $run.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            gobj_send_event(gobj, "EV_RUN_HISTORY", {cmd: e.cmd}, gobj);
+        });
         let $add = createElement2(
-            ["button", {class: "button is-small is-ghost", type: "button",
+            ["button", {class: "HISTORY_ADD button is-small is-ghost", type: "button",
                         title: t("add to shortkeys"), "aria-label": t("add to shortkeys"),
                         "data-i18n-title": "add to shortkeys",
                         "data-i18n-aria-label": "add to shortkeys"},
@@ -960,7 +972,7 @@ function fill_hist_popover(gobj)
             insert_add_shortkey(gobj, e.cmd);
         });
         let $del = createElement2(
-            ["button", {class: "button is-small is-ghost", type: "button",
+            ["button", {class: "HISTORY_DEL button is-small is-ghost", type: "button",
                         title: t("remove from history"), "aria-label": t("remove from history"),
                         "data-i18n-title": "remove from history",
                         "data-i18n-aria-label": "remove from history"},
@@ -981,6 +993,7 @@ function fill_hist_popover(gobj)
                 ]
             ]
         );
+        $item.appendChild($run);
         $item.appendChild($add);
         $item.appendChild($del);
         $item.addEventListener("click", (ev) => {
@@ -989,6 +1002,25 @@ function fill_hist_popover(gobj)
         });
         $c.appendChild($item);
     }
+}
+
+/***************************************************************
+ *  Run a history entry in one gesture: drop it in the input and
+ *  send it. Picking a line from the history and then having to
+ *  aim at Execute was two steps for one intention.
+ ***************************************************************/
+function ac_run_history(gobj, event, kw, src)
+{
+    let cmd = kw_get_str(gobj, kw, "cmd", "", 0);
+
+    if(!cmd) {
+        log_error(`${GCLASS_NAME}: EV_RUN_HISTORY without a command`);
+        return -1;
+    }
+
+    insert_command(gobj, cmd);
+    send_command(gobj);
+    return 0;
 }
 
 /***************************************************************
@@ -1342,45 +1374,29 @@ function set_copy_enabled(gobj, enabled)
 function copy_response(gobj)
 {
     let priv = gobj.priv;
+
+    /*  Table mode: the rows, as JSON — the selection if there is one,
+     *  otherwise whatever the current filters leave on screen.  */
+    if(priv.tabulator) {
+        yui_copy_table_json(priv.tabulator).then(function(copied) {
+            if(copied) {
+                flash_copied(gobj);
+            }
+        });
+        return;
+    }
+
+    /*  Text mode: the <pre> as it reads.  */
     let pre = priv.$data ? priv.$data.querySelector(".CONSOLE_RESPONSE_TEXT") : null;
     let text = pre ? pre.textContent : "";
     if(!text) {
         return;
     }
-    if(navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => {
+    yui_copy_text(text).then(function(ok) {
+        if(ok) {
             flash_copied(gobj);
-        }).catch(() => {
-            if(legacy_copy(text)) {
-                flash_copied(gobj);
-            }
-        });
-    } else if(legacy_copy(text)) {
-        flash_copied(gobj);
-    }
-}
-
-/***************************************************************
- *  Clipboard fallback: a hidden textarea + execCommand("copy").
- *  Returns true if the copy command was accepted.
- ***************************************************************/
-function legacy_copy(text)
-{
-    let ok = false;
-    try {
-        let ta = document.createElement("textarea");
-        ta.value = text;
-        ta.setAttribute("readonly", "");
-        ta.style.position = "absolute";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        ok = document.execCommand("copy");
-        document.body.removeChild(ta);
-    } catch(e) {
-        ok = false;
-    }
-    return ok;
+        }
+    });
 }
 
 /***************************************************************
@@ -1432,6 +1448,11 @@ function render_table(gobj, schema, data)
         maxHeight:      "100%",
         placeholder:    "—"
     });
+
+    /*  A table answer IS copyable — as the rows, in JSON. Without this
+     *  the button stayed dead for every command that answers with a
+     *  table (`top`, `list-yunos`…), which is most of them.  */
+    set_copy_enabled(gobj, true);
 }
 
 /***************************************************************
@@ -1961,7 +1982,8 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",          ac_on_close,          null],
             ["EV_ON_OPEN_ERROR",     ac_on_open_error,     null],
             ["EV_ON_ID_NAK",         ac_on_id_nak,         null],
-            ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null]
+            ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
+            ["EV_RUN_HISTORY",       ac_run_history,       null]
         ]]
     ];
 
@@ -1974,7 +1996,8 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",          0],
         ["EV_ON_OPEN_ERROR",     0],
         ["EV_ON_ID_NAK",         0],
-        ["EV_MT_COMMAND_ANSWER", 0]
+        ["EV_MT_COMMAND_ANSWER", 0],
+        ["EV_RUN_HISTORY",       0]
     ];
 
     __gclass__ = gclass_create(
