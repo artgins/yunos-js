@@ -17,9 +17,10 @@ the submodule flow. This file only adds the yunos-js-specific layer on top.
 
 - The JS **yunos** (browser SPAs): `gui_agent`, `gui_treedb`. The most
   active-changing JS layer; it evolves on `main` with its own `CHANGELOG.md`.
-- Depends on `@yuneta/gobj-js` / `@yuneta/gobj-ui` (v2) by `file:`
-  (`../../../kernel/js/…`) — it must be checked out at its submodule path for
-  those deps to resolve.
+- Depends on `@yuneta/gobj-js` / `@yuneta/gobj-ui` (v2) from the **npm
+  registry**, like wattyzer — not on the `kernel/js/*` checkouts. So a local
+  edit to those libraries does NOT reach these SPAs: publish the library, then
+  raise the range in the yuno's `package.json`.
 - To ship: commit on `main` here, then **bump the `yunos/js` submodule pointer
   in yunetas**.
 - gui_agent deploys are a build + rsync via its `deploy-com.sh` — a commit

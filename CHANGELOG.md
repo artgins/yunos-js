@@ -15,12 +15,44 @@ Contents:
   (auth_bff login + access_token forwarded in each C_IEVENT_CLI identity_card).
 - Keycloak login-form / BFF notes and `FUTURE-JS.md`.
 
-Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` via local `file:`
-dependencies (`../../../kernel/js/…`) that resolve within the yunetas
-superproject, where this repo is mounted at `yunos/js`. (A standalone clone of
-this repo, outside yunetas, will not resolve those `file:` deps — by design.)
+Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
+registry**, the same way wattyzer does. A standalone clone of this repo builds
+on its own, outside the yunetas superproject.
 
 ## Unreleased
+
+### Both yunos
+
+- **`@yuneta/gobj-js` and `@yuneta/gobj-ui` come from the npm registry.** They
+  were `file:` dependencies on the `kernel/js/*` submodule checkouts, which
+  tied a build of these SPAs to the yunetas superproject and to whatever was
+  in those working trees. They are now ranges (`^7.9.6` / `^5.8.2`) resolved
+  from the registry, so a build is reproducible from this repo alone and both
+  yunos consume exactly what wattyzer consumes.
+
+  The `file:` deps were symlinks, which forced `resolve.preserveSymlinks` in
+  `vite.config.js` — and that made Vite load duplicate module instances, which
+  is why the config carried the `dedupe` list and the `src/` aliases. Both the
+  flag and the aliases are gone; `dedupe` stays and now also lists
+  `@yuneta/gobj-js`, because the app and gobj-ui both pull it and a split
+  instance means two `__yuno__` trees.
+
+  **Consequence:** a local edit under `yunetas/kernel/js/**` no longer reaches
+  these SPAs. To pick up library work: commit + bump + `npm publish` in the
+  library repo, bump the submodule pointer in yunetas, then raise the range in
+  `package.json` here.
+
+- **Installable as a WebAPK.** Both yunos now ship a complete web app manifest
+  (`display: standalone`, `start_url`, `scope`, 192/512 PNG icons and a
+  **maskable** 512 variant) plus a raster `apple-touch-icon`, so Android
+  offers to install them and the launcher does not letterbox the icon inside a
+  white circle. Icons are rendered from each yuno's existing SVG mark. No
+  service worker is involved: Chrome no longer requires one to consider a page
+  installable, and these consoles are useless offline anyway.
+
+  `gui_treedb` already had a `site.webmanifest`, but it was never installable:
+  it declared no `display` (so it defaulted to `browser`) and its only icon was
+  an SVG, which Chrome does not accept for the install icon.
 
 ### gui_treedb
 

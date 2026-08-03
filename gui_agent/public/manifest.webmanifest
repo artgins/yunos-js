@@ -1,15 +1,15 @@
 {
-    "name": "TreeDB GUI",
-    "short_name": "TreeDB",
-    "description": "Browse and edit yuneta treedb graphs: topics, nodes, links and schema.",
+    "name": "Yuneta Agent Console",
+    "short_name": "Agent",
+    "description": "Operate yuneta agents: control-plane CLI, treedb, statistics and terminal.",
     "id": "/",
     "start_url": "/",
     "scope": "/",
     "display": "standalone",
     "orientation": "any",
     "lang": "en",
-    "background_color": "#115E59",
-    "theme_color": "#0D9488",
+    "background_color": "#1E3A8A",
+    "theme_color": "#1F3A5F",
     "categories": ["utilities", "productivity"],
     "icons": [
         {

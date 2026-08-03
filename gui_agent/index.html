@@ -14,7 +14,15 @@
     <meta name="robots" content="noindex, nofollow">
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/agent-mark.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/agent-mark.svg">
+    <!--
+        apple-touch-icon must be a raster: Safari ignores an SVG here.
+        The manifest is what makes this installable as a WebAPK on Android
+        (name + start_url + display:standalone + 192/512 PNG icons); the
+        maskable variant is what stops the launcher from letterboxing the
+        icon inside a white circle.
+    -->
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <link rel="manifest" href="/manifest.webmanifest">
     <!--
         CSP_PLACEHOLDER is replaced at build time by the @yuneta/gobj-ui
         html-transform Vite plugin. The connect-src origins are read from

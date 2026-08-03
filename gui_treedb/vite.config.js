@@ -1,29 +1,35 @@
+/*
+ *  @yuneta/gobj-js and @yuneta/gobj-ui come from the npm REGISTRY, not from
+ *  the kernel/js checkouts — same model as wattyzer/gui. gobj-ui is still
+ *  imported as source by package specifier (@yuneta/gobj-ui/src/*.js, exports
+ *  map "./src/*"); gobj-js publishes only dist/, so it resolves to its bundle.
+ *
+ *  Consequence: a local edit under yunetas/kernel/js does NOT reach this app.
+ *  To pick up library work: commit + bump + npm publish there, bump the
+ *  submodule pointer in yunetas, then raise the range in package.json.
+ */
 import { defineConfig } from "vite";
-import path from "path";
-import { fileURLToPath } from "url";
 import { yunetaHtmlPlugin } from "@yuneta/gobj-ui/vite-plugin-yuneta-html.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
     resolve: {
-        preserveSymlinks: true,
         /*
-         *  WARNING: preserveSymlinks:true makes Vite load DUPLICATE module
-         *  instances for the symlinked `file:` deps (@yuneta/gobj-ui here).
-         *  gobj-ui ships its own node_modules copy of every shared lib below,
-         *  so each must be deduped or the app and the vendored gobj-ui views
-         *  each get their own instance / internal state — hard-to-debug
-         *  failures. Seen: i18next split → col_label's `t()` ran on an
-         *  UNINITIALIZED instance → every treedb column header rendered blank
-         *  (Tabulator's `&nbsp;` placeholder); @antv/g6 split → "extension
-         *  drag-canvas has been registered before" and a broken Graphs view.
-         *  (@yuneta/gobj-js and @yuneta/gobj-ui are already single instances
-         *  via the `src/` aliases below, so they are NOT listed here — unlike
-         *  wattyzer, which consumes them by specifier and must dedupe them.)
+         *  WARNING: gobj-ui declares this whole list as peerDependencies and
+         *  npm installs its own copies, so a range that drifts from ours gets
+         *  a NESTED copy. Every dependency shared between this app and those
+         *  packages — and any shared singleton gobj-ui relies on — MUST be
+         *  listed here, otherwise each gets its own internal state (__yuno__,
+         *  i18next store, etc.) causing hard-to-debug failures: a component
+         *  that imports a module-level singleton (i18next's `t`) binds an
+         *  uninitialized second copy and renders blank. Seen: i18next split →
+         *  col_label's `t()` ran on an UNINITIALIZED instance → every treedb
+         *  column header rendered blank (Tabulator's `&nbsp;` placeholder);
+         *  @antv/g6 split → "extension drag-canvas has been registered
+         *  before" and a broken Graphs view.
          *  Mirror wattyzer/gui/vite.config.js when adding a shared lib.
          */
         dedupe: [
+            "@yuneta/gobj-js",
             "i18next",
             "@antv/g6",
             "maplibre-gl",
@@ -31,16 +37,6 @@ export default defineConfig({
             "tom-select",
             "uplot",
             "vanilla-jsoneditor",
-        ],
-        alias: [
-            {
-                find: "@yuneta/gobj-js",
-                replacement: path.resolve(__dirname, "../../../kernel/js/gobj-js/src/index.js"),
-            },
-            {
-                find: /^@yuneta\/gobj-ui($|\/)/,
-                replacement: path.resolve(__dirname, "../../../kernel/js/gobj-ui") + "/",
-            },
         ],
     },
     build: {
