@@ -21,6 +21,23 @@ on its own, outside the yunetas superproject.
 
 ## Unreleased
 
+### gui_agent
+
+- **Nodes and Statistics hand their table over as JSON** (`@yuneta/gobj-ui`
+  `^5.9.0`). A *Copy JSON* button in each toolbar puts on the clipboard what
+  the user is looking at: the checked rows if any are checked, otherwise every
+  row the current search leaves on screen. Until now the only way to pass that
+  list to anyone was a screenshot, which is how this came up.
+
+  The work is `yui_copy_table_json()` from the library, so the next table gets
+  it in three lines. The click is an event (`EV_COPY_JSON`) handled in the FSM,
+  not a function call from the DOM handler.
+
+  The label hides on a phone (`is-hidden-mobile`), decided against Spanish —
+  the longest locale — because "Copiar JSON" and "Recargar" do not both fit
+  beside the search box at 360px. `title` and `aria-label` carry the meaning in
+  the icon-only case.
+
 ### Both yunos
 
 - **`@yuneta/gobj-js` and `@yuneta/gobj-ui` come from the npm registry.** They

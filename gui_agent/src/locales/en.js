@@ -47,6 +47,8 @@ const en = {
         "add":               "Add",
         "new":               "New",
         "refresh":           "Refresh",
+        "copy json":         "Copy JSON",
+        "copy the rows shown as json": "Copy the rows shown as JSON",
         "search":            "Search",
         "select":            "Select",
         "are you sure":      "Are you sure?",

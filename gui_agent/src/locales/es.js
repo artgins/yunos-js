@@ -47,6 +47,8 @@ const es = {
         "add":               "Añadir",
         "new":               "Nuevo",
         "refresh":           "Recargar",
+        "copy json":         "Copiar JSON",
+        "copy the rows shown as json": "Copiar en JSON las filas mostradas",
         "search":            "Buscar",
         "select":            "Seleccionar",
         "are you sure":      "¿Está seguro?",
