@@ -34,6 +34,7 @@ import {
     msg_iev_get_stack,
     msg_iev_write_key,
     msg_iev_read_key,
+    gobj_send_event,
     kw_get_str,
     kw_get_local_storage_value,
     kw_set_local_storage_value,
