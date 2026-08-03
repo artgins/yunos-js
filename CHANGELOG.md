@@ -52,7 +52,15 @@ on its own, outside the yunetas superproject.
 
   `gui_treedb` already had a `site.webmanifest`, but it was never installable:
   it declared no `display` (so it defaulted to `browser`) and its only icon was
-  an SVG, which Chrome does not accept for the install icon.
+  an SVG, which Chrome does not accept for the install icon. That file is now
+  named `manifest.webmanifest`, the name every SPA in the family uses, so the
+  nginx `location` that declares its MIME type is identical everywhere.
+
+  The manifests carry **no `orientation`**. Declaring `orientation: "any"`
+  tells the system the app accepts any orientation, which overrides the
+  device's own rotation lock — the app rotates even when the user has locked
+  it. Leaving the member out lets the platform decide, which is what a console
+  wants.
 
 ### gui_treedb
 
