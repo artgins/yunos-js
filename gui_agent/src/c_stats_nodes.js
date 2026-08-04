@@ -30,7 +30,6 @@ import {
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_send_event,
     gobj_create_pure_child,
-    gobj_start,
     set_timeout,
     clear_timeout,
     gobj_subscribe_event,
@@ -148,7 +147,6 @@ function mt_start(gobj)
 {
     let priv = gobj.priv;
 
-    gobj_start(priv.gobj_timer);
 
     build_dom(gobj);
     create_table(gobj);

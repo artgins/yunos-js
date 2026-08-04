@@ -46,8 +46,6 @@ import {
     clear_timeout,
     gobj_create_pure_child,
     gobj_name,
-    gobj_start,
-    gobj_stop,
     build_path,
 } from "@yuneta/gobj-js";
 
@@ -131,7 +129,6 @@ function mt_start(gobj)
 {
     let priv = gobj.priv;
 
-    gobj_start(priv.gobj_timer);
 
     /*
      *  Coming back from a sleeping laptop / a dead network is an OS
@@ -172,7 +169,6 @@ function mt_stop(gobj)
         priv.on_wake = null;
     }
     clear_timeout(priv.gobj_timer);
-    gobj_stop(priv.gobj_timer);
 }
 
 /***************************************************************

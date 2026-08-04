@@ -23,6 +23,15 @@ on its own, outside the yunetas superproject.
 
 ### Both yunos
 
+- **Nobody starts or stops a `C_TIMER` any more.** `@yuneta/gobj-js` 7.9.10
+  makes `set_timeout()`/`clear_timeout()` the whole contract, as it always was
+  in C: the helper arms and starts, the clear disarms and stops, and a spent
+  one-shot stops itself. The `gobj_start()` in `mt_start` and the `gobj_stop()`
+  in `mt_stop` that every timer-holding view carried are gone — the second one
+  would now log *"GObj NOT RUNNING"*, because `clear_timeout()` got there
+  first. Touched `c_agent_login`, `c_agent_console`, `c_nodes`,
+  `c_stats_nodes` (gui_agent) and `c_login` (gui_treedb).
+
 - **The timers stay out of a `machine` trace.** Both `main.js` now carry the
   block every C `main()` has, which the JS side had never had:
 

@@ -28,7 +28,7 @@ import {
     gobj_change_state, gobj_current_state,
     gobj_subscribe_event, gobj_publish_event, gobj_send_event,
     gobj_find_service,
-    gobj_create_pure_child, gobj_start, gobj_stop,
+    gobj_create_pure_child,
     set_timeout, clear_timeout,
 } from "@yuneta/gobj-js";
 
@@ -102,7 +102,6 @@ function mt_create(gobj)
  ***************************************************************/
 function mt_start(gobj)
 {
-    gobj_start(gobj.priv.gobj_timer);
     gobj_change_state(gobj, "ST_WAIT_TOKEN");
     try_restore_session(gobj);
 }
@@ -113,7 +112,6 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     clear_timeout(gobj.priv.gobj_timer);
-    gobj_stop(gobj.priv.gobj_timer);
 }
 
 /***************************************************************

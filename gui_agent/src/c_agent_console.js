@@ -37,7 +37,6 @@ import {
     gobj_send_event,
     gobj_name,
     gobj_create_pure_child,
-    gobj_start,
     set_timeout,
     clear_timeout,
     kw_get_str,
@@ -195,7 +194,6 @@ function mt_create(gobj)
  ***************************************************************/
 function mt_start(gobj)
 {
-    gobj_start(gobj.priv.gobj_timer);
 
     if(empty_string(gobj_read_attr(gobj, "node"))) {
         return;   /*  empty-state panel: nothing to refresh  */
