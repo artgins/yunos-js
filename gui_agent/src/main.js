@@ -44,6 +44,7 @@ import {
  *  whole app before the shell renders). Same pattern as wattyzer.
  */
 import {register_c_yui_shell}  from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_install_start_watch} from "@yuneta/gobj-ui/src/yui_install.js";
 import {register_c_yui_nav}    from "@yuneta/gobj-ui/src/c_yui_nav.js";
 import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
 import {register_c_yui_window_manager} from "@yuneta/gobj-ui/src/c_yui_window_manager.js";
@@ -150,6 +151,10 @@ function main()
      *  you were following. Same block every C main() carries.  */
     gobj_set_gclass_no_trace("C_TIMER", "machine", true);
     gobj_set_global_no_trace("timer_periodic", true);
+
+    /*  Listen for the install offer. The event itself was caught earlier
+     *  by public/install-prompt.js; this picks up the re-emission.  */
+    yui_install_start_watch();
 
     /*------------------------------------------------*
      *          Create the __yuno__

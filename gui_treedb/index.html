@@ -10,6 +10,13 @@
     The connect-src origins are read from config.json "csp_connect_src" array.
     Keep that array in sync with backend_config.js (backend_urls + bff_urls + keycloak auth-server-url).
   -->
+    <!--
+        Catch the install offer before the bundle exists: Chrome fires
+        beforeinstallprompt early and an event nobody caught cannot be
+        asked for back. From public/ and by src, never inline -- the CSP
+        below is script-src 'self'.
+    -->
+    <script src="/install-prompt.js"></script>
   <!-- CSP_PLACEHOLDER -->
 
   <link rel="icon" href="/treedb-mark.svg" type="image/svg+xml">

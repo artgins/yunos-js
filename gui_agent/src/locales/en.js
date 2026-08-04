@@ -21,6 +21,9 @@ const en = {
         /* dialogs */
         /*  Tabulator's own chrome (paginator, notices): the keys of
             gobj-ui's yui_tabulator_i18n.js.  */
+        "install this app": "Install this app?",
+        "install": "Install",
+        "not now": "Not now",
         "loading": "Loading",
         "page size": "Page Size",
         "show page": "Show Page",

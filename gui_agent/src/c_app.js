@@ -46,6 +46,7 @@ import {
     yui_shell_language_changed,
     yui_shell_register_event_handler,
 } from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_install_ask_once} from "@yuneta/gobj-ui/src/yui_install.js";
 import {yui_shell_show_modal} from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_shell_show_route_map} from "@yuneta/gobj-ui/src/shell_route_map.js";
 
@@ -629,6 +630,16 @@ function ac_on_open(gobj, event, kw, src)
     }
     let shell = build_shell(gobj);
     yui_shell_refresh_avatars(shell);
+
+    /*  Offer the install, once per browser. Chrome stops showing its own
+     *  banner for months after a dismissal or an uninstall, so the app
+     *  does the asking; on a browser that never offered this is a no-op. */
+    yui_install_ask_once(shell, {
+        t:         t,
+        message:   t("install this app"),
+        yes_label: "install",
+        no_label:  "not now"
+    });
     yui_shell_set_connection_state(shell, true);    // control-center link up
 
     /*  Per-node workspaces: paint each workspace's fixed picker + per-node

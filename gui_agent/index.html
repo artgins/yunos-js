@@ -28,6 +28,13 @@
         html-transform Vite plugin. The connect-src origins are read from
         config.json "csp_connect_src".
     -->
+    <!--
+        Catch the install offer before the bundle exists: Chrome fires
+        beforeinstallprompt early and an event nobody caught cannot be
+        asked for back. From public/ and by src, never inline -- the CSP
+        below is script-src 'self'.
+    -->
+    <script src="/install-prompt.js"></script>
     <!-- CSP_PLACEHOLDER -->
 
 <!-- METADATA_PLACEHOLDER -->

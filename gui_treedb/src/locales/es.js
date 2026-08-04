@@ -27,6 +27,9 @@ const es = {
 
     translation: {
         /* etiquetas de UI (llamadas vía t() en c_yuneta_gui.js) */
+        "install this app": "¿Instalar esta aplicación?",
+        "install": "Instalar",
+        "not now": "Ahora no",
         "class": "Clase",
         "browse": "Examinar",
         "cause":                              "Motivo",

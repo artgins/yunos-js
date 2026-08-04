@@ -27,6 +27,9 @@ const en = {
 
     translation: {
         /* free-text UI labels (called via t() in c_yuneta_gui.js) */
+        "install this app": "Install this app?",
+        "install": "Install",
+        "not now": "Not now",
         "class": "Class",
         "browse": "Browse",
         "cause":                              "Cause",
