@@ -412,7 +412,7 @@ function build_dom(gobj)
             $count,
             $copy,
             ["button", {class: "STATS_REFRESH button", type: "button", i18n: "refresh"},
-                "Refresh", {click: () => request_agents(gobj)}]
+                "Refresh", {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
         ]]
     );
     $c.appendChild(priv.$toolbar);
@@ -681,6 +681,15 @@ function set_node_yunos(gobj, node, data)
 
 
 /***************************************************************
+ *  Ask the control center for the list again.
+ ***************************************************************/
+function ac_refresh(gobj, event, kw, src)
+{
+    request_agents(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  Hand the list over as JSON: the checked rows if any are
  *  checked, otherwise everything the current search leaves on
  *  screen. What you see is what you get.
@@ -864,6 +873,7 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",             ac_on_close,               null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,      null],
             ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null],
+            ["EV_REFRESH",              ac_refresh,               null],
             ["EV_COPY_JSON",            ac_copy_json,              null],
             ["EV_TIMEOUT",              ac_timeout,                null]
         ]]
@@ -878,6 +888,7 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",             0],
         ["EV_MT_COMMAND_ANSWER",    0],
         ["EV_SELECTED_NODES_CHANGED", 0],
+        ["EV_REFRESH",              0],
         ["EV_COPY_JSON",            0],
         ["EV_TIMEOUT",              0]
     ];

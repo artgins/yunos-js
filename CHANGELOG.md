@@ -38,6 +38,15 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **Every action in the node tables and the console crosses the FSM.** The
+  *Refresh* buttons called `request_agents()` straight from their `onclick`,
+  and the console's copy flash ran on a bare `setTimeout`. Both are now
+  `EV_REFRESH` and `EV_TIMEOUT` with actions, so a click and its consequences
+  show up in the `machine` trace — which is the whole reason the trace exists.
+  The console gained the `C_TIMER` child it needed for that; the flash keeps
+  its own look (green + `yi-square-check`), only the timing moved.
+
+
 - **The console's copy button works for TABLE answers.** It was created
   disabled and only re-enabled by the branch that renders a `<pre>`, so every
   command that answers with a table — `top`, `list-yunos`, most of them — left

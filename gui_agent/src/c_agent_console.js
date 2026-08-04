@@ -35,6 +35,11 @@ import {
     msg_iev_write_key,
     msg_iev_read_key,
     gobj_send_event,
+    gobj_name,
+    gobj_create_pure_child,
+    gobj_start,
+    set_timeout,
+    clear_timeout,
     kw_get_str,
     kw_get_local_storage_value,
     kw_set_local_storage_value,
@@ -127,7 +132,7 @@ function mt_create(gobj)
     priv.$hint = null;
     priv.$copy = null;         /*  copy-response button (right of the status line)  */
     priv.$copy_icon = null;
-    priv.copy_flash_timer = null;
+    priv.gobj_timer = gobj_create_pure_child(gobj_name(gobj), "C_TIMER", {}, gobj);
     priv.tabulator = null;    /*  Tabulator instance for table-mode answers  */
     priv.commands = {};       /*  name -> {name, params[], desc} from `help`  */
     priv.commands_loaded = false;
@@ -190,6 +195,8 @@ function mt_create(gobj)
  ***************************************************************/
 function mt_start(gobj)
 {
+    gobj_start(gobj.priv.gobj_timer);
+
     if(empty_string(gobj_read_attr(gobj, "node"))) {
         return;   /*  empty-state panel: nothing to refresh  */
     }
@@ -288,10 +295,7 @@ function mt_destroy(gobj)
 {
     destroy_table(gobj);
     let priv = gobj.priv;
-    if(priv.copy_flash_timer) {
-        clearTimeout(priv.copy_flash_timer);
-        priv.copy_flash_timer = null;
-    }
+    clear_timeout(priv.gobj_timer);
     if(priv.doc_click) {
         document.removeEventListener("click", priv.doc_click);
         priv.doc_click = null;
@@ -1357,10 +1361,7 @@ function set_copy_enabled(gobj, enabled)
         return;
     }
     priv.$copy.disabled = !enabled;
-    if(priv.copy_flash_timer) {
-        clearTimeout(priv.copy_flash_timer);
-        priv.copy_flash_timer = null;
-    }
+    clear_timeout(priv.gobj_timer);
     priv.$copy.classList.remove("has-text-success");
     if(priv.$copy_icon) {
         priv.$copy_icon.className = "yi-copy";
@@ -1414,18 +1415,25 @@ function flash_copied(gobj)
     if(priv.$copy_icon) {
         priv.$copy_icon.className = "yi-square-check";
     }
-    if(priv.copy_flash_timer) {
-        clearTimeout(priv.copy_flash_timer);
+    /*  Going back is EV_TIMEOUT, an FSM transition that shows in the
+     *  machine trace -- not a setTimeout nobody can see.  */
+    set_timeout(priv.gobj_timer, 1200);
+}
+
+/***************************************************************
+ *  The "copied" mark has had its moment.
+ ***************************************************************/
+function ac_timeout(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    if(priv.$copy) {
+        priv.$copy.classList.remove("has-text-success");
     }
-    priv.copy_flash_timer = setTimeout(() => {
-        priv.copy_flash_timer = null;
-        if(priv.$copy) {
-            priv.$copy.classList.remove("has-text-success");
-        }
-        if(priv.$copy_icon) {
-            priv.$copy_icon.className = "yi-copy";
-        }
-    }, 1200);
+    if(priv.$copy_icon) {
+        priv.$copy_icon.className = "yi-copy";
+    }
+    return 0;
 }
 
 /***************************************************************
@@ -1984,7 +1992,8 @@ function create_gclass(gclass_name)
             ["EV_ON_OPEN_ERROR",     ac_on_open_error,     null],
             ["EV_ON_ID_NAK",         ac_on_id_nak,         null],
             ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
-            ["EV_RUN_HISTORY",       ac_run_history,       null]
+            ["EV_RUN_HISTORY",       ac_run_history,       null],
+            ["EV_TIMEOUT",           ac_timeout,           null]
         ]]
     ];
 
@@ -1998,7 +2007,8 @@ function create_gclass(gclass_name)
         ["EV_ON_OPEN_ERROR",     0],
         ["EV_ON_ID_NAK",         0],
         ["EV_MT_COMMAND_ANSWER", 0],
-        ["EV_RUN_HISTORY",       0]
+        ["EV_RUN_HISTORY",       0],
+        ["EV_TIMEOUT",           0]
     ];
 
     __gclass__ = gclass_create(
