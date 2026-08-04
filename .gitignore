@@ -8,4 +8,5 @@ gui_treedb/assets/
 
 # Deploy scripts (local operator tooling, carry node names — not for the repo)
 gui_agent/deploy-com.sh
+gui_agent/deploy-ovh.sh
 gui_treedb/deploy-com.sh
