@@ -31,9 +31,24 @@ on its own, outside the yunetas superproject.
     made reading a `view-config` or a `stats` answer a matter of exporting the
     text to an external JSON editor to be able to search it.
 
-    Table answers are untouched (array + schema still goes to Tabulator), and
-    so is the `<pre>`: it still serves string and comment-only answers (`help`)
-    and the `form` display mode, which stays the way to see the literal text.
+    Table answers are untouched: an array with a schema still goes to
+    Tabulator.
+
+    The display mode gained a third value instead of losing one, because there
+    has to be a way to see the original:
+
+    | mode | shows |
+    |---|---|
+    | `table` (default) | a table when the answer carries a schema, the JSON tree otherwise |
+    | `form` | always the JSON tree, schema or not |
+    | `raw` | the answer exactly as it arrived |
+
+    So `form` — which used to mean the literal text — is the tree now, and
+    `raw` is what `form` used to be. Reading JSON is the common case and
+    reading the bytes is the exception, so they swapped places. A leading `*`
+    still forces `form` for a single command, which is how you look at a table
+    answer as the JSON it really is; strings and comment-only answers (`help`)
+    are text in every mode.
 
     The console's A− / A+ and its copy button follow the viewer: the font size
     is set on the viewer root and cascades, and copy hands over the WHOLE
