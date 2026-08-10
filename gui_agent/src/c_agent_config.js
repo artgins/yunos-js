@@ -45,7 +45,7 @@ const DEFAULT_SHORTKEYS = {
 const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,                        null, "Subscriber of output events"),
 SDATA(data_type_t.DTP_STRING,   "active_node",  sdata_flag_t.SDF_PERSIST, "",      "Active node (hostname/UUID from list-agents)"),
-SDATA(data_type_t.DTP_STRING,   "display_mode", sdata_flag_t.SDF_PERSIST, "table", "Command answer display: table | form (raw JSON)"),
+SDATA(data_type_t.DTP_STRING,   "display_mode", sdata_flag_t.SDF_PERSIST, "table", "Command answer display: table | form (JSON tree) | raw (text)"),
 SDATA(data_type_t.DTP_STRING,   "stats_layout", sdata_flag_t.SDF_PERSIST, "single", "Statistics cards layout: single (one tab, all cards) | tabs (a tab per yuno)"),
 SDATA(data_type_t.DTP_INTEGER,  "stats_refresh", sdata_flag_t.SDF_PERSIST, 2,       "Statistics auto-refresh interval in seconds (0 = off)"),
 SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "{}",  "Selected nodes per workspace: {workspace: [{id, host}, ...]}"),
@@ -135,8 +135,17 @@ function agent_config_set_active_node(gobj, node)
 }
 
 /***************************************************************
- *  Command-answer display mode: "table" (default) or "form"
- *  (raw JSON), mirroring ycommand's display_mode attribute.
+ *  Command-answer display mode, mirroring ycommand's display_mode
+ *  attribute:
+ *
+ *      "table"  a Tabulator table when the answer carries a schema,
+ *               the JSON tree otherwise  (default)
+ *      "form"   always the JSON tree, schema or not
+ *      "raw"    the literal text, as it arrived
+ *
+ *  "form" used to mean the literal text; that is "raw" now, and the
+ *  tree took its place, because reading JSON is the common case and
+ *  reading the bytes is the exception.
  ***************************************************************/
 function agent_config_get_display_mode(gobj)
 {

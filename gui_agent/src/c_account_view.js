@@ -274,13 +274,15 @@ function build_preference(gobj)
     );
 
     /*  Command-answer display mode (Console), persisted on the shared
-     *  C_AGENT_CONFIG service — "table" or "form" (raw JSON).  */
+     *  C_AGENT_CONFIG service — a table when there is a schema, the JSON
+     *  tree (searchable, foldable), or the literal text as it arrived.  */
     let config = gobj_find_service("agent_config", false);
     let display_mode = config ? agent_config_get_display_mode(config) : "table";
     let display_seg = segment(
         [
-            {value: "table", i18n: "table",    text: "Table",    icon: "yi-table"},
-            {value: "form",  i18n: "raw json", text: "Raw JSON", icon: "yi-square-js"}
+            {value: "table", i18n: "table",     text: "Table",     icon: "yi-table"},
+            {value: "form",  i18n: "json tree", text: "JSON tree", icon: "yi-square-js"},
+            {value: "raw",   i18n: "raw text",  text: "Raw text",  icon: "yi-bars"}
         ],
         display_mode,
         function(v) {

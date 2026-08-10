@@ -1264,18 +1264,20 @@ function change_console_font_size(gobj, delta)
  *    - array + table mode + schema  -> interactive Tabulator table
  *    - array + form/no-schema       -> JSON tree viewer (C_YUI_JSON)
  *    - object                       -> JSON tree viewer (C_YUI_JSON)
+ *    - "raw" mode                   -> the text exactly as it arrived
  *    - no data but a (non-error)    -> paint the comment; this is how
  *      comment (e.g. `help`)           `help` arrives: text in comment,
  *                                       data + schema null.
  *  Errors keep their short comment in the CONSOLE_COMMENT line.
  ***************************************************************/
-function show_data(gobj, data, schema, raw, comment, result)
+function show_data(gobj, data, schema, mode, comment, result)
 {
     let priv = gobj.priv;
     if(!priv.$data) {
         return;
     }
     priv.pending = false;   /*  a real render supersedes the "running…" state  */
+    mode = mode || "table"; /*  internal callers pass none  */
 
     /*  Tear down any previous table/viewer + content.  */
     destroy_table(gobj);
@@ -1284,17 +1286,17 @@ function show_data(gobj, data, schema, raw, comment, result)
     set_copy_enabled(gobj, false);   /*  nothing to copy yet  */
 
     /*  Table mode: array payload + schema -> Tabulator.  */
-    if(!raw && Array.isArray(data) && Array.isArray(schema) && schema.length) {
+    if(mode === "table" && Array.isArray(data) && Array.isArray(schema) && schema.length) {
         render_table(gobj, schema, data);
         return;
     }
 
     /*  A structured answer is a TREE, not a wall of text: object and array
      *  payloads go to the JSON viewer, which brings the search box, the
-     *  per-node collapse and its own copy. `raw` still forces the <pre>,
-     *  which is the escape hatch when what you want is the bytes as they
-     *  came. Strings and comment-only answers (`help`) stay text.  */
-    if(!raw && data !== null && typeof data === "object") {
+     *  per-node collapse and its own copy. Only "raw" keeps the <pre>, for
+     *  when what you want is the answer exactly as it arrived. Strings and
+     *  comment-only answers (`help`) are text in every mode.  */
+    if(mode !== "raw" && data !== null && typeof data === "object") {
         render_json_view(gobj, data);
         return;
     }
@@ -1811,9 +1813,10 @@ function send_command(gobj)
     }
 
     /*  Like ycommand: the display mode is the persistent `display_mode`
-     *  attr (default "table"); a leading '*' overrides it to "form" (raw
-     *  JSON) for this one command. The '*' is a client-side flag — strip
-     *  it before sending.  */
+     *  attr (default "table"); a leading '*' overrides it to "form" — the
+     *  JSON tree — for this one command, which is how you look at a table
+     *  answer as the JSON it really is. The '*' is a client-side flag —
+     *  strip it before sending.  */
     let config = gobj_read_attr(gobj, "config_svc");
     let mode = config ? agent_config_get_display_mode(config) : "table";
     if(cmd.charAt(0) === "*") {
@@ -1941,16 +1944,18 @@ function ac_on_id_nak(gobj, event, kw, src)
 /***************************************************************
  *  Effective display mode for an answer: the value echoed back in
  *  __md_iev__ (set when the command was sent) wins; otherwise fall
- *  back to the persistent `display_mode` attr. "form" => raw JSON.
+ *  back to the persistent `display_mode` attr.
+ *
+ *  "table" | "form" (JSON tree) | "raw" (the text as it arrived).
  ***************************************************************/
-function answer_is_raw(gobj, kw)
+function answer_display_mode(gobj, kw)
 {
     let mode = msg_iev_read_key(kw, "display_mode");
     if(!mode) {
         let config = gobj_read_attr(gobj, "config_svc");
         mode = config ? agent_config_get_display_mode(config) : "table";
     }
-    return mode === "form";
+    return mode;
 }
 
 /***************************************************************
@@ -2022,14 +2027,14 @@ function ac_mt_command_answer(gobj, event, kw, src)
     if(command === "command-agent") {
         if(typeof kw.result === "number" && kw.result < 0) {
             show_comment(gobj, kw.comment, kw.result);
-            show_data(gobj, kw.data, kw.schema, answer_is_raw(gobj, kw), kw.comment, kw.result);
+            show_data(gobj, kw.data, kw.schema, answer_display_mode(gobj, kw), kw.comment, kw.result);
         }
         return 0;
     }
 
     /*  Anything else is the agent's real answer to our command.  */
     show_comment(gobj, kw.comment, kw.result);
-    show_data(gobj, kw.data, kw.schema, answer_is_raw(gobj, kw), kw.comment, kw.result);
+    show_data(gobj, kw.data, kw.schema, answer_display_mode(gobj, kw), kw.comment, kw.result);
     return 0;
 }
 
