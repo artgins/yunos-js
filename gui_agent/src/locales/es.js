@@ -54,6 +54,8 @@ const es = {
         "copy json":         "Copiar JSON",
         "copy the rows shown as json": "Copiar en JSON las filas mostradas",
         "search":            "Buscar",
+        "no data":           "Sin datos",
+        "too many rows; collapse some branches": "Demasiadas filas; pliegue algunas ramas",
         "select":            "Seleccionar",
         "are you sure":      "¿Está seguro?",
         "this field is required": "Campo requerido",

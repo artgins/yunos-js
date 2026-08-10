@@ -36,7 +36,11 @@ import {
     msg_iev_read_key,
     gobj_send_event,
     gobj_name,
+    gobj_short_name,
     gobj_create_pure_child,
+    gobj_create_service,
+    gobj_start,
+    gobj_destroy,
     set_timeout,
     clear_timeout,
     kw_get_str,
@@ -133,6 +137,8 @@ function mt_create(gobj)
     priv.$copy_icon = null;
     priv.gobj_timer = gobj_create_pure_child(gobj_name(gobj), "C_TIMER", {}, gobj);
     priv.tabulator = null;    /*  Tabulator instance for table-mode answers  */
+    priv.json_view = null;    /*  C_YUI_JSON instance for object/array answers  */
+    priv.json_text = null;    /*  what the viewer shows, for the copy button  */
     priv.commands = {};       /*  name -> {name, params[], desc} from `help`  */
     priv.commands_loaded = false;
     priv.pending = false;     /*  a command is in flight → CONSOLE_RESPONSE shows
@@ -284,6 +290,7 @@ function mt_stop(gobj)
         priv.vis_obs = null;
     }
     destroy_table(gobj);
+    destroy_json_view(gobj);
 }
 
 /***************************************************************
@@ -292,6 +299,7 @@ function mt_stop(gobj)
 function mt_destroy(gobj)
 {
     destroy_table(gobj);
+    destroy_json_view(gobj);
     let priv = gobj.priv;
     clear_timeout(priv.gobj_timer);
     if(priv.doc_click) {
@@ -1206,6 +1214,12 @@ function apply_console_font_size(gobj)
         if($pre) {
             $pre.style.fontSize = size + "px";
         }
+        /*  The viewer is the other face of the same answer, so A− / A+
+         *  has to reach it too; set on its root, it cascades to the tree. */
+        let $json = priv.$data.querySelector(".CONSOLE_RESPONSE_JSON");
+        if($json) {
+            $json.style.fontSize = size + "px";
+        }
     }
     if(priv.$font_size_label) {
         priv.$font_size_label.textContent = size + " px";
@@ -1248,8 +1262,8 @@ function change_console_font_size(gobj, delta)
  *
  *  Mirrors ycommand's display_webix_result mapped to the console:
  *    - array + table mode + schema  -> interactive Tabulator table
- *    - array + form/no-schema       -> raw JSON
- *    - object                       -> raw JSON
+ *    - array + form/no-schema       -> JSON tree viewer (C_YUI_JSON)
+ *    - object                       -> JSON tree viewer (C_YUI_JSON)
  *    - no data but a (non-error)    -> paint the comment; this is how
  *      comment (e.g. `help`)           `help` arrives: text in comment,
  *                                       data + schema null.
@@ -1263,14 +1277,25 @@ function show_data(gobj, data, schema, raw, comment, result)
     }
     priv.pending = false;   /*  a real render supersedes the "running…" state  */
 
-    /*  Tear down any previous table + content.  */
+    /*  Tear down any previous table/viewer + content.  */
     destroy_table(gobj);
+    destroy_json_view(gobj);
     priv.$data.replaceChildren();
-    set_copy_enabled(gobj, false);   /*  no CONSOLE_RESPONSE_TEXT to copy yet  */
+    set_copy_enabled(gobj, false);   /*  nothing to copy yet  */
 
     /*  Table mode: array payload + schema -> Tabulator.  */
     if(!raw && Array.isArray(data) && Array.isArray(schema) && schema.length) {
         render_table(gobj, schema, data);
+        return;
+    }
+
+    /*  A structured answer is a TREE, not a wall of text: object and array
+     *  payloads go to the JSON viewer, which brings the search box, the
+     *  per-node collapse and its own copy. `raw` still forces the <pre>,
+     *  which is the escape hatch when what you want is the bytes as they
+     *  came. Strings and comment-only answers (`help`) stay text.  */
+    if(!raw && data !== null && typeof data === "object") {
+        render_json_view(gobj, data);
         return;
     }
 
@@ -1321,6 +1346,7 @@ function show_pending(gobj)
     }
     priv.pending = true;
     destroy_table(gobj);
+    destroy_json_view(gobj);
     set_copy_enabled(gobj, false);   /*  nothing to copy while pending  */
     priv.$data.replaceChildren(createElement2(
         ["p", {class: "CONSOLE_PENDING is-size-7 has-text-grey",
@@ -1342,6 +1368,7 @@ function clear_pending(gobj)
         return;
     }
     priv.pending = false;
+    destroy_json_view(gobj);
     if(priv.$data) {
         priv.$data.replaceChildren();
     }
@@ -1380,6 +1407,16 @@ function copy_response(gobj)
     if(priv.tabulator) {
         yui_copy_table_json(priv.tabulator).then(function(copied) {
             if(copied) {
+                flash_copied(gobj);
+            }
+        });
+        return;
+    }
+
+    /*  Viewer mode: the whole answer, not the part left expanded.  */
+    if(priv.json_view && priv.json_text) {
+        yui_copy_text(priv.json_text).then(function(ok) {
+            if(ok) {
                 flash_copied(gobj);
             }
         });
@@ -1460,6 +1497,73 @@ function render_table(gobj, schema, data)
      *  the button stayed dead for every command that answers with a
      *  table (`top`, `list-yunos`…), which is most of them.  */
     set_copy_enabled(gobj, true);
+}
+
+/***************************************************************
+ *  Mount the lazy JSON tree viewer (C_YUI_JSON) into CONSOLE_RESPONSE
+ *  and feed it the answer.
+ *
+ *  No `subscriber`: the viewer publishes EV_EXPAND_PATH only for
+ *  `kw_collapse()` sentinels, and an agent command answer arrives
+ *  whole -- there is no path to re-issue, so there is nothing for us
+ *  to answer. With no sentinels it is a plain collapsible tree.
+ *
+ *  No `title` either: the workspace tab already names the answer.
+ ***************************************************************/
+function render_json_view(gobj, data)
+{
+    let priv = gobj.priv;
+
+    let jv = gobj_create_service(
+        `console-json-${gobj_name(gobj)}`,
+        "C_YUI_JSON",
+        {},
+        gobj
+    );
+    if(!jv) {
+        log_error(`${gobj_short_name(gobj)}: cannot create the JSON viewer`);
+        return;
+    }
+    priv.json_view = jv;
+    gobj_start(jv);
+
+    let $box = gobj_read_pointer_attr(jv, "$container");
+    if(!$box) {
+        log_error(`${gobj_short_name(gobj)}: the JSON viewer has no container`);
+        destroy_json_view(gobj);
+        return;
+    }
+    $box.classList.add("CONSOLE_RESPONSE_JSON");
+    $box.style.height = "100%";
+    $box.style.minHeight = "0";
+    priv.$data.appendChild($box);
+
+    gobj_send_event(jv, "EV_SET_JSON", {json: data}, gobj);
+
+    /*  Keep the text the console's own copy button hands over: the
+     *  viewer's toolbar copies what is expanded, this copies the answer. */
+    try {
+        priv.json_text = JSON.stringify(data, null, 4);
+    } catch(e) {
+        priv.json_text = null;
+    }
+    apply_console_font_size(gobj);
+    set_copy_enabled(gobj, priv.json_text !== null);
+}
+
+/***************************************************************
+ *  Drop the JSON viewer, if any. Paired with destroy_table() at
+ *  every teardown point: a new answer, a pending command, mt_stop
+ *  and mt_destroy.
+ ***************************************************************/
+function destroy_json_view(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.json_view) {
+        gobj_destroy(priv.json_view);
+        priv.json_view = null;
+    }
+    priv.json_text = null;
 }
 
 /***************************************************************

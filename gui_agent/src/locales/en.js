@@ -54,6 +54,8 @@ const en = {
         "copy json":         "Copy JSON",
         "copy the rows shown as json": "Copy the rows shown as JSON",
         "search":            "Search",
+        "no data":           "No data",
+        "too many rows; collapse some branches": "Too many rows; collapse some branches",
         "select":            "Select",
         "are you sure":      "Are you sure?",
         "this field is required": "This field is required",

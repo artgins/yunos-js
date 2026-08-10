@@ -21,6 +21,27 @@ on its own, outside the yunetas superproject.
 
 ## Unreleased
 
+### gui_agent
+
+- **A structured answer is a tree, not a wall of text.** Object and array
+    payloads in the console now render in the lazy JSON viewer (`C_YUI_JSON`,
+    already in gobj-ui and already used by gui_treedb) instead of a `<pre>` of
+    `JSON.stringify`. That brings the search box, per-node collapse/expand and
+    the viewer's own copy to every answer that is not a table — which is what
+    made reading a `view-config` or a `stats` answer a matter of exporting the
+    text to an external JSON editor to be able to search it.
+
+    Table answers are untouched (array + schema still goes to Tabulator), and
+    so is the `<pre>`: it still serves string and comment-only answers (`help`)
+    and the `form` display mode, which stays the way to see the literal text.
+
+    The console's A− / A+ and its copy button follow the viewer: the font size
+    is set on the viewer root and cascades, and copy hands over the WHOLE
+    answer, not just the part left expanded (the viewer's own copy button does
+    the expanded part). Mounting the viewer also made its two i18n keys
+    required in this app — `validate-locales` caught them missing, which is the
+    check working exactly as intended.
+
 ### Both yunos
 
 - **Nobody starts or stops a `C_TIMER` any more.** `@yuneta/gobj-js` 7.9.10/7.9.11
