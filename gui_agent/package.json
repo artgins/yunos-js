@@ -9,6 +9,7 @@
         "build": "vite build",
         "preview": "vite preview",
         "validate-locales": "node scripts/validate-locales.mjs",
+    "qa": "node scripts/qa.mjs",
         "prebuild": "npm run validate-locales"
     },
     "dependencies": {

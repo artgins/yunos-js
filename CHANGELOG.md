@@ -23,6 +23,33 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **A QA driver of its own (`scripts/qa.mjs`, `npm run qa`).** A `curl` of the
+    deployed files answers "the bytes are served". It cannot answer the question
+    that matters — does this build boot, sign in, and mount its shell against a
+    live control center. Now one command does, and writes a full-page
+    screenshot, every console message and every failed request to
+    `/tmp/agent-qa-out/<host>-<stamp>/`.
+
+    It is not wattyzer's driver moved over: that one drives wattyzer's own login
+    and BFF. This one speaks the Agent Console's login form (`src/login.js`) and
+    waits on `.C_YUI_SHELL`, so a change to either breaks the driver LOUDLY —
+    which is the point, because a silent pass against a screen that no longer
+    exists is worse than a failure.
+
+    Credentials never touch the repo: the user comes from `~/.yuneta/.qa-creds`
+    or the environment, the password from the OS keyring (or `CLAUDIA_PASS` for
+    CI). Playwright is borrowed from wattyzer's `node_modules` rather than added
+    as a dependency, so the SPA ships nothing extra. It defaults to **firefox**,
+    the engine this machine has downloaded — and firefox reports
+    `navigator.language` as the literal string `"undefined"` under Playwright,
+    which every `Intl` call has to be guarded against.
+
+    The first run proved what a `curl` had left open: both planes serve the same
+    bundle, and each derives its own control center from its hostname.
+    `artgins.yunetacontrol.com` reports `artgins · agents`;
+    `artgins.yunetacontrol.ovh` reports `artgins · agent22` and opens
+    `wss://…:1997`. Five steps green on each, zero console errors.
+
 - **A structured answer is a tree, not a wall of text.** Object and array
     payloads in the console now render in the lazy JSON viewer (`C_YUI_JSON`,
     already in gobj-ui and already used by gui_treedb) instead of a `<pre>` of
