@@ -196,6 +196,14 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
+- **The schema of a topic is one click away** (gobj-ui `^5.12.0`). The topic
+  table's toolbar gets a *Schema* button: it opens that topic's `desc` — pkey,
+  cols, types, flags, fkey targets — in the adaptive dialog, on the lazy JSON
+  viewer. The table shows the data; this shows the contract the data answers
+  to, which is what you want in front of you when a value is refused or a link
+  does not appear. It arrives from the library, so the only change here is the
+  dependency floor.
+
 - **Talk to the shell through `yui_shell_of()`, never through
   `gobj_parent()`.** `ac_child_selected` (mirror the selected topic into the
   URL) and `ac_remove_conn` (the confirm dialog) took the parent to be the
