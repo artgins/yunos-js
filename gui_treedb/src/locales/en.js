@@ -168,6 +168,7 @@ const en = {
         "type": "Type",
         "schema": "Schema",
         "schema graph": "Schema graph",
+        "show json": "Show JSON",
         "site map": "Site map",
         "toolbar": "Toolbar",
         "matches": "matches",
