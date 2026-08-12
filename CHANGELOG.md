@@ -23,6 +23,36 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **Preferences left the primary rail for the account menu.** The rail is the
+    WORK of the console and every option on it now opens a workspace: Commands,
+    Statistics, Terminal, Schemas. The settings page moved to `/preferences`,
+    reached from the toolbar avatar — where a user looks for their own
+    settings, and where the yunovatios SPAs already put it. It stays a ROUTE
+    and not a dialog, so it is linkable, survives an F5 and appears in the site
+    map. `/settings` is gone: the page is the same one, at the new address.
+
+- **The treedbs of a Schemas tab are a tree of nodes, and the operator chooses
+    how depth is drawn.** What discovery answers is a level of navigation —
+    yuno → treedb → topic — so it is declared as one: the tab roots a
+    `C_YUI_NODE` at its own route with one child per discovered treedb, each a
+    `link` node whose viewer (the new `C_AGENT_TREEDB_VIEW`) owns everything
+    below it in the url. The `<select>` that used to switch treedb is gone; the
+    tree draws the way in, the shape of the workspace reaches the site map by
+    itself, and the url is unchanged (`<treedb>[/<topic>[/info]]`).
+
+    On top of it, **Preferences → Navigation**: *stacked strips* (the default,
+    a strip of treedbs above the open one), *back to parent* (a single
+    `← treedbs`) or *breadcrumb* (the trail as one line). It is one choice for
+    the app, persisted in the browser, and it applies to the OPEN tabs on the
+    spot — a mode filters what each node draws, so nothing is re-mounted and
+    the open treedb stays open.
+
+    Two consequences worth knowing: landing on a tab with no treedb in the url
+    now shows the treedbs as CARDS (the tree's index) instead of jumping into
+    the last one — which is what makes "back to parent" and the breadcrumb able
+    to reach that level at all; and a fresh tab still opens
+    `treedb_system_schema` directly, because that is what the workspace is for.
+
 - **Applying a schema, from the tab that edited it.** An edited schema reaches
     its yuno when the yuno re-reads it, which means a restart — so the Schemas
     tab now does it: `kill-yuno` → `run-yuno play=0` → `play-yuno`, behind a

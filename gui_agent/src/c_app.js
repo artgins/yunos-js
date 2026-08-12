@@ -327,9 +327,10 @@ function destroy_shell(gobj)
 /***************************************************************
  *      Per-node workspaces controller
  *
- *  The primary rail has three per-node workspaces — Commands,
- *  Statistics, Terminal — plus Settings. Each per-node workspace
- *  owns a submenu = one FIXED node-picker tab (C_NODES, filtered by
+ *  The primary rail is four per-node workspaces — Commands,
+ *  Statistics, Terminal, Schemas — and nothing else (preferences hang
+ *  off the avatar menu). Each workspace owns a submenu = one FIXED
+ *  node-picker tab (C_NODES, filtered by
  *  min_version) followed by one DYNAMIC, closable tab per node the
  *  operator selected in that picker. Selection lives per workspace in
  *  C_AGENT_CONFIG; the submenu is (re)built at runtime via

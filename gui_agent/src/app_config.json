@@ -1,5 +1,5 @@
 {
-    "_comment": "Agent Console shell config — mobile-app style: an always-on top toolbar with a left brand + right-aligned actions (language, theme, user avatar); a global connection dot on the toolbar reflects the CONTROL-CENTER LINK (the single session transport: green up / red down), which is a different layer from per-node reachability — each node tab keeps its own coloured glyph. Primary nav (Commands / Statistics / Terminal / Schemas) is the left rail on desktop and the bottom icon-bar on mobile; submenus render as top tabs. The toolbar user avatar shows the logged-in user's initials and navigates to /settings/auth (login form when signed out). Schemas edits a yuno's treedb_system_schema through the routing adapter; BROWSING data of any other treedb stays in the separate gui_treedb SPA.",
+    "_comment": "Agent Console shell config — mobile-app style: an always-on top toolbar with a left brand + right-aligned actions (language, theme, user avatar); a global connection dot on the toolbar reflects the CONTROL-CENTER LINK (the single session transport: green up / red down), which is a different layer from per-node reachability — each node tab keeps its own coloured glyph. Primary nav (Commands / Statistics / Terminal / Schemas) is the left rail on desktop and the bottom icon-bar on mobile; submenus render as top tabs. The four primaries are the WORK of the console and nothing else shares that level: the preferences page hangs off the toolbar avatar as /preferences, which is where a user looks for their own settings and where the yunovatios SPAs already put it. Schemas edits a yuno's treedb_system_schema through the routing adapter; BROWSING data of any other treedb stays in the separate gui_treedb SPA.",
 
     "shell": {
         "breakpoints": "bulma",
@@ -16,8 +16,14 @@
             "main": { "zone": "center", "default_route": "/commands/node" }
         },
 
-        "_routes_comment": "Resolution-ancestor + empty-state routes for the per-node workspaces (a node tab /<ws>/node/<id> resolves here on F5 before the controller rebuilds it). About opens as an adaptive dialog from the account menu (EV_OPEN_ABOUT), not a route. Settings (preferences) is a direct target on the Settings primary item.",
+        "_routes_comment": "Resolution-ancestor + empty-state routes for the per-node workspaces (a node tab /<ws>/node/<id> resolves here on F5 before the controller rebuilds it). About opens as an adaptive dialog from the account menu (EV_OPEN_ABOUT), not a route. /preferences is a first-level route with NO menu entry: it is reached from the avatar menu, and it stays a route — not a dialog — so it is linkable, survives an F5 and appears in the site map.",
         "routes": {
+            "/preferences": {
+                "stage": "main",
+                "gclass": "C_ACCOUNT_VIEW",
+                "kw": { "view": "preference" },
+                "lifecycle": "lazy_destroy"
+            },
             "/commands/node": {
                 "stage": "main",
                 "gclass": "C_AGENT_CONSOLE",
@@ -88,8 +94,15 @@
                 "aria_label": "Account menu",
                 "action": {
                     "type": "dropdown",
-                    "_items_comment": "Account menu: Settings is NOT here (it is a primary rail item). Developer-window toggle first, then About (app info), plus Sign out — order matches gui_treedb.",
+                    "_items_comment": "Account menu: Preferences first — it is the user's own settings and no longer a primary rail item — then the developer tools, the informative entries and Sign out.",
                     "items": [
+                        {
+                            "id": "preferences",
+                            "name": "preferences",
+                            "icon": "yi-gear",
+                            "action": { "type": "navigate", "route": "/preferences" }
+                        },
+                        { "type": "divider" },
                         {
                             "id": "developer",
                             "name": "developer",
@@ -133,7 +146,7 @@
                 "left":   { "layout": "vertical", "icon_pos": "left", "show_label": true },
                 "bottom": { "layout": "icon-bar", "icon_pos": "top",  "show_label": true }
             },
-            "_items_comment": "Five primary options. The four per-node workspaces (Commands, Statistics, Terminal, Schemas) each declare ONLY their fixed node-picker tab here; the C_APP workspaces controller replaces the submenu at runtime, keeping this picker as tab 0 and appending one closable tab per selected node (per selected YUNO in Statistics and Schemas, whose picker is the C_STATS_NODES tree). Commands/Statistics/Schemas list only agents >= 7.7.0 (min_version); Terminal (PTY backdoor) lists every version.",
+            "_items_comment": "Four primary options, all of them WORK — preferences left this level for the avatar menu (/preferences). Each workspace declares ONLY its fixed node-picker tab here; the C_APP workspaces controller replaces the submenu at runtime, keeping this picker as tab 0 and appending one closable tab per selected node (per selected YUNO in Statistics and Schemas, whose picker is the C_STATS_NODES tree). Commands/Statistics/Schemas list only agents >= 7.7.0 (min_version); Terminal (PTY backdoor) lists every version.",
             "items": [
                 {
                     "id": "commands",
@@ -233,20 +246,6 @@
                                 }
                             }
                         ]
-                    }
-                },
-                {
-                    "id": "settings",
-                    "name": "settings",
-                    "icon": "yi-gear",
-                    "tooltip": "Application settings",
-                    "route": "/settings",
-                    "_comment": "No tabs for now: a direct target (preferences). About moved to the account menu; add a submenu here again if Settings grows more pages.",
-                    "target": {
-                        "stage": "main",
-                        "gclass": "C_ACCOUNT_VIEW",
-                        "kw": { "view": "preference" },
-                        "lifecycle": "lazy_destroy"
                     }
                 }
             ]

@@ -1,12 +1,13 @@
 /***********************************************************************
  *          c_account_view.js
  *
- *      C_ACCOUNT_VIEW — the Settings pages, one gclass parameterised by
- *      the `view` attr and mounted as Settings sub-tabs (and reachable
- *      from the avatar menu):
+ *      C_ACCOUNT_VIEW — the account pages, one gclass parameterised by
+ *      the `view` attr and reached from the toolbar avatar menu:
  *
- *        - "preference" : appearance (theme + language + command-answer
- *                         display) and the shortkeys manager; all apply
+ *        - "preference" : the /preferences page — appearance (theme +
+ *                         language), navigation shape, command-answer
+ *                         display, the stats knobs, the two font sizes
+ *                         and the shortkeys manager; all apply
  *                         immediately and persist in this browser.
  *        - "about"      : product card (mark, version, tenant/plane,
  *                         documentation link, copyright) plus read-only
@@ -61,6 +62,8 @@ import {
 } from "./c_agent_console.js";
 import {
     agent_config_get_active_node,
+    agent_config_get_nav_mode,
+    agent_config_set_nav_mode,
     agent_config_get_display_mode,
     agent_config_set_display_mode,
     agent_config_get_stats_layout,
@@ -293,6 +296,26 @@ function build_preference(gobj)
         }
     );
 
+    /*  How a tree of nodes shows the way in — today the Schemas
+     *  drill-down (yuno → treedb → topic). It is a shape, not a place:
+     *  the open tabs re-draw themselves on the change (they subscribe to
+     *  EV_NAV_MODE_CHANGED), nothing is re-mounted and nothing moves.  */
+    let nav_mode = config ? agent_config_get_nav_mode(config) : "stack";
+    let nav_seg = segment(
+        [
+            {value: "stack", i18n: "stacked strips", text: "Stacked strips", icon: "yi-bars"},
+            {value: "back",  i18n: "back to parent", text: "Back to parent", icon: "yi-arrow-left"},
+            {value: "path",  i18n: "breadcrumb",     text: "Breadcrumb",     icon: "yi-hexagon-nodes"}
+        ],
+        nav_mode,
+        function(v) {
+            if(config) {
+                agent_config_set_nav_mode(config, v);
+            }
+            render(gobj);
+        }
+    );
+
     /*  Statistics cards layout: one tab holding all cards (default) vs a
      *  tab per selected yuno. C_APP rebuilds the Statistics tabs on change.  */
     let stats_layout = config ? agent_config_get_stats_layout(config) : "single";
@@ -390,6 +413,7 @@ function build_preference(gobj)
                     [
                         field("theme", "Theme", theme_seg),
                         field("language", "Language", lang_seg),
+                        field("navigation", "Navigation", nav_seg),
                         field("display mode", "Command answers", display_seg),
                         field("statistics layout", "Statistics cards", stats_layout_seg),
                         field("stats refresh", "Auto-refresh stats", stats_refresh_ctrl),

@@ -46,6 +46,7 @@ import {
 import {register_c_yui_shell}  from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_install_start_watch} from "@yuneta/gobj-ui/src/yui_install.js";
 import {register_c_yui_nav}    from "@yuneta/gobj-ui/src/c_yui_nav.js";
+import {register_c_yui_node}   from "@yuneta/gobj-ui/src/c_yui_node.js";
 import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
 import {register_c_yui_window_manager} from "@yuneta/gobj-ui/src/c_yui_window_manager.js";
 import {register_c_yui_gobj_tree_js} from "@yuneta/gobj-ui/src/c_yui_gobj_tree_js.js";
@@ -70,6 +71,7 @@ import {register_c_agent_stats} from "./c_agent_stats.js";
 import {register_c_agent_tty} from "./c_agent_tty.js";
 import {register_c_agent_treedb} from "./c_agent_treedb.js";
 import {register_c_agent_treedb_link} from "./c_agent_treedb_link.js";
+import {register_c_agent_treedb_view} from "./c_agent_treedb_view.js";
 
 import {setup_locale} from "./locales/locales.js";
 import {apply_theme, current_theme} from "./theme.js";
@@ -119,6 +121,9 @@ function main()
     /*  Shell + nav stack (v2)  */
     register_c_yui_shell();
     register_c_yui_nav();
+    /*  Navigation as a TREE of gobjs: the Schemas tab roots one at its
+     *  own route, with a node per treedb of the yuno it opened.  */
+    register_c_yui_node();
     register_c_yui_window();     // legacy window host for the developer panel
     register_c_yui_window_manager(); // dock/taskbar for windows (Developer monitor)
     register_c_yui_gobj_tree_js();   // gobj tree of this yuno (Frontend view window)
@@ -144,6 +149,7 @@ function main()
     register_c_agent_stats();
     register_c_agent_tty();
     register_c_agent_treedb_link();  // treedb commands routed through the agent
+    register_c_agent_treedb_view();  // one treedb: the link node of the Schemas tree
     register_c_agent_treedb();
 
     /*------------------------------------------------*
