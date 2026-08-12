@@ -134,6 +134,25 @@ Three things the adapter is built around, all of them scars:
   does not change under you, so the cost is small; for its own writes the
   adapter echoes the matching node event locally, so the table reflects a save.
 
+**Applying is restarting.** An edited schema reaches the yuno when it re-reads
+it, so the tab's **Apply** button runs `kill-yuno` → `run-yuno play=0` →
+`play-yuno` on the owning yuno, after a confirmation that names it and says
+that every client connected to it is disconnected. Each of those commands
+answers only when it is DONE — the agent waits for the killed yuno's channel to
+close, and for the launched one to connect back — so the sequence is chained on
+those answers, with no timer and no polling, and ends by re-discovering, which
+re-mounts the view against the schema the yuno has just read. A write in this
+tab marks the button until the next apply.
+
+`play=0` is deliberate: with the implicit play, `run-yuno` answers twice and a
+step that answers twice advances the sequence twice.
+
+⚠️ **The node's agent must carry the `ac_final_count` fix** (SDK, this release).
+Older agents drop the answer of those four commands for any client behind a
+controlcenter — the work is done, the answer is lost. The tab gives up after
+30 s and says so, but after a `kill` that means the yuno is DOWN and stays
+down. Deploy the agent before using Apply on a node.
+
 **Permissions are the yuno's, not the console's.** The commands run inside the
 target yuno with the logged-in identity, so reading a topic needs the `read`
 authz of its `C_NODE` (and `create`/`update`/`delete` to edit) in **that yuno's**

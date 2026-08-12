@@ -25,12 +25,23 @@
  *      this console — and not the gui_treedb data browser — is where
  *      schema editing lives.
  *
+ *      APPLYING a schema is restarting the yuno that opened it, so the
+ *      tab offers it: `kill-yuno` -> `run-yuno play=0` -> `play-yuno`,
+ *      confirmed first because it disconnects every client of that yuno.
+ *      Each command answers ONCE and only when it is done (the agent
+ *      counts the channel closing and re-opening), so the sequence needs
+ *      neither timer nor polling — and it ends by re-discovering, which
+ *      re-mounts the view against the schema the yuno has just re-read.
+ *
  *      STATES, because each is a different screen and a different set of
  *      legal actions:
  *          ST_IDLE         no yuno picked, or no session yet
  *          ST_DISCOVERING  `services` in flight
  *          ST_EMPTY        the yuno exposes no treedb
  *          ST_READY        a treedb is mounted
+ *          ST_KILLING      apply: waiting for the yuno to die
+ *          ST_STARTING     apply: waiting for it to connect back
+ *          ST_PLAYING      apply: waiting for its services to play
  *
  *      NOT ROUTED (yet): neither the selected treedb nor the view's
  *      topic is mirrored into the URL, so a reload lands on the default
@@ -49,8 +60,8 @@ import {
     gobj_find_service,
     gobj_subscribe_event,
     gobj_send_event,
-    gobj_start, gobj_stop, gobj_destroy, gobj_is_running, gobj_is_destroying,
-    set_timeout, clear_timeout,
+    gobj_start, gobj_stop, gobj_destroy, gobj_is_running,
+    gobj_post_event,
     gobj_has_event,
     gobj_change_state, gobj_current_state,
     gobj_short_name,
@@ -67,6 +78,8 @@ import {t} from "i18next";
 import {
     yui_mount_service_view,
 } from "@yuneta/gobj-ui/src/c_yui_service_view.js";
+import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_shell_show_modal, yui_shell_show_error} from "@yuneta/gobj-ui/src/shell_modals.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 
@@ -82,6 +95,11 @@ const SYSTEM_TREEDB = "treedb_system_schema";
 /*  Marker of OUR discovery request in __md_iev__: the link re-publishes
  *  every answer to every panel, and each filters on its own purpose.  */
 const PURPOSE = "treedbs";
+
+/*  How long a step of the apply sequence may take before the tab stops
+ *  waiting. Generous: the agent answers each one when it is DONE, and
+ *  "done" for a kill is the killed yuno's channel closing.  */
+const APPLY_TIMEOUT = 30 * 1000;
 
 
 /***************************************************************
@@ -102,13 +120,17 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    mount_timer: null,  /*  deferred discovery on session open (see ac_on_open)  */
     treedbs:     null,  /*  discovered C_NODE service names  */
     notice:      "",    /*  explicit text when a key does not say it all  */
     adapter:     null,  /*  C_AGENT_TREEDB_LINK (pure child)  */
     view:        null,  /*  C_YUI_TREEDB_TOPICS (named service)  */
-    $toolbar:    null,  /*  treedb selector  */
+    dirty:       false, /*  something was written since the last apply  */
+    apply_timer: null,  /*  deadline of the step in flight  */
+    modal:       null,  /*  the apply confirmation  */
+    $toolbar:    null,  /*  treedb selector + apply  */
     $select:     null,
+    $apply:      null,
+    $pending:    null,
     $notice:     null,  /*  shown while there is nothing to mount  */
     $body:       null,  /*  where the view's container is mounted  */
 };
@@ -133,6 +155,7 @@ function mt_create(gobj)
     let priv = gobj.priv;
 
     priv.treedbs = [];
+    priv.dirty = false;
 
     /*
      *  CHILD subscription model
@@ -169,10 +192,7 @@ function mt_stop(gobj)
 {
     let priv = gobj.priv;
 
-    if(priv.mount_timer) {
-        clear_timeout(priv.mount_timer);
-        priv.mount_timer = null;
-    }
+    clear_apply_timer(gobj);
     if(priv.view && gobj_is_running(priv.view)) {
         gobj_stop(priv.view);
     }
@@ -191,10 +211,16 @@ function mt_destroy(gobj)
 {
     let priv = gobj.priv;
 
+    if(priv.modal) {
+        priv.modal.close();
+        priv.modal = null;
+    }
     priv.view = null;
     priv.adapter = null;
     priv.$toolbar = null;
     priv.$select = null;
+    priv.$apply = null;
+    priv.$pending = null;
     priv.$notice = null;
     priv.$body = null;
 
@@ -247,6 +273,29 @@ function build_ui(gobj)
             }}
         ]
     );
+    /*  What actually publishes an edited schema: the owning yuno has to
+     *  re-read it, and that means a restart. The button says `apply`
+     *  because that is the intent; the confirmation says what it does.  */
+    priv.$apply = createElement2(
+        ["button", {class: "button TREEDB_APPLY",
+                    title: t("apply schema"), "aria-label": t("apply schema"),
+                    "data-i18n-title": "apply schema",
+                    "data-i18n-aria-label": "apply schema"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
+                ["span", {i18n: "apply"}, t("apply")]
+            ],
+            {click: (e) => {
+                e.stopPropagation();
+                gobj_send_event(gobj, "EV_APPLY_CHANGES", {}, gobj);
+            }}
+        ]
+    );
+    priv.$pending = createElement2(
+        ["span", {class: "TREEDB_PENDING has-text-warning-dark is-hidden",
+                  i18n: "pending changes"},
+            t("pending changes")]
+    );
     priv.$toolbar = createElement2(
         /*  NO `is-flex` here: it is a Bulma helper and carries !important,
          *  so it beats `is-hidden` (also !important) depending on which
@@ -258,7 +307,10 @@ function build_ui(gobj)
             [
                 ["span", {class: "TREEDB_TOOLBAR_LABEL has-text-grey", i18n: "treedb"},
                     t("treedb")],
-                ["div", {class: "select"}, [priv.$select]]
+                ["div", {class: "select"}, [priv.$select]],
+                ["div", {class: "TREEDB_TOOLBAR_END is-align-items-center",
+                         style: "display:flex; gap:.5rem; margin-left:auto;"},
+                    [priv.$pending, priv.$apply]]
             ]
         ]
     );
@@ -488,6 +540,111 @@ function render_selector(gobj)
 }
 
 /***************************************************************
+ *  The apply button: `is-warning` while this tab knows of a write
+ *  that no restart has published yet.
+ ***************************************************************/
+function render_apply(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.$apply || !priv.$pending) {
+        return;
+    }
+    priv.$apply.classList.toggle("is-warning", priv.dirty);
+    priv.$pending.classList.toggle("is-hidden", !priv.dirty);
+}
+
+/***************************************************************
+ *  True when an answer carries OUR markers (the link re-publishes
+ *  every answer of the session to every panel).
+ ***************************************************************/
+function is_ours(gobj, kw)
+{
+    return msg_iev_read_key(kw, "console_purpose") === PURPOSE &&
+        msg_iev_read_key(kw, "console_node") === gobj_read_str_attr(gobj, "node") &&
+        msg_iev_read_key(kw, "console_yuno") === gobj_read_str_attr(gobj, "yuno_id");
+}
+
+/***************************************************************
+ *  One step of the apply sequence. Each of the three commands
+ *  answers ONCE and only when it is DONE: kill-yuno waits for the
+ *  killed yuno's channel to close, run-yuno for the launched one to
+ *  connect back (that is why `play=0` — the implicit play would add
+ *  a second answer). So the sequence needs no timer and no polling:
+ *  every step is driven by the answer of the one before.
+ ***************************************************************/
+function send_apply_step(gobj, step, cmd_line)
+{
+    let priv = gobj.priv;
+    let node = gobj_read_str_attr(gobj, "node");
+    let yuno = gobj_read_str_attr(gobj, "yuno_id");
+    let link = link_service(gobj);
+
+    if(!link || !agent_link_is_connected(link)) {
+        log_error(`${gobj_short_name(gobj)}: cannot '${step}' — not in session`);
+        return -1;
+    }
+
+    /*  A DEADLINE, which is a real time and not a deferral: an agent
+     *  without the ac_final_count fix drops the answer of these commands
+     *  entirely (see the SDK CHANGELOG), and the first step of the
+     *  sequence is the KILL — waiting in silence there leaves the yuno
+     *  dead with nobody told. */
+    clear_apply_timer(gobj);
+    /*  window.setTimeout, NOT gobj-js's set_timeout(gobj, msec): that one
+     *  drives a C_TIMER gobj, and called browser-style it just logs
+     *  "not GObj TYPE" and arms nothing. Importing it shadows the global,
+     *  which is how this deadline silently did not exist.  */
+    priv.apply_timer = setTimeout(function() {
+        priv.apply_timer = null;
+        gobj_send_event(gobj, "EV_APPLY_TIMEOUT", {step: step}, gobj);
+    }, APPLY_TIMEOUT);
+    let kw_send = {agent_id: node, cmd2agent: cmd_line};
+    msg_iev_write_key(kw_send, "console_purpose", PURPOSE);
+    msg_iev_write_key(kw_send, "console_node", node);
+    msg_iev_write_key(kw_send, "console_yuno", yuno);
+    msg_iev_write_key(kw_send, "apply_step", step);
+    agent_link_command(link, "command-agent", kw_send);
+    return 0;
+}
+
+/***************************************************************
+ *  Disarm the deadline of the step in flight.
+ ***************************************************************/
+function clear_apply_timer(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.apply_timer) {
+        clearTimeout(priv.apply_timer);
+        priv.apply_timer = null;
+    }
+}
+
+/***************************************************************
+ *  The apply sequence ended. Whatever the yuno is now, discovery
+ *  says it — and re-mounting from that answer is what makes the tab
+ *  show the schema the yuno has actually re-read.
+ *
+ *  A failure is reported as a toast, not as the notice: discovery
+ *  replaces the notice with the view a second later, and an error
+ *  that disappears before it is read is not reported at all.
+ ***************************************************************/
+function end_apply(gobj, error_comment)
+{
+    let priv = gobj.priv;
+
+    clear_apply_timer(gobj);
+    if(error_comment) {
+        yui_shell_show_error(yui_shell_of(gobj), error_comment, {t: t});
+    } else {
+        priv.dirty = false;
+    }
+    priv.notice = "";
+    render_apply(gobj);
+    start_discovery(gobj);
+    render_state(gobj);
+}
+
+/***************************************************************
  *  What this tab shows in each state.
  ***************************************************************/
 function render_state(gobj)
@@ -498,6 +655,7 @@ function render_state(gobj)
     }
     let ready = !!priv.view;
 
+    render_apply(gobj);
     priv.$toolbar.classList.toggle("is-hidden", !ready);
     priv.$body.classList.toggle("is-hidden", !ready);
     priv.$notice.classList.toggle("is-hidden", ready);
@@ -510,12 +668,15 @@ function render_state(gobj)
         priv.$notice.textContent = priv.notice;
         return;
     }
+    let state = gobj_current_state(gobj);
     let key;
-    if(empty_string(gobj_read_str_attr(gobj, "yuno_id"))) {
+    if(state === "ST_KILLING" || state === "ST_STARTING" || state === "ST_PLAYING") {
+        key = "applying";
+    } else if(empty_string(gobj_read_str_attr(gobj, "yuno_id"))) {
         key = "select a yuno";
     } else if(!agent_link_is_connected(link_service(gobj))) {
         key = "not connected to an agent";
-    } else if(gobj_current_state(gobj) === "ST_EMPTY") {
+    } else if(state === "ST_EMPTY") {
         key = "no treedb in this yuno";
     } else {
         key = "loading";
@@ -547,32 +708,33 @@ function notify_view_transport(gobj, connected)
 
 
 /***************************************************************
- *  Session up with nothing mounted: discover.
+ *  Session up with nothing mounted: discover — but NEXT CYCLE.
  *
- *  DEFERRED, and not for tidiness: we are inside the link's
- *  publication, and the ADAPTER (built at the end of discovery) is
- *  another subscriber of the same event. Mounting from here would
- *  start the view — whose mt_start fetches the schema — while the
- *  adapter may not have been given the edge yet, so its own state
- *  would still say "not in session" and the fetch would be refused.
- *  Next tick every subscriber has seen it.
+ *  We are inside the link's publication, and the ADAPTER (built at
+ *  the end of discovery) is another subscriber of the same event.
+ *  Discovering from here would end up starting the view — whose
+ *  mt_start fetches the schema — while the adapter may not have been
+ *  given the edge yet, so its own state would still say "not in
+ *  session" and the fetch would be refused.
+ *
+ *  A deferral is NOT a time, so it is a posted event and not a timer:
+ *  the event keeps its name in the trace, which a generic timeout
+ *  would not.
  ***************************************************************/
 function ac_on_open(gobj, event, kw, src)
 {
-    let priv = gobj.priv;
+    gobj_post_event(gobj, "EV_DISCOVER", {}, gobj);
+    return 0;
+}
 
-    if(priv.mount_timer) {
-        clear_timeout(priv.mount_timer);
-    }
-    priv.mount_timer = set_timeout(function() {
-        priv.mount_timer = null;
-        if(gobj_is_destroying(gobj)) {
-            return;
-        }
-        priv.notice = "";
-        start_discovery(gobj);
-        render_state(gobj);
-    }, 0);
+/***************************************************************
+ *  The deferred discovery of ac_on_open.
+ ***************************************************************/
+function ac_discover(gobj, event, kw, src)
+{
+    gobj.priv.notice = "";
+    start_discovery(gobj);
+    render_state(gobj);
     return 0;
 }
 
@@ -686,12 +848,217 @@ function ac_select_treedb(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  The hosted view selected a topic / wrote a record. Neither is
- *  routed into the URL yet (see the header) — handled here so the
- *  CHILD publication does not die as "Event NOT DEFINED in state".
+ *  The hosted view selected a topic. Not routed into the URL yet
+ *  (see the header) — handled here so the CHILD publication does not
+ *  die as "Event NOT DEFINED in state".
  ***************************************************************/
 function ac_view_notice(gobj, event, kw, src)
 {
+    return 0;
+}
+
+/***************************************************************
+ *  The hosted view WROTE a record. The treedb has it; the yuno that
+ *  opened the treedb has not re-read it, so from here on this tab
+ *  carries a change nobody has applied. Say so on the button.
+ ***************************************************************/
+function ac_record_written(gobj, event, kw, src)
+{
+    gobj.priv.dirty = true;
+    render_apply(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Apply asked for. What it does is restart the owning yuno, and
+ *  that disconnects every client of it — so it is confirmed, with
+ *  the yuno named, before anything is sent.
+ ***************************************************************/
+function ac_apply_changes(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    if(priv.modal) {
+        return 0;   /*  already asking  */
+    }
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell to confirm the apply`);
+        return 0;
+    }
+    let label = gobj_read_str_attr(gobj, "yuno_label") ||
+                gobj_read_str_attr(gobj, "yuno_id");
+
+    let $content = createElement2(
+        ["div", {class: "TREEDB_APPLY_DIALOG box"}, [
+            ["p", {class: "TREEDB_APPLY_TARGET has-text-weight-bold mb-2"},
+                `${label} · ${gobj_read_str_attr(gobj, "node")}`],
+            ["p", {class: "TREEDB_APPLY_WARN mb-4", i18n: "apply restart warning"},
+                t("apply restart warning")],
+            ["div", {class: "TREEDB_APPLY_ACTIONS is-align-items-center",
+                     style: "display:flex; gap:.5rem; justify-content:flex-end;"}, [
+                ["button", {class: "button TREEDB_APPLY_CANCEL"},
+                    [["span", {i18n: "cancel"}, t("cancel")]],
+                    {click: (e) => {
+                        e.stopPropagation();
+                        gobj_send_event(gobj, "EV_APPLY_CANCELLED", {}, gobj);
+                    }}
+                ],
+                ["button", {class: "button is-warning TREEDB_APPLY_CONFIRM"},
+                    [
+                        ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
+                        ["span", {i18n: "apply"}, t("apply")]
+                    ],
+                    {click: (e) => {
+                        e.stopPropagation();
+                        gobj_send_event(gobj, "EV_APPLY_CONFIRMED", {}, gobj);
+                    }}
+                ]
+            ]]
+        ]]
+    );
+
+    priv.modal = yui_shell_show_modal(shell, $content, {
+        dialog: true,
+        logical_class: "TREEDB_APPLY_DIALOG",
+        title: "apply schema",
+        t: t,
+        on_close: function() {
+            priv.modal = null;
+        }
+    });
+    return 0;
+}
+
+/***************************************************************
+ *  Confirmation dismissed.
+ ***************************************************************/
+function ac_apply_cancelled(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.modal) {
+        priv.modal.close();
+        priv.modal = null;
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  Confirmed: the yuno restarts. The view goes FIRST — its backend
+ *  is about to die, and a view whose every request will fail is a
+ *  lie on screen. Discovery re-mounts it at the end of the sequence.
+ ***************************************************************/
+function ac_apply_confirmed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let yuno = gobj_read_str_attr(gobj, "yuno_id");
+
+    if(priv.modal) {
+        priv.modal.close();
+        priv.modal = null;
+    }
+    unmount_view(gobj);
+    priv.notice = "";
+
+    if(send_apply_step(gobj, "kill", `kill-yuno id="${yuno}"`) < 0) {
+        end_apply(gobj, t("not connected to an agent"));
+        return 0;
+    }
+    gobj_change_state(gobj, "ST_KILLING");
+    render_state(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The answer of the step this tab is waiting for. Two arrive per
+ *  command, as everywhere in this console: the controlcenter's
+ *  dispatch ack (stack frame `command-agent`, interesting only when
+ *  it failed) and the agent's real answer.
+ ***************************************************************/
+function ac_apply_answer(gobj, event, kw, src)
+{
+    let yuno = gobj_read_str_attr(gobj, "yuno_id");
+    const expected = {
+        ST_KILLING:  "kill",
+        ST_STARTING: "run",
+        ST_PLAYING:  "play"
+    };
+    let state = gobj_current_state(gobj);
+
+    if(!is_ours(gobj, kw)) {
+        return 0;
+    }
+    if(msg_iev_read_key(kw, "apply_step") !== expected[state]) {
+        return 0;   /*  a late answer of another step (or of a discovery)  */
+    }
+
+    let stack = msg_iev_get_stack(gobj, kw, "command_stack", false);
+    let outer = kw_get_str(gobj, stack, "command", "", 0);
+    let failed = (typeof kw.result === "number" && kw.result < 0);
+
+    if(outer === "command-agent" && !failed) {
+        return 0;   /*  dispatch ok: the real answer is still coming  */
+    }
+    if(failed) {
+        end_apply(gobj, kw.comment || `${state}: failed`);
+        return 0;
+    }
+
+    /*  `play=0` on purpose: with the implicit play, run-yuno answers
+     *  TWICE (its own aggregate and the play), and a step that answers
+     *  twice moves the sequence twice.  */
+    if(state === "ST_KILLING") {
+        if(send_apply_step(gobj, "run", `run-yuno id="${yuno}" play=0`) < 0) {
+            end_apply(gobj, t("not connected to an agent"));
+            return 0;
+        }
+        gobj_change_state(gobj, "ST_STARTING");
+        return 0;
+    }
+    if(state === "ST_STARTING") {
+        if(send_apply_step(gobj, "play", `play-yuno id="${yuno}"`) < 0) {
+            end_apply(gobj, t("not connected to an agent"));
+            return 0;
+        }
+        gobj_change_state(gobj, "ST_PLAYING");
+        return 0;
+    }
+
+    /*  ST_PLAYING: the yuno is up and playing with the schema it just
+     *  re-read. Discovery re-mounts the view against it.  */
+    end_apply(gobj, "");
+    return 0;
+}
+
+/***************************************************************
+ *  The session dropped mid-sequence: the answer we wait for will
+ *  never come, and what the yuno is now is unknown.
+ ***************************************************************/
+function ac_apply_broken(gobj, event, kw, src)
+{
+    clear_apply_timer(gobj);
+    gobj.priv.notice = "";
+    render_state(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The step took too long. The commands answer when they are DONE,
+ *  so silence is not slowness: it is an agent that cannot answer
+ *  them (see the SDK CHANGELOG on ac_final_count). Say it with the
+ *  step named, because after a `kill` the yuno is DOWN.
+ ***************************************************************/
+function ac_apply_timeout(gobj, event, kw, src)
+{
+    let step = (kw && kw.step) || "";
+    let yuno = gobj_read_str_attr(gobj, "yuno_label") ||
+               gobj_read_str_attr(gobj, "yuno_id");
+
+    log_error(
+        `${gobj_short_name(gobj)}: the node's agent did not answer '${step}' ` +
+        `for '${yuno}'`
+    );
+    end_apply(gobj, `${t("apply timeout")} (${step})`);
     return 0;
 }
 
@@ -734,28 +1101,41 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const view_events = [
         ["EV_TOPIC_SELECTED",       ac_view_notice,       null],
-        ["EV_RECORD_WRITTEN",       ac_view_notice,       null]
+        ["EV_RECORD_WRITTEN",       ac_record_written,    null]
+    ];
+    /*  The apply confirmation can be answered in any state it can be
+     *  opened in, and it can only be opened where there is something to
+     *  apply — but a dialog outlives a state change, so the two dismiss
+     *  events are legal wherever it can still be on screen.  */
+    const dialog_events = [
+        ["EV_APPLY_CANCELLED",      ac_apply_cancelled,   null]
     ];
     const states = [
         ["ST_IDLE", [
             ["EV_ON_OPEN",              ac_on_open,           null],
+            ["EV_DISCOVER",             ac_discover,          null],
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
             ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
+            ...dialog_events,
             ...view_events
         ]],
         ["ST_DISCOVERING", [
             ["EV_ON_OPEN",              ac_on_open,           null],
+            ["EV_DISCOVER",             ac_discover,          null],
             ["EV_ON_CLOSE",             ac_on_close,          "ST_IDLE"],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
             ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
+            ...dialog_events,
             ...view_events
         ]],
         ["ST_EMPTY", [
             ["EV_ON_OPEN",              ac_on_open,           null],
+            ["EV_DISCOVER",             ac_discover,          null],
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
             ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
+            ...dialog_events,
             ...view_events
         ]],
         ["ST_READY", [
@@ -763,6 +1143,33 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
             ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
+            ["EV_APPLY_CHANGES",        ac_apply_changes,     null],
+            ["EV_APPLY_CONFIRMED",      ac_apply_confirmed,   null],
+            ...dialog_events,
+            ...view_events
+        ]],
+        /*  The restart, one state per command in flight, so the trace
+         *  says which one is being waited for. Each answers once and only
+         *  when it is done — see send_apply_step().  */
+        ["ST_KILLING", [
+            ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
+            ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
+            ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
+            ...dialog_events,
+            ...view_events
+        ]],
+        ["ST_STARTING", [
+            ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
+            ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
+            ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
+            ...dialog_events,
+            ...view_events
+        ]],
+        ["ST_PLAYING", [
+            ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
+            ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
+            ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
+            ...dialog_events,
             ...view_events
         ]]
     ];
@@ -775,6 +1182,11 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",          0],
         ["EV_MT_COMMAND_ANSWER", 0],
         ["EV_SELECT_TREEDB",     0],
+        ["EV_APPLY_CHANGES",     0],
+        ["EV_APPLY_CONFIRMED",   0],
+        ["EV_APPLY_CANCELLED",   0],
+        ["EV_APPLY_TIMEOUT",     0],
+        ["EV_DISCOVER",          0],
         ["EV_TOPIC_SELECTED",    0],
         ["EV_RECORD_WRITTEN",    0]
     ];

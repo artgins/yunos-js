@@ -164,6 +164,12 @@ const en = {
         "identity card refused": "Identity card refused",
 
         /* treedb schema editor (Schemas workspace, gobj-ui views) */
+        "apply": "Apply",
+        "apply schema": "Apply the schema: restarts the yuno",
+        "apply restart warning": "The yuno is restarted (kill, run, play) so it re-reads its schema. Every client connected to it is disconnected.",
+        "apply timeout":     "The node's agent did not answer; the yuno may be down",
+        "applying": "Applying…",
+        "pending changes": "Pending changes",
         "no treedb in this yuno": "This yuno exposes no treedb",
         "topics":            "Topics",
         "no topics":         "No topics",

@@ -23,6 +23,35 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **Applying a schema, from the tab that edited it.** An edited schema reaches
+    its yuno when the yuno re-reads it, which means a restart — so the Schemas
+    tab now does it: `kill-yuno` → `run-yuno play=0` → `play-yuno`, behind a
+    confirmation that names the yuno and says every client of it is
+    disconnected. A write marks the button until the next apply.
+
+    The sequence is chained on the ANSWERS, with no timer and no polling: each
+    of those commands answers only when it is done (the agent waits for the
+    killed yuno's channel to close, and for the launched one to connect back).
+    `play=0` is deliberate — with the implicit play, `run-yuno` answers twice,
+    and a step that answers twice advances the sequence twice. It ends by
+    re-discovering, which re-mounts the view against the schema the yuno has
+    just read. One state per step (`ST_KILLING`, `ST_STARTING`, `ST_PLAYING`)
+    so the trace says which answer is being waited for.
+
+    Two things came out of building it, and both were silent:
+
+    - **The agent dropped those answers for any client behind a
+      controlcenter** — the yuno was killed and nothing came back. Fixed in the
+      SDK (`ac_final_count`, see its CHANGELOG); the tab additionally gives up
+      after 30 s and says so, because after a `kill` a silent wait means a
+      yuno that is DOWN and nobody told.
+    - **`set_timeout` imported from gobj-js is not the browser's.** It drives a
+      C_TIMER gobj; called browser-style it logs *"not GObj TYPE"* and arms
+      nothing — and importing it SHADOWS the global, so the deferred mount of
+      the previous change had never actually deferred either. The deferral is
+      now a posted event (`gobj_post_event`, which is what a deferral is), and
+      the deadline — a real time — a plain `setTimeout`.
+
 - **Schemas discovers the yuno's treedbs instead of assuming one.** A yuno
     exposes its treedbs as services, so one round trip answers which ones there
     are — `command-yuno id=<yuno> service=__yuno__ command=services`, whose

@@ -168,6 +168,12 @@ const es = {
             real topic of treedb_system_schema, which the cards render through
             t(): translating it printed a card labelled "Temas". It stays in
             English, like "Sin topics" just below.  */
+        "apply": "Aplicar",
+        "apply schema": "Aplicar el esquema: reinicia el yuno",
+        "apply restart warning": "El yuno se reinicia (kill, run, play) para que relea su esquema. Todo cliente conectado a él se desconecta.",
+        "apply timeout":     "El agente del nodo no ha contestado; el yuno puede estar parado",
+        "applying": "Aplicando…",
+        "pending changes": "Cambios sin aplicar",
         "no treedb in this yuno": "Este yuno no expone ningún treedb",
         "topics":            "Topics",
         "no topics":         "Sin topics",
