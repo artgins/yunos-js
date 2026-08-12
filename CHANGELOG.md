@@ -56,7 +56,11 @@ on its own, outside the yunetas superproject.
     The adapter is a real transport façade, states included: `ST_DISCONNECTED` /
     `ST_SESSION` driven by the link, because the library asks its transport for
     `gobj_current_state() === "ST_SESSION"` to decide whether its remote-only
-    actions are usable.
+    actions are usable. And it subscribes by the **SERVICE** model, not the
+    CHILD one: a transport's audience is whoever asks for it — the hosted view —
+    and with the CHILD model the parent tab received the echoed
+    `EV_TREEDB_NODE_*` it has no reason to declare, answering *"Event NOT DEFINED
+    in state"* on every save.
 
     Permissions stay the yuno's: the commands run there with the logged-in
     identity, so a user without the `read` authz of that `C_NODE` gets `-403`

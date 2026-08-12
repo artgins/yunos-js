@@ -249,7 +249,10 @@ function build_adapter(gobj)
         `treedb_link_${clean_id(gobj)}`,
         "C_AGENT_TREEDB_LINK",
         {
-            subscriber:  gobj,
+            /*  No `subscriber`: the adapter is a transport, and its only
+             *  audience is the hosted view, which subscribes to it on its
+             *  own (SERVICE model). Handing it this gobj would deliver the
+             *  echoed EV_TREEDB_NODE_* here, where they mean nothing.  */
             link_svc:    link_service(gobj),
             node:        gobj_read_str_attr(gobj, "node"),
             yuno_id:     gobj_read_str_attr(gobj, "yuno_id"),

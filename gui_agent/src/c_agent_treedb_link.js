@@ -64,7 +64,6 @@
 import {
     SDATA, SDATA_END, data_type_t, event_flag_t,
     gclass_create, log_error,
-    gobj_parent,
     gobj_read_attr, gobj_read_str_attr, gobj_read_pointer_attr,
     gobj_subscribe_event, gobj_unsubscribe_event,
     gobj_change_state, gobj_current_state,
@@ -138,13 +137,19 @@ function mt_create(gobj)
     priv.pending = {};
 
     /*
-     *  CHILD subscription model
+     *  SERVICE subscription model
+     *
+     *  A transport's audience is whoever asks for it — here the hosted
+     *  view, which subscribes to the node events on its `gobj_remote_yuno`
+     *  exactly as it would on a C_IEVENT_CLI. The parent is NOT the
+     *  audience: with the CHILD model it received the echoed
+     *  EV_TREEDB_NODE_* it has no reason to declare, and answered
+     *  "Event NOT DEFINED in state" on every write.
      */
-    let subscriber = gobj_read_pointer_attr(gobj, "subscriber");
-    if(!subscriber) {
-        subscriber = gobj_parent(gobj);
+    const subscriber = gobj_read_pointer_attr(gobj, "subscriber");
+    if(subscriber) {
+        gobj_subscribe_event(gobj, null, {}, subscriber);
     }
-    gobj_subscribe_event(gobj, null, {}, subscriber);
 }
 
 /***************************************************************
