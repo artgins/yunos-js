@@ -98,7 +98,13 @@ data itself.
 
 Discovery also answers what the tab could not ask before: a yuno with **no**
 treedb (a gate, a yuno with only a timeranger) says so, instead of mounting a
-view that answers with an error toast per topic. The tab's states say which
+view that answers with an error toast per topic. The **picker** says it too:
+expanding a node in the Schemas tree probes each of its yunos with the same
+`services` call and marks the ones that expose no treedb — status column and
+checkbox off, so a dead end is visible before a tab is opened. It is one round
+trip per yuno, which is why it runs on EXPAND and only in this workspace; a
+probe that fails or has not answered leaves the row untouched, because
+"could not ask" is not "has none". The tab's states say which
 screen you are on: `ST_IDLE` (no yuno, or no session), `ST_DISCOVERING`,
 `ST_EMPTY`, `ST_READY`.
 

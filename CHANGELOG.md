@@ -52,6 +52,23 @@ on its own, outside the yunetas superproject.
       now a posted event (`gobj_post_event`, which is what a deferral is), and
       the deadline — a real time — a plain `setTimeout`.
 
+- **The Schemas picker marks the yunos with no treedb.** Expanding a node in
+    the tree probes each of its yunos with the same `services` call the tab
+    makes, and a yuno whose answer carries no `C_NODE` service is shown as such
+    — status column and checkbox off — so a dead end is visible BEFORE a tab is
+    opened for it. On this node that is 6 of the 11 running yunos.
+
+    On EXPAND and only in this workspace, because it is one round trip per
+    yuno and a node holds a dozen: the tree the operator does not open costs
+    nothing. A probe that failed or has not answered leaves the row alone —
+    "could not ask" is not "has none", and marking on a permission error would
+    send the operator looking for a treedb that is there.
+
+    The flag reaches the picker as a kw key, and only when true: an attr the
+    gclass does not declare fails the WHOLE load ("GClass Attribute NOT FOUND"
+    + "json2data() FAILED"), so the flat C_NODES picker of Commands/Terminal
+    must not be handed it, not even as `false`.
+
 - **Schemas discovers the yuno's treedbs instead of assuming one.** A yuno
     exposes its treedbs as services, so one round trip answers which ones there
     are — `command-yuno id=<yuno> service=__yuno__ command=services`, whose

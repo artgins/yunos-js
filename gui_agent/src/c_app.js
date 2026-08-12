@@ -360,7 +360,8 @@ const WORKSPACES = {
     terminal:   {min_version: "",      tab_gclass: "C_AGENT_TTY"},
     /*  Schemas edits a yuno's `treedb_system_schema` — the treedb that holds
      *  its schemas as data — through the routing adapter (C_AGENT_TREEDB).  */
-    schemas:    {min_version: "7.7.0", tab_gclass: "C_AGENT_TREEDB", unit: "yuno"}
+    schemas:    {min_version: "7.7.0", tab_gclass: "C_AGENT_TREEDB", unit: "yuno",
+                 treedb_check: true}
 };
 
 /*  Reserved tab id for the Statistics "single" layout: one tab holding a
@@ -448,6 +449,13 @@ function workspace_picker_item(ws)
 {
     let spec = WORKSPACES[ws];
     let picker_gclass = (spec.unit === "yuno") ? "C_STATS_NODES" : "C_NODES";
+    let kw = {workspace: ws, min_version: spec.min_version, title: "nodes"};
+    /*  Only the tree picker declares it. A kw key the gclass does not have
+     *  fails the WHOLE load ("GClass Attribute NOT FOUND" + "json2data()
+     *  FAILED"), so C_NODES must not be handed it — not even as false.  */
+    if(spec.treedb_check) {
+        kw.with_treedb_check = true;
+    }
     return {
         id:       "picker",
         name:     "nodes",
@@ -457,7 +465,7 @@ function workspace_picker_item(ws)
         target: {
             stage:     "main",
             gclass:    picker_gclass,
-            kw:        {workspace: ws, min_version: spec.min_version, title: "nodes"},
+            kw:        kw,
             lifecycle: "keep_alive"
         }
     };
