@@ -79,10 +79,28 @@ ack plus the agent's asynchronous real answer).
 ## Schemas: the treedb views over the agent's control plane
 
 The Schemas workspace mounts gobj-ui's treedb editor (`C_YUI_TREEDB_TOPICS`)
-**unchanged**, pointed at one yuno's `treedb_system_schema` — the treedb where
-every schema of that yuno lives as data (`treedbs` → `topics` → `cols`). Editing
-it there is how a schema changes without touching the C literal; the change
-reaches the yuno on its next restart (`kill-yuno` + `run-yuno`).
+**unchanged**, pointed at one treedb of one yuno. It opens the yuno's
+`treedb_system_schema` — the treedb where every schema of that yuno lives as
+data (`treedbs` → `topics` → `cols`). Editing it there is how a schema changes
+without touching the C literal; the change reaches the yuno on its next restart
+(`kill-yuno` + `run-yuno`).
+
+**Which treedbs a yuno has is discovered, not assumed.** A yuno exposes them as
+services, so one round trip answers it —
+`command-yuno id=<yuno> service=__yuno__ command=services` — and the `C_NODE`
+rows are the treedbs this console can talk to. They fill a selector in the tab
+toolbar, `treedb_system_schema` first and selected; picking another one tears
+the mount down (view **and** adapter, so no answer of the old one lands in the
+new table) and builds a fresh one. The others are offered because an operator
+already on the node should not need a second SPA and a second session to look
+at the data — `gui_treedb` remains the browser for someone whose job is the
+data itself.
+
+Discovery also answers what the tab could not ask before: a yuno with **no**
+treedb (a gate, a yuno with only a timeranger) says so, instead of mounting a
+view that answers with an error toast per topic. The tab's states say which
+screen you are on: `ST_IDLE` (no yuno, or no session), `ST_DISCOVERING`,
+`ST_EMPTY`, `ST_READY`.
 
 The piece that makes it work is `C_AGENT_TREEDB_LINK`, a **routing adapter**.
 The library view talks to a "remote yuno" with `gobj_command(...)` and expects
@@ -122,9 +140,9 @@ authz of its `C_NODE` (and `create`/`update`/`delete` to edit) in **that yuno's*
 `C_AUTHZ`. A user without it gets `-403 No permission to 'read' in service
 '…'` as a toast per topic, and empty tables.
 
-**Not routed yet:** the topic selection is not mirrored into the URL, so a
-reload lands on the topic grid. `gui_treedb`'s `C_TREEDB_VIEW` does that
-bridging and is the model to copy.
+**Not routed yet:** neither the selected treedb nor the topic is mirrored into
+the URL, so a reload lands on the default treedb's topic grid. `gui_treedb`'s
+`C_TREEDB_VIEW` does that bridging and is the model to copy.
 
 ## i18n
 
@@ -174,7 +192,9 @@ rule, visible-tab only) and **highlight** any counter that changed since the las
 refresh. Commands/Statistics require agent **≥ 7.7.0**; Terminal works on any
 version (needs the `open-console` authz — an admin role). **Schemas** picks
 yunos the same way Statistics does and opens one treedb-editor tab per yuno,
-routed through `C_AGENT_TREEDB_LINK` (see the section above). Selecting a tab focuses
+routed through `C_AGENT_TREEDB_LINK` (see the section above); each tab
+discovers that yuno's treedbs and offers them in a selector, `treedb_system_schema`
+first. Selecting a tab focuses
 its input (Commands) / xterm (Terminal); node tabs carry a green/red connection
 dot; the last-active tab is remembered per workspace. Commands and Terminal both
 carry a per-tab **font-size** control (temporary) over a shared default set in

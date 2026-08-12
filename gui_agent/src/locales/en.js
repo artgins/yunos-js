@@ -164,6 +164,7 @@ const en = {
         "identity card refused": "Identity card refused",
 
         /* treedb schema editor (Schemas workspace, gobj-ui views) */
+        "no treedb in this yuno": "This yuno exposes no treedb",
         "topics":            "Topics",
         "no topics":         "No topics",
         "schema":            "Schema",

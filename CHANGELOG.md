@@ -23,6 +23,32 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **Schemas discovers the yuno's treedbs instead of assuming one.** A yuno
+    exposes its treedbs as services, so one round trip answers which ones there
+    are — `command-yuno id=<yuno> service=__yuno__ command=services`, whose
+    `C_NODE` rows are the treedbs this console can talk to. They fill a selector
+    in the tab toolbar with `treedb_system_schema` first and selected: it is
+    what the workspace is for. Picking another tears the mount down — view AND
+    adapter, because the adapter holds the requests in flight for THAT view and
+    an answer of the old one landing in the new table is the bug this avoids —
+    and builds a fresh pair.
+
+    The other treedbs are offered, not hidden: an operator already on the node
+    should not need a second SPA and a second session to look at the data.
+    `gui_treedb` stays the browser for someone whose job IS the data.
+
+    Discovery also answers the question the tab could not ask: a yuno with NO
+    treedb — a gate, a yuno carrying only a timeranger — now says so, instead of
+    mounting a view that answers with an error toast per topic. The tab models
+    it as states rather than flags: `ST_IDLE` (no yuno, or no session),
+    `ST_DISCOVERING`, `ST_EMPTY`, `ST_READY`.
+
+    One CSS scar on the way: the toolbar carried Bulma's `is-flex`, which is
+    `!important` and beat the `is-hidden` toggling it — an empty selector stayed
+    on screen for a yuno with no treedb. Inline `display:flex` + `is-hidden`
+    behaves, because an `!important` rule does beat a non-important inline
+    style.
+
 - **A fifth workspace: Schemas — the treedb editor over the agent's control
     plane.** gobj-ui's `C_YUI_TREEDB_TOPICS` is mounted **unchanged** against
     one yuno's `treedb_system_schema` (the treedb that holds that yuno's schemas

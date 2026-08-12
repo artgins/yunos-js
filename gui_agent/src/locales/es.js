@@ -168,6 +168,7 @@ const es = {
             real topic of treedb_system_schema, which the cards render through
             t(): translating it printed a card labelled "Temas". It stays in
             English, like "Sin topics" just below.  */
+        "no treedb in this yuno": "Este yuno no expone ningún treedb",
         "topics":            "Topics",
         "no topics":         "Sin topics",
         "schema":            "Esquema",

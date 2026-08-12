@@ -2,32 +2,40 @@
  *          c_agent_treedb.js
  *
  *      C_AGENT_TREEDB — the Schemas workspace tab: gobj-ui's treedb
- *      editor pointed at ONE yuno's `treedb_system_schema`, the treedb
- *      that holds every schema of that yuno AS DATA (treedbs -> topics
- *      -> cols).  Editing it there is how a schema is changed without
- *      touching the C literal; the change reaches the yuno when it is
- *      restarted (kill-yuno + run-yuno), which is the agent's job and
- *      the reason this console — and not the gui_treedb data browser —
- *      is where schema editing lives.
+ *      editor pointed at ONE treedb of ONE yuno of ONE node, reached
+ *      through the agent by C_AGENT_TREEDB_LINK (see its header).
  *
- *      Two pieces are mounted here:
+ *      WHICH treedb is discovered, not assumed.  A yuno exposes its
+ *      treedbs as SERVICES, so one round trip answers it:
+ *          command-yuno id=<yuno> service=__yuno__ command=services
+ *      and the `C_NODE` rows of that answer are the treedbs this console
+ *      can talk to.  The tab opens `treedb_system_schema` — the one that
+ *      holds the yuno's schemas AS DATA (treedbs -> topics -> cols), and
+ *      the reason this workspace exists — and offers the rest in a
+ *      selector, because an operator already on the node should not need
+ *      a second SPA and a second session to look at the data.
  *
- *        - C_AGENT_TREEDB_LINK, the routing adapter, which turns the
- *          view's commands into `command-agent`/`command-yuno` on the
- *          single control-center session (see its header).
- *        - C_YUI_TREEDB_TOPICS, the library view, mounted as a NAMED
- *          SERVICE with the adapter injected as its transport
- *          (`yui_mount_service_view`), so it works unchanged.
+ *      Discovery also answers the question the tab could not ask before:
+ *      a yuno with NO treedb (a gate, a pure timeranger yuno) now says
+ *      so, instead of mounting a view that answers with an error toast
+ *      per topic.
  *
- *      The view is mounted only once the session is up: it fetches its
- *      schema in ITS mt_start and a second fetch would rebuild its topic
- *      services on top of the first ones.  Until then this tab shows a
- *      notice, and EV_ON_OPEN mounts it.
+ *      Editing a schema takes effect when the owning yuno is restarted
+ *      (kill-yuno + run-yuno), which is the agent's job and the reason
+ *      this console — and not the gui_treedb data browser — is where
+ *      schema editing lives.
  *
- *      NOT ROUTED (yet): the view's topic selection is not mirrored into
- *      the URL, so a reload lands on the topic grid.  gui_treedb's
- *      C_TREEDB_VIEW does that bridging and is the model to copy when
- *      this workspace earns it.
+ *      STATES, because each is a different screen and a different set of
+ *      legal actions:
+ *          ST_IDLE         no yuno picked, or no session yet
+ *          ST_DISCOVERING  `services` in flight
+ *          ST_EMPTY        the yuno exposes no treedb
+ *          ST_READY        a treedb is mounted
+ *
+ *      NOT ROUTED (yet): neither the selected treedb nor the view's
+ *      topic is mirrored into the URL, so a reload lands on the default
+ *      treedb's topic grid.  gui_treedb's C_TREEDB_VIEW does that
+ *      bridging and is the model to copy.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -41,12 +49,17 @@ import {
     gobj_find_service,
     gobj_subscribe_event,
     gobj_send_event,
-    gobj_start, gobj_stop, gobj_is_running,
+    gobj_start, gobj_stop, gobj_destroy, gobj_is_running, gobj_is_destroying,
     set_timeout, clear_timeout,
     gobj_has_event,
+    gobj_change_state, gobj_current_state,
     gobj_short_name,
     createElement2,
     empty_string,
+    msg_iev_write_key,
+    msg_iev_read_key,
+    msg_iev_get_stack,
+    kw_get_str,
 } from "@yuneta/gobj-js";
 
 import {t} from "i18next";
@@ -55,7 +68,7 @@ import {
     yui_mount_service_view,
 } from "@yuneta/gobj-ui/src/c_yui_service_view.js";
 
-import {agent_link_is_connected} from "./c_agent_link.js";
+import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 
 
 /***************************************************************
@@ -63,8 +76,12 @@ import {agent_link_is_connected} from "./c_agent_link.js";
  ***************************************************************/
 const GCLASS_NAME = "C_AGENT_TREEDB";
 
-/*  The treedb every yuno keeps its own schemas in.  */
+/*  The treedb every yuno with a C_TREEDB keeps its own schemas in.  */
 const SYSTEM_TREEDB = "treedb_system_schema";
+
+/*  Marker of OUR discovery request in __md_iev__: the link re-publishes
+ *  every answer to every panel, and each filters on its own purpose.  */
+const PURPOSE = "treedbs";
 
 
 /***************************************************************
@@ -76,20 +93,24 @@ SDATA(data_type_t.DTP_POINTER,  "subscriber",  0,  null,          "Subscriber of
 SDATA(data_type_t.DTP_STRING,   "title",       0,  "schemas",     "View title (i18n key)"),
 SDATA(data_type_t.DTP_STRING,   "workspace",   0,  "schemas",     "Owning workspace (selection bucket)"),
 SDATA(data_type_t.DTP_STRING,   "node",        0,  "",            "Node holding the yuno"),
-SDATA(data_type_t.DTP_STRING,   "yuno_id",     0,  "",            "Yuno whose schemas are edited"),
+SDATA(data_type_t.DTP_STRING,   "yuno_id",     0,  "",            "Yuno whose treedbs are opened"),
 SDATA(data_type_t.DTP_STRING,   "yuno_label",  0,  "",            "Yuno label role^name"),
-SDATA(data_type_t.DTP_STRING,   "treedb_name", 0,  SYSTEM_TREEDB, "Treedb service inside that yuno"),
+SDATA(data_type_t.DTP_STRING,   "treedb_name", 0,  "",            "Treedb currently open (discovered)"),
 SDATA(data_type_t.DTP_POINTER,  "link_svc",    0,  null,          "C_AGENT_LINK service"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,          "Root HTMLElement"),
 SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    mount_timer: null,  /*  deferred mount on session open (see ac_on_open)  */
-    adapter: null,  /*  C_AGENT_TREEDB_LINK (pure child)  */
-    view:    null,  /*  C_YUI_TREEDB_TOPICS (named service)  */
-    $body:   null,  /*  where the view's container is mounted  */
-    $notice: null,  /*  shown while there is nothing to mount  */
+    mount_timer: null,  /*  deferred discovery on session open (see ac_on_open)  */
+    treedbs:     null,  /*  discovered C_NODE service names  */
+    notice:      "",    /*  explicit text when a key does not say it all  */
+    adapter:     null,  /*  C_AGENT_TREEDB_LINK (pure child)  */
+    view:        null,  /*  C_YUI_TREEDB_TOPICS (named service)  */
+    $toolbar:    null,  /*  treedb selector  */
+    $select:     null,
+    $notice:     null,  /*  shown while there is nothing to mount  */
+    $body:       null,  /*  where the view's container is mounted  */
 };
 
 let __gclass__ = null;
@@ -111,6 +132,8 @@ function mt_create(gobj)
 {
     let priv = gobj.priv;
 
+    priv.treedbs = [];
+
     /*
      *  CHILD subscription model
      */
@@ -124,26 +147,18 @@ function mt_create(gobj)
     if(link) {
         gobj_subscribe_event(link, "EV_ON_OPEN", {}, gobj);
         gobj_subscribe_event(link, "EV_ON_CLOSE", {}, gobj);
+        gobj_subscribe_event(link, "EV_MT_COMMAND_ANSWER", {}, gobj);
     }
 
     build_ui(gobj);
-    build_adapter(gobj);
 }
 
 /***************************************************************
  *          Framework Method: Start
- *
- *  The adapter starts FIRST: it subscribes to the link's answers,
- *  and the view's very first request goes out in its own mt_start.
  ***************************************************************/
 function mt_start(gobj)
 {
-    let priv = gobj.priv;
-
-    if(priv.adapter && !gobj_is_running(priv.adapter)) {
-        gobj_start(priv.adapter);
-    }
-    mount_view(gobj);
+    start_discovery(gobj);
     render_state(gobj);
 }
 
@@ -178,8 +193,10 @@ function mt_destroy(gobj)
 
     priv.view = null;
     priv.adapter = null;
-    priv.$body = null;
+    priv.$toolbar = null;
+    priv.$select = null;
     priv.$notice = null;
+    priv.$body = null;
 
     let $c = gobj_read_attr(gobj, "$container");
     if($c && $c.parentNode) {
@@ -213,16 +230,41 @@ function link_service(gobj)
 
 /***************************************************************
  *  Root DOM: a wrapper this tab owns, so the hosted view can be
- *  mounted (and re-mounted) inside it without the shell noticing.
+ *  mounted (and swapped) inside it without the shell noticing.
  ***************************************************************/
 function build_ui(gobj)
 {
     let priv = gobj.priv;
 
+    priv.$select = createElement2(
+        ["select", {class: "TREEDB_SELECT",
+                    "aria-label": t("treedb"), "data-i18n-aria-label": "treedb"},
+            [],
+            {change: (e) => {
+                /*  The DOM callback's only job: turn the change into an
+                 *  event. The work belongs to the action.  */
+                gobj_send_event(gobj, "EV_SELECT_TREEDB", {treedb: e.target.value}, gobj);
+            }}
+        ]
+    );
+    priv.$toolbar = createElement2(
+        /*  NO `is-flex` here: it is a Bulma helper and carries !important,
+         *  so it beats `is-hidden` (also !important) depending on which
+         *  lands later in the sheet — the toolbar stayed visible, empty,
+         *  on a yuno with no treedb. Inline display + is-hidden behaves:
+         *  an !important rule beats a non-important inline style.  */
+        ["div", {class: "TREEDB_TOOLBAR is-align-items-center is-hidden",
+                 style: "display:flex; gap:.5rem; padding:.25rem .5rem;"},
+            [
+                ["span", {class: "TREEDB_TOOLBAR_LABEL has-text-grey", i18n: "treedb"},
+                    t("treedb")],
+                ["div", {class: "select"}, [priv.$select]]
+            ]
+        ]
+    );
     priv.$notice = createElement2(
-        ["div", {class: "TREEDB_NOTICE p-4 has-text-grey",
-                 i18n: "not connected to an agent"},
-            t("not connected to an agent")]
+        ["div", {class: "TREEDB_NOTICE p-4 has-text-grey", i18n: "select a yuno"},
+            t("select a yuno")]
     );
     priv.$body = createElement2(
         ["div", {class: "TREEDB_BODY", style: "flex:1 1 auto; min-height:0;"}, []]
@@ -231,15 +273,92 @@ function build_ui(gobj)
     let $c = createElement2(
         ["div", {class: `${GCLASS_NAME} TREEDB_CARD view-card`,
                  style: "display:flex; flex-direction:column; height:100%;"},
-            [priv.$notice, priv.$body]]
+            [priv.$toolbar, priv.$notice, priv.$body]]
     );
     gobj_write_attr(gobj, "$container", $c);
 }
 
 /***************************************************************
- *  The routing adapter, one per tab: it carries WHICH treedb this
- *  tab edits (node, yuno, service) and is the transport the library
- *  view talks to.
+ *  Ask the yuno which services it runs; its C_NODE ones are the
+ *  treedbs. Returns 0 when the request went out.
+ ***************************************************************/
+function request_treedbs(gobj)
+{
+    let node = gobj_read_str_attr(gobj, "node");
+    let yuno = gobj_read_str_attr(gobj, "yuno_id");
+    let link = link_service(gobj);
+
+    if(empty_string(node) || empty_string(yuno)) {
+        return -1;      /*  the empty-state route: nothing to discover  */
+    }
+    if(!link || !agent_link_is_connected(link)) {
+        return -1;      /*  ac_on_open asks again when the session lands  */
+    }
+
+    let kw_send = {
+        agent_id:  node,
+        cmd2agent: `command-yuno id="${yuno}" service="__yuno__" command="services"`
+    };
+    msg_iev_write_key(kw_send, "console_purpose", PURPOSE);
+    msg_iev_write_key(kw_send, "console_node", node);
+    msg_iev_write_key(kw_send, "console_yuno", yuno);
+    agent_link_command(link, "command-agent", kw_send);
+    return 0;
+}
+
+/***************************************************************
+ *  Discover, or explain why not. Called at start and on every
+ *  session open that finds this tab with nothing mounted.
+ ***************************************************************/
+function start_discovery(gobj)
+{
+    if(request_treedbs(gobj) === 0) {
+        gobj_change_state(gobj, "ST_DISCOVERING");
+        return;
+    }
+    gobj_change_state(gobj, "ST_IDLE");
+}
+
+/***************************************************************
+ *  The C_NODE services of the answer, `treedb_system_schema` first:
+ *  it is what this workspace is for, and the default.
+ ***************************************************************/
+function treedbs_of(data)
+{
+    if(!Array.isArray(data)) {
+        return [];
+    }
+    let names = data
+        .filter((s) => s && s.gclass === "C_NODE" && !empty_string(s.service))
+        .map((s) => s.service)
+        .sort();
+
+    let i = names.indexOf(SYSTEM_TREEDB);
+    if(i > 0) {
+        names.splice(i, 1);
+        names.unshift(SYSTEM_TREEDB);
+    }
+    return names;
+}
+
+/***************************************************************
+ *  A unique, lower-case suffix per mount: the hosted view is a
+ *  NAMED SERVICE and a duplicate name is not fatal — gobj-js
+ *  REBINDS the name and one tab's answers would land in the other.
+ *  The treedb is part of it because switching treedb is a new mount.
+ ***************************************************************/
+function clean_id(gobj)
+{
+    let node = gobj_read_str_attr(gobj, "node") || "node";
+    let yuno = gobj_read_str_attr(gobj, "yuno_id") || "yuno";
+    let treedb = gobj_read_str_attr(gobj, "treedb_name") || "db";
+    return `${node}_${yuno}_${treedb}`.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+}
+
+/***************************************************************
+ *  The routing adapter, one per mount: it carries WHICH treedb is
+ *  open (node, yuno, service) and is the transport the library view
+ *  talks to.
  ***************************************************************/
 function build_adapter(gobj)
 {
@@ -262,40 +381,29 @@ function build_adapter(gobj)
     );
     if(!priv.adapter) {
         log_error(`${gobj_short_name(gobj)}: cannot create the treedb adapter`);
+        return -1;
     }
+    gobj_start(priv.adapter);
+    return 0;
 }
 
 /***************************************************************
- *  A unique, lower-case suffix per tab: the hosted view is a NAMED
- *  SERVICE and a duplicate name is not fatal — gobj-js REBINDS the
- *  name and one tab's answers would land in the other.
- ***************************************************************/
-function clean_id(gobj)
-{
-    let node = gobj_read_str_attr(gobj, "node") || "node";
-    let yuno = gobj_read_str_attr(gobj, "yuno_id") || "yuno";
-    return `${node}_${yuno}`.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
-}
-
-/***************************************************************
- *  Mount the library view — once, and only with the session up: it
- *  fetches its schema in mt_start, and a second fetch would build a
- *  second set of topic services over the first.
+ *  Mount the library view on the current treedb. It fetches its
+ *  schema in mt_start, so this runs once per mount — switching
+ *  treedb tears the pair down and builds a fresh one.
  ***************************************************************/
 function mount_view(gobj)
 {
     let priv = gobj.priv;
 
-    if(priv.view || !priv.adapter) {
-        return;
+    if(priv.view) {
+        return 0;
     }
-    if(empty_string(gobj_read_str_attr(gobj, "node")) ||
-            empty_string(gobj_read_str_attr(gobj, "yuno_id"))) {
-        return;     /*  the empty-state route (/schemas/node): nothing to open  */
+    if(empty_string(gobj_read_str_attr(gobj, "treedb_name"))) {
+        return -1;
     }
-    let link = link_service(gobj);
-    if(!link || !agent_link_is_connected(link)) {
-        return;     /*  ac_on_open mounts it when the session lands  */
+    if(!priv.adapter && build_adapter(gobj) < 0) {
+        return -1;      /*  Error already logged  */
     }
 
     let view = yui_mount_service_view(gobj, {
@@ -303,16 +411,16 @@ function mount_view(gobj)
         name:      `treedb_view_${clean_id(gobj)}`,
         kw: {
             treedb_name:        gobj_read_str_attr(gobj, "treedb_name"),
-            /*  The schemas live in the `__system__`-flavoured topics of
-             *  this treedb (treedbs / topics / cols), so they must NOT be
-             *  filtered out as system topics.  */
+            /*  A schema lives in the `__system__`-flavoured topics of its
+             *  treedb (treedbs / topics / cols), so system topics must NOT
+             *  be filtered out. In a data treedb it only adds __snaps__.  */
             system:             true,
             with_cards_landing: true
         },
         transport: priv.adapter
     });
     if(!view) {
-        return;     /*  Error already logged  */
+        return -1;      /*  Error already logged  */
     }
     priv.view = view;
 
@@ -325,27 +433,95 @@ function mount_view(gobj)
     if(gobj_is_running(gobj) && !gobj_is_running(view)) {
         gobj_start(view);
     }
+    return 0;
 }
 
 /***************************************************************
- *  Notice vs view.
+ *  Tear the pair down. The adapter goes with the view: it holds the
+ *  requests in flight for THAT view, and answering a destroyed one
+ *  is how a stale answer lands in the next treedb's table.
+ ***************************************************************/
+function unmount_view(gobj)
+{
+    let priv = gobj.priv;
+
+    if(priv.view) {
+        let $v = gobj_read_attr(priv.view, "$container");
+        if(gobj_is_running(priv.view)) {
+            gobj_stop(priv.view);
+        }
+        gobj_destroy(priv.view);
+        priv.view = null;
+        /*  The view removes its own container in mt_destroy; this is the
+         *  case where it did not.  */
+        if($v && $v.parentNode) {
+            $v.parentNode.removeChild($v);
+        }
+    }
+    if(priv.adapter) {
+        if(gobj_is_running(priv.adapter)) {
+            gobj_stop(priv.adapter);
+        }
+        gobj_destroy(priv.adapter);
+        priv.adapter = null;
+    }
+}
+
+/***************************************************************
+ *  Options of the selector, current one selected.
+ ***************************************************************/
+function render_selector(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.$select) {
+        return;
+    }
+    let current = gobj_read_str_attr(gobj, "treedb_name");
+
+    priv.$select.replaceChildren();
+    for(let name of priv.treedbs) {
+        priv.$select.appendChild(
+            createElement2(["option", {value: name}, name])
+        );
+    }
+    priv.$select.value = current;
+}
+
+/***************************************************************
+ *  What this tab shows in each state.
  ***************************************************************/
 function render_state(gobj)
 {
     let priv = gobj.priv;
-    if(!priv.$notice || !priv.$body) {
+    if(!priv.$notice || !priv.$body || !priv.$toolbar) {
         return;
     }
-    let mounted = !!priv.view;
-    priv.$notice.classList.toggle("is-hidden", mounted);
-    priv.$body.classList.toggle("is-hidden", !mounted);
-    if(!mounted) {
-        let key = empty_string(gobj_read_str_attr(gobj, "yuno_id"))
-            ? "select a yuno"
-            : "not connected to an agent";
-        priv.$notice.setAttribute("i18n", key);
-        priv.$notice.textContent = t(key);
+    let ready = !!priv.view;
+
+    priv.$toolbar.classList.toggle("is-hidden", !ready);
+    priv.$body.classList.toggle("is-hidden", !ready);
+    priv.$notice.classList.toggle("is-hidden", ready);
+
+    if(ready) {
+        return;
     }
+    if(priv.notice) {
+        priv.$notice.removeAttribute("i18n");
+        priv.$notice.textContent = priv.notice;
+        return;
+    }
+    let key;
+    if(empty_string(gobj_read_str_attr(gobj, "yuno_id"))) {
+        key = "select a yuno";
+    } else if(!agent_link_is_connected(link_service(gobj))) {
+        key = "not connected to an agent";
+    } else if(gobj_current_state(gobj) === "ST_EMPTY") {
+        key = "no treedb in this yuno";
+    } else {
+        key = "loading";
+    }
+    priv.$notice.setAttribute("i18n", key);
+    priv.$notice.textContent = t(key);
 }
 
 /***************************************************************
@@ -371,14 +547,15 @@ function notify_view_transport(gobj, connected)
 
 
 /***************************************************************
- *  Session up: mount the view if it was waiting for it.
+ *  Session up with nothing mounted: discover.
  *
  *  DEFERRED, and not for tidiness: we are inside the link's
- *  publication, and the ADAPTER is another subscriber of the same
- *  event. Mounting here would start the view — whose mt_start fetches
- *  the schema — while the adapter may not have been given the edge
- *  yet, so its own state would still say "not in session" and the
- *  fetch would be refused. Next tick every subscriber has seen it.
+ *  publication, and the ADAPTER (built at the end of discovery) is
+ *  another subscriber of the same event. Mounting from here would
+ *  start the view — whose mt_start fetches the schema — while the
+ *  adapter may not have been given the edge yet, so its own state
+ *  would still say "not in session" and the fetch would be refused.
+ *  Next tick every subscriber has seen it.
  ***************************************************************/
 function ac_on_open(gobj, event, kw, src)
 {
@@ -389,30 +566,131 @@ function ac_on_open(gobj, event, kw, src)
     }
     priv.mount_timer = set_timeout(function() {
         priv.mount_timer = null;
-        mount_view(gobj);
+        if(gobj_is_destroying(gobj)) {
+            return;
+        }
+        priv.notice = "";
+        start_discovery(gobj);
         render_state(gobj);
-        notify_view_transport(gobj, true);
     }, 0);
     return 0;
 }
 
 /***************************************************************
- *  Session down. The view stays mounted (its schema is still valid
- *  and the adapter re-resolves the link on the next request); only
- *  its remote-only actions are disabled.
+ *  Session up while a treedb is already mounted: the view stays,
+ *  only its remote-only actions are re-enabled.
  ***************************************************************/
-function ac_on_close(gobj, event, kw, src)
+function ac_on_open_ready(gobj, event, kw, src)
 {
-    notify_view_transport(gobj, false);
+    notify_view_transport(gobj, true);
     return 0;
 }
 
 /***************************************************************
- *  The hosted view selected a topic. Not routed into the URL yet
- *  (see the header) — swallowed here so the CHILD publication does
- *  not die as "Event NOT DEFINED in state".
+ *  Session down. A mounted view stays mounted (its schema is still
+ *  valid and the adapter re-resolves the link on the next request);
+ *  a discovery in flight will never be answered.
  ***************************************************************/
-function ac_topic_selected(gobj, event, kw, src)
+function ac_on_close(gobj, event, kw, src)
+{
+    notify_view_transport(gobj, false);
+    render_state(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The answer to OUR `services`. Two arrive: the controlcenter's
+ *  dispatch ack (stack frame `command-agent`, interesting only when
+ *  it failed) and the yuno's real answer.
+ ***************************************************************/
+function ac_mt_command_answer(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    if(msg_iev_read_key(kw, "console_purpose") !== PURPOSE) {
+        return 0;   /*  another panel's answer  */
+    }
+    if(msg_iev_read_key(kw, "console_node") !== gobj_read_str_attr(gobj, "node") ||
+            msg_iev_read_key(kw, "console_yuno") !== gobj_read_str_attr(gobj, "yuno_id")) {
+        return 0;   /*  another tab's discovery  */
+    }
+
+    let stack = msg_iev_get_stack(gobj, kw, "command_stack", false);
+    let outer = kw_get_str(gobj, stack, "command", "", 0);
+    let failed = (typeof kw.result === "number" && kw.result < 0);
+
+    if(outer === "command-agent" && !failed) {
+        return 0;   /*  dispatch ok: the real answer is still coming  */
+    }
+    if(failed) {
+        priv.treedbs = [];
+        priv.notice = kw.comment || "";
+        gobj_change_state(gobj, "ST_EMPTY");
+        render_state(gobj);
+        return 0;
+    }
+
+    priv.notice = "";
+    priv.treedbs = treedbs_of(kw.data);
+    if(priv.treedbs.length === 0) {
+        gobj_change_state(gobj, "ST_EMPTY");
+        render_state(gobj);
+        return 0;
+    }
+
+    /*  Keep what was open if it survived a re-discovery, else the
+     *  system schema, else whatever this yuno has.  */
+    let current = gobj_read_str_attr(gobj, "treedb_name");
+    if(priv.treedbs.indexOf(current) < 0) {
+        gobj_write_attr(gobj, "treedb_name", priv.treedbs[0]);
+    }
+    render_selector(gobj);
+
+    if(mount_view(gobj) < 0) {
+        gobj_change_state(gobj, "ST_EMPTY");
+        render_state(gobj);
+        return 0;
+    }
+    gobj_change_state(gobj, "ST_READY");
+    render_state(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The operator picked another treedb of the same yuno: a new
+ *  mount, transport included.
+ ***************************************************************/
+function ac_select_treedb(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let name = (kw && kw.treedb) || "";
+
+    if(empty_string(name) || name === gobj_read_str_attr(gobj, "treedb_name")) {
+        render_selector(gobj);      /*  undo a stray change of the widget  */
+        return 0;
+    }
+    if(priv.treedbs.indexOf(name) < 0) {
+        log_error(`${gobj_short_name(gobj)}: '${name}' is not a treedb of this yuno`);
+        render_selector(gobj);
+        return 0;
+    }
+
+    unmount_view(gobj);
+    gobj_write_attr(gobj, "treedb_name", name);
+    render_selector(gobj);
+    if(mount_view(gobj) < 0) {
+        gobj_change_state(gobj, "ST_EMPTY");
+    }
+    render_state(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The hosted view selected a topic / wrote a record. Neither is
+ *  routed into the URL yet (see the header) — handled here so the
+ *  CHILD publication does not die as "Event NOT DEFINED in state".
+ ***************************************************************/
+function ac_view_notice(gobj, event, kw, src)
 {
     return 0;
 }
@@ -449,13 +727,43 @@ function create_gclass(gclass_name)
 
     /*---------------------------------------------*
      *          States
+     *
+     *  The answer event is declared in every state: the link
+     *  re-publishes EVERY answer of the session to EVERY panel, so it
+     *  arrives here whatever this tab is doing.
      *---------------------------------------------*/
+    const view_events = [
+        ["EV_TOPIC_SELECTED",       ac_view_notice,       null],
+        ["EV_RECORD_WRITTEN",       ac_view_notice,       null]
+    ];
     const states = [
         ["ST_IDLE", [
-            ["EV_ON_OPEN",              ac_on_open,        null],
-            ["EV_ON_CLOSE",             ac_on_close,       null],
-            ["EV_TOPIC_SELECTED",       ac_topic_selected, null],
-            ["EV_RECORD_WRITTEN",       ac_topic_selected, null]
+            ["EV_ON_OPEN",              ac_on_open,           null],
+            ["EV_ON_CLOSE",             ac_on_close,          null],
+            ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
+            ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
+            ...view_events
+        ]],
+        ["ST_DISCOVERING", [
+            ["EV_ON_OPEN",              ac_on_open,           null],
+            ["EV_ON_CLOSE",             ac_on_close,          "ST_IDLE"],
+            ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
+            ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
+            ...view_events
+        ]],
+        ["ST_EMPTY", [
+            ["EV_ON_OPEN",              ac_on_open,           null],
+            ["EV_ON_CLOSE",             ac_on_close,          null],
+            ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
+            ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
+            ...view_events
+        ]],
+        ["ST_READY", [
+            ["EV_ON_OPEN",              ac_on_open_ready,     null],
+            ["EV_ON_CLOSE",             ac_on_close,          null],
+            ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
+            ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
+            ...view_events
         ]]
     ];
 
@@ -463,10 +771,12 @@ function create_gclass(gclass_name)
      *          Events
      *---------------------------------------------*/
     const event_types = [
-        ["EV_ON_OPEN",        0],
-        ["EV_ON_CLOSE",       0],
-        ["EV_TOPIC_SELECTED", 0],
-        ["EV_RECORD_WRITTEN", 0]
+        ["EV_ON_OPEN",           0],
+        ["EV_ON_CLOSE",          0],
+        ["EV_MT_COMMAND_ANSWER", 0],
+        ["EV_SELECT_TREEDB",     0],
+        ["EV_TOPIC_SELECTED",    0],
+        ["EV_RECORD_WRITTEN",    0]
     ];
 
     __gclass__ = gclass_create(
