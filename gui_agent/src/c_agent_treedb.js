@@ -43,10 +43,13 @@
  *          ST_STARTING     apply: waiting for it to connect back
  *          ST_PLAYING      apply: waiting for its services to play
  *
- *      NOT ROUTED (yet): neither the selected treedb nor the view's
- *      topic is mirrored into the URL, so a reload lands on the default
- *      treedb's topic grid.  gui_treedb's C_TREEDB_VIEW does that
- *      bridging and is the model to copy.
+ *      THE URL CARRIES THE POSITION, as everywhere else in the shell:
+ *      under this tab's route the subpath is `<treedb>[/<topic>[/info]]`
+ *      (or `<treedb>/schema`). The first segment is OURS — changing it is
+ *      a remount — and the rest belongs to the hosted view, which routes
+ *      its own topics because it is mounted with `base_route` =
+ *      <our route>/<treedb>. So a reload, a Back or a shared link lands
+ *      where the operator was.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -58,13 +61,13 @@ import {
     gobj_read_attr, gobj_read_str_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_create_pure_child,
     gobj_find_service,
-    gobj_subscribe_event,
+    gobj_subscribe_event, gobj_unsubscribe_event,
     gobj_send_event,
     gobj_start, gobj_stop, gobj_destroy, gobj_is_running,
     gobj_post_event,
     gobj_has_event,
     gobj_change_state, gobj_current_state,
-    gobj_short_name,
+    gobj_short_name, gobj_name,
     createElement2,
     empty_string,
     msg_iev_write_key,
@@ -78,7 +81,7 @@ import {t} from "i18next";
 import {
     yui_mount_service_view,
 } from "@yuneta/gobj-ui/src/c_yui_service_view.js";
-import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_shell_show_modal, yui_shell_show_error} from "@yuneta/gobj-ui/src/shell_modals.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
@@ -114,6 +117,7 @@ SDATA(data_type_t.DTP_STRING,   "node",        0,  "",            "Node holding 
 SDATA(data_type_t.DTP_STRING,   "yuno_id",     0,  "",            "Yuno whose treedbs are opened"),
 SDATA(data_type_t.DTP_STRING,   "yuno_label",  0,  "",            "Yuno label role^name"),
 SDATA(data_type_t.DTP_STRING,   "treedb_name", 0,  "",            "Treedb currently open (discovered)"),
+SDATA(data_type_t.DTP_STRING,   "base_route",  0,  "",            "This tab's declared route: the URL carries <treedb>[/<topic>] under it"),
 SDATA(data_type_t.DTP_POINTER,  "link_svc",    0,  null,          "C_AGENT_LINK service"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,          "Root HTMLElement"),
 SDATA_END()
@@ -125,6 +129,7 @@ let PRIVATE_DATA = {
     adapter:     null,  /*  C_AGENT_TREEDB_LINK (pure child)  */
     view:        null,  /*  C_YUI_TREEDB_TOPICS (named service)  */
     dirty:       false, /*  something was written since the last apply  */
+    seg:         null,  /*  subpath last applied or navigated (loop guard)  */
     apply_timer: null,  /*  deadline of the step in flight  */
     modal:       null,  /*  the apply confirmation  */
     $toolbar:    null,  /*  treedb selector + apply  */
@@ -181,6 +186,14 @@ function mt_create(gobj)
  ***************************************************************/
 function mt_start(gobj)
 {
+    /*  The HOST, not "the shell": this is a subscription, so it goes to
+     *  whoever PUBLISHES EV_ROUTE_CHANGED — the parent. (To TALK to the
+     *  shell, yui_shell_of().) In mt_start to pair with mt_stop, and
+     *  still before the shell's first broadcast, which follows the mount. */
+    let host = gobj_parent(gobj);
+    if(host) {
+        gobj_subscribe_event(host, "EV_ROUTE_CHANGED", {}, gobj);
+    }
     start_discovery(gobj);
     render_state(gobj);
 }
@@ -192,6 +205,10 @@ function mt_stop(gobj)
 {
     let priv = gobj.priv;
 
+    let host = gobj_parent(gobj);
+    if(host) {
+        gobj_unsubscribe_event(host, "EV_ROUTE_CHANGED", {}, gobj);
+    }
     clear_apply_timer(gobj);
     if(priv.view && gobj_is_running(priv.view)) {
         gobj_stop(priv.view);
@@ -458,17 +475,37 @@ function mount_view(gobj)
         return -1;      /*  Error already logged  */
     }
 
+    /*  The URL under this tab is `<treedb>[/<topic>[/info]]`, so the
+     *  library view's own base is OUR route plus the treedb: from there
+     *  it routes its topics itself (cards, landing toggle, site map) and
+     *  the treedb segment stays ours. No `graph` action: this workspace
+     *  mounts no graph view, and a card icon that navigates nowhere is
+     *  worse than one that is not there.  */
+    let vbase = view_base_route(gobj);
+    let kw = {
+        treedb_name:        gobj_read_str_attr(gobj, "treedb_name"),
+        /*  A schema lives in the `__system__`-flavoured topics of its
+         *  treedb (treedbs / topics / cols), so system topics must NOT
+         *  be filtered out. In a data treedb it only adds __snaps__.  */
+        system:             true,
+        with_cards_landing: true
+    };
+    if(vbase) {
+        /*  `base_route` is a ROUTE (the site map matches it); the card and
+         *  landing templates are HREFS and carry the '#', or the anchor
+         *  leaves the SPA on click — same convention as gui_treedb.  */
+        kw.base_route = vbase;
+        kw.card_action_routes = {
+            info:  `#${vbase}/{topic}/info`,
+            table: `#${vbase}/{topic}`
+        };
+        kw.landing_routes = {cards: `#${vbase}`, schema: `#${vbase}/schema`};
+    }
+
     let view = yui_mount_service_view(gobj, {
         gclass:    "C_YUI_TREEDB_TOPICS",
         name:      `treedb_view_${clean_id(gobj)}`,
-        kw: {
-            treedb_name:        gobj_read_str_attr(gobj, "treedb_name"),
-            /*  A schema lives in the `__system__`-flavoured topics of its
-             *  treedb (treedbs / topics / cols), so system topics must NOT
-             *  be filtered out. In a data treedb it only adds __snaps__.  */
-            system:             true,
-            with_cards_landing: true
-        },
+        kw:        kw,
         transport: priv.adapter
     });
     if(!view) {
@@ -486,6 +523,96 @@ function mount_view(gobj)
         gobj_start(view);
     }
     return 0;
+}
+
+/***************************************************************
+ *  Say in the URL which treedb is open, without adding a Back
+ *  entry: nobody navigated here, the tab just landed on its
+ *  default. Skipped when the URL already carries a position.
+ ***************************************************************/
+function stamp_treedb_in_url(gobj)
+{
+    let priv = gobj.priv;
+    let base = base_route(gobj);
+    let treedb = gobj_read_str_attr(gobj, "treedb_name");
+    let shell = yui_shell_of(gobj);
+
+    if(empty_string(base) || empty_string(treedb) || !shell) {
+        return;
+    }
+    if(!empty_string(priv.seg)) {
+        return;     /*  a deep link is being applied: leave it alone  */
+    }
+    priv.seg = treedb;
+    yui_shell_navigate(shell, `${base}/${treedb}`, {push: false});
+}
+
+/***************************************************************
+ *  This tab's route, and the hosted view's under it.
+ ***************************************************************/
+function base_route(gobj)
+{
+    return gobj_read_str_attr(gobj, "base_route");
+}
+
+function view_base_route(gobj)
+{
+    let base = base_route(gobj);
+    let treedb = gobj_read_str_attr(gobj, "treedb_name");
+    if(empty_string(base) || empty_string(treedb)) {
+        return "";
+    }
+    return `${base}/${treedb}`;
+}
+
+/***************************************************************
+ *  Put a subpath in the URL, so a reload or a shared link lands
+ *  where the operator is. `push` because these are user moves and
+ *  browser Back should undo them one at a time.
+ ***************************************************************/
+function navigate_seg(gobj, seg)
+{
+    let priv = gobj.priv;
+    let base = base_route(gobj);
+    let shell = yui_shell_of(gobj);
+
+    if(empty_string(base) || !shell) {
+        return -1;      /*  a tab with no route of its own: nothing to mirror  */
+    }
+    if(seg === priv.seg) {
+        return 0;       /*  echo of what we just applied  */
+    }
+    priv.seg = seg;
+    yui_shell_navigate(shell, seg ? `${base}/${seg}` : base, {push: true});
+    return 0;
+}
+
+/***************************************************************
+ *  Apply the part of the subpath the hosted view owns: a bare
+ *  topic opens its table, `<topic>/info` its info panel, `schema`
+ *  the schema-graph landing, and nothing at all the topic grid.
+ ***************************************************************/
+function apply_view_seg(gobj, seg)
+{
+    let priv = gobj.priv;
+    if(!priv.view) {
+        return;
+    }
+    if(empty_string(seg)) {
+        gobj_send_event(priv.view, "EV_SHOW", {href: ""}, gobj);
+        return;
+    }
+    if(seg === "schema") {
+        gobj_send_event(priv.view, "EV_SET_LANDING_VIEW", {view: "schema"}, gobj);
+        return;
+    }
+    if(seg.endsWith("/info")) {
+        gobj_send_event(priv.view, "EV_SHOW_TOPIC_INFO",
+            {topic: seg.slice(0, -"/info".length)}, gobj);
+        return;
+    }
+    gobj_send_event(priv.view, "EV_SHOW",
+        {href: `${gobj_name(priv.view)}?${seg}`}, gobj);
 }
 
 /***************************************************************
@@ -813,6 +940,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
         render_state(gobj);
         return 0;
     }
+    stamp_treedb_in_url(gobj);
     gobj_change_state(gobj, "ST_READY");
     render_state(gobj);
     return 0;
@@ -842,18 +970,70 @@ function ac_select_treedb(gobj, event, kw, src)
     render_selector(gobj);
     if(mount_view(gobj) < 0) {
         gobj_change_state(gobj, "ST_EMPTY");
+        render_state(gobj);
+        return 0;
+    }
+    /*  From the URL (kw.seg) the position is already in the address bar
+     *  and only the view's half is left to apply; from the selector it is
+     *  a user move, so the URL follows it.  */
+    if(kw && typeof kw.seg === "string") {
+        apply_view_seg(gobj, kw.seg);
+    } else {
+        navigate_seg(gobj, name);
     }
     render_state(gobj);
     return 0;
 }
 
 /***************************************************************
- *  The hosted view selected a topic. Not routed into the URL yet
- *  (see the header) — handled here so the CHILD publication does not
- *  die as "Event NOT DEFINED in state".
+ *  The hosted view selected a topic: mirror it into the URL as
+ *  `<treedb>/<topic>`, so a reload or a shared link lands on it.
+ *  An EMPTY topic is the way back to the topic grid.
  ***************************************************************/
 function ac_view_notice(gobj, event, kw, src)
 {
+    let topic = kw ? kw.topic : undefined;
+    let treedb = gobj_read_str_attr(gobj, "treedb_name");
+
+    if(topic === undefined || empty_string(treedb)) {
+        return 0;   /*  a stray echo, or nothing mounted  */
+    }
+    navigate_seg(gobj, topic ? `${treedb}/${topic}` : treedb);
+    return 0;
+}
+
+/***************************************************************
+ *  The shell moved. Only OUR tab's route matters — several of
+ *  these tabs are open at once — and under it the first segment is
+ *  the treedb (ours) and the rest is the view's.
+ *
+ *  Changing treedb from the URL is a REMOUNT, so it goes through
+ *  the same event the selector sends; the view's part is applied
+ *  after it, when the schema is in.
+ ***************************************************************/
+function ac_route_changed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let base = base_route(gobj);
+
+    if(empty_string(base) || !kw || kw.base !== base) {
+        return 0;   /*  not our tab  */
+    }
+    let seg = kw.subpath || "";
+    if(seg === (priv.seg || "")) {
+        return 0;   /*  the echo of what we just navigated  */
+    }
+    priv.seg = seg;
+
+    let cut = seg.indexOf("/");
+    let treedb = (cut < 0) ? seg : seg.slice(0, cut);
+    let rest = (cut < 0) ? "" : seg.slice(cut + 1);
+
+    if(!empty_string(treedb) && treedb !== gobj_read_str_attr(gobj, "treedb_name")) {
+        gobj_send_event(gobj, "EV_SELECT_TREEDB", {treedb: treedb, seg: rest}, gobj);
+        return 0;
+    }
+    apply_view_seg(gobj, rest);
     return 0;
 }
 
@@ -1110,6 +1290,11 @@ function create_gclass(gclass_name)
     const dialog_events = [
         ["EV_APPLY_CANCELLED",      ac_apply_cancelled,   null]
     ];
+    /*  The shell broadcasts to every subscriber, so this arrives in any
+     *  state; the action drops what is not this tab's route.  */
+    const route_events = [
+        ["EV_ROUTE_CHANGED",        ac_route_changed,     null]
+    ];
     const states = [
         ["ST_IDLE", [
             ["EV_ON_OPEN",              ac_on_open,           null],
@@ -1118,6 +1303,7 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
             ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
             ...dialog_events,
+            ...route_events,
             ...view_events
         ]],
         ["ST_DISCOVERING", [
@@ -1127,6 +1313,7 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
             ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
             ...dialog_events,
+            ...route_events,
             ...view_events
         ]],
         ["ST_EMPTY", [
@@ -1136,6 +1323,7 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
             ["EV_SELECT_TREEDB",        ac_select_treedb,     null],
             ...dialog_events,
+            ...route_events,
             ...view_events
         ]],
         ["ST_READY", [
@@ -1146,6 +1334,7 @@ function create_gclass(gclass_name)
             ["EV_APPLY_CHANGES",        ac_apply_changes,     null],
             ["EV_APPLY_CONFIRMED",      ac_apply_confirmed,   null],
             ...dialog_events,
+            ...route_events,
             ...view_events
         ]],
         /*  The restart, one state per command in flight, so the trace
@@ -1156,6 +1345,7 @@ function create_gclass(gclass_name)
             ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
             ...dialog_events,
+            ...route_events,
             ...view_events
         ]],
         ["ST_STARTING", [
@@ -1163,6 +1353,7 @@ function create_gclass(gclass_name)
             ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
             ...dialog_events,
+            ...route_events,
             ...view_events
         ]],
         ["ST_PLAYING", [
@@ -1170,6 +1361,7 @@ function create_gclass(gclass_name)
             ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
             ...dialog_events,
+            ...route_events,
             ...view_events
         ]]
     ];
@@ -1187,6 +1379,7 @@ function create_gclass(gclass_name)
         ["EV_APPLY_CANCELLED",   0],
         ["EV_APPLY_TIMEOUT",     0],
         ["EV_DISCOVER",          0],
+        ["EV_ROUTE_CHANGED",     0],
         ["EV_TOPIC_SELECTED",    0],
         ["EV_RECORD_WRITTEN",    0]
     ];

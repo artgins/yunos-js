@@ -52,6 +52,27 @@ on its own, outside the yunetas superproject.
       now a posted event (`gobj_post_event`, which is what a deferral is), and
       the deadline — a real time — a plain `setTimeout`.
 
+- **The URL of a Schemas tab carries the position.** Under the tab's route the
+    subpath is now `<treedb>[/<topic>[/info]]` (or `<treedb>/schema`), so a
+    reload, a browser Back or a link sent to a colleague lands on the same
+    treedb and the same topic instead of on the default grid.
+
+    The first segment is the tab's — changing it is a remount, and it goes
+    through the same event the selector sends — and the rest is the hosted
+    view's: it is mounted with `base_route` = `<tab route>/<treedb>`, so the
+    card icons and the landing toggle are hash anchors the LIBRARY builds and
+    navigates, with no bridging code here. The tab only mirrors the topic
+    selection it receives (`EV_TOPIC_SELECTED`) and applies what arrives in
+    `EV_ROUTE_CHANGED`, with the usual `seg` dedup breaking the
+    child → navigate → route_changed → child loop.
+
+    Two conventions, learned the hard way in the same hour: `base_route` is a
+    ROUTE (what the shell matches, what the site map lists) while the
+    card/landing templates are HREFS and must carry the `#` — without it the
+    anchor is a path, and clicking it LEAVES the SPA. And the mount stamps its
+    treedb with `push: false`: nobody navigated there, so it must not become a
+    Back entry.
+
 - **The Schemas picker marks the yunos with no treedb.** Expanding a node in
     the tree probes each of its yunos with the same `services` call the tab
     makes, and a yuno whose answer carries no `C_NODE` service is shown as such

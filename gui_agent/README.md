@@ -165,9 +165,19 @@ authz of its `C_NODE` (and `create`/`update`/`delete` to edit) in **that yuno's*
 `C_AUTHZ`. A user without it gets `-403 No permission to 'read' in service
 '…'` as a toast per topic, and empty tables.
 
-**Not routed yet:** neither the selected treedb nor the topic is mirrored into
-the URL, so a reload lands on the default treedb's topic grid. `gui_treedb`'s
-`C_TREEDB_VIEW` does that bridging and is the model to copy.
+**The URL carries the position.** Under a tab's route the subpath is
+`<treedb>[/<topic>[/info]]` (or `<treedb>/schema`), so a reload, a browser Back
+or a link shared with a colleague lands on the same treedb and topic. The first
+segment is the tab's — changing it is a remount — and the rest is the hosted
+view's, which routes its own topics because it is mounted with `base_route` =
+`<tab route>/<treedb>`: the card icons and the landing toggle are real hash
+anchors it builds itself.
+
+Two conventions that bite when mixed up: `base_route` is a **route** (what the
+shell matches and the site map lists), while the card/landing templates are
+**hrefs** and must carry the `#` — without it the anchor leaves the SPA on
+click. And the mount stamps its treedb into the URL with `push: false`: nobody
+navigated there, so it must not become a Back entry.
 
 ## i18n
 

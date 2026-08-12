@@ -361,7 +361,7 @@ const WORKSPACES = {
     /*  Schemas edits a yuno's `treedb_system_schema` — the treedb that holds
      *  its schemas as data — through the routing adapter (C_AGENT_TREEDB).  */
     schemas:    {min_version: "7.7.0", tab_gclass: "C_AGENT_TREEDB", unit: "yuno",
-                 treedb_check: true}
+                 treedb_check: true, routed: true}
 };
 
 /*  Reserved tab id for the Statistics "single" layout: one tab holding a
@@ -518,6 +518,13 @@ function rebuild_workspace_tabs(gobj, ws)
         let kw = is_yuno
             ? {node: parsed.node, yuno_id: parsed.yuno_id, yuno_label: n.host || n.id}
             : {node: n.id, title: n.host || n.id};
+        /*  A tab that mirrors its position into the URL needs to know its
+         *  own route: the shell publishes EV_ROUTE_CHANGED with `base`,
+         *  and the tab keeps only what matches it. Only the gclass that
+         *  declares the attr gets it — an unknown kw key fails the load. */
+        if(spec.routed) {
+            kw.base_route = node_tab_route(ws, n.id);
+        }
         items.push({
             id:       "node-" + n.id,
             name:     n.host || n.id,
