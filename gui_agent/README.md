@@ -5,16 +5,20 @@ built on the **v2 declarative shell** of `@yuneta/gobj-ui`
 (`C_YUI_SHELL` + `C_YUI_NAV`).
 
 It is the modern successor of the old webix "Yuneta CLI"
-(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Four workspaces** in the primary rail:
+(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Five workspaces** in the primary rail:
 **Commands** (control-plane CLI to a node's yunos), **Statistics** (live
 `SDF_RSTATS` counters as cards), **Terminal** (an interactive xterm.js PTY
-console), and **Settings**. **Commands** and **Terminal** share one pattern — a
-flat node-picker tab (`C_NODES`) plus one closable tab per selected node.
-**Statistics** differs: its picker is a **nodes→yunos tree** (`C_STATS_NODES`)
-where you select *yunos*, and their counters render as **cards** (one tab for
-all cards by default, or a tab per yuno — a Settings toggle). Commands/Statistics
-list only agents **≥ 7.7.0**; Terminal works on any version. TreeDB browsing
-lives in the separate **`gui_treedb`** SPA, not here.
+console), **Schemas** (edit the schemas a yuno keeps in its
+`treedb_system_schema`), and **Settings**. **Commands** and **Terminal** share
+one pattern — a flat node-picker tab (`C_NODES`) plus one closable tab per
+selected node. **Statistics** and **Schemas** differ: their picker is a
+**nodes→yunos tree** (`C_STATS_NODES`) where you select *yunos*. Statistics
+renders their counters as **cards** (one tab for all cards by default, or a tab
+per yuno — a Settings toggle); Schemas opens one editor tab per yuno.
+Commands/Statistics/Schemas list only agents **≥ 7.7.0**; Terminal works on any
+version. Browsing the DATA of an application treedb lives in the separate
+**`gui_treedb`** SPA; what is here is SCHEMA editing, because applying a schema
+change means restarting the owning yuno and that is the agent's job.
 
 **Canonical URL:** the SPA is served at `https://agents.yunetacontrol.com`
 (new apex — needs its own DNS zone + TLS cert at deploy time). This is the
@@ -72,6 +76,56 @@ The Console targets remote role `controlcenter` / service `controlcenter` and
 wraps each typed line in a `command-agent` (which returns a synchronous dispatch
 ack plus the agent's asynchronous real answer).
 
+## Schemas: the treedb views over the agent's control plane
+
+The Schemas workspace mounts gobj-ui's treedb editor (`C_YUI_TREEDB_TOPICS`)
+**unchanged**, pointed at one yuno's `treedb_system_schema` — the treedb where
+every schema of that yuno lives as data (`treedbs` → `topics` → `cols`). Editing
+it there is how a schema changes without touching the C literal; the change
+reaches the yuno on its next restart (`kill-yuno` + `run-yuno`).
+
+The piece that makes it work is `C_AGENT_TREEDB_LINK`, a **routing adapter**.
+The library view talks to a "remote yuno" with `gobj_command(...)` and expects
+`EV_MT_COMMAND_ANSWER` back — one hop with a direct `C_IEVENT_CLI`. From this
+console the treedb is two hops away, so the adapter implements
+`mt_command_parser` (which `gobj_command()` dispatches to before anything else),
+re-wraps each command as
+
+```
+command-agent agent_id=<node>
+    cmd2agent="command-yuno id=<yuno> service=<treedb> command=<the command>"
+```
+
+and hands the answer back in the shape the view already understands.
+`C_AGENT_TREEDB` is the tab: it creates the adapter, mounts the view with
+`yui_mount_service_view()` (transport = the adapter), and waits for the session
+before mounting, because the view fetches its schema in `mt_start` and a second
+fetch would build a second set of topic services.
+
+Three things the adapter is built around, all of them scars:
+
+- **`command-yuno` uses its WHOLE kw as the filter that selects the yuno.** Keys
+  that are columns of the agent's `yunos` topic filter it; the rest travel
+  through untouched. So `treedb_name` / `topic_name` / `record` / `options` are
+  safe, and a top-level `id` is not — it would name the yuno. The adapter
+  refuses that request loudly instead of letting it come back "Yuno not found".
+- **The controlcenter's `command-agent` deletes id/command/service from the kw**
+  before forwarding, which is why they travel inline in the `cmd2agent` line.
+- **Routing loses the live subscriptions.** `command-yuno` is
+  request/response, so the treedb's `EV_TREEDB_NODE_*` never arrive. A schema
+  does not change under you, so the cost is small; for its own writes the
+  adapter echoes the matching node event locally, so the table reflects a save.
+
+**Permissions are the yuno's, not the console's.** The commands run inside the
+target yuno with the logged-in identity, so reading a topic needs the `read`
+authz of its `C_NODE` (and `create`/`update`/`delete` to edit) in **that yuno's**
+`C_AUTHZ`. A user without it gets `-403 No permission to 'read' in service
+'…'` as a toast per topic, and empty tables.
+
+**Not routed yet:** the topic selection is not mirrored into the URL, so a
+reload lands on the topic grid. `gui_treedb`'s `C_TREEDB_VIEW` does that
+bridging and is the model to copy.
+
 ## i18n
 
 Every text goes through i18n **and must be able to change language** (the full
@@ -106,10 +160,11 @@ npm run build      # production bundle into dist/
 
 ## Status
 
-**Live**, restructured into **four primary workspaces** — **Commands**
+**Live**, restructured into **five primary workspaces** — **Commands**
 (`C_AGENT_CONSOLE`), **Statistics** (`C_STATS_NODES` tree picker +
 `C_AGENT_STATS` cards), **Terminal** (`C_AGENT_TTY`, xterm.js over the agent
-PTY), **Settings**. **Commands** and **Terminal** share the flat pattern: a
+PTY), **Schemas** (`C_STATS_NODES` tree picker + `C_AGENT_TREEDB`, the gobj-ui
+treedb editor over the routing adapter), **Settings**. **Commands** and **Terminal** share the flat pattern: a
 node-picker tab (`C_NODES`) plus one closable tab per selected node.
 **Statistics** picks **yunos** from a nodes→yunos tree and shows their
 `SDF_RSTATS` counters as **cards** — a single tab holding all cards (default)
@@ -117,12 +172,14 @@ or a tab per yuno (Settings toggle "Statistics cards"). The cards **auto-refresh
 (default 2 s, Settings; a deliberate opt-in exception to Yuneta's no-polling
 rule, visible-tab only) and **highlight** any counter that changed since the last
 refresh. Commands/Statistics require agent **≥ 7.7.0**; Terminal works on any
-version (needs the `open-console` authz — an admin role). Selecting a tab focuses
+version (needs the `open-console` authz — an admin role). **Schemas** picks
+yunos the same way Statistics does and opens one treedb-editor tab per yuno,
+routed through `C_AGENT_TREEDB_LINK` (see the section above). Selecting a tab focuses
 its input (Commands) / xterm (Terminal); node tabs carry a green/red connection
 dot; the last-active tab is remembered per workspace. Commands and Terminal both
 carry a per-tab **font-size** control (temporary) over a shared default set in
-Settings. TreeDB is **not** part of
-this app — it is the separate `gui_treedb` SPA. Time-series charts
+Settings. Browsing the DATA of an application treedb is **not** part of this app
+— that is the separate `gui_treedb` SPA; what lives here is schema editing. Time-series charts
 (`C_YUI_UPLOT`) over the live counters are a possible follow-up. See the
 `CHANGELOG.md` (repo root) for the per-cycle detail.
 

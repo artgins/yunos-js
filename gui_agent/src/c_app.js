@@ -350,9 +350,17 @@ const WORKSPACES = {
     commands:   {min_version: "7.7.0", tab_gclass: "C_AGENT_CONSOLE"},
     /*  Statistics selects YUNOS: its picker is the C_STATS_NODES tree and a
      *  selected item id is the composite "node<US>yuno_id" (stats_sel_parse),
-     *  so a tab is opened per yuno rather than per node.  */
-    statistics: {min_version: "7.7.0", tab_gclass: "C_AGENT_STATS", unit: "yuno"},
-    terminal:   {min_version: "",      tab_gclass: "C_AGENT_TTY"}
+     *  so a tab is opened per yuno rather than per node.
+     *  `single_layout` is Statistics-only: it is the one workspace that can
+     *  collapse every selected yuno into ONE tab of cards. Schemas selects
+     *  yunos the same way but always opens a tab per yuno — an editor is not
+     *  a dashboard.  */
+    statistics: {min_version: "7.7.0", tab_gclass: "C_AGENT_STATS", unit: "yuno",
+                 single_layout: true},
+    terminal:   {min_version: "",      tab_gclass: "C_AGENT_TTY"},
+    /*  Schemas edits a yuno's `treedb_system_schema` — the treedb that holds
+     *  its schemas as data — through the routing adapter (C_AGENT_TREEDB).  */
+    schemas:    {min_version: "7.7.0", tab_gclass: "C_AGENT_TREEDB", unit: "yuno"}
 };
 
 /*  Reserved tab id for the Statistics "single" layout: one tab holding a
@@ -473,7 +481,7 @@ function rebuild_workspace_tabs(gobj, ws)
     /*  Statistics "single" layout: the picker plus ONE non-closable tab that
      *  holds a card per selected yuno (shown only when something is selected).
      *  The tree checkboxes add/remove cards; there are no per-yuno tabs.  */
-    if(is_yuno && stats_layout(config) === "single") {
+    if(spec.single_layout && stats_layout(config) === "single") {
         if(nodes.length) {
             items.push({
                 id:       "node-" + STATS_ALL_ID,
@@ -556,7 +564,7 @@ function workspace_first_route(gobj, ws)
     let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
     /*  Statistics "single" layout: land on the one all-cards tab when any
      *  yuno is selected, else the picker.  */
-    if(WORKSPACES[ws] && WORKSPACES[ws].unit === "yuno" && stats_layout(config) === "single") {
+    if(WORKSPACES[ws] && WORKSPACES[ws].single_layout && stats_layout(config) === "single") {
         return nodes.length ? node_tab_route(ws, STATS_ALL_ID) : picker_route(ws);
     }
     if(!nodes.length) {

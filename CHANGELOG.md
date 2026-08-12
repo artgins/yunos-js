@@ -23,6 +23,51 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **A fifth workspace: Schemas — the treedb editor over the agent's control
+    plane.** gobj-ui's `C_YUI_TREEDB_TOPICS` is mounted **unchanged** against
+    one yuno's `treedb_system_schema` (the treedb that holds that yuno's schemas
+    as data: `treedbs` → `topics` → `cols`), so a schema can be edited from the
+    browser instead of from the C literal. It lands here and not in `gui_treedb`
+    for a structural reason: applying a schema change means restarting the
+    owning yuno, and the lifecycle commands are the agent's.
+
+    The piece that made it possible without touching the library is
+    `C_AGENT_TREEDB_LINK`, a **routing adapter**. The views issue
+    `gobj_command(remote, …)` and expect `EV_MT_COMMAND_ANSWER` — one hop with a
+    direct `C_IEVENT_CLI`, but two from this console. `gobj_command()` dispatches
+    to `gclass.gmt.mt_command_parser` before anything else, so the adapter takes
+    the command verbatim, re-wraps it as `command-agent` +
+    `cmd2agent="command-yuno id=… service=… command=…"`, and hands the answer
+    back in the shape the view already reads — its own command back on top of the
+    `command_stack`, which is what the view keys everything on. Handed to
+    `yui_mount_service_view()` as the `transport`, the library works as if it
+    were talking to a treedb directly, through ONE session and ONE login.
+
+    Three traps it is born knowing, each of them a way this silently does not
+    work: `command-yuno` uses its **whole kw as the yuno filter** (so a
+    top-level `id` names the yuno — refused loudly here — while `treedb_name` /
+    `topic_name` / `record` / `options` travel safely, being no columns of the
+    agent's `yunos` topic); the controlcenter's `command-agent` **deletes**
+    id/command/service from the kw, so they travel inline in the `cmd2agent`
+    line; and routing **loses the live subscriptions**, so the adapter echoes
+    the `EV_TREEDB_NODE_*` of its own writes locally — otherwise a saved record
+    leaves a stale table, which reads as a failed write.
+
+    The adapter is a real transport façade, states included: `ST_DISCONNECTED` /
+    `ST_SESSION` driven by the link, because the library asks its transport for
+    `gobj_current_state() === "ST_SESSION"` to decide whether its remote-only
+    actions are usable.
+
+    Permissions stay the yuno's: the commands run there with the logged-in
+    identity, so a user without the `read` authz of that `C_NODE` gets `-403`
+    and empty tables, as it should.
+
+- **`topics` is no longer translated in Spanish.** It is a Yuneta term AND the
+    name of a real topic of `treedb_system_schema`, whose card is rendered
+    through `t()` — so the editor showed a topic called "Temas". (`gui_treedb`
+    still carries the old translation and has the same effect on any treedb with
+    a `topics` topic.)
+
 - **A QA driver of its own (`scripts/qa.mjs`, `npm run qa`).** A `curl` of the
     deployed files answers "the bytes are served". It cannot answer the question
     that matters — does this build boot, sign in, and mount its shell against a

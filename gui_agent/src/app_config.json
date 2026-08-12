@@ -1,5 +1,5 @@
 {
-    "_comment": "Agent Console shell config — mobile-app style: an always-on top toolbar with a left brand + right-aligned actions (language, theme, user avatar); a global connection dot on the toolbar reflects the CONTROL-CENTER LINK (the single session transport: green up / red down), which is a different layer from per-node reachability — each node tab keeps its own coloured glyph. Primary nav (Console / Nodes / Stats) is the left rail on desktop and the bottom icon-bar on mobile; submenus render as top tabs. The toolbar user avatar shows the logged-in user's initials and navigates to /settings/auth (login form when signed out). TreeDB lives in the separate gui_treedb SPA.",
+    "_comment": "Agent Console shell config — mobile-app style: an always-on top toolbar with a left brand + right-aligned actions (language, theme, user avatar); a global connection dot on the toolbar reflects the CONTROL-CENTER LINK (the single session transport: green up / red down), which is a different layer from per-node reachability — each node tab keeps its own coloured glyph. Primary nav (Commands / Statistics / Terminal / Schemas) is the left rail on desktop and the bottom icon-bar on mobile; submenus render as top tabs. The toolbar user avatar shows the logged-in user's initials and navigates to /settings/auth (login form when signed out). Schemas edits a yuno's treedb_system_schema through the routing adapter; BROWSING data of any other treedb stays in the separate gui_treedb SPA.",
 
     "shell": {
         "breakpoints": "bulma",
@@ -34,6 +34,12 @@
                 "stage": "main",
                 "gclass": "C_AGENT_TTY",
                 "kw": { "title": "terminal", "node": "" },
+                "lifecycle": "keep_alive"
+            },
+            "/schemas/node": {
+                "stage": "main",
+                "gclass": "C_AGENT_TREEDB",
+                "kw": { "title": "schemas", "node": "", "yuno_id": "" },
                 "lifecycle": "keep_alive"
             }
         }
@@ -127,7 +133,7 @@
                 "left":   { "layout": "vertical", "icon_pos": "left", "show_label": true },
                 "bottom": { "layout": "icon-bar", "icon_pos": "top",  "show_label": true }
             },
-            "_items_comment": "Four primary options. The three per-node workspaces (Commands, Statistics, Terminal) each declare ONLY their fixed node-picker tab here; the C_APP workspaces controller replaces the submenu at runtime, keeping this picker as tab 0 and appending one closable tab per selected node. Commands/Statistics list only agents >= 7.7.0 (min_version); Terminal (PTY backdoor) lists every version.",
+            "_items_comment": "Five primary options. The four per-node workspaces (Commands, Statistics, Terminal, Schemas) each declare ONLY their fixed node-picker tab here; the C_APP workspaces controller replaces the submenu at runtime, keeping this picker as tab 0 and appending one closable tab per selected node (per selected YUNO in Statistics and Schemas, whose picker is the C_STATS_NODES tree). Commands/Statistics/Schemas list only agents >= 7.7.0 (min_version); Terminal (PTY backdoor) lists every version.",
             "items": [
                 {
                     "id": "commands",
@@ -198,6 +204,31 @@
                                     "stage": "main",
                                     "gclass": "C_NODES",
                                     "kw": { "title": "nodes", "workspace": "terminal", "min_version": "" },
+                                    "lifecycle": "keep_alive"
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "id": "schemas",
+                    "name": "schemas",
+                    "icon": "yi-hexagon-nodes",
+                    "tooltip": "Edit the schemas a yuno keeps in its treedb_system_schema (agent >= 7.7.0)",
+                    "route": "/schemas",
+                    "submenu": {
+                        "render": { "top-sub": "tabs" },
+                        "default": "/schemas/node",
+                        "items": [
+                            {
+                                "id": "picker",
+                                "name": "nodes",
+                                "icon": "yi-cloudversify",
+                                "route": "/schemas/nodes",
+                                "target": {
+                                    "stage": "main",
+                                    "gclass": "C_STATS_NODES",
+                                    "kw": { "title": "nodes", "workspace": "schemas", "min_version": "7.7.0" },
                                     "lifecycle": "keep_alive"
                                 }
                             }

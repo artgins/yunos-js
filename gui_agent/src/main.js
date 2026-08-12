@@ -51,6 +51,12 @@ import {register_c_yui_window_manager} from "@yuneta/gobj-ui/src/c_yui_window_ma
 import {register_c_yui_gobj_tree_js} from "@yuneta/gobj-ui/src/c_yui_gobj_tree_js.js";
 import {register_c_yui_json}   from "@yuneta/gobj-ui/src/c_yui_json.js";
 
+/*  TreeDB editor (Schemas workspace): the topics view, the per-topic
+ *  table+form it builds, and the schema graph its landing toggles to.  */
+import {register_c_yui_treedb_topics}          from "@yuneta/gobj-ui/src/c_yui_treedb_topics.js";
+import {register_c_yui_treedb_topic_with_form} from "@yuneta/gobj-ui/src/c_yui_treedb_topic_with_form.js";
+import {register_c_yui_treedb_schema}          from "@yuneta/gobj-ui/src/c_yui_treedb_schema.js";
+
 import {register_c_app} from "./c_app.js";
 import {register_c_gui_agent_view} from "./c_gui_agent_view.js";
 import {register_c_account_view} from "./c_account_view.js";
@@ -62,6 +68,8 @@ import {register_c_stats_nodes} from "./c_stats_nodes.js";
 import {register_c_agent_console} from "./c_agent_console.js";
 import {register_c_agent_stats} from "./c_agent_stats.js";
 import {register_c_agent_tty} from "./c_agent_tty.js";
+import {register_c_agent_treedb} from "./c_agent_treedb.js";
+import {register_c_agent_treedb_link} from "./c_agent_treedb_link.js";
 
 import {setup_locale} from "./locales/locales.js";
 import {apply_theme, current_theme} from "./theme.js";
@@ -116,6 +124,13 @@ function main()
     register_c_yui_gobj_tree_js();   // gobj tree of this yuno (Frontend view window)
     register_c_yui_json();           // lazy JSON tree viewer (console answers)
 
+    /*  TreeDB editor of the Schemas workspace. C_YUI_TREEDB_TOPICS builds a
+     *  C_YUI_TREEDB_TOPIC_WITH_FORM per topic (which registers C_YUI_FORM
+     *  itself) and a C_YUI_TREEDB_SCHEMA for its schema-graph landing.  */
+    register_c_yui_treedb_topics();
+    register_c_yui_treedb_topic_with_form();
+    register_c_yui_treedb_schema();
+
     /*  App root + config + login + link services + views  */
     register_c_app();
     register_c_account_view();
@@ -128,6 +143,8 @@ function main()
     register_c_agent_console();
     register_c_agent_stats();
     register_c_agent_tty();
+    register_c_agent_treedb_link();  // treedb commands routed through the agent
+    register_c_agent_treedb();
 
     /*------------------------------------------------*
      *          Start yuneta

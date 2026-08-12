@@ -76,6 +76,7 @@ const es = {
         "commands":          "Comandos",
         "statistics":        "Estadísticas",
         "terminal":          "Terminal",
+        "schemas":           "Esquemas",
         "reconnect":         "Reconectar",
         "paste":             "Pegar",
         "font smaller":      "Fuente más pequeña",
@@ -161,6 +162,33 @@ const es = {
         "backend connection": "Conexión con el backend",
         "authentication required": "Autenticación requerida",
         "identity card refused": "Tarjeta de identidad rechazada",
+
+        /* editor de esquemas treedb (workspace Esquemas, vistas gobj-ui) */
+        /*  `topics` is a Yuneta term (a treedb collection) AND the name of a
+            real topic of treedb_system_schema, which the cards render through
+            t(): translating it printed a card labelled "Temas". It stays in
+            English, like "Sin topics" just below.  */
+        "topics":            "Topics",
+        "no topics":         "Sin topics",
+        "schema":            "Esquema",
+        "schema graph":      "Grafo de esquema",
+        "columns":           "Columnas",
+        "column":            "Columna",
+        "type":              "Tipo",
+        "key":               "clave",
+        "rows":              "Filas",
+        "raw json":          "JSON crudo",
+        "show json":         "Ver JSON",
+        "copy":              "Copiar",
+        "undo":              "Deshacer",
+        "no session":        "Sin sesión",
+        "coordinates":       "Coordenadas",
+        "remove all selected options": "Quitar todas las opciones seleccionadas",
+        "permission denied": "Permiso denegado",
+        "location unavailable": "Ubicación no disponible",
+        "timed out":         "Tiempo agotado",
+        "unknown error":     "Error desconocido",
+        "geolocation is not supported": "La geolocalización no está soportada",
 
         /* configuración · agentes */
         "agents subtitle":   "Endpoints de agentes, guardados en este navegador",
