@@ -1,5 +1,5 @@
 {
-    "_comment": "TreeDB GUI shell config. Two per-workspace rails — Topics (table editors) and Graphs (node graphs). Each declares ONLY its fixed picker tab (C_TREEDB_PICKER: manage connections + check which treedbs to open); the C_TREEDB_APP controller replaces the submenu at runtime, keeping the picker as tab 0 and appending one closable tab per selected treedb of a CONNECTED backend. The picker target.kw carries only the workspace string; the dynamic treedb tabs carry the live gobj_remote_yuno pointer (built in JS via yui_shell_set_submenu). Theme/language/logout live in the top toolbar. Connections + tokens are browser-local (localStorage).",
+    "_comment": "TreeDB GUI shell config. Two primary options, and both are WORK: Topics (table editors) and Graphs (node graphs) -- the backend list and the preferences hang off the toolbar avatar as /connections and /preferences. Two per-workspace rails — Topics (table editors) and Graphs (node graphs). Each declares ONLY its fixed picker tab (C_TREEDB_PICKER: manage connections + check which treedbs to open); the C_TREEDB_APP controller replaces the submenu at runtime, keeping the picker as tab 0 and appending one closable tab per selected treedb of a CONNECTED backend. The picker target.kw carries only the workspace string; the dynamic treedb tabs carry the live gobj_remote_yuno pointer (built in JS via yui_shell_set_submenu). Theme/language/logout live in the top toolbar. Connections + tokens are browser-local (localStorage).",
 
     "shell": {
         "breakpoints": "bulma",
@@ -16,8 +16,20 @@
             "main": { "zone": "center", "default_route": "/topics/connections" }
         },
 
-        "_routes_comment": "Resolution-ancestor routes for the per-workspace dynamic treedb tabs (a tab /<ws>/db/<sel> resolves here on F5 before the controller rebuilds it). Both point at the workspace picker so an F5 shows the connection manager while the backend connects; once EV_ON_OPEN rebuilds the tab, C_TREEDB_APP.restore_tab_from_url re-navigates to it so the reload lands on the tab the operator was on.",
+        "_routes_comment": "Resolution-ancestor routes for the per-workspace dynamic treedb tabs (a tab /<ws>/db/<sel> resolves here on F5 before the controller rebuilds it). Both point at the workspace picker so an F5 shows the connection manager while the backend connects; once EV_ON_OPEN rebuilds the tab, C_TREEDB_APP.restore_tab_from_url re-navigates to it so the reload lands on the tab the operator was on. /connections and /preferences are first-level routes with NO menu entry: they are reached from the avatar menu (and /connections also from each workspace picker), and they stay ROUTES so they are linkable, survive an F5 and appear in the site map. They are two pages and not one because they are two different things: the backends are what the app BROWSES -- shared by both workspaces, the thing a picker sends you to -- while preferences are what this browser chose.",
         "routes": {
+            "/connections": {
+                "stage": "main",
+                "gclass": "C_TREEDB_CONNECTIONS",
+                "kw": { "title": "connections" },
+                "lifecycle": "lazy_destroy"
+            },
+            "/preferences": {
+                "stage": "main",
+                "gclass": "C_TREEDB_PREFERENCES",
+                "kw": { "title": "preferences" },
+                "lifecycle": "lazy_destroy"
+            },
             "/topics/db": {
                 "stage": "main",
                 "gclass": "C_TREEDB_PICKER",
@@ -69,7 +81,21 @@
                 "aria_label": "Account menu",
                 "action": {
                     "type": "dropdown",
+                    "_items_comment": "Account menu: the backends first (they are where a session starts), then the operator's own preferences, then the developer tools and the informative entries. Neither is a rail item any more -- the rail is the WORK: Topics and Graphs.",
                     "items": [
+                        {
+                            "id": "connections",
+                            "name": "connections",
+                            "icon": "yi-cloudversify",
+                            "action": { "type": "navigate", "route": "/connections" }
+                        },
+                        {
+                            "id": "preferences",
+                            "name": "preferences",
+                            "icon": "yi-gear",
+                            "action": { "type": "navigate", "route": "/preferences" }
+                        },
+                        { "type": "divider" },
                         {
                             "id": "developer",
                             "name": "developer",
@@ -164,19 +190,6 @@
                                 }
                             }
                         ]
-                    }
-                },
-                {
-                    "id": "settings",
-                    "name": "settings",
-                    "icon": "yi-gear",
-                    "tooltip": "Manage backend connections",
-                    "route": "/settings",
-                    "target": {
-                        "stage": "main",
-                        "gclass": "C_TREEDB_SETTINGS",
-                        "kw": { "title": "settings" },
-                        "lifecycle": "lazy_destroy"
                     }
                 }
             ]

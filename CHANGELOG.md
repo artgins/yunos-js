@@ -368,6 +368,18 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
+- **The rail is Topics and Graphs, and the settings page became two.** What
+    `/settings` held was two different things under one name: the BACKENDS —
+    the editable table of connections, their discovered services and the
+    connect/disconnect intent, which is what the whole app browses and what
+    each workspace picker sends you to — and one operator choice, the live
+    buffer. They are now two pages, each with its own name, and neither takes
+    a rail slot: **`/connections`** (`C_TREEDB_CONNECTIONS`, the old page
+    renamed for what it is) and **`/preferences`**
+    (`C_TREEDB_PREFERENCES`, new). Both hang off the toolbar avatar menu, both
+    stay ROUTES — linkable, F5-proof, in the site map — and the picker's
+    "manage connections" button now lands on `/connections`.
+
 - **The schema of a topic is one click away** (gobj-ui `^5.12.0`). The topic
   table's toolbar gets a *Schema* button: it opens that topic's `desc` — pkey,
   cols, types, flags, fkey targets — in the adaptive dialog, on the lazy JSON

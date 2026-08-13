@@ -178,7 +178,7 @@ const en = {
         "shown above": "Shown above",
         "show references": "Show references",
         "other routes": "Other routes",
-        "settings": "Settings",
+        "preferences": "Preferences",
         "connections": "Connections",
         "add connection": "Add connection",
         "manage connections": "Manage connections",
@@ -189,7 +189,7 @@ const en = {
 
         /* service discovery + tranger records browser (added 2026-07-11) */
         "no services selected": "No services selected — pick them in Settings",
-        "disconnected - connect in settings": "Disconnected — connect it in Settings",
+        "disconnected - open connections": "Disconnected — connect it in Connections",
         "connect": "Connect",
         "disconnect": "Disconnect",
         "refresh services": "Refresh the yuno services",

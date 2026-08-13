@@ -178,7 +178,7 @@ const es = {
         "shown above": "Mostrado arriba",
         "show references": "Mostrar referencias",
         "other routes": "Otras rutas",
-        "settings": "Ajustes",
+        "preferences": "Preferencias",
         "connections": "Conexiones",
         "add connection": "Añadir conexión",
         "manage connections": "Gestionar conexiones",
@@ -189,7 +189,7 @@ const es = {
 
         /* service discovery + tranger records browser (added 2026-07-11) */
         "no services selected": "No hay servicios seleccionados — márcalos en Ajustes",
-        "disconnected - connect in settings": "Desconectada — conéctala en Ajustes",
+        "disconnected - open connections": "Desconectada — conéctala en Conexiones",
         "connect": "Conectar",
         "disconnect": "Desconectar",
         "refresh services": "Refrescar los servicios del yuno",

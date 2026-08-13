@@ -7,8 +7,11 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 ## Architecture
 
 - **Shell:** the declarative shell drives the nav; `src/app_config.json` declares
-  the rail (Topics / Graphs / Settings). Views are mounted by gclass name.
-- **Connections:** the user configures backends at runtime in **Settings** (an
+  the rail (Topics / Graphs), and both entries are WORK. The two setup pages
+  hang off the toolbar avatar as first-level routes with no rail entry:
+  `/connections` (the backends, also reached from each workspace picker) and
+  `/preferences` (what this browser chose). Views are mounted by gclass name.
+- **Connections:** the user configures backends at runtime in **Connections** (an
   editable Tabulator table: `url`, `remote_yuno_role`, `remote_yuno_service`),
   persisted in browser localStorage (`C_TREEDB_CONFIG`). Each connection is
   the `C_IEVENT_CLI` entry to **one yuno** (its public wss endpoint — the wss
@@ -82,8 +85,8 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   beyond the connected service), and `C_IEVENT_SRV` only routes that for
   channels whose user is a **superuser** (a role with `service="*"`) or has
   roles in the target services — the same model as the gui_agent control
-  plane. A non-authorized user sees the rejection in the Settings error
-  panel / view banner; nothing fails silently.
+  plane. A non-authorized user sees the rejection in the error panel of the
+  Connections page / the view banner; nothing fails silently.
 - **Auth (multi-backend):** the SPA logs in once at the co-located **auth_bff**
   (BFF httpOnly cookie, same origin). Because that cookie cannot travel to a
   backend on another host, the SPA fetches the access_token from the BFF
@@ -108,7 +111,7 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   has passed. A backend that NAKs the identity even after a fresh token is
   **rejected**: its transport is closed, its connect intent cleared, and the
   cause shown in the picker (retrying would only NAK again — it takes fixing the
-  user's roles on that backend and reconnecting in Settings).
+  user's roles on that backend and reconnecting in Connections).
 - **View adapter:** `C_TREEDB_VIEW` hosts the gobj-ui `C_YUI_TREEDB_TOPICS` /
   `C_YUI_TREEDB_GRAPH` as a **named service** (so `C_IEVENT_CLI` can route their
   command answers back) and resolves the live transport by `conn_id`.
@@ -148,7 +151,7 @@ gobj-ui's README ("Conventions → i18n") for the full contract. In this SPA:
 - The switch is the shell's: `C_TREEDB_APP` switches i18next and calls
   `yui_shell_language_changed(shell)`, which re-translates the document and
   publishes `EV_LANGUAGE_CHANGED`. Every view that builds DOM imperatively (the
-  picker, Settings, the Tranger cards, and gobj-ui's own treedb views)
+  picker, Connections, the Tranger cards, and gobj-ui's own treedb views)
   subscribes to the shell and re-renders **in its action** — a Tabulator header,
   a paginator or anything a formatter paints is drawn ONCE and no `data-i18n`
   attribute can reach it.

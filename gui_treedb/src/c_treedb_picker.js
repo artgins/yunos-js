@@ -300,7 +300,7 @@ function render_connection(gobj, conn)
         /*  Configured but not enabled: transports only open from the
          *  Settings connect button.  */
         $treedb_list.appendChild(createElement2(
-            ["p", {class: "is-size-7 has-text-grey", i18n: "disconnected - connect in settings"},
+            ["p", {class: "is-size-7 has-text-grey", i18n: "disconnected - open connections"},
                 "Disconnected — connect it in Settings."]));
     } else if(!open_error) {
         /*  Only "connecting" while there is no connect failure; a failure is
@@ -393,10 +393,10 @@ function ac_manage_connections(gobj, event, kw, src)
 {
     let shell = yui_shell_of(gobj);
     if(!shell) {
-        log_error(`${gobj_short_name(gobj)}: no shell, cannot open Settings`);
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot open Connections`);
         return -1;
     }
-    yui_shell_navigate(shell, "/settings", {push: true});   /*  user move  */
+    yui_shell_navigate(shell, "/connections", {push: true});   /*  user move  */
     return 0;
 }
 

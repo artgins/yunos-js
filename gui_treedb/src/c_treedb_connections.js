@@ -1,7 +1,7 @@
 /***********************************************************************
- *          c_treedb_settings.js
+ *          c_treedb_connections.js
  *
- *      C_TREEDB_SETTINGS — the Settings page: an EDITABLE Tabulator table
+ *      C_TREEDB_CONNECTIONS — the Settings page: an EDITABLE Tabulator table
  *      of backend connections, persisted to browser localStorage (via
  *      C_TREEDB_CONFIG, whose `connections` attr is SDF_PERSIST).
  *
@@ -75,9 +75,6 @@ import {
     treedb_config_get_connection,
     treedb_config_conn_services,
     treedb_config_is_conn_expanded,
-    treedb_config_get_live_max,
-    LIVE_MAX_MIN,
-    LIVE_MAX_MAX,
 } from "./c_treedb_config.js";
 
 import {
@@ -89,7 +86,7 @@ import {
 /***************************************************************
  *              Constants
  ***************************************************************/
-const GCLASS_NAME = "C_TREEDB_SETTINGS";
+const GCLASS_NAME = "C_TREEDB_CONNECTIONS";
 
 /*  What an exported connections file says it is. A file that does not say so
  *  is still accepted if it carries a `connections` list (or IS one) — an
@@ -137,7 +134,7 @@ let __gclass__ = null;
 function mt_create(gobj)
 {
     gobj.priv.subtables = {};
-    gobj_write_attr(gobj, "table_id", "treedb_settings_table");
+    gobj_write_attr(gobj, "table_id", "treedb_connections_table");
     build_ui(gobj);
 }
 
@@ -260,7 +257,7 @@ function build_ui(gobj)
     let table_id = gobj_read_attr(gobj, "table_id");
 
     let $add = createElement2(
-        ["button", {class: "button is-primary is-small SETTINGS_ADD", id: "treedb-settings-add",
+        ["button", {class: "button is-primary is-small CONNECTIONS_ADD", id: "treedb-connections-add",
                     title: t("add connection"),
                     "aria-label": t("add connection"),
                     "data-i18n-title": "add connection",
@@ -277,7 +274,7 @@ function build_ui(gobj)
     /*  The connection set is browser-local: without these, moving it to another
      *  browser (or another operator's machine) means retyping every row.  */
     let $export = createElement2(
-        ["button", {class: "button is-small ml-2 SETTINGS_EXPORT",
+        ["button", {class: "button is-small ml-2 CONNECTIONS_EXPORT",
                     title: t("download the connections as a json file"),
                     "aria-label": t("export"),
                     "data-i18n-title": "download the connections as a json file",
@@ -295,7 +292,7 @@ function build_ui(gobj)
      *  its `change` does nothing but turn the picked file into an event.  */
     let $file = createElement2(
         ["input", {type: "file", accept: "application/json,.json",
-                   class: "is-hidden SETTINGS_IMPORT_FILE"}]);
+                   class: "is-hidden CONNECTIONS_IMPORT_FILE"}]);
     $file.addEventListener("change", () => {
         let file = $file.files && $file.files[0];
         $file.value = "";       /*  so picking the same file twice fires again  */
@@ -314,7 +311,7 @@ function build_ui(gobj)
     priv.$import_file = $file;
 
     let $import = createElement2(
-        ["button", {class: "button is-small ml-2 SETTINGS_IMPORT",
+        ["button", {class: "button is-small ml-2 CONNECTIONS_IMPORT",
                     title: t("add the connections of a json file"),
                     "aria-label": t("import"),
                     "data-i18n-title": "add the connections of a json file",
@@ -332,7 +329,7 @@ function build_ui(gobj)
      *  itself below the fold. It lives behind this toggle, folded away until
      *  asked for. Like every other control here, the click is an EVENT.  */
     let $help_btn = createElement2(
-        ["button", {class: "button is-small ml-2 SETTINGS_HELP_TOGGLE",
+        ["button", {class: "button is-small ml-2 CONNECTIONS_HELP_TOGGLE",
                     "aria-expanded": "false",
                     title: t("show help"),
                     "aria-label": t("show help"),
@@ -348,7 +345,7 @@ function build_ui(gobj)
     priv.$help_btn = $help_btn;
 
     let $help = createElement2(
-        ["p", {class: "is-size-7 has-text-grey mb-3 is-hidden SETTINGS_HELP",
+        ["p", {class: "is-size-7 has-text-grey mb-3 is-hidden CONNECTIONS_HELP",
                i18n: "connections help"},
             "Edit cells inline. Each URL is a yuno's public wss endpoint " +
             "(plus its role and service). Connect with the plug button — " +
@@ -357,11 +354,11 @@ function build_ui(gobj)
     priv.$help = $help;
 
     let $scan_errors = createElement2(
-        ["div", {class: "is-size-7 has-text-danger mb-2 is-hidden SETTINGS_SCAN_ERRORS"}, []]);
+        ["div", {class: "is-size-7 has-text-danger mb-2 is-hidden CONNECTIONS_SCAN_ERRORS"}, []]);
     priv.$scan_errors = $scan_errors;
 
     let $container = createElement2(
-        ["div", {class: "C_TREEDB_SETTINGS ytreedb-settings p-4"},
+        ["div", {class: "C_TREEDB_CONNECTIONS ytreedb-connections p-4"},
             [
                 /*  NOT Bulma's `.level`: below 769px it turns itself AND its
                  *  two halves into `flex-direction: column`, so the three
@@ -369,74 +366,24 @@ function build_ui(gobj)
                  *  table needed (`.level.is-mobile` does not fix it either —
                  *  it only restores `display: flex`, leaving the halves in
                  *  column). A plain flex row that wraps only if it must.  */
-                ["div", {class: "SETTINGS_HEADER is-flex is-align-items-center "
+                ["div", {class: "CONNECTIONS_HEADER is-flex is-align-items-center "
                               + "is-justify-content-space-between is-flex-wrap-wrap mb-3"}, [
-                    ["div", {class: "SETTINGS_TITLE is-flex is-align-items-center"}, [
+                    ["div", {class: "CONNECTIONS_TITLE is-flex is-align-items-center"}, [
                         ["h2", {class: "title is-5 mb-0", i18n: "connections"}, "Connections"],
                         $help_btn
                     ]],
-                    ["div", {class: "SETTINGS_ACTIONS is-flex is-align-items-center"},
+                    ["div", {class: "CONNECTIONS_ACTIONS is-flex is-align-items-center"},
                         [$add, $export, $import, $file]]
                 ]],
                 $help,
                 $scan_errors,
-                ["div", {id: table_id}, []],
-                build_live_max_field(gobj)
+                ["div", {id: table_id}, []]
             ]
         ]
     );
 
     gobj_write_attr(gobj, "$container", $container);
     refresh_language($container, t);
-}
-
-/***************************************************************
- *  Live-buffer setting: how many rows a Live card keeps (newest on top;
- *  the oldest are dropped at the cap). It bounds the BROWSER's memory —
- *  the backend keeps no live data — so the value is clamped by
- *  C_TREEDB_CONFIG. Applied to cards opened from now on: an open card
- *  keeps the cap it was created with.
- ***************************************************************/
-function build_live_max_field(gobj)
-{
-    let config = gobj_find_service("treedb_config", false);
-    let cur = config ? treedb_config_get_live_max(config) : LIVE_MAX_MIN;
-
-    let $input = createElement2(
-        ["input", {class: "input is-small SETTINGS_LIVE_MAX", type: "number",
-                   min: String(LIVE_MAX_MIN), max: String(LIVE_MAX_MAX),
-                   step: "50", value: String(cur),
-                   style: "max-width:9rem;"}]);
-    $input.addEventListener("change", () => {
-        let cfg = gobj_find_service("treedb_config", false);
-        if(!cfg) {
-            log_error(`${GCLASS_NAME}: treedb_config service not found`);
-            return;
-        }
-        gobj_send_event(cfg, "EV_SET_LIVE_MAX", {live_max: $input.value}, gobj);
-        /*  Echo back what was STORED: the value is clamped, so a typed
-         *  1000000 must not keep showing 1000000 in the field. The send is
-         *  synchronous, so the clamped value is already persisted here.  */
-        $input.value = String(treedb_config_get_live_max(cfg));
-    });
-
-    return ["div", {class: "SETTINGS_LIVE mt-5"},
-        [
-            ["h2", {class: "title is-5 mb-2", i18n: "live buffer"}, "Live buffer"],
-            ["p", {class: "is-size-7 has-text-grey mb-3 SETTINGS_LIVE_HELP",
-                   i18n: "live buffer help"},
-                "Rows a Live card keeps in memory. The oldest are dropped when " +
-                "the cap is reached; nothing is lost — the records stay in the " +
-                "backend and can be read in a Rows card. Applies to cards opened " +
-                "from now on."],
-            ["div", {class: "field SETTINGS_LIVE_FIELD"},
-                [
-                    ["label", {class: "label is-small mb-1", i18n: "rows per live card"},
-                        "Rows per Live card"],
-                    ["div", {class: "control"}, [$input]]
-                ]
-            ]
-        ]];
 }
 
 /***************************************************************
@@ -475,7 +422,7 @@ function build_services_subtable(gobj, row)
     let $row = row.getElement();
 
     drop_subtable(gobj, conn_id);
-    let $old = $row.querySelector(".SETTINGS_SUBTABLE");
+    let $old = $row.querySelector(".CONNECTIONS_SUBTABLE");
     if($old) {
         $old.remove();
     }
@@ -503,10 +450,10 @@ function build_services_subtable(gobj, row)
      *    a services table stretched to the width of the connections table reads
      *    as a second header row of it. max-width is only the mobile guard.  */
     let $holder = createElement2(
-        ["div", {class: "SETTINGS_SUBTABLE",
+        ["div", {class: "CONNECTIONS_SUBTABLE",
                  style: "margin: 0.25rem 0 0.5rem 2rem; max-width: calc(100% - 2.5rem);"},
             []]);
-    let $table = createElement2(["div", {class: "SETTINGS_SUBTABLE_TABLE"}, []]);
+    let $table = createElement2(["div", {class: "CONNECTIONS_SUBTABLE_TABLE"}, []]);
     $holder.appendChild($table);
     $row.appendChild($holder);
 
@@ -525,7 +472,7 @@ function build_services_subtable(gobj, row)
             {title: t("service"), field: "service", minWidth: 160,
                 formatter: (cell) => {
                     let $s = document.createElement("span");
-                    $s.classList.add("SETTINGS_SERVICE", "has-text-weight-semibold");
+                    $s.classList.add("CONNECTIONS_SERVICE", "has-text-weight-semibold");
                     $s.textContent = cell.getValue();
                     return $s;
                 }},
@@ -533,7 +480,7 @@ function build_services_subtable(gobj, row)
                 formatter: (cell) => {
                     let $tag = document.createElement("span");
                     $tag.classList.add("tag", "is-size-7", "is-light",
-                        "SETTINGS_SERVICE_GCLASS",
+                        "CONNECTIONS_SERVICE_GCLASS",
                         cell.getValue() === "C_TRANGER" ? "is-warning" : "is-info");
                     $tag.textContent = cell.getValue();
                     return $tag;
@@ -541,7 +488,7 @@ function build_services_subtable(gobj, row)
             {title: t("browse"), field: "selected", minWidth: 100, hozAlign: "center",
                 formatter: (cell) => {
                     let on = !!cell.getValue();
-                    return `<span class="icon SETTINGS_SERVICE_CHECK" role="checkbox" `
+                    return `<span class="icon CONNECTIONS_SERVICE_CHECK" role="checkbox" `
                          + `aria-checked="${on ? "true" : "false"}" `
                          + `title="${t("browse this service")}">`
                          + `<i class="${on ? "yi-square-check" : "yi-square"}"></i></span>`;
@@ -727,7 +674,7 @@ function show_scan_errors(gobj, errors)
         return;
     }
     for(let err of errors) {
-        let $line = createElement2(["div", {class: "SETTINGS_SCAN_ERROR"}, []]);
+        let $line = createElement2(["div", {class: "CONNECTIONS_SCAN_ERROR"}, []]);
         $line.textContent = (err.yuno ? `${err.yuno}: ` : "") + t(err.error || "scan failed");
         $box.appendChild($line);
     }
@@ -760,7 +707,7 @@ function make_columns(gobj)
         let expanded = config ? treedb_config_is_conn_expanded(config, d.id) : false;
         let icon = expanded ? "yi-chevron-down" : "yi-chevron-right";
         let title = expanded ? t("hide services") : t("show services");
-        return `<span class="icon SETTINGS_EXPAND" title="${title}" `
+        return `<span class="icon CONNECTIONS_EXPAND" title="${title}" `
              + `role="button" aria-expanded="${expanded ? "true" : "false"}" `
              + `aria-label="${title}"><i class="${icon}"></i></span>`;
     }
@@ -779,7 +726,7 @@ function make_columns(gobj)
         let connected = links ? treedb_links_is_connected(links, d.id) : false;
         let cls = (connected && !scanning) ? "" : " has-text-grey-light";
         let title = scanning ? t("refreshing services") : t("refresh services");
-        return `<span class="icon SETTINGS_REFRESH${cls}" title="${title}" `
+        return `<span class="icon CONNECTIONS_REFRESH${cls}" title="${title}" `
              + `aria-label="${title}"><i class="yi-arrows-rotate"></i></span>`;
     }
 
@@ -798,7 +745,7 @@ function make_columns(gobj)
         let icon = enabled ? "yi-plug-slash" : "yi-plug";
         let cls = enabled ? " has-text-danger" : " has-text-success";
         let title = enabled ? t("disconnect") : t("connect");
-        return `<span class="icon SETTINGS_CONNECT${cls}" title="${title}" `
+        return `<span class="icon CONNECTIONS_CONNECT${cls}" title="${title}" `
              + `aria-label="${title}"><i class="${icon}"></i></span>`;
     }
 
@@ -821,7 +768,7 @@ function make_columns(gobj)
 
     function clone_formatter(cell)
     {
-        return `<span class="icon SETTINGS_CLONE" title="${t("clone this connection")}" `
+        return `<span class="icon CONNECTIONS_CLONE" title="${t("clone this connection")}" `
              + `aria-label="${t("clone")}"><i class="yi-copy"></i></span>`;
     }
 
@@ -1505,9 +1452,9 @@ function create_gclass(gclass_name)
     return 0;
 }
 
-function register_c_treedb_settings()
+function register_c_treedb_connections()
 {
     return create_gclass(GCLASS_NAME);
 }
 
-export {register_c_treedb_settings};
+export {register_c_treedb_connections};

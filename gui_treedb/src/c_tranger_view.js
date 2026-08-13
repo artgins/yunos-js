@@ -3605,7 +3605,7 @@ function ac_transport_closed(gobj, event, kw, src)
     priv.cur_topic = "";
     render_tabs(gobj);
     update_meta(gobj);
-    show_error(gobj, "disconnected - connect in settings");
+    show_error(gobj, "disconnected - open connections");
 
     gobj_change_state(gobj, "ST_DISCONNECTED");
     return 0;
