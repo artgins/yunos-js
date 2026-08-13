@@ -5,16 +5,18 @@ built on the **v2 declarative shell** of `@yuneta/gobj-ui`
 (`C_YUI_SHELL` + `C_YUI_NAV`).
 
 It is the modern successor of the old webix "Yuneta CLI"
-(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Five workspaces** in the primary rail:
-**Commands** (control-plane CLI to a node's yunos), **Statistics** (live
-`SDF_RSTATS` counters as cards), **Terminal** (an interactive xterm.js PTY
-console), **Schemas** (edit the schemas a yuno keeps in its
-`treedb_system_schema`), and **Settings**. **Commands** and **Terminal** share
+(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Four workspaces** in the primary rail,
+and all four are WORK: **Commands** (control-plane CLI to a node's yunos),
+**Statistics** (live `SDF_RSTATS` counters as cards), **Terminal** (an
+interactive xterm.js PTY console) and **Schemas** (edit the schemas a yuno
+keeps in its `treedb_system_schema`). The preferences page is not a rail item:
+it hangs off the toolbar avatar as the route **`/preferences`** (a route, not a
+dialog — linkable, F5-proof, in the site map). **Commands** and **Terminal** share
 one pattern — a flat node-picker tab (`C_NODES`) plus one closable tab per
 selected node. **Statistics** and **Schemas** differ: their picker is a
 **nodes→yunos tree** (`C_STATS_NODES`) where you select *yunos*. Statistics
 renders their counters as **cards** (one tab for all cards by default, or a tab
-per yuno — a Settings toggle); Schemas opens one editor tab per yuno.
+per yuno — a Preferences toggle); Schemas opens one editor tab per yuno.
 Commands/Statistics/Schemas list only agents **≥ 7.7.0**; Terminal works on any
 version. Browsing the DATA of an application treedb lives in the separate
 **`gui_treedb`** SPA; what is here is SCHEMA editing, because applying a schema
@@ -31,7 +33,7 @@ agent must accept `wss` upgrades from this origin.
 
 Unlike `gui_treedb` (which hardcodes endpoints in `src/conf/backend_config.js`),
 this app ships **no private data**. The user enters the authentication URL and
-the agent endpoints through **forms** in the *Settings* views, and those values
+the agent endpoints through **forms** in the *Preferences* views, and those values
 are persisted as **gobj persistent attrs** in the browser `localStorage`
 (`db_save/load_persistent_attrs`, wired in `src/main.js`).
 
@@ -39,7 +41,7 @@ are persisted as **gobj persistent attrs** in the browser `localStorage`
 
 > **CSP note:** `config.json` → `csp_connect_src` is a **build-time** security
 > boundary. The browser only allows WebSocket/HTTPS connections to the origins
-> listed there. An agent URL the user adds in Settings **must** match one of
+> listed there. An agent URL the user adds in Preferences **must** match one of
 > those origins; adding a brand-new origin requires editing `config.json` and
 > rebuilding.
 
@@ -182,7 +184,7 @@ navigated there, so it must not become a Back entry.
 ## i18n
 
 Every text goes through i18n **and must be able to change language** (the full
-contract is in gobj-ui's README, "Conventions → i18n"). Here: the Settings page
+contract is in gobj-ui's README, "Conventions → i18n"). Here: the Preferences page
 switches i18next and calls `yui_shell_language_changed(shell)`, and the views
 that build DOM imperatively — the three Tabulator tables above all — subscribe
 to the shell's `EV_LANGUAGE_CHANGED` and re-render in their action. A `title`
@@ -213,27 +215,32 @@ npm run build      # production bundle into dist/
 
 ## Status
 
-**Live**, restructured into **five primary workspaces** — **Commands**
+**Live**, restructured into **four primary workspaces** — **Commands**
 (`C_AGENT_CONSOLE`), **Statistics** (`C_STATS_NODES` tree picker +
 `C_AGENT_STATS` cards), **Terminal** (`C_AGENT_TTY`, xterm.js over the agent
 PTY), **Schemas** (`C_STATS_NODES` tree picker + `C_AGENT_TREEDB`, the gobj-ui
-treedb editor over the routing adapter), **Settings**. **Commands** and **Terminal** share the flat pattern: a
+treedb editor over the routing adapter). Preferences left the rail for the
+avatar menu (`/preferences`). **Commands** and **Terminal** share the flat pattern: a
 node-picker tab (`C_NODES`) plus one closable tab per selected node.
 **Statistics** picks **yunos** from a nodes→yunos tree and shows their
 `SDF_RSTATS` counters as **cards** — a single tab holding all cards (default)
-or a tab per yuno (Settings toggle "Statistics cards"). The cards **auto-refresh**
-(default 2 s, Settings; a deliberate opt-in exception to Yuneta's no-polling
+or a tab per yuno (Preferences toggle "Statistics cards"). The cards **auto-refresh**
+(default 2 s, Preferences; a deliberate opt-in exception to Yuneta's no-polling
 rule, visible-tab only) and **highlight** any counter that changed since the last
 refresh. Commands/Statistics require agent **≥ 7.7.0**; Terminal works on any
 version (needs the `open-console` authz — an admin role). **Schemas** picks
 yunos the same way Statistics does and opens one treedb-editor tab per yuno,
 routed through `C_AGENT_TREEDB_LINK` (see the section above); each tab
-discovers that yuno's treedbs and offers them in a selector, `treedb_system_schema`
-first. Selecting a tab focuses
+discovers that yuno's treedbs and declares them as a **tree of nodes**
+(`C_YUI_NODE` rooted at the tab's route, one `link` child per treedb whose
+viewer is `C_AGENT_TREEDB_VIEW`), `treedb_system_schema` first; how that depth
+is drawn — stacked strips, a "← yuno", or a breadcrumb — is the operator's
+choice in **Preferences → Navigation** and applies to the open tabs live.
+Selecting a tab focuses
 its input (Commands) / xterm (Terminal); node tabs carry a green/red connection
 dot; the last-active tab is remembered per workspace. Commands and Terminal both
 carry a per-tab **font-size** control (temporary) over a shared default set in
-Settings. Browsing the DATA of an application treedb is **not** part of this app
+Preferences. Browsing the DATA of an application treedb is **not** part of this app
 — that is the separate `gui_treedb` SPA; what lives here is schema editing. Time-series charts
 (`C_YUI_UPLOT`) over the live counters are a possible follow-up. See the
 `CHANGELOG.md` (repo root) for the per-cycle detail.
@@ -252,7 +259,7 @@ summary.
   the `CONSOLE_STATUS_ROW` holds **A− / [N px] / A+** buttons that nudge **this
   console's** live size — TEMPORARY and per-console, never persisted, so
   reopening the tab returns to the default. The shared DEFAULT is a "Console
-  font size" stepper in **Settings**, persisted in
+  font size" stepper in **Preferences**, persisted in
   `localStorage["console_font_size"]`, clamped to [8, 28] (default 12); each
   console seeds its live size from it on (re)open.
 - **Command history is one shared list across all nodes.** The store was
@@ -331,9 +338,10 @@ summary.
 - **Dev monitor Copy + Expanded (inherited).** From gobj-ui: a **Copy** button
   (copies the visible traffic) and an **Expanded** JSON view with Schema/Data/
   Metadata section toggles in the Developer window.
-- **Account menu + adaptive dialogs.** The account (avatar) menu now holds **About**
-  (+ Developer + **Site map** + Sign out); **Settings** is a tab-less **rail** view (Preferences),
-  no longer duplicated in the menu. **About** opens as the standardized gobj-ui
+- **Account menu + adaptive dialogs.** The account (avatar) menu holds
+  **Preferences** first (the `/preferences` route — it went back to the menu
+  when the rail was reserved for the four workspaces), then Developer,
+  **Site map**, **About** and Sign out. **About** opens as the standardized gobj-ui
   **adaptive dialog** (2.1.12): a centered card with the close **X top-right** on
   desktop, a full-screen sheet with a **back arrow top-left** on mobile; the popup
   backdrop was lightened (2.1.13). App at **0.2.0**.
@@ -345,12 +353,12 @@ summary.
   expands to its running yunos (`list-yunos` per node), and a checkbox on a yuno
   row selects it. Selected yunos' `SDF_RSTATS` counters render as **cards**
   (`C_AGENT_STATS`, `stats-yuno id=<yuno>`) — a single tab holding a card per
-  selected yuno (default), or a tab per yuno (Settings toggle). Fetches are
+  selected yuno (default), or a tab per yuno (Preferences toggle). Fetches are
   tagged `console_purpose` + `console_node` + `console_yuno` (echoed in
   `__md_iev__`, [[md_iev round-trip]]) so each answer updates exactly its own
   card and other panels ignore it. Integer counters get fixed "." grouping
   (Intl-free — the `navigator.language` crash landmine). The cards **auto-refresh**
-  on a timer (default 2 s, Settings "Auto-refresh stats", 0 = off; a deliberate
+  on a timer (default 2 s, Preferences "Auto-refresh stats", 0 = off; a deliberate
   opt-in exception to the no-polling rule — polls only the visible tab's current
   cards while the link is up) and a counter that **changed** since the last
   refresh is accented for that cycle. `C_YUI_UPLOT` time-series charts remain a
