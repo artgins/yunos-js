@@ -189,9 +189,10 @@ gobj-ui's `readonly`: no edition mode, no new/delete/paste, no in-row icons, and
 the record form opens with its cells locked and only *copy* on its toolbar. The
 form still opens, because reading is the point of a replica.
 
-The flag is per TREEDB and it is runtime state, not config: a yuno is routinely
-the master of its `treedb_system_schema` and a replica of a data treedb it
-shares, and `tranger2_startup` decides by who holds the store's lock. The
+The flag is per TREEDB, not per yuno: a yuno is routinely the master of its
+`treedb_system_schema` and a replica of a data treedb it shares. Which one it
+is comes from the yuno's config — only a configured master opens the store in
+exclusive mode — so the start order does not change it. The
 **picker** summarises it per yuno — *Master*, *Read only*, *Master (some)* when
 its treedbs disagree — and says nothing at all when a treedb could not answer:
 a node older than the command replies "command not available", and calling that
