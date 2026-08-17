@@ -23,6 +23,32 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **The Schemas picker says whether a yuno can be EDITED: master, read only or
+    mixed.** Only the master of a treedb's tranger can write — the yuno refuses
+    otherwise (SDK 7.13.0) — so a replica is a read-only visit, and that is the
+    first thing an operator opening a schema editor needs to know.
+
+    It cost a kernel command to get: `master` is an `SDF_RD` attr of the
+    tranger, absent from `services`, from `treedbs` and from the stats, so the
+    only place it surfaced was the whole `print-tranger` dump. `C_NODE`
+    answers `treedb-info` now, and the picker asks it once per treedb right
+    after the `services` probe that discovered them.
+
+    The label is per YUNO but the flag is per TREEDB, and they can disagree: a
+    yuno is routinely the master of its `treedb_system_schema` and a replica of
+    a data treedb it shares with another yuno. So the row counts masters
+    against the total — all of them *Master*, none *Read only*, some
+    *Master (some)*.
+
+    Two silences are deliberate. Nothing is shown until **every** treedb of the
+    yuno has answered, and nothing at all when one of them **could not** answer
+    — a node older than the command replies "command not available", and
+    counting that as "not master" would label every pre-7.13.0 node read-only,
+    which is a claim this app cannot make. Verified live against a node whose
+    yunos were in all three states at once: `db_history_ce^1620` *Master*,
+    `gate_central^2020` *Read only* (1620 holds the shared store), and the two
+    yunos still on an older binary showing nothing.
+
 - **The Schemas picker lists only yunos that HAVE a treedb.** They used to be
     listed with the checkbox off and *"this yuno exposes no treedb"* in the
     status column — a row whose only purpose was to be refused. In this

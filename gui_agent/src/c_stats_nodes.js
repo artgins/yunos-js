@@ -82,6 +82,12 @@ const GCLASS_NAME = "C_STATS_NODES";
  *  ("treedbs"): the link re-publishes every answer to every panel.  */
 const CHECK_PURPOSE = "treedbcheck";
 
+/*  Marker of the per-treedb `treedb-info` probe: it answers whether this yuno
+ *  is the MASTER of that treedb's tranger, which is the difference between an
+ *  editable schema and a read-only replica. One call per treedb, right after
+ *  the `services` probe that discovered them, and only in this workspace.  */
+const MASTER_PURPOSE = "treedbmaster";
+
 
 /***************************************************************
  *              Attrs
@@ -125,6 +131,7 @@ function mt_create(gobj)
     priv.nodes = [];              /*  parsed list-agents (node rows)  */
     priv.yunos = {};              /*  node id -> [yuno rows] (loaded)  */
     priv.treedbs = {};            /*  sel id -> true|false (undefined = not asked)  */
+    priv.masters = {};            /*  sel id -> {total, master, answered} of its treedbs  */
     priv.render_pending = false;  /*  one-shot setData debounce  */
 
     /*
@@ -443,11 +450,38 @@ function make_columns(gobj)
                 return `<span class="STATNODES_INFO has-text-grey is-size-7">` +
                     `${esc(t("no treedb in this yuno"))}</span>`;
             }
-            return r.running
+            /*  running/stopped, plus what the operator is really asking in
+             *  this workspace: can I EDIT here? Only the master of a treedb
+             *  can write (the yuno refuses otherwise), so a replica is a
+             *  read-only visit. Nothing is said until every treedb of the
+             *  yuno has answered, and nothing at all against a node too old
+             *  to know the question.  */
+            let run = r.running
                 ? `<span class="STATNODES_INFO has-text-success is-size-7">` +
                     `${esc(t("running"))}</span>`
                 : `<span class="STATNODES_INFO has-text-grey is-size-7">` +
                     `${esc(t("stopped"))}</span>`;
+            let badge = "";
+            switch(master_state(gobj, r)) {
+                case "master":
+                    badge = `<span class="STATNODES_MASTER has-text-link is-size-7 ` +
+                        `has-text-weight-semibold">${esc(t("master"))}</span>`;
+                    break;
+                case "readonly":
+                    badge = `<span class="STATNODES_READONLY has-text-grey is-size-7 ` +
+                        `has-text-weight-semibold">${esc(t("read only"))}</span>`;
+                    break;
+                case "mixed":
+                    badge = `<span class="STATNODES_MIXED has-text-warning-dark is-size-7 ` +
+                        `has-text-weight-semibold">${esc(t("master mixed"))}</span>`;
+                    break;
+                default:
+                    break;      /*  still asking, or nobody could answer  */
+            }
+            if(badge) {
+                run += " " + badge;
+            }
+            return run;
         }
         if(r._type === "empty") {
             return "";
@@ -644,6 +678,82 @@ function request_yunos(gobj, node)
 }
 
 /***************************************************************
+ *  Ask ONE treedb of ONE yuno whether this yuno is its MASTER
+ *  (`treedb-info`, C_NODE, SDK >= 7.13.0). An older node answers
+ *  "command not available", which counts as an ANSWER carrying no
+ *  master information — the row then says nothing rather than claiming
+ *  read-only, because a question that cannot be asked is not a "no".
+ ***************************************************************/
+function probe_master(gobj, node, yuno_id, treedb_name)
+{
+    let link = gobj_read_attr(gobj, "link_svc");
+    if(!node || !yuno_id || !treedb_name || !link || !agent_link_is_connected(link)) {
+        return;
+    }
+    let kw_send = {
+        agent_id:  node,
+        cmd2agent: `command-yuno id="${yuno_id}" service="${treedb_name}" command="treedb-info"`
+    };
+    msg_iev_write_key(kw_send, "console_purpose", MASTER_PURPOSE);
+    msg_iev_write_key(kw_send, "console_node", node);
+    msg_iev_write_key(kw_send, "console_yuno", yuno_id);
+    agent_link_command(link, "command-agent", kw_send);
+}
+
+/***************************************************************
+ *  One `treedb-info` answer. Masters are counted against the total, so
+ *  a yuno whose treedbs DISAGREE can say so: being master is per
+ *  TREEDB, and one yuno is routinely the master of its
+ *  treedb_system_schema and a replica of a data treedb it shares.
+ ***************************************************************/
+function set_treedb_master(gobj, node, yuno_id, data, result)
+{
+    let priv = gobj.priv;
+    let acc = priv.masters[stats_sel_id(node, yuno_id)];
+
+    if(!acc) {
+        return;     /*  the yuno left the list while this was in flight  */
+    }
+    acc.answered++;
+    if(typeof result === "number" && result < 0 || !data || typeof data.master !== "boolean") {
+        /*  A node older than the command answers "command not available", and
+         *  a failure answers nothing: that is UNKNOWN. Counting it as "not
+         *  master" would label every pre-7.13.0 node read-only, which is a
+         *  claim this app cannot make.  */
+        acc.unknown++;
+        refresh_active(gobj);
+        return;
+    }
+    if(data.master === true) {
+        acc.master++;
+    }
+    refresh_active(gobj);
+}
+
+/***************************************************************
+ *  What the row says about writing: nothing until every treedb of the
+ *  yuno has answered, then master / read-only / mixed.
+ ***************************************************************/
+function master_state(gobj, row)
+{
+    let acc = gobj.priv.masters[stats_sel_id(row.node, row.yuno_id)];
+
+    if(!acc || acc.answered < acc.total) {
+        return "";      /*  still asking  */
+    }
+    if(acc.unknown > 0) {
+        return "";      /*  a treedb could not answer: say nothing  */
+    }
+    if(acc.master === 0) {
+        return "readonly";
+    }
+    if(acc.master === acc.total) {
+        return "master";
+    }
+    return "mixed";
+}
+
+/***************************************************************
  *  Ask ONE yuno which services it runs, to learn whether it exposes
  *  any treedb (a `C_NODE` service). Only the Schemas picker does
  *  this, and only for the node the operator EXPANDS: it is one round
@@ -740,10 +850,13 @@ function set_yuno_treedbs(gobj, node, yuno_id, data, result)
         delete priv.treedbs[key];   /*  unknown again: a later expand retries  */
         return;
     }
-    let count = 0;
+    let names = [];
     if(Array.isArray(data)) {
-        count = data.filter((sv) => sv && sv.gclass === "C_NODE").length;
+        names = data.filter((sv) => sv && sv.gclass === "C_NODE")
+            .map((sv) => sv.service)
+            .filter((x) => typeof x === "string" && x.length > 0);
     }
+    let count = names.length;
     let had = priv.treedbs[key];
     priv.treedbs[key] = (count > 0);
 
@@ -756,6 +869,14 @@ function set_yuno_treedbs(gobj, node, yuno_id, data, result)
     if(count === 0 && gobj_read_bool_attr(gobj, "with_treedb_check")) {
         schedule_render(gobj);
         return;
+    }
+
+    /*  It HAS treedbs: ask each one whether this yuno is its master. Only the
+     *  master can modify, so this is what tells the operator whether the tab
+     *  they are about to open can edit anything.  */
+    priv.masters[key] = {total: count, master: 0, answered: 0, unknown: 0};
+    for(let name of names) {
+        probe_master(gobj, node, yuno_id, name);
     }
     if(had !== priv.treedbs[key]) {
         refresh_active(gobj);
@@ -906,6 +1027,16 @@ function ac_mt_command_answer(gobj, event, kw, src)
             let yuno_id = msg_iev_read_key(kw, "console_yuno") || "";
             if(node && yuno_id) {
                 set_yuno_treedbs(gobj, node, yuno_id, kw.data, kw.result);
+            }
+        }
+        return 0;
+    }
+    if(purpose === MASTER_PURPOSE) {
+        if(command !== "command-agent") {
+            let node = msg_iev_read_key(kw, "console_node") || "";
+            let yuno_id = msg_iev_read_key(kw, "console_yuno") || "";
+            if(node && yuno_id) {
+                set_treedb_master(gobj, node, yuno_id, kw.data, kw.result);
             }
         }
         return 0;
