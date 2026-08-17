@@ -22,40 +22,58 @@ version. Browsing the DATA of an application treedb lives in the separate
 **`gui_treedb`** SPA; what is here is SCHEMA editing, because applying a schema
 change means restarting the owning yuno and that is the agent's job.
 
-**Canonical URL:** the SPA is served at `https://agents.yunetacontrol.com`
-(new apex — needs its own DNS zone + TLS cert at deploy time). This is the
-app's own origin, **not** a backend endpoint: it does not go in
-`csp_connect_src`. In Phase 2 it must be registered in the IdP as a Valid
-Redirect URI (`https://agents.yunetacontrol.com/*`) and Web Origin, and the
-agent must accept `wss` upgrades from this origin.
+**Where it is served:** one build serves every tenant and both agent planes,
+because the deployment identity is **derived from the serving hostname**
+(`src/conf/deploy.js`) — never baked in:
 
-## Key design choice: config lives in the browser, not the repo
+| Host | Plane | Control center | Auth BFF |
+|---|---|---|---|
+| `artgins.yunetacontrol.com` | `yuneta_agent`   | `wss://<host>:1996` | `https://<host>:1806` |
+| `artgins.yunetacontrol.ovh` | `yuneta_agent22` | `wss://<host>:1997` | `https://<host>:1807` |
 
-Unlike `gui_treedb` (which hardcodes endpoints in `src/conf/backend_config.js`),
-this app ships **no private data**. The user enters the authentication URL and
-the agent endpoints through **forms** in the *Preferences* views, and those values
-are persisted as **gobj persistent attrs** in the browser `localStorage`
-(`db_save/load_persistent_attrs`, wired in `src/main.js`).
+`deploy-com.sh` / `deploy-ovh.sh` rsync `dist/` to each vhost on `artgins.com`.
+Everything is co-located on the SPA's own host, which is what makes the flow
+work: the cookie the BFF sets (`Domain=<host>`) reaches both the BFF and the
+control center, and one letsencrypt cert covers all of it. A new tenant is a
+new DNS name + cert + a redirect URI in the IdP — no rebuild.
 
-`src/conf/defaults.js` only carries empty templates and a non-secret example.
+## Key design choice: no private data in the repo
+
+The app ships **no endpoints and no credentials**. The control-center and BFF
+URLs come from the hostname (above); *Preferences → Diagnostics* only
+**displays** the resolved pair, read-only. What the browser persists is the
+operator's own state — theme, language, answer display mode, navigation mode,
+Statistics layout and refresh, selected nodes per workspace, the last-active
+tab, the command history and the shortkeys — as **gobj persistent attrs** on
+the `agent_config` service (`db_save/load_persistent_attrs`, wired in
+`src/main.js`, backed by `localStorage`).
 
 > **CSP note:** `config.json` → `csp_connect_src` is a **build-time** security
-> boundary. The browser only allows WebSocket/HTTPS connections to the origins
-> listed there. An agent URL the user adds in Preferences **must** match one of
-> those origins; adding a brand-new origin requires editing `config.json` and
-> rebuilding.
+> boundary: the browser only allows WebSocket/HTTPS connections to what is
+> listed there. Because the host decides the endpoints, the list is the
+> `wss:` and `https:` **schemes** rather than an origin allowlist (plus
+> `ws://localhost:1991` for dev). Narrowing it to explicit origins would mean
+> one build per tenant.
 
 ## Library consumption (v2)
 
-Both kernel JS packages are consumed as local `file:` deps on the submodules:
+Both kernel JS packages come from the **npm registry**, the same way wattyzer
+consumes them — not from the `kernel/js/*` submodule checkouts:
 
 ```
-@yuneta/gobj-js -> ../../../kernel/js/gobj-js   (file:, v2 source via vite alias)
-@yuneta/gobj-ui -> ../../../kernel/js/gobj-ui   (file:, v2 / main line)
+@yuneta/gobj-js ^7.10.0     (publishes only dist/ → resolved to its bundle)
+@yuneta/gobj-ui ^5.14.1     (v2 / main line; imported as SOURCE by specifier,
+                             @yuneta/gobj-ui/src/*.js via its exports map)
 ```
 
 This is the v2 (`main`) line — **not** the published npm v1 used by
 estadodelaire/hidraulia.
+
+**A local edit under `yunetas/kernel/js/**` does not reach this app.** To pick
+up library work: commit + bump + `npm publish` there, bump the submodule
+pointer in yunetas, then raise the range in `package.json`. Every shared
+third-party lib must also stay in `resolve.dedupe` (`vite.config.js`) — gobj-ui
+declares them as peers and npm will otherwise nest a second copy.
 
 ## Transport to the agent
 
@@ -181,6 +199,36 @@ shell matches and the site map lists), while the card/landing templates are
 click. And the mount stamps its treedb into the URL with `push: false`: nobody
 navigated there, so it must not become a Back entry.
 
+## Every action crosses the FSM
+
+A DOM handler in this app does exactly two things: whatever the browser needs
+synchronously (`preventDefault`, `stopPropagation`, keeping the xterm focused),
+and `gobj_send_event`. The work lives in the action. That is not style — the
+`machine` trace is the execution log of a yuno, so an action that bypasses the
+automaton is invisible when something breaks, and the only way left to chase it
+is WebSocket traffic and screenshots.
+
+Concretely, in every view: buttons, keys that mean something, `<select>`
+changes, the outside-click that closes a popover, and the observers that tell a
+tab it was revealed or hidden. Two supporting rules:
+
+- **A `kw` is plain JSON.** The trace dumps it, and a gobj / widget / DOM node
+  is circular — serializing one throws, so the first casualty is the trace the
+  FSM exists to feed. Pass an identity (`{node, yuno_id}`, `{seq}`, `{kind}`)
+  and resolve it inside the action.
+- **A deferral is a posted event, not a `setTimeout(…, 0)`** — `gobj_post_event`
+  arrives named in the trace. A `C_TIMER` is for a real time (a watchdog, an
+  interval); `set_timeout_periodic` gives the auto-refresh tick its own
+  `EV_TIMEOUT_PERIODIC`, which the `timer_periodic` trace level silences on its
+  own.
+
+Two deliberate exceptions, both commented where they live: xterm's `onData`
+(a byte stream, not an action — one event per keystroke would bury the tab's
+trace under the typing) and Tabulator's `ajaxRequestFunc` (a data source that
+must return a Promise). Where the browser needs an answer the action cannot
+give — Tab completion deciding `preventDefault` — the action reports through
+`priv` and the handler reads it back.
+
 ## i18n
 
 Every text goes through i18n **and must be able to change language** (the full
@@ -204,14 +252,18 @@ npm run dev        # vite dev server
 npm run build      # production bundle into dist/
 ```
 
-## Roadmap (phases)
+## Roadmap
 
-| Phase | Content |
-|-------|---------|
-| **0** | Scaffold: shell + nav, placeholder views, green build *(this commit)* |
-| **1** | `C_AGENT_CONSOLE` (CLI panel) + `C_SETTINGS` (agents form, persistent attrs); MVP target `app.wattyzer.com` over `wss`+OAuth2 |
-| **2** | Authentication: configurable OIDC/Keycloak `auth_url` → JWT → `wss:1993` |
-| **3** | Live **Stats** (`C_AGENT_STATS`): a yuno's `SDF_RSTATS` counters as a table. TreeDB moved out to the `gui_treedb` SPA. |
+The phased build-out is **done**: scaffold (shell + nav), the Commands console,
+BFF/OIDC authentication, live Statistics, the PTY Terminal and the Schemas
+editor all ship. What is open:
+
+| Open item | Note |
+|---|---|
+| **Operating yunos from the GUI** | The agent's own job — `kill-yuno` / `run-yuno` / `play-yuno`, binaries, configs, snaps — is reachable only by TYPING into Commands. The one exception is the Schemas tab's *Apply*, which drives the restart itself. A workspace over the existing nodes→yunos tree is the natural home. |
+| **Time-series charts** | `C_YUI_UPLOT` over the live `SDF_RSTATS` counters the Statistics cards already poll. |
+| **Statistics *Reset* on app gclasses** | `stats-yuno stats="__reset__"` only lands where the gclass honours it; counters kept in private fields behind `mt_reading` need their own `mt_stats(__reset__)`. Backend work, not a GUI bug. |
+| **Terminal key bar on iOS / old Android** | Browsers without `interactive-widget=resizes-content` still overlay the on-screen keyboard; the bar needs pinning to `visualViewport` there. |
 
 ## Status
 

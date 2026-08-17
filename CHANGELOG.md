@@ -23,6 +23,78 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **The FSM sweep reaches the rest of the app: every action crosses the
+    automaton now.** An earlier pass did the node tables and parts of the
+    console, and its changelog line claimed more than it delivered — the four
+    places that were left are the ones an operator uses most:
+
+    - **Executing a command** (Enter and the Execute button) went straight from
+      the DOM handler to `send_command()`, so the central action of the
+      Commands workspace appeared NOWHERE in the `machine` trace. It is
+      `EV_EXEC_COMMAND` now, and so are Clear, Copy, the A− / A+ font nudge,
+      the two popover triggers, the outside-click that closes them, Tab
+      completion, Up/Down history recall, typing (`EV_INPUT_CHANGED`), the
+      Recent/Frequent sort and the three per-row history buttons.
+    - **The whole Preferences page** ran outside the FSM: an empty
+      `event_types`, one `ST_IDLE` with no actions, and every control's work in
+      a closure. Theme, language, navigation shape, answer display, Statistics
+      layout and refresh, the two font-size defaults and the shortkeys manager
+      are ten events with ten actions.
+    - **The Terminal's key bar, Reconnect and font buttons** — `EV_KEY` carries
+      the key's literal sequence, so the sticky-Ctrl / soft-keyboard / Paste
+      pseudo-keys are decided in the action, not in a `pointerdown` closure.
+    - **The Statistics Refresh and per-card Reset buttons**, plus the
+      show/hide of the tab (`EV_VISIBILITY`), which used to arm and disarm the
+      poll from inside a `MutationObserver` callback.
+
+    Two rules held throughout: a `kw` is plain JSON — a card's Reset sends
+    `{node, yuno_id}`, a bar key sends `{seq}`, a popover sends `{kind}`, never
+    the element — and where the browser demands a synchronous answer (Tab, to
+    decide `preventDefault`) the action reports back through `priv`, because a
+    DOM event must never travel in a kw.
+
+    One carve-out, deliberate and commented: xterm's `onData` stays a plain
+    call. It is a BYTE STREAM, not an action — one event per character would
+    bury the trace of the tab under the typing, the same reason Tabulator's
+    `ajaxRequestFunc` is not an event either.
+
+- **The Statistics auto-refresh is a `C_TIMER`, not a `setInterval`.** The
+    polling is a sanctioned exception to the no-polling rule; the invisible
+    tick was not. It is a PERIODIC timer now, so each tick arrives as
+    `EV_TIMEOUT_PERIODIC` — and the framework silences exactly that event
+    through its own `timer_periodic` trace level (already set in `main.js`), so
+    the FSM gains the tick without the trace drowning in it.
+
+- **Five `setTimeout(…, 0)` deferrals became posted events**
+    (`gobj_post_event`, which is what a deferral IS): route normalization after
+    an F5 or a Statistics layout change (`EV_NORMALIZE_ROUTE`, `c_app`), the
+    one-`setData` debounce of the nodes→yunos tree (`EV_RENDER_TREE`), the
+    Terminal's deferred xterm boot (`EV_TTY_BOOT`) and its self-close on
+    `exit` (`EV_CLOSE_TAB`). The Paste key's ✗ flash now returns on
+    `EV_TIMEOUT` from a `C_TIMER` like every other flash in the app. The only
+    surviving `window.setTimeout` is the Schemas Apply watchdog — a real time,
+    which is what a timer is for.
+
+- **The Preferences page follows a language switch made from the toolbar.**
+    Which option is ACTIVE in the theme and language segments is markup, not a
+    translatable string, so `refresh_language()` could not move it: the page
+    subscribes to the shell's `EV_LANGUAGE_CHANGED` and re-renders.
+
+- **Documentation caught up with the app** (`README.md`, `main.js`,
+    `scripts/qa.mjs`): the libraries come from the **npm registry**, not from
+    `file:` deps on the `kernel/js/*` checkouts; the app is served at
+    `artgins.yunetacontrol.com` / `.ovh` with its endpoints DERIVED from the
+    hostname (`src/conf/deploy.js`), not typed by the user into a form and not
+    at an `agents.yunetacontrol.com` that was never deployed — so the "config
+    lives in the browser" section now says what actually lives there (the
+    operator's own preferences) and points at Diagnostics for the read-only
+    endpoint pair; `src/conf/defaults.js` was cited and does not exist; the
+    delivered phase table became a table of what is still OPEN, led by
+    operating yunos from the GUI (`kill-yuno` / `run-yuno` / binaries / configs
+    / snaps are reachable only by typing them into Commands today); and the QA
+    driver's usage examples name routes that exist (`/commands/nodes`, not
+    `/nodes`).
+
 - **Preferences left the primary rail for the account menu.** The rail is the
     WORK of the console and every option on it now opens a workspace: Commands,
     Statistics, Terminal, Schemas. The settings page moved to `/preferences`,

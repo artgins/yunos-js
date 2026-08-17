@@ -144,6 +144,9 @@ function mt_create(gobj)
     priv.pending = false;     /*  a command is in flight → CONSOLE_RESPONSE shows
                                   the "running…" placeholder; cleared when the
                                   answer renders or the link drops.  */
+    priv.tab_completed = false; /*  did EV_COMPLETE_COMMAND consume the Tab?
+                                    read back by the keydown handler, which
+                                    owes the browser a synchronous answer.  */
     priv.req_seq = 0;         /*  monotonic id of the latest user command; a
                                   command-agent answer echoes its seq in
                                   __md_iev__ so a late answer for a superseded
@@ -364,27 +367,35 @@ function build_ui(gobj)
         autocomplete: "off",
         "aria-label": "command"
     }, null, {
+        /*  Each key that MEANS something is an event; the handler only
+         *  translates and, where the browser needs a synchronous answer,
+         *  reads back whether the key was consumed.  */
         keydown: (ev) => {
             if(ev.key === "Enter") {
                 ev.preventDefault();
-                send_command(gobj);
+                gobj_send_event(gobj, "EV_EXEC_COMMAND", {}, gobj);
             } else if(ev.key === "Tab") {
                 /*  Complete the command word to the unique match / common
-                 *  prefix; only swallow Tab when it actually completes. */
-                if(complete_command(gobj)) {
+                 *  prefix; only swallow Tab when it actually completed, so
+                 *  Tab still leaves the input when there is nothing to
+                 *  complete. The action cannot call preventDefault (a DOM
+                 *  event must never travel in a kw), so it reports through
+                 *  priv.tab_completed. */
+                priv.tab_completed = false;
+                gobj_send_event(gobj, "EV_COMPLETE_COMMAND", {}, gobj);
+                if(priv.tab_completed) {
                     ev.preventDefault();
                 }
             } else if(ev.key === "ArrowUp") {
                 ev.preventDefault();
-                recall_history(gobj, +1);   /*  older  */
+                gobj_send_event(gobj, "EV_HISTORY_RECALL", {dir: +1}, gobj);  /*  older  */
             } else if(ev.key === "ArrowDown") {
                 ev.preventDefault();
-                recall_history(gobj, -1);   /*  newer / back to draft  */
+                gobj_send_event(gobj, "EV_HISTORY_RECALL", {dir: -1}, gobj);  /*  newer  */
             }
         },
         input: () => {
-            priv.hist_idx = -1;   /*  typing leaves history-recall mode  */
-            update_hint(gobj);
+            gobj_send_event(gobj, "EV_INPUT_CHANGED", {}, gobj);
         }
     }]);
     priv.$input = $input;
@@ -397,7 +408,8 @@ function build_ui(gobj)
             ["span", {class: "is-hidden-mobile", i18n: "execute"}, "Execute"]
         ]]
     );
-    $exec.addEventListener("click", () => send_command(gobj));
+    $exec.addEventListener("click",
+        () => gobj_send_event(gobj, "EV_EXEC_COMMAND", {}, gobj));
 
     /*  Clear as its OWN addon button (right of history), NOT an in-input ✕:
      *  on mobile the in-input ✕ sits under the typing thumb and gets tapped
@@ -407,7 +419,8 @@ function build_ui(gobj)
                     "data-i18n-title": "clear"},
             [["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]]]]
     );
-    $clear.addEventListener("click", () => clear_console(gobj));
+    $clear.addEventListener("click",
+        () => gobj_send_event(gobj, "EV_CLEAR", {}, gobj));
 
     let $input_control = createElement2(["div", {class: "CONSOLE_INPUT_CONTROL control is-expanded"}, [$input]]);
 
@@ -441,7 +454,7 @@ function build_ui(gobj)
                     title: t("font smaller"), "aria-label": t("font smaller"),
                     "data-i18n-title": "font smaller", "data-i18n-aria-label": "font smaller"},
             [["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-minus"}]]]],
-            {click: () => change_console_font_size(gobj, -1)}]
+            {click: () => gobj_send_event(gobj, "EV_FONT_SIZE", {delta: -1}, gobj)}]
     );
     priv.$font_size_label = createElement2(
         ["span", {class: "CONSOLE_FONT_SIZE is-size-7 has-text-grey",
@@ -453,7 +466,7 @@ function build_ui(gobj)
                     title: t("font larger"), "aria-label": t("font larger"),
                     "data-i18n-title": "font larger", "data-i18n-aria-label": "font larger"},
             [["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-plus"}]]]],
-            {click: () => change_console_font_size(gobj, +1)}]
+            {click: () => gobj_send_event(gobj, "EV_FONT_SIZE", {delta: +1}, gobj)}]
     );
 
     let $copy = createElement2(
@@ -462,7 +475,8 @@ function build_ui(gobj)
             [["span", {class: "icon is-small"}, [["i", {class: "yi-copy"}]]]]]
     );
     $copy.disabled = true;
-    $copy.addEventListener("click", () => copy_response(gobj));
+    $copy.addEventListener("click",
+        () => gobj_send_event(gobj, "EV_COPY_RESPONSE", {}, gobj));
     priv.$copy = $copy;
     priv.$copy_icon = $copy.querySelector("i");
 
@@ -530,7 +544,7 @@ function build_ui(gobj)
             }
         }
         if(!inside) {
-            close_popovers(gobj);
+            gobj_send_event(gobj, "EV_CLOSE_POPOVERS", {}, gobj);
         }
     };
     document.addEventListener("click", priv.doc_click);
@@ -790,7 +804,7 @@ function build_popover(gobj, kind, icon, title)
     );
     $btn.addEventListener("click", (ev) => {
         ev.stopPropagation();   /*  don't let the doc handler close it first  */
-        toggle_popover(gobj, kind);
+        gobj_send_event(gobj, "EV_TOGGLE_POPOVER", {kind: kind}, gobj);
     });
     /*  CONSOLE_POP_CONTROL is made position:static in app.css so the menu
      *  anchors to the input row and spans it full width.  */
@@ -870,7 +884,7 @@ function fill_help_popover(gobj)
         );
         $item.addEventListener("click", (ev) => {
             ev.preventDefault();
-            insert_command(gobj, name + " ");
+            gobj_send_event(gobj, "EV_INSERT_COMMAND", {text: name + " "}, gobj);
         });
         $c.appendChild($item);
     }
@@ -943,9 +957,7 @@ function fill_hist_popover(gobj)
         }
         $b.addEventListener("click", (ev) => {
             ev.stopPropagation();
-            priv.hist_sort = mode;
-            kw_set_local_storage_value("console_hist_sort", mode);
-            fill_hist_popover(gobj);
+            gobj_send_event(gobj, "EV_HISTORY_SORT", {mode: mode}, gobj);
         });
         return $b;
     };
@@ -980,7 +992,7 @@ function fill_hist_popover(gobj)
         $add.addEventListener("click", (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
-            insert_add_shortkey(gobj, e.cmd);
+            gobj_send_event(gobj, "EV_ADD_SHORTKEY", {cmd: e.cmd}, gobj);
         });
         let $del = createElement2(
             ["button", {class: "HISTORY_DEL button is-small is-ghost", type: "button",
@@ -991,8 +1003,7 @@ function fill_hist_popover(gobj)
         $del.addEventListener("click", (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
-            remove_history(gobj, e.cmd);
-            fill_hist_popover(gobj);
+            gobj_send_event(gobj, "EV_REMOVE_HISTORY", {cmd: e.cmd}, gobj);
         });
         let $item = createElement2(
             ["a", {class: "dropdown-item is-family-monospace",
@@ -1009,7 +1020,7 @@ function fill_hist_popover(gobj)
         $item.appendChild($del);
         $item.addEventListener("click", (ev) => {
             ev.preventDefault();
-            insert_command(gobj, e.cmd);
+            gobj_send_event(gobj, "EV_INSERT_COMMAND", {text: e.cmd}, gobj);
         });
         $c.appendChild($item);
     }
@@ -1470,6 +1481,140 @@ function ac_timeout(gobj, event, kw, src)
     if(priv.$copy_icon) {
         priv.$copy_icon.className = "yi-copy";
     }
+    return 0;
+}
+
+/***************************************************************
+ *  Execute what is in the input — Enter or the Execute button. THE
+ *  action of this workspace: it has to be visible in the machine trace,
+ *  which is why it is an event and not a call from the DOM handler.
+ ***************************************************************/
+function ac_exec_command(gobj, event, kw, src)
+{
+    send_command(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Tab: complete the command name or the parameter being typed.
+ *  Reports back through priv.tab_completed whether the key was
+ *  consumed — the keydown handler needs that answer synchronously to
+ *  decide preventDefault, and a DOM event cannot travel in a kw.
+ ***************************************************************/
+function ac_complete_command(gobj, event, kw, src)
+{
+    gobj.priv.tab_completed = complete_command(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Up / Down: walk the shared command history (dir +1 = older).
+ ***************************************************************/
+function ac_history_recall(gobj, event, kw, src)
+{
+    recall_history(gobj, (kw && kw.dir) || 0);
+    return 0;
+}
+
+/***************************************************************
+ *  The user typed: that leaves history-recall mode and re-matches the
+ *  command hint.
+ ***************************************************************/
+function ac_input_changed(gobj, event, kw, src)
+{
+    gobj.priv.hist_idx = -1;
+    update_hint(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Clear (✕): wipe the command AND the response panel.
+ ***************************************************************/
+function ac_clear(gobj, event, kw, src)
+{
+    clear_console(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Copy the answer to the clipboard (table answers go as JSON).
+ ***************************************************************/
+function ac_copy_response(gobj, event, kw, src)
+{
+    copy_response(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  A− / A+ : this console's live response font size (temporary; the
+ *  shared default lives in Preferences).
+ ***************************************************************/
+function ac_font_size(gobj, event, kw, src)
+{
+    change_console_font_size(gobj, (kw && kw.delta) || 0);
+    return 0;
+}
+
+/***************************************************************
+ *  The "?" (commands) or history popover trigger. `kind` is the
+ *  identity of the popover ("HELP" | "HIST"), never its element.
+ ***************************************************************/
+function ac_toggle_popover(gobj, event, kw, src)
+{
+    toggle_popover(gobj, (kw && kw.kind) || "");
+    return 0;
+}
+
+/***************************************************************
+ *  A click outside every popover closes them.
+ ***************************************************************/
+function ac_close_popovers(gobj, event, kw, src)
+{
+    close_popovers(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Drop a command in the input to edit (a popover row, a command
+ *  name from "?"). It does NOT run it — that is EV_RUN_HISTORY.
+ ***************************************************************/
+function ac_insert_command(gobj, event, kw, src)
+{
+    insert_command(gobj, (kw && kw.text) || "");
+    return 0;
+}
+
+/***************************************************************
+ *  Preload `add-shortkey key= command="<cmd>"` with the caret on the
+ *  key, so naming it and pressing Enter creates the shortkey.
+ ***************************************************************/
+function ac_add_shortkey(gobj, event, kw, src)
+{
+    insert_add_shortkey(gobj, (kw && kw.cmd) || "");
+    return 0;
+}
+
+/***************************************************************
+ *  Remove one entry from the shared history (row ✕); the popover
+ *  stays open and redraws.
+ ***************************************************************/
+function ac_remove_history(gobj, event, kw, src)
+{
+    remove_history(gobj, (kw && kw.cmd) || "");
+    fill_hist_popover(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Recent vs Frequent in the history popover (the choice is
+ *  remembered in the browser).
+ ***************************************************************/
+function ac_history_sort(gobj, event, kw, src)
+{
+    let mode = (kw && kw.mode) || "time";
+    gobj.priv.hist_sort = mode;
+    kw_set_local_storage_value("console_hist_sort", mode);
+    fill_hist_popover(gobj);
     return 0;
 }
 
@@ -2100,7 +2245,21 @@ function create_gclass(gclass_name)
             ["EV_ON_ID_NAK",         ac_on_id_nak,         null],
             ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
             ["EV_RUN_HISTORY",       ac_run_history,       null],
-            ["EV_TIMEOUT",           ac_timeout,           null]
+            ["EV_TIMEOUT",           ac_timeout,           null],
+            /*  from the card: input row, popovers, status row  */
+            ["EV_EXEC_COMMAND",      ac_exec_command,      null],
+            ["EV_COMPLETE_COMMAND",  ac_complete_command,  null],
+            ["EV_HISTORY_RECALL",    ac_history_recall,    null],
+            ["EV_INPUT_CHANGED",     ac_input_changed,     null],
+            ["EV_CLEAR",             ac_clear,             null],
+            ["EV_COPY_RESPONSE",     ac_copy_response,     null],
+            ["EV_FONT_SIZE",         ac_font_size,         null],
+            ["EV_TOGGLE_POPOVER",    ac_toggle_popover,    null],
+            ["EV_CLOSE_POPOVERS",    ac_close_popovers,    null],
+            ["EV_INSERT_COMMAND",    ac_insert_command,    null],
+            ["EV_ADD_SHORTKEY",      ac_add_shortkey,      null],
+            ["EV_REMOVE_HISTORY",    ac_remove_history,    null],
+            ["EV_HISTORY_SORT",      ac_history_sort,      null]
         ]]
     ];
 
@@ -2115,7 +2274,20 @@ function create_gclass(gclass_name)
         ["EV_ON_ID_NAK",         0],
         ["EV_MT_COMMAND_ANSWER", 0],
         ["EV_RUN_HISTORY",       0],
-        ["EV_TIMEOUT",           0]
+        ["EV_TIMEOUT",           0],
+        ["EV_EXEC_COMMAND",      0],
+        ["EV_COMPLETE_COMMAND",  0],
+        ["EV_HISTORY_RECALL",    0],
+        ["EV_INPUT_CHANGED",     0],
+        ["EV_CLEAR",             0],
+        ["EV_COPY_RESPONSE",     0],
+        ["EV_FONT_SIZE",         0],
+        ["EV_TOGGLE_POPOVER",    0],
+        ["EV_CLOSE_POPOVERS",    0],
+        ["EV_INSERT_COMMAND",    0],
+        ["EV_ADD_SHORTKEY",      0],
+        ["EV_REMOVE_HISTORY",    0],
+        ["EV_HISTORY_SORT",      0]
     ];
 
     __gclass__ = gclass_create(

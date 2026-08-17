@@ -5,9 +5,10 @@
  *
  *          The GUI is built on the declarative shell + nav stack
  *          (C_YUI_SHELL + C_YUI_NAV) from the v2 line of @yuneta/gobj-ui,
- *          consumed as a local file: dependency on the kernel/js/gobj-ui
- *          submodule. All menu structure lives in src/app_config.json;
- *          this file only wires the GClasses and starts the yuno.
+ *          consumed from the npm REGISTRY (not from the kernel/js
+ *          checkouts — see vite.config.js). All menu structure lives in
+ *          src/app_config.json; this file only wires the GClasses and
+ *          starts the yuno.
  *
  *          Persistence: writable+SDF_PERSIST attrs are stored in the
  *          browser localStorage via the db_*_persistent_attrs helpers

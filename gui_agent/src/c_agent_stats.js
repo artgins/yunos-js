@@ -15,7 +15,14 @@
  *      and rendering the flat {stat: value} answer. Every fetch is tagged
  *      console_purpose="stats" + console_node + console_yuno (echoed in
  *      __md_iev__) so each answer updates exactly its own card and other
- *      panels ignore it. No polling: on open, selection change, Refresh.
+ *      panels ignore it.
+ *
+ *      Fetches happen on open, on selection change and on Refresh — plus
+ *      the AUTO-REFRESH, a deliberate, opt-in exception to Yuneta's
+ *      no-polling rule (Preferences; default 2 s, 0 = off). It is a
+ *      periodic C_TIMER, so the tick is EV_TIMEOUT_PERIODIC in the FSM and
+ *      the `timer_periodic` trace level silences it; it runs only while
+ *      this tab is the VISIBLE one and the link is up.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -27,6 +34,11 @@ import {
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_subscribe_event,
     gobj_unsubscribe_event,
+    gobj_send_event,
+    gobj_create_pure_child,
+    gobj_name,
+    set_timeout_periodic,
+    clear_timeout,
     gobj_find_service,
     createElement2,
     refresh_language,
@@ -90,6 +102,13 @@ let __gclass__ = null;
 function mt_create(gobj)
 {
     let priv = gobj.priv;
+
+    /*  Drives the auto-refresh: a PERIODIC C_TIMER, so each tick arrives as
+     *  EV_TIMEOUT_PERIODIC — an event of the FSM like everything else, and one
+     *  the `timer_periodic` trace level silences on its own (main.js), so
+     *  polling every 2 s does not bury the machine trace.  */
+    priv.gobj_timer = gobj_create_pure_child(gobj_name(gobj), "C_TIMER", {}, gobj);
+
     priv.cards = {};        /*  composite key -> {$body}  */
     priv.last_values = {};  /*  composite key -> last {stat: value} (change hl)  */
     priv.visible = true;    /*  poll only while the tab is shown  */
@@ -291,7 +310,7 @@ function build_dom(gobj)
                     title: t("refresh"), "aria-label": t("refresh"),
                     "data-i18n-title": "refresh", "data-i18n-aria-label": "refresh"},
             [["span", {class: "icon is-small"}, [["i", {class: "yi-arrows-rotate"}]]]],
-            {click: () => render_cards(gobj)}]
+            {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
     );
 
     priv.$toolbar = createElement2(
@@ -362,7 +381,8 @@ function render_cards(gobj)
                         title: t("reset stats"), "aria-label": t("reset stats"),
                         "data-i18n-title": "reset stats", "data-i18n-aria-label": "reset stats"},
                 [["span", {class: "icon is-small"}, [["i", {class: "yi-broom"}]]]],
-                {click: () => request_reset_for(gobj, tgt.node, tgt.yuno_id)}]
+                {click: () => gobj_send_event(gobj, "EV_RESET_STATS",
+                    {node: tgt.node, yuno_id: tgt.yuno_id}, gobj)}]
         );
         let $card = createElement2(
             ["div", {class: "card STATS_CARD", style: "width:20rem; max-width:100%;"},
@@ -488,11 +508,7 @@ function poll_tick(gobj)
 
 function disarm_poll(gobj)
 {
-    let priv = gobj.priv;
-    if(priv.poll_timer) {
-        clearInterval(priv.poll_timer);
-        priv.poll_timer = null;
-    }
+    clear_timeout(gobj.priv.gobj_timer);
 }
 
 function arm_poll(gobj)
@@ -503,7 +519,7 @@ function arm_poll(gobj)
     let secs = config ? agent_config_get_stats_refresh(config) : 0;
     let link = gobj_read_attr(gobj, "link_svc");
     if(secs > 0 && priv.visible && link && agent_link_is_connected(link)) {
-        priv.poll_timer = setInterval(() => poll_tick(gobj), secs * 1000);
+        set_timeout_periodic(priv.gobj_timer, secs * 1000);
     }
 }
 
@@ -521,18 +537,14 @@ function watch_visibility(gobj)
     if(!$c || typeof MutationObserver === "undefined") {
         return;
     }
+    /*  The observer only TRANSLATES the class flip into an event; arming and
+     *  disarming happen in the action (ac_visibility).  */
     priv.vis_obs = new MutationObserver(function() {
         let vis = !$c.classList.contains("is-hidden");
         if(vis === priv.visible) {
             return;
         }
-        priv.visible = vis;
-        if(vis) {
-            arm_poll(gobj);
-            poll_tick(gobj);   /*  fresh numbers the moment you return  */
-        } else {
-            disarm_poll(gobj);
-        }
+        gobj_send_event(gobj, "EV_VISIBILITY", {visible: vis}, gobj);
     });
     priv.vis_obs.observe($c, {attributes: true, attributeFilter: ["class"]});
 }
@@ -568,6 +580,53 @@ function ac_on_close(gobj, event, kw, src)
 function ac_stats_refresh_changed(gobj, event, kw, src)
 {
     arm_poll(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Refresh button: rebuild the card set and re-fetch every counter.
+ ***************************************************************/
+function ac_refresh(gobj, event, kw, src)
+{
+    render_cards(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  A card's Reset button. The pair arrives as an IDENTITY in the kw
+ *  (plain JSON), never the card element — the machine trace dumps it.
+ ***************************************************************/
+function ac_reset_stats(gobj, event, kw, src)
+{
+    request_reset_for(gobj, (kw && kw.node) || "", (kw && kw.yuno_id) || "");
+    return 0;
+}
+
+/***************************************************************
+ *  This tab was revealed or hidden (the shell toggles `is-hidden` on
+ *  the container). Poll only what someone is looking at: on show,
+ *  re-arm and fetch fresh numbers at once; on hide, disarm.
+ ***************************************************************/
+function ac_visibility(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    priv.visible = !!(kw && kw.visible);
+    if(priv.visible) {
+        arm_poll(gobj);
+        poll_tick(gobj);   /*  fresh numbers the moment you return  */
+    } else {
+        disarm_poll(gobj);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  Auto-refresh tick (see poll_tick). Silenced in the trace by the
+ *  `timer_periodic` level, like every periodic timer in the app.
+ ***************************************************************/
+function ac_timeout_periodic(gobj, event, kw, src)
+{
+    poll_tick(gobj);
     return 0;
 }
 
@@ -667,7 +726,12 @@ function create_gclass(gclass_name)
             ["EV_MT_STATS_ANSWER",   ac_mt_stats_answer,   null],
             ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null],
             ["EV_STATS_REFRESH_CHANGED",  ac_stats_refresh_changed,  null],
-            ["EV_LANGUAGE_CHANGED",       ac_language_changed,       null]
+            ["EV_LANGUAGE_CHANGED",       ac_language_changed,       null],
+            /*  from the card  */
+            ["EV_REFRESH",           ac_refresh,           null],
+            ["EV_RESET_STATS",       ac_reset_stats,       null],
+            ["EV_VISIBILITY",        ac_visibility,        null],
+            ["EV_TIMEOUT_PERIODIC",  ac_timeout_periodic,  null]
         ]]
     ];
 
@@ -681,7 +745,11 @@ function create_gclass(gclass_name)
         ["EV_MT_STATS_ANSWER",   0],
         ["EV_SELECTED_NODES_CHANGED", 0],
         ["EV_STATS_REFRESH_CHANGED",  0],
-        ["EV_LANGUAGE_CHANGED",       0]
+        ["EV_LANGUAGE_CHANGED",       0],
+        ["EV_REFRESH",           0],
+        ["EV_RESET_STATS",       0],
+        ["EV_VISIBILITY",        0],
+        ["EV_TIMEOUT_PERIODIC",  0]
     ];
 
     __gclass__ = gclass_create(

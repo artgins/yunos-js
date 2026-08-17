@@ -47,6 +47,13 @@ import {
     gobj_parent,
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr, gobj_write_str_attr,
     gobj_subscribe_event,
+    gobj_send_event,
+    gobj_post_event,
+    gobj_is_running,
+    gobj_create_pure_child,
+    gobj_name,
+    set_timeout,
+    clear_timeout,
     gobj_find_service,
     createElement2,
     refresh_language,
@@ -124,6 +131,11 @@ let __gclass__ = null;
  ***************************************************************/
 function mt_create(gobj)
 {
+    let priv = gobj.priv;
+
+    /*  Restores the Paste key's label after its ✗ flash (EV_TIMEOUT).  */
+    priv.gobj_timer = gobj_create_pure_child(gobj_name(gobj), "C_TIMER", {}, gobj);
+
     /*
      *  CHILD subscription model
      */
@@ -161,12 +173,9 @@ function mt_start(gobj)
     watch_activation(gobj);
 
     /*  Defer the xterm fit+open until the stage is laid out and visible
-     *  (a fit against a zero-size container yields 0 cols/rows). */
-    gobj.priv.boot = setTimeout(() => {
-        gobj.priv.boot = null;
-        create_terminal(gobj);
-        open_console(gobj);
-    }, 0);
+     *  (a fit against a zero-size container yields 0 cols/rows). A posted
+     *  event IS the deferral, and it arrives named in the machine trace. */
+    gobj_post_event(gobj, "EV_TTY_BOOT", {}, gobj);
 
     /*  Persist the screen when the page goes away (refresh/close);
      *  restored on the re-attach's EV_TTY_OPEN (see restore_screen).
@@ -187,10 +196,9 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     let priv = gobj.priv;
-    if(priv.boot) {
-        clearTimeout(priv.boot);
-        priv.boot = null;
-    }
+    /*  A posted EV_TTY_BOOT still in flight needs no cancelling: its action
+     *  checks gobj_is_running() and a destroy purges the queue.  */
+    clear_timeout(priv.gobj_timer);
     if(priv.vis_obs) {
         priv.vis_obs.disconnect();
         priv.vis_obs = null;
@@ -421,14 +429,14 @@ function build_dom(gobj)
                     title: t("font smaller"), "aria-label": t("font smaller"),
                     "data-i18n-title": "font smaller", "data-i18n-aria-label": "font smaller"},
             ["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-minus"}]]],
-            {click: () => change_font_size(gobj, -1)}]
+            {click: () => gobj_send_event(gobj, "EV_FONT_SIZE", {delta: -1}, gobj)}]
     );
     priv.$font_inc = createElement2(
         ["button", {class: "button is-small", type: "button",
                     title: t("font larger"), "aria-label": t("font larger"),
                     "data-i18n-title": "font larger", "data-i18n-aria-label": "font larger"},
             ["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-plus"}]]],
-            {click: () => change_font_size(gobj, +1)}]
+            {click: () => gobj_send_event(gobj, "EV_FONT_SIZE", {delta: +1}, gobj)}]
     );
 
     /*  Reconnect: icon + label; the label is hidden on mobile so the button
@@ -441,7 +449,7 @@ function build_dom(gobj)
                 ["span", {class: "icon is-small"}, [["i", {class: "yi-arrows-rotate"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "reconnect"}, "Reconnect"]
             ],
-            {click: () => open_console(gobj)}]
+            {click: () => gobj_send_event(gobj, "EV_RECONNECT", {}, gobj)}]
     );
 
     priv.$toolbar = createElement2(
@@ -507,27 +515,21 @@ function build_keybar(gobj)
                     "aria-label": label
                 }, content]
             );
+            /*  The handler's only job is to keep the xterm focused and turn
+             *  the tap into an event: which key it was travels as its literal
+             *  sequence (plain JSON — never the button element).  */
             $b.addEventListener("pointerdown", function(e) {
                 e.preventDefault();          /*  keep xterm focused / keyboard open  */
-                if(seq === "__ctrl__") {
-                    set_ctrl_armed(gobj, !priv.ctrl_armed);
-                    return;
-                }
-                if(seq === "__kb__") {
-                    set_soft_keyboard(gobj, !priv.kb_on, true);
-                    return;
-                }
-                if(seq === "__paste__") {
-                    paste_clipboard(gobj, $b);
-                    return;
-                }
-                tty_input(gobj, seq, true);
+                gobj_send_event(gobj, "EV_KEY", {seq: seq}, gobj);
             });
             if(seq === "__ctrl__") {
                 priv.$ctrl = $b;
             }
             if(seq === "__kb__") {
                 priv.$kb = $b;
+            }
+            if(seq === "__paste__") {
+                priv.$paste = $b;
             }
             return $b;
         });
@@ -574,7 +576,14 @@ function create_terminal(gobj)
     } catch(e) {
         /*  container not sized yet — keep xterm's default geometry  */
     }
-    /*  Keystrokes -> node PTY (through the sticky-Ctrl gate).  */
+    /*  Keystrokes -> node PTY (through the sticky-Ctrl gate).
+     *
+     *  DELIBERATELY not an event, unlike every button of this card: onData
+     *  is a BYTE STREAM, not an action — one event per character would bury
+     *  the machine trace of the tab under the typing that is the least
+     *  interesting thing in it. Same carve-out as Tabulator's
+     *  ajaxRequestFunc (a data source, not an action). The bar keys DO cross
+     *  the FSM as EV_KEY: those are discrete actions.  */
     term.onData((d) => tty_input(gobj, d, false));
     priv.term = term;
     priv.fit = fit;
@@ -941,18 +950,23 @@ function tty_input(gobj, data, from_bar)
  *  Paste key: read the clipboard (needs the user gesture + permission)
  *  and feed it to the PTY via term.paste() — bracketed-paste aware,
  *  same onData path as typing. On denial or an unsupported browser
- *  flash ✗ on the key.
+ *  flash ✗ on the key (priv.$paste, restored by EV_TIMEOUT).
  ***************************************************************/
-function paste_clipboard(gobj, $b)
+function paste_clipboard(gobj)
 {
     let priv = gobj.priv;
+    let $b = priv.$paste;
+    /*  Going back to the label is EV_TIMEOUT from this view's own C_TIMER,
+     *  not a loose setTimeout: the flash is the only thing the user sees of
+     *  a denied clipboard, so it belongs in the trace like any other state
+     *  change.  */
     let fail = () => {
         if($b) {
-            let old = $b.textContent;
+            if(!priv.paste_label) {
+                priv.paste_label = $b.textContent;
+            }
             $b.textContent = "✗";
-            setTimeout(() => {
-                $b.textContent = old;
-            }, 700);
+            set_timeout(priv.gobj_timer, 700);
         }
     };
     if(!navigator.clipboard || !navigator.clipboard.readText) {
@@ -1028,6 +1042,98 @@ function is_my_console(gobj, kw)
 
 
 /***************************************************************
+ *  Posted by mt_start: create the xterm and open the PTY once the
+ *  stage is laid out (a fit against a zero-size container yields
+ *  0 cols/rows, and the geometry we measure here is what the node
+ *  freezes for the whole session).
+ ***************************************************************/
+function ac_tty_boot(gobj, event, kw, src)
+{
+    if(!gobj_is_running(gobj)) {
+        return 0;   /*  stopped between the post and its delivery  */
+    }
+    create_terminal(gobj);
+    open_console(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Reconnect button: open a console again (a dead one leaves the
+ *  card with nothing but its "closed" status line).
+ ***************************************************************/
+function ac_reconnect(gobj, event, kw, src)
+{
+    open_console(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  A− / A+ : nudge THIS tab's live font size (never persisted; the
+ *  shared default lives in Preferences).
+ ***************************************************************/
+function ac_font_size(gobj, event, kw, src)
+{
+    change_font_size(gobj, (kw && kw.delta) || 0);
+    return 0;
+}
+
+/***************************************************************
+ *  A key of the mobile bar. `seq` is either a literal byte sequence
+ *  for the PTY or one of the three pseudo-keys (see KEYBAR_ROWS):
+ *  the sticky Ctrl modifier, the soft-keyboard toggle and Paste.
+ ***************************************************************/
+function ac_key(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let seq = (kw && kw.seq) || "";
+
+    switch(seq) {
+        case "__ctrl__":
+            set_ctrl_armed(gobj, !priv.ctrl_armed);
+            break;
+        case "__kb__":
+            set_soft_keyboard(gobj, !priv.kb_on, true);
+            break;
+        case "__paste__":
+            paste_clipboard(gobj);
+            break;
+        default:
+            tty_input(gobj, seq, true);
+            break;
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  End of the Paste key's ✗ flash — put its label back.
+ ***************************************************************/
+function ac_timeout(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.$paste && priv.paste_label) {
+        priv.$paste.textContent = priv.paste_label;
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  Posted by ac_tty_close: drop this node from its workspace, which
+ *  closes the tab. It cannot run inside ac_tty_close — deselecting
+ *  rebuilds the workspace tabs and would destroy THIS view from
+ *  inside its own published-event callback.
+ ***************************************************************/
+function ac_close_tab(gobj, event, kw, src)
+{
+    let ws = (kw && kw.workspace) || "";
+    let node = (kw && kw.node) || "";
+    let config = gobj_find_service("agent_config", false);
+    if(config && node) {
+        agent_config_remove_selected_node(config, ws, node);
+    }
+    return 0;
+}
+
+/***************************************************************
  *  Link in session — (re)open a console if none is live.
  ***************************************************************/
 function ac_on_open(gobj, event, kw, src)
@@ -1100,18 +1206,14 @@ function ac_tty_close(gobj, event, kw, src)
     }
     /*
      *  A deliberate exit (the shell ended) closes the whole tab: deselect this
-     *  node from its workspace, same as clicking the tab ✕. Deferred with a
-     *  timer — deselecting now rebuilds the workspace tabs and would destroy
-     *  THIS view from inside its own published-event callback.
+     *  node from its workspace, same as clicking the tab ✕. Deferred (see
+     *  ac_close_tab) — deselecting now rebuilds the workspace tabs and would
+     *  destroy THIS view from inside its own published-event callback.
      */
-    let ws = gobj_read_attr(gobj, "workspace") || "terminal";
-    let node = gobj_read_attr(gobj, "node") || "";
-    setTimeout(() => {
-        let config = gobj_find_service("agent_config", false);
-        if(config && node) {
-            agent_config_remove_selected_node(config, ws, node);
-        }
-    }, 0);
+    gobj_post_event(gobj, "EV_CLOSE_TAB", {
+        workspace: gobj_read_attr(gobj, "workspace") || "terminal",
+        node:      gobj_read_attr(gobj, "node") || ""
+    }, gobj);
     return 0;
 }
 
@@ -1213,12 +1315,20 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const states = [
         ["ST_IDLE", [
+            /*  from the link  */
             ["EV_ON_OPEN",   ac_on_open,   null],
             ["EV_ON_CLOSE",  ac_on_close,  null],
             ["EV_TTY_OPEN",  ac_tty_open,  null],
             ["EV_TTY_DATA",  ac_tty_data,  null],
             ["EV_TTY_CLOSE", ac_tty_close, null],
-            ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null]
+            ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
+            /*  from the card: toolbar + mobile key bar  */
+            ["EV_TTY_BOOT",  ac_tty_boot,  null],
+            ["EV_RECONNECT", ac_reconnect, null],
+            ["EV_FONT_SIZE", ac_font_size, null],
+            ["EV_KEY",       ac_key,       null],
+            ["EV_CLOSE_TAB", ac_close_tab, null],
+            ["EV_TIMEOUT",   ac_timeout,   null]
         ]]
     ];
 
@@ -1231,7 +1341,13 @@ function create_gclass(gclass_name)
         ["EV_TTY_OPEN",  0],
         ["EV_TTY_DATA",  0],
         ["EV_TTY_CLOSE", 0],
-        ["EV_MT_COMMAND_ANSWER", 0]
+        ["EV_MT_COMMAND_ANSWER", 0],
+        ["EV_TTY_BOOT",  0],
+        ["EV_RECONNECT", 0],
+        ["EV_FONT_SIZE", 0],
+        ["EV_KEY",       0],
+        ["EV_CLOSE_TAB", 0],
+        ["EV_TIMEOUT",   0]
     ];
 
     __gclass__ = gclass_create(

@@ -29,6 +29,7 @@ import {
     gobj_parent, gobj_name,
     gobj_read_attr, gobj_read_bool_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_send_event,
+    gobj_post_event,
     gobj_create_pure_child,
     set_timeout,
     clear_timeout,
@@ -338,19 +339,7 @@ function schedule_render(gobj)
         return;
     }
     priv.render_pending = true;
-    setTimeout(() => {
-        priv.render_pending = false;
-        let table = gobj_read_attr(gobj, "tabulator");
-        let tree = build_tree(gobj);
-        if(table) {
-            if(table._ready) {
-                table.setData(tree);
-            } else {
-                table._pendingData = tree;
-            }
-        }
-        update_count(gobj);
-    }, 0);
+    gobj_post_event(gobj, "EV_RENDER_TREE", {}, gobj);
 }
 
 /***************************************************************
@@ -803,6 +792,31 @@ function ac_refresh(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Push the tree into Tabulator. Posted by schedule_render(), so a
+ *  flurry of per-node list-yunos answers collapses into ONE setData:
+ *  the first one posts, the rest see render_pending and skip, and this
+ *  action clears the flag. The coalescing is the same a `setTimeout`
+ *  gave us; what it gains is a name in the `machine` trace.
+ ***************************************************************/
+function ac_render_tree(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    priv.render_pending = false;
+
+    let table = gobj_read_attr(gobj, "tabulator");
+    let tree = build_tree(gobj);
+    if(table) {
+        if(table._ready) {
+            table.setData(tree);
+        } else {
+            table._pendingData = tree;
+        }
+    }
+    update_count(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  Hand the list over as JSON: the checked rows if any are
  *  checked, otherwise everything the current search leaves on
  *  screen. What you see is what you get.
@@ -998,6 +1012,7 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,      null],
             ["EV_SELECTED_NODES_CHANGED", ac_selected_nodes_changed, null],
             ["EV_REFRESH",              ac_refresh,               null],
+            ["EV_RENDER_TREE",          ac_render_tree,            null],
             ["EV_COPY_JSON",            ac_copy_json,              null],
             ["EV_TIMEOUT",              ac_timeout,                null]
         ]]
@@ -1013,6 +1028,7 @@ function create_gclass(gclass_name)
         ["EV_MT_COMMAND_ANSWER",    0],
         ["EV_SELECTED_NODES_CHANGED", 0],
         ["EV_REFRESH",              0],
+        ["EV_RENDER_TREE",          0],
         ["EV_COPY_JSON",            0],
         ["EV_TIMEOUT",              0]
     ];

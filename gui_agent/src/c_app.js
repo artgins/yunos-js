@@ -26,7 +26,7 @@ import {
     gobj_short_name,
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr, gobj_write_str_attr,
     gobj_create_service, gobj_create_pure_child,
-    gobj_subscribe_event, gobj_send_event,
+    gobj_subscribe_event, gobj_send_event, gobj_post_event,
     gobj_find_service, gobj_yuno,
     gobj_start, gobj_start_tree, gobj_stop, gobj_stop_tree, gobj_destroy, gobj_is_running,
     refresh_language,
@@ -1017,14 +1017,10 @@ function ac_stats_layout_changed(gobj, event, kw, src)
     let shell = gobj.priv.shell;
     let cur = shell ? gobj_read_attr(shell, "current_route") : "";
     if(shell && cur && ws_from_route(cur) === "statistics") {
-        setTimeout(() => {
-            if(gobj.priv.shell) {
-                /*  Re-land after the Statistics layout changed under us: a
-                 *  normalization, not a user move — no Back entry. */
-                yui_shell_navigate(gobj.priv.shell,
-                    workspace_first_route(gobj, "statistics"), {replace: true});
-            }
-        }, 0);
+        /*  Re-land after the Statistics layout changed under us, once this
+         *  event is done publishing (see ac_normalize_route).  */
+        gobj_post_event(gobj, "EV_NORMALIZE_ROUTE",
+            {route: workspace_first_route(gobj, "statistics")}, gobj);
     }
     return 0;
 }
@@ -1115,12 +1111,27 @@ function ac_route_changed(gobj, event, kw, src)
     if(target) {
         /*  Deferred so we don't re-enter navigate mid-publish. Normalizing a
          *  bare/deep-linked workspace route onto its tab: no Back entry. */
-        setTimeout(() => {
-            if(gobj.priv.shell) {
-                yui_shell_navigate(gobj.priv.shell, target, {replace: true});
-            }
-        }, 0);
+        gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {route: target}, gobj);
     }
+    return 0;
+}
+
+/***************************************************************
+ *  Land on `route` after the event that decided it has finished
+ *  publishing — a deferral, which is what a posted event IS (a
+ *  `setTimeout` would do the same thing invisibly to the trace).
+ *
+ *  Always a `replace`: nobody navigated here, we are normalizing a
+ *  bare or deep-linked workspace route onto the tab that serves it,
+ *  so it must not become a Back entry.
+ ***************************************************************/
+function ac_normalize_route(gobj, event, kw, src)
+{
+    let route = (kw && kw.route) || "";
+    if(!route || !gobj.priv.shell) {
+        return 0;
+    }
+    yui_shell_navigate(gobj.priv.shell, route, {replace: true});
     return 0;
 }
 
@@ -1197,6 +1208,7 @@ function create_gclass(gclass_name)
             ["EV_STATS_LAYOUT_CHANGED", ac_stats_layout_changed, null],
             ["EV_NAV_ITEM_CLOSE",   ac_nav_item_close,  null],
             ["EV_ROUTE_CHANGED",    ac_route_changed,   null],
+            ["EV_NORMALIZE_ROUTE",  ac_normalize_route, null],
             ["EV_MT_COMMAND_ANSWER", ac_link_answer,    null]
         ]]
     ];
@@ -1226,6 +1238,7 @@ function create_gclass(gclass_name)
         ["EV_STATS_LAYOUT_CHANGED", 0],
         ["EV_NAV_ITEM_CLOSE",   0],
         ["EV_ROUTE_CHANGED",    0],
+        ["EV_NORMALIZE_ROUTE",  0],
         ["EV_MT_COMMAND_ANSWER", 0]
     ];
 

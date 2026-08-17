@@ -26,8 +26,16 @@
  *
  *          node scripts/qa.mjs                         # the .com plane
  *          node scripts/qa.mjs --url https://artgins.yunetacontrol.ovh
- *          node scripts/qa.mjs --route /nodes --route /console
  *          node scripts/qa.mjs --no-login              # login screen only
+ *
+ *      Routes are hash routes of the shell, given without the '#':
+ *
+ *          node scripts/qa.mjs --route /commands/nodes --route /preferences
+ *          node scripts/qa.mjs --route /statistics/nodes --route /schemas/nodes
+ *
+ *      The four workspaces are /commands, /statistics, /terminal and
+ *      /schemas; each has a picker at /<ws>/nodes and its per-node tabs at
+ *      /<ws>/node/<id>. Preferences is /preferences.
  *
  *      Output (one directory per run):
  *

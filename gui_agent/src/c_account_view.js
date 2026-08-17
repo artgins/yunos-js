@@ -29,7 +29,8 @@ import {
     gclass_create, log_error,
     gobj_parent,
     gobj_read_attr, gobj_read_pointer_attr, gobj_write_attr,
-    gobj_subscribe_event, gobj_find_service,
+    gobj_subscribe_event, gobj_unsubscribe_event, gobj_find_service,
+    gobj_send_event,
     createElement2,
     refresh_language,
 } from "@yuneta/gobj-js";
@@ -131,6 +132,13 @@ function mt_create(gobj)
  ***************************************************************/
 function mt_start(gobj)
 {
+    /*  Which option is ACTIVE in the theme/language segments is markup, so a
+     *  language switch from the toolbar (not from this page) has to re-render
+     *  it — refresh_language() only reaches nodes that carry a key.  */
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
 }
 
 /***************************************************************
@@ -138,6 +146,10 @@ function mt_start(gobj)
  ***************************************************************/
 function mt_stop(gobj)
 {
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
 }
 
 /***************************************************************
@@ -248,8 +260,7 @@ function build_preference(gobj)
         ],
         theme,
         function(v) {
-            app_set_theme(v);
-            render(gobj);
+            gobj_send_event(gobj, "EV_SET_THEME", {value: v}, gobj);
         }
     );
 
@@ -260,19 +271,7 @@ function build_preference(gobj)
         ],
         lang,
         function(v) {
-            switch_locale(v);
-            /*  The SHELL fans it out: it re-translates the document and
-             *  publishes EV_LANGUAGE_CHANGED, so the views that build DOM
-             *  imperatively (the Tabulator tables above all — their headers,
-             *  paginator and formatters are drawn ONCE) can re-render what no
-             *  data-i18n attribute can reach.  */
-            let shell = yui_shell_of(gobj);
-            if(shell) {
-                yui_shell_language_changed(shell);
-            } else {
-                refresh_language(document.body, t);
-            }
-            render(gobj);
+            gobj_send_event(gobj, "EV_SET_LANGUAGE", {value: v}, gobj);
         }
     );
 
@@ -289,10 +288,7 @@ function build_preference(gobj)
         ],
         display_mode,
         function(v) {
-            if(config) {
-                agent_config_set_display_mode(config, v);
-            }
-            render(gobj);
+            gobj_send_event(gobj, "EV_SET_DISPLAY_MODE", {value: v}, gobj);
         }
     );
 
@@ -309,10 +305,7 @@ function build_preference(gobj)
         ],
         nav_mode,
         function(v) {
-            if(config) {
-                agent_config_set_nav_mode(config, v);
-            }
-            render(gobj);
+            gobj_send_event(gobj, "EV_SET_NAV_MODE", {value: v}, gobj);
         }
     );
 
@@ -326,10 +319,7 @@ function build_preference(gobj)
         ],
         stats_layout,
         function(v) {
-            if(config) {
-                agent_config_set_stats_layout(config, v);
-            }
-            render(gobj);
+            gobj_send_event(gobj, "EV_SET_STATS_LAYOUT", {value: v}, gobj);
         }
     );
 
@@ -339,12 +329,8 @@ function build_preference(gobj)
     let $refresh_sel = createElement2(
         ["select", {"aria-label": t("stats refresh"), "data-i18n-aria-label": "stats refresh"},
             [0, 1, 2, 5, 10, 30].map((s) => ["option", {value: String(s)}, (s === 0 ? t("off") : `${s} s`)]),
-            {change: (e) => {
-                if(config) {
-                    agent_config_set_stats_refresh(config, parseInt(e.target.value, 10));
-                }
-                render(gobj);
-            }}
+            {change: (e) => gobj_send_event(gobj, "EV_SET_STATS_REFRESH",
+                {secs: parseInt(e.target.value, 10)}, gobj)}
         ]
     );
     $refresh_sel.value = String(stats_refresh);
@@ -370,11 +356,15 @@ function build_preference(gobj)
     let font_seg = ["div", {class: "buttons has-addons"},
         [
             font_button("yi-magnifying-glass-minus", "font smaller", font_size <= FONT_SIZE_MIN,
-                function() { tty_set_font_size(font_size - 1); render(gobj); }),
+                function() {
+                    gobj_send_event(gobj, "EV_SET_TTY_FONT_SIZE", {delta: -1}, gobj);
+                }),
             ["button", {type: "button", class: "button is-static", style: "min-width:4.5rem;"},
                 `${font_size} px`],
             font_button("yi-magnifying-glass-plus", "font larger", font_size >= FONT_SIZE_MAX,
-                function() { tty_set_font_size(font_size + 1); render(gobj); })
+                function() {
+                    gobj_send_event(gobj, "EV_SET_TTY_FONT_SIZE", {delta: +1}, gobj);
+                })
         ]
     ];
 
@@ -386,12 +376,16 @@ function build_preference(gobj)
         [
             font_button("yi-magnifying-glass-minus", "font smaller",
                 console_font_size <= CONSOLE_FONT_SIZE_MIN,
-                function() { set_console_font_size(console_font_size - 1); render(gobj); }),
+                function() {
+                    gobj_send_event(gobj, "EV_SET_CONSOLE_FONT_SIZE", {delta: -1}, gobj);
+                }),
             ["button", {type: "button", class: "button is-static", style: "min-width:4.5rem;"},
                 `${console_font_size} px`],
             font_button("yi-magnifying-glass-plus", "font larger",
                 console_font_size >= CONSOLE_FONT_SIZE_MAX,
-                function() { set_console_font_size(console_font_size + 1); render(gobj); })
+                function() {
+                    gobj_send_event(gobj, "EV_SET_CONSOLE_FONT_SIZE", {delta: +1}, gobj);
+                })
         ]
     ];
 
@@ -463,10 +457,8 @@ function build_shortkeys(gobj)
                                 title: t("remove shortkey"), "data-i18n-title": "remove shortkey"},
                         [["span", {class: "icon is-small"}, [["span", {class: "yi-trash"}, ""]]]],
                         {click: function() {
-                            if(config) {
-                                agent_config_remove_shortkey(config, this_key);
-                            }
-                            render(gobj);
+                            gobj_send_event(gobj, "EV_REMOVE_SHORTKEY",
+                                {key: this_key}, gobj);
                         }}]
                 ]
             ]
@@ -481,15 +473,14 @@ function build_shortkeys(gobj)
     let $cmd = ce(["input", {class: "input is-small is-family-monospace", type: "text",
                              placeholder: t("command template"), "aria-label": "command"}]);
 
-    function do_add()
-    {
-        let k = String($key.value || "").trim();
-        let c = String($cmd.value || "").trim();
-        if(config && k && c) {
-            agent_config_set_shortkey(config, k, c);
-            render(gobj);
-        }
-    }
+    /*  The action reads the two inputs back from priv, so nothing but the
+     *  intention travels in the kw.  */
+    gobj.priv.$sk_key = $key;
+    gobj.priv.$sk_cmd = $cmd;
+
+    let do_add = function() {
+        gobj_send_event(gobj, "EV_ADD_SHORTKEY", {}, gobj);
+    };
     let on_enter = function(ev) {
         if(ev.key === "Enter") {
             ev.preventDefault();
@@ -679,6 +670,157 @@ function build_about(gobj)
 
 
 /***************************************************************
+ *  Every control of the Preferences page is an ACTION, and each one
+ *  ends the same way: write the setting, then re-render so the page
+ *  shows the state that is now true (the segmented buttons carry the
+ *  active option in their own markup).
+ *
+ *  The settings are applied by whoever owns them — the theme module,
+ *  i18next, the shared C_AGENT_CONFIG service — and the views that
+ *  care subscribe to that service's events; this page never reaches
+ *  into an open tab.
+ ***************************************************************/
+function ac_set_theme(gobj, event, kw, src)
+{
+    app_set_theme((kw && kw.value) || "light");
+    render(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Language. The SHELL fans it out: it re-translates the document and
+ *  publishes EV_LANGUAGE_CHANGED, so the views that build DOM
+ *  imperatively (the Tabulator tables above all — their headers,
+ *  paginator and formatters are drawn ONCE) can re-render what no
+ *  data-i18n attribute can reach.
+ ***************************************************************/
+function ac_set_language(gobj, event, kw, src)
+{
+    switch_locale((kw && kw.value) || "en");
+
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        yui_shell_language_changed(shell);
+    } else {
+        refresh_language(document.body, t);
+    }
+    render(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The language changed somewhere else (the toolbar toggle) while
+ *  this page is open: re-render, because which option is ACTIVE in
+ *  the language and theme segments is markup, not a translatable
+ *  string, so refresh_language() cannot move it.
+ ***************************************************************/
+function ac_language_changed(gobj, event, kw, src)
+{
+    render(gobj);
+    return 0;
+}
+
+function ac_set_display_mode(gobj, event, kw, src)
+{
+    let config = gobj_find_service("agent_config", false);
+    if(config) {
+        agent_config_set_display_mode(config, (kw && kw.value) || "table");
+    }
+    render(gobj);
+    return 0;
+}
+
+function ac_set_nav_mode(gobj, event, kw, src)
+{
+    let config = gobj_find_service("agent_config", false);
+    if(config) {
+        agent_config_set_nav_mode(config, (kw && kw.value) || "stack");
+    }
+    render(gobj);
+    return 0;
+}
+
+function ac_set_stats_layout(gobj, event, kw, src)
+{
+    let config = gobj_find_service("agent_config", false);
+    if(config) {
+        agent_config_set_stats_layout(config, (kw && kw.value) || "single");
+    }
+    render(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Statistics auto-refresh interval in seconds (0 = off) — the
+ *  deliberate polling exception. The open Statistics views re-arm
+ *  their timer on the config service's own event.
+ ***************************************************************/
+function ac_set_stats_refresh(gobj, event, kw, src)
+{
+    let secs = (kw && kw.secs) || 0;
+    let config = gobj_find_service("agent_config", false);
+    if(config) {
+        agent_config_set_stats_refresh(config, secs);
+    }
+    render(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The two shared font-size DEFAULTS (Terminal / Commands). Both
+ *  steppers send a delta and the setter clamps it; an open tab picks
+ *  the new default up on its next (re)open, since its own A- / A+
+ *  buttons are a temporary per-tab nudge.
+ ***************************************************************/
+function ac_set_tty_font_size(gobj, event, kw, src)
+{
+    tty_set_font_size(tty_get_font_size() + ((kw && kw.delta) || 0));
+    render(gobj);
+    return 0;
+}
+
+function ac_set_console_font_size(gobj, event, kw, src)
+{
+    set_console_font_size(get_console_font_size() + ((kw && kw.delta) || 0));
+    render(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Shortkeys. Add reads the two inputs of the form back from priv
+ *  (only the intention travels in the kw); an empty key or template
+ *  is a no-op, the same as before.
+ ***************************************************************/
+function ac_add_shortkey(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let key = String((priv.$sk_key && priv.$sk_key.value) || "").trim();
+    let cmd = String((priv.$sk_cmd && priv.$sk_cmd.value) || "").trim();
+    if(!key || !cmd) {
+        return 0;
+    }
+    let config = gobj_find_service("agent_config", false);
+    if(config) {
+        agent_config_set_shortkey(config, key, cmd);
+    }
+    render(gobj);   /*  which also clears the inputs  */
+    return 0;
+}
+
+function ac_remove_shortkey(gobj, event, kw, src)
+{
+    let config = gobj_find_service("agent_config", false);
+    if(config) {
+        agent_config_remove_shortkey(config, (kw && kw.key) || "");
+    }
+    render(gobj);
+    return 0;
+}
+
+
+
+
+/***************************************************************
  *              FSM
  ***************************************************************/
 /*---------------------------------------------*
@@ -705,13 +847,37 @@ function create_gclass(gclass_name)
      *          States
      *---------------------------------------------*/
     const states = [
-        ["ST_IDLE", []]
+        ["ST_IDLE", [
+            ["EV_SET_THEME",             ac_set_theme,             null],
+            ["EV_SET_LANGUAGE",          ac_set_language,          null],
+            ["EV_SET_DISPLAY_MODE",      ac_set_display_mode,      null],
+            ["EV_SET_NAV_MODE",          ac_set_nav_mode,          null],
+            ["EV_SET_STATS_LAYOUT",      ac_set_stats_layout,      null],
+            ["EV_SET_STATS_REFRESH",     ac_set_stats_refresh,     null],
+            ["EV_SET_TTY_FONT_SIZE",     ac_set_tty_font_size,     null],
+            ["EV_SET_CONSOLE_FONT_SIZE", ac_set_console_font_size, null],
+            ["EV_ADD_SHORTKEY",          ac_add_shortkey,          null],
+            ["EV_REMOVE_SHORTKEY",       ac_remove_shortkey,       null],
+            ["EV_LANGUAGE_CHANGED",      ac_language_changed,      null]
+        ]]
     ];
 
     /*---------------------------------------------*
      *          Events
      *---------------------------------------------*/
-    const event_types = [];
+    const event_types = [
+        ["EV_SET_THEME",             0],
+        ["EV_SET_LANGUAGE",          0],
+        ["EV_SET_DISPLAY_MODE",      0],
+        ["EV_SET_NAV_MODE",          0],
+        ["EV_SET_STATS_LAYOUT",      0],
+        ["EV_SET_STATS_REFRESH",     0],
+        ["EV_SET_TTY_FONT_SIZE",     0],
+        ["EV_SET_CONSOLE_FONT_SIZE", 0],
+        ["EV_ADD_SHORTKEY",          0],
+        ["EV_REMOVE_SHORTKEY",       0],
+        ["EV_LANGUAGE_CHANGED",      0]
+    ];
 
     __gclass__ = gclass_create(
         gclass_name,
