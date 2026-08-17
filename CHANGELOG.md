@@ -23,6 +23,25 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **A replica opens READ-ONLY in the editor.** Knowing a treedb cannot be
+    written was half the job; the other half is not offering to write it. The
+    Schemas tab asks each discovered treedb `treedb-info` before it builds its
+    tree — the library reads `readonly` once, when it draws a topic's toolbar —
+    and mounts the editor with gobj-ui `^5.15.0`'s new `readonly`: no edition
+    mode, no *new* / *delete* / *paste*, no in-row edit icons, and the record
+    form opens with its cells locked and only *copy* on the toolbar. The form
+    still opens: reading a record is the point of a replica.
+
+    Unknown mounts WRITABLE. A node older than the command answers "command not
+    available", and locking its editor would take away an editing session that
+    works today — its writes are the pre-7.13.0 behaviour, which is a reason to
+    upgrade the node, not to guess in the browser.
+
+    Verified on the deployed plane against one node holding both cases:
+    `gate_central^2020`'s replica of `treedb_authzs` mounted with **0** new /
+    delete / edit buttons and **0** in-row trash icons, `db_history_ce^1620`'s
+    own `treedb_system_schema` with all of them, no console errors.
+
 - **The Schemas picker says whether a yuno can be EDITED: master, read only or
     mixed.** Only the master of a treedb's tranger can write — the yuno refuses
     otherwise (SDK 7.13.0) — so a replica is a read-only visit, and that is the

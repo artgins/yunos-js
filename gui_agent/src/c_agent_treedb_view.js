@@ -34,7 +34,8 @@ import {
     SDATA, SDATA_END, data_type_t,
     gclass_create, log_error,
     gobj_parent,
-    gobj_read_attr, gobj_read_str_attr, gobj_read_pointer_attr, gobj_write_attr,
+    gobj_read_attr, gobj_read_str_attr, gobj_read_bool_attr, gobj_read_pointer_attr,
+    gobj_write_attr,
     gobj_gclass_name,
     gobj_create_pure_child,
     gobj_find_service,
@@ -72,6 +73,7 @@ SDATA(data_type_t.DTP_POINTER,  "subscriber",  0,  null,   "Subscriber of output
 SDATA(data_type_t.DTP_STRING,   "node",        0,  "",     "Node holding the yuno"),
 SDATA(data_type_t.DTP_STRING,   "yuno_id",     0,  "",     "Yuno holding the treedb"),
 SDATA(data_type_t.DTP_STRING,   "treedb_name", 0,  "",     "Treedb this view opens"),
+SDATA(data_type_t.DTP_BOOLEAN,  "readonly",    0,  false,  "Mount the editor read-only: this yuno is not the MASTER of the treedb's tranger, so the yuno refuses every write (the tab asks `treedb-info` and hands it down)"),
 SDATA(data_type_t.DTP_STRING,   "base_route",  0,  "",     "This treedb node's route: the url carries <topic>[/info] under it"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,   "Root HTMLElement"),
 SDATA_END()
@@ -299,6 +301,10 @@ function mount_view(gobj)
     let base = base_route(gobj);
     let kw = {
         treedb_name:        gobj_read_str_attr(gobj, "treedb_name"),
+        /*  Only the master of the tranger can write; on a replica the yuno
+         *  refuses every write, so the editor is mounted without its write
+         *  affordances instead of turning each click into an error toast.  */
+        readonly:           gobj_read_bool_attr(gobj, "readonly"),
         /*  A schema lives in the `__system__`-flavoured topics of its
          *  treedb (treedbs / topics / cols), so system topics must NOT
          *  be filtered out. In a data treedb it only adds __snaps__.  */

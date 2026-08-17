@@ -179,6 +179,25 @@ controlcenter — the work is done, the answer is lost. The tab gives up after
 30 s and says so, but after a `kill` that means the yuno is DOWN and stays
 down. Deploy the agent before using Apply on a node.
 
+**Only the MASTER can edit; a replica opens read-only.** A treedb whose tranger
+this yuno does not master is a replica: the yuno refuses every write on it
+(SDK 7.13.0), and before that it *accepted* them into memory and lost them at
+the next reload. So the tab asks each discovered treedb
+`command-yuno id=<yuno> service=<treedb> command=treedb-info` —
+`{treedb_name, master, schema_version, topics}` — and mounts the editor with
+gobj-ui's `readonly`: no edition mode, no new/delete/paste, no in-row icons, and
+the record form opens with its cells locked and only *copy* on its toolbar. The
+form still opens, because reading is the point of a replica.
+
+The flag is per TREEDB and it is runtime state, not config: a yuno is routinely
+the master of its `treedb_system_schema` and a replica of a data treedb it
+shares, and `tranger2_startup` decides by who holds the store's lock. The
+**picker** summarises it per yuno — *Master*, *Read only*, *Master (some)* when
+its treedbs disagree — and says nothing at all when a treedb could not answer:
+a node older than the command replies "command not available", and calling that
+read-only would lock an editor that works. Unknown therefore mounts WRITABLE,
+which is the pre-7.13.0 behaviour and a reason to upgrade the node.
+
 **Permissions are the yuno's, not the console's.** The commands run inside the
 target yuno with the logged-in identity, so reading a topic needs the `read`
 authz of its `C_NODE` (and `create`/`update`/`delete` to edit) in **that yuno's**

@@ -103,6 +103,12 @@ const GCLASS_NAME = "C_AGENT_TREEDB";
 /*  The treedb every yuno with a C_TREEDB keeps its own schemas in.  */
 const SYSTEM_TREEDB = "treedb_system_schema";
 
+/*  Marker of the per-treedb `treedb-info` request: it answers whether this
+ *  yuno is the MASTER of that treedb, which decides whether its editor is
+ *  mounted read-only. Kept apart from the discovery marker below because the
+ *  link re-publishes every answer to every panel.  */
+const MASTER_PURPOSE = "treedbmaster";
+
 /*  Marker of OUR discovery request in __md_iev__: the link re-publishes
  *  every answer to every panel, and each filters on its own purpose.  */
 const PURPOSE = "treedbs";
@@ -165,6 +171,8 @@ function mt_create(gobj)
     let priv = gobj.priv;
 
     priv.treedbs = [];
+    priv.master = {};             /*  treedb name -> true|false (absent = unknown)  */
+    priv.master_left = 0;         /*  treedb-info answers still owed  */
     priv.dirty = false;
 
     /*
@@ -428,6 +436,34 @@ function nav_mode(gobj)
 }
 
 /***************************************************************
+ *  Ask ONE treedb whether this yuno is its MASTER (`treedb-info`,
+ *  SDK >= 7.13.0). Only the master can write — the yuno refuses every
+ *  write on a replica — so this is what decides whether the editor is
+ *  mounted read-only instead of offering buttons that cannot work.
+ *
+ *  A link that is down answers itself: the count has to reach zero or
+ *  the tab would wait in ST_DISCOVERING forever.
+ ***************************************************************/
+function probe_master(gobj, treedb_name)
+{
+    let link = link_service(gobj);
+    let node = gobj_read_str_attr(gobj, "node");
+    let yuno_id = gobj_read_str_attr(gobj, "yuno_id");
+
+    if(!link || !agent_link_is_connected(link)) {
+        master_answered(gobj, treedb_name, null);
+        return;
+    }
+    let kw_send = {
+        agent_id:  node,
+        cmd2agent: `command-yuno id="${yuno_id}" service="${treedb_name}" command="treedb-info"`
+    };
+    msg_iev_write_key(kw_send, "console_purpose", MASTER_PURPOSE);
+    msg_iev_write_key(kw_send, "console_treedb", treedb_name);
+    agent_link_command(link, "command-agent", kw_send);
+}
+
+/***************************************************************
  *  One child spec per discovered treedb.
  *
  *  A `link` and not a branch: below a treedb there are topics,
@@ -453,7 +489,10 @@ function treedb_children(gobj)
                     node:        gobj_read_str_attr(gobj, "node"),
                     yuno_id:     gobj_read_str_attr(gobj, "yuno_id"),
                     treedb_name: name,
-                    base_route:  `${base}/${name}`
+                    base_route:  `${base}/${name}`,
+                    /*  Read-only ONLY when the yuno SAID it is not the master.
+                     *  Unknown stays writable — see ac_master_answer.  */
+                    readonly:    priv.master[name] === false
                 }
             }
         });
@@ -816,6 +855,21 @@ function ac_mt_command_answer(gobj, event, kw, src)
 {
     let priv = gobj.priv;
 
+    /*  The per-treedb `treedb-info` answers ride the same event with their
+     *  own marker: parse them here and hand the value to the accounting that
+     *  finishes discovery.  */
+    if(msg_iev_read_key(kw, "console_purpose") === MASTER_PURPOSE) {
+        let stack_m = msg_iev_get_stack(gobj, kw, "command_stack", false);
+        let outer_m = kw_get_str(gobj, stack_m, "command", "", 0);
+        let failed_m = (typeof kw.result === "number" && kw.result < 0);
+        if(outer_m === "command-agent" && !failed_m) {
+            return 0;   /*  dispatch ack: the real answer is still coming  */
+        }
+        let name = msg_iev_read_key(kw, "console_treedb") || "";
+        let master = (!failed_m && kw.data && typeof kw.data.master === "boolean")
+            ? kw.data.master : null;
+        return master_answered(gobj, name, master);
+    }
     if(msg_iev_read_key(kw, "console_purpose") !== PURPOSE) {
         return 0;   /*  another panel's answer  */
     }
@@ -845,6 +899,43 @@ function ac_mt_command_answer(gobj, event, kw, src)
         gobj_change_state(gobj, "ST_EMPTY");
         render_state(gobj);
         return 0;
+    }
+
+    /*  Discovery is not done: WHICH of them can be written is part of what
+     *  the tree declares, and it has to be known BEFORE the nodes are built
+     *  — the library reads `readonly` when it draws a topic's toolbar, once.
+     *  So ask each treedb and stay in ST_DISCOVERING until they answer.  */
+    priv.master = {};
+    priv.master_left = priv.treedbs.length;
+    for(let name of priv.treedbs) {
+        probe_master(gobj, name);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  One `treedb-info` answer (or its failure). When the last one lands,
+ *  the tree is built — which is what ST_DISCOVERING was waiting for.
+ *
+ *  A treedb whose answer FAILED stays absent from priv.master, i.e.
+ *  unknown, and unknown is treated as WRITABLE: a node older than the
+ *  command cannot answer, and locking its editor would take away an
+ *  editing session that works today. On such a node a write to a replica
+ *  is still accepted and lost — the pre-7.13.0 behaviour, and a reason to
+ *  upgrade the node rather than to guess here.
+ ***************************************************************/
+function master_answered(gobj, treedb_name, master)
+{
+    let priv = gobj.priv;
+
+    if(treedb_name && typeof master === "boolean") {
+        priv.master[treedb_name] = master;
+    }
+    if(priv.master_left > 0) {
+        priv.master_left--;
+    }
+    if(priv.master_left > 0) {
+        return 0;   /*  still waiting for the others  */
     }
 
     /*  A re-discovery answers a yuno that has just restarted, so the
