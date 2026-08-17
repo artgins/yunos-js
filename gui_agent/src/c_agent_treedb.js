@@ -450,7 +450,7 @@ function probe_master(gobj, treedb_name)
     let node = gobj_read_str_attr(gobj, "node");
     let yuno_id = gobj_read_str_attr(gobj, "yuno_id");
 
-    if(!link || !agent_link_is_connected(link)) {
+    if(!link || !agent_link_is_connected(link) || empty_string(node) || empty_string(yuno_id)) {
         master_answered(gobj, treedb_name, null);
         return;
     }
@@ -459,6 +459,10 @@ function probe_master(gobj, treedb_name)
         cmd2agent: `command-yuno id="${yuno_id}" service="${treedb_name}" command="treedb-info"`
     };
     msg_iev_write_key(kw_send, "console_purpose", MASTER_PURPOSE);
+    /*  Tagged like the discovery request: the answer has to be recognisable
+     *  as THIS tab's, or every other tab counts it as one of its own.  */
+    msg_iev_write_key(kw_send, "console_node", node);
+    msg_iev_write_key(kw_send, "console_yuno", yuno_id);
     msg_iev_write_key(kw_send, "console_treedb", treedb_name);
     agent_link_command(link, "command-agent", kw_send);
 }
@@ -855,10 +859,25 @@ function ac_mt_command_answer(gobj, event, kw, src)
 {
     let priv = gobj.priv;
 
-    /*  The per-treedb `treedb-info` answers ride the same event with their
-     *  own marker: parse them here and hand the value to the accounting that
-     *  finishes discovery.  */
-    if(msg_iev_read_key(kw, "console_purpose") === MASTER_PURPOSE) {
+    /*  Two kinds of answer are OURS: the `services` discovery and the
+     *  per-treedb `treedb-info`. Anything else belongs to another panel.  */
+    let purpose = msg_iev_read_key(kw, "console_purpose");
+    if(purpose !== PURPOSE && purpose !== MASTER_PURPOSE) {
+        return 0;   /*  another panel's answer  */
+    }
+
+    /*  And it has to be THIS tab's. The filter used to sit below, guarding
+     *  the discovery only, and the `treedb-info` branch went in above it: so
+     *  every open Schemas tab — and the empty-state view, which has no node
+     *  and no route — consumed every other tab's master answers, counted them
+     *  as its own and built a tree from them. On the empty-state view that
+     *  surfaced as "no route for this tab: no tree can be rooted".  */
+    if(msg_iev_read_key(kw, "console_node") !== gobj_read_str_attr(gobj, "node") ||
+            msg_iev_read_key(kw, "console_yuno") !== gobj_read_str_attr(gobj, "yuno_id")) {
+        return 0;   /*  another tab's  */
+    }
+
+    if(purpose === MASTER_PURPOSE) {
         let stack_m = msg_iev_get_stack(gobj, kw, "command_stack", false);
         let outer_m = kw_get_str(gobj, stack_m, "command", "", 0);
         let failed_m = (typeof kw.result === "number" && kw.result < 0);
@@ -869,13 +888,6 @@ function ac_mt_command_answer(gobj, event, kw, src)
         let master = (!failed_m && kw.data && typeof kw.data.master === "boolean")
             ? kw.data.master : null;
         return master_answered(gobj, name, master);
-    }
-    if(msg_iev_read_key(kw, "console_purpose") !== PURPOSE) {
-        return 0;   /*  another panel's answer  */
-    }
-    if(msg_iev_read_key(kw, "console_node") !== gobj_read_str_attr(gobj, "node") ||
-            msg_iev_read_key(kw, "console_yuno") !== gobj_read_str_attr(gobj, "yuno_id")) {
-        return 0;   /*  another tab's discovery  */
     }
 
     let stack = msg_iev_get_stack(gobj, kw, "command_stack", false);
@@ -928,12 +940,15 @@ function master_answered(gobj, treedb_name, master)
 {
     let priv = gobj.priv;
 
+    if(priv.master_left <= 0) {
+        /*  Nothing owed: a late or duplicated answer must not walk into the
+         *  build below. Discovery is finished (or was never asked for).  */
+        return 0;
+    }
     if(treedb_name && typeof master === "boolean") {
         priv.master[treedb_name] = master;
     }
-    if(priv.master_left > 0) {
-        priv.master_left--;
-    }
+    priv.master_left--;
     if(priv.master_left > 0) {
         return 0;   /*  still waiting for the others  */
     }

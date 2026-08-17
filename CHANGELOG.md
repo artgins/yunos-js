@@ -23,6 +23,24 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **fix: every Schemas tab was eating the other tabs' `treedb-info` answers.**
+    Introduced by the read-only wiring the same day and caught in the browser
+    console: *"C_AGENT_TREEDB^view_schemas_node: no route for this tab: no tree
+    can be rooted"*, repeating once per answer.
+
+    Two mistakes, and the second is why the first could not be caught by the
+    existing guard: the new `treedb-info` branch went in **above** the filter
+    that checks the answer belongs to THIS tab, and the probe never tagged
+    `console_node` / `console_yuno`, so the filter had nothing to match on
+    anyway. Every open tab — and the empty-state view of the workspace, which
+    has no node and therefore no route — counted every other tab's answers as
+    its own and went on to build a tree from them.
+
+    The filter now runs FIRST and covers both purposes, the probe tags its node
+    and yuno like the discovery request does, a probe without them refuses to
+    ask instead of asking for `id=""`, and the accounting ignores an answer
+    when nothing is owed, so a late or duplicated one cannot walk into a build.
+
 - **A replica opens READ-ONLY in the editor.** Knowing a treedb cannot be
     written was half the job; the other half is not offering to write it. The
     Schemas tab asks each discovered treedb `treedb-info` before it builds its
