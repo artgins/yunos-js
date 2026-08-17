@@ -24,8 +24,12 @@ the submodule flow. This file only adds the yunos-js-specific layer on top.
 - To ship: commit on `main` here, **tag the release**, then **bump the
   `yunos/js` submodule pointer in yunetas**.
 - **Releases are tagged, no `v` prefix** — `0.7.0`, the same convention as
-  gobj-js and gobj-ui (started at `0.7.0` on 2026-08-17; the earlier releases
-  the CHANGELOG names are untagged). **Both yunos carry the SAME version**, as
+  gobj-js and gobj-ui. Every versioned release the CHANGELOG names has its tag:
+  `0.3.0` … `0.7.0`, the four older ones backfilled on 2026-08-17 onto their own
+  `release(...)` commit (the one that bumped both `package.json` AND closed the
+  heading — verified per tag, not guessed). The one heading without a version,
+  `## 2026-07-08 — shipped with SDK 7.7.2`, predates versioning and has no tag.
+  **Both yunos carry the SAME version**, as
   they have since 0.3.0: one `## <version> — <date>` heading in the shared
   CHANGELOG, and both `package.json` bumped together even when a cycle only
   touched one of them. Before creating a tag, `git tag -l | grep <version>`:
