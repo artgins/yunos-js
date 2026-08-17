@@ -3,6 +3,10 @@
  * A centered split card: a brand-tinted welcome panel on the left and the
  * sign-in form on the right; below 900px the welcome panel collapses and only
  * the form shows. Theme-aware via [data-theme="dark"] on <html>.
+ *
+ * NO animations and NO transitions, like the rest of the app: the ambient orbs
+ * and the spark are static gradients, the card does not fade in, and hover /
+ * focus states appear instantly. Do not re-add them.
  * Adapted from wattyzer's login (same visual language, Agent Console palette).
  */
 
@@ -79,7 +83,6 @@
     border-radius: 50%;
     filter: blur(80px);
     opacity: 0.5;
-    animation: ylogin-drift 22s ease-in-out infinite alternate;
 }
 .ylogin-orb-1 {
     width: 520px; height: 520px;
@@ -92,16 +95,10 @@
     bottom: -180px; right: -120px;
     background: radial-gradient(circle at 60% 60%,
                 var(--yl-accent-soft), var(--yl-accent) 55%, transparent 75%);
-    animation-delay: -8s;
     opacity: 0.38;
 }
 :root[data-theme="dark"] .ylogin-orb-1 { opacity: 0.32; }
 :root[data-theme="dark"] .ylogin-orb-2 { opacity: 0.2; }
-
-@keyframes ylogin-drift {
-    0%   { transform: translate3d(0, 0, 0) scale(1); }
-    100% { transform: translate3d(40px, 30px, 0) scale(1.08); }
-}
 
 
 /* ---- card ---------------------------------------------------- */
@@ -119,11 +116,6 @@
     border-radius: var(--yl-radius-card);
     box-shadow: var(--yl-card-shadow);
     overflow: hidden;
-    animation: ylogin-rise 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-@keyframes ylogin-rise {
-    0%   { opacity: 0; transform: translateY(14px) scale(0.985); }
-    100% { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
 
@@ -213,11 +205,6 @@
     opacity: 0.5;
     border-radius: 50%;
     pointer-events: none;
-    animation: ylogin-spark 24s linear infinite;
-}
-@keyframes ylogin-spark {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
 }
 
 
@@ -275,7 +262,6 @@
     font-size: 0.82rem;
     line-height: 1;
     cursor: pointer;
-    transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 .yquick-btn:hover {
     border-color: var(--yl-1);
@@ -345,7 +331,6 @@
     font: inherit;
     font-size: 0.95rem;
     box-sizing: border-box;
-    transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 .yfield input:hover { border-color: var(--yl-1); }
 .yfield input:focus {
@@ -373,7 +358,6 @@
     align-items: center;
     justify-content: center;
     padding: 0;
-    transition: background 140ms ease, color 140ms ease;
 }
 .ypassword-toggle:hover {
     background: var(--yl-soft);
@@ -402,7 +386,6 @@
     cursor: pointer;
     position: relative;
     overflow: hidden;
-    transition: transform 140ms ease, box-shadow 200ms ease;
     box-shadow: 0 12px 24px -10px rgba(37, 99, 235, 0.55);
 }
 .ylogin-cta::after {
@@ -413,10 +396,8 @@
     background: var(--yl-accent);
     transform: scaleX(0);
     transform-origin: left;
-    transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .ylogin-cta:hover {
-    transform: translateY(-1px);
     box-shadow: 0 16px 30px -10px rgba(37, 99, 235, 0.6);
 }
 .ylogin-cta:hover::after { transform: scaleX(1); }
@@ -425,7 +406,6 @@
     box-shadow: 0 0 0 4px var(--yl-accent-glow),
                 0 12px 24px -10px rgba(37, 99, 235, 0.55);
 }
-.ylogin-cta:active { transform: translateY(0); }
 .ylogin-cta.is-busy { opacity: 0.7; cursor: default; }
 .ylogin-cta[disabled] { cursor: default; }
 
@@ -481,13 +461,4 @@
     .ylogin-form { padding: 1.5rem 1.25rem 1.25rem; }
     .ylogin-title { font-size: 1.35rem; }
     .ylogin-orb { opacity: 0.3; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .ylogin-card,
-    .ylogin-orb,
-    .ylogin-spark { animation: none; }
-    .yquick-btn,
-    .yfield input,
-    .ylogin-cta { transition: none; }
 }

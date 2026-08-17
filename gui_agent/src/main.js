@@ -12,9 +12,11 @@
  *
  *          Persistence: writable+SDF_PERSIST attrs are stored in the
  *          browser localStorage via the db_*_persistent_attrs helpers
- *          wired into gobj_start_up() below. This is where the
- *          user-entered connection / auth config lives (no private data
- *          is committed to the repo).
+ *          wired into gobj_start_up() below. What lives there is the
+ *          OPERATOR's own state (theme, language, selected nodes, command
+ *          history, shortkeys) on the agent_config service — the
+ *          endpoints are derived from the hostname (src/conf/deploy.js),
+ *          so no private data is committed to the repo either way.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -60,7 +62,6 @@ import {register_c_yui_treedb_topic_with_form} from "@yuneta/gobj-ui/src/c_yui_t
 import {register_c_yui_treedb_schema}          from "@yuneta/gobj-ui/src/c_yui_treedb_schema.js";
 
 import {register_c_app} from "./c_app.js";
-import {register_c_gui_agent_view} from "./c_gui_agent_view.js";
 import {register_c_account_view} from "./c_account_view.js";
 import {register_c_agent_config} from "./c_agent_config.js";
 import {register_c_agent_login} from "./c_agent_login.js";
@@ -143,7 +144,6 @@ function main()
     register_c_agent_config();
     register_c_agent_login();
     register_c_agent_link();
-    register_c_gui_agent_view();
     register_c_nodes();
     register_c_stats_nodes();
     register_c_agent_console();

@@ -23,6 +23,24 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **The login screen stops moving, and a dead view is gone.** `login.css` was
+    the last place in the app with animation: two ambient orbs drifting on a 22 s
+    loop, a conic-gradient spark rotating on a 24 s one, and the card fading up
+    380 ms on every load — plus transitions on the quick buttons, the inputs, the
+    password toggle and the CTA. All removed, including the CTA's 1px hover lift
+    (a lift only makes sense animated; jumping it instantly is a glitch, not an
+    affordance — the shadow change carries the hover). The
+    `prefers-reduced-motion` block went with them: it had nothing left to reduce.
+    The header now says the screen is static, so nobody re-adds it. Nothing in JS
+    hooked any of it, and the card's fade used `both` fill rather than a separate
+    `opacity: 0`, so removing the declaration leaves it fully visible.
+
+- **`src/c_gui_agent_view.js` deleted** — 248 lines of "placeholder view" from
+    the Phase-0 scaffold, still registered in `main.js` and referenced by no
+    route and no other gclass since the four workspaces landed. It was the one
+    file left with zero logical DOM names, and decorating code that never
+    renders would only have hidden it.
+
 - **The DOM says what it is: logical names on every block, and two views stop
     answering to the same prefix.** A bare `<pre class="is-size-7 mb-2">` is
     unidentifiable in the Inspector, which is why the convention exists — and
