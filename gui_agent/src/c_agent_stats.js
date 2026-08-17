@@ -139,7 +139,8 @@ function mt_create(gobj)
     }
 
     let $c = createElement2(
-        ["div", {class: "view-card", style: "display:flex; flex-direction:column; height:100%;"}, []]
+        ["div", {class: `${GCLASS_NAME} STATS_VIEW view-card`,
+                 style: "display:flex; flex-direction:column; height:100%;"}, []]
     );
     gobj_write_attr(gobj, "$container", $c);
 }
@@ -276,15 +277,17 @@ function table_html(data, prev)
         }
     }
     if(!rows.length) {
-        return `<p class="has-text-grey is-size-7">${esc(t("no statistics"))}</p>`;
+        return `<p class="STATS_NO_COUNTERS has-text-grey is-size-7">` +
+            `${esc(t("no statistics"))}</p>`;
     }
     let trs = rows.map(([k, v]) => {
         let changed = prev && Object.prototype.hasOwnProperty.call(prev, k) && prev[k] !== v;
         let cls = "has-text-right is-family-monospace" + (changed ? " stats-changed" : "");
-        return `<tr><td>${esc(k)}</td>` +
-               `<td class="${cls}">${esc(fmt_value(v))}</td></tr>`;
+        return `<tr class="STATS_ROW"><td class="STATS_NAME">${esc(k)}</td>` +
+               `<td class="STATS_VALUE ${cls}">${esc(fmt_value(v))}</td></tr>`;
     }).join("");
-    return `<table class="table is-fullwidth is-narrow is-size-7"><tbody>${trs}</tbody></table>`;
+    return `<table class="STATS_COUNTERS table is-fullwidth is-narrow is-size-7">` +
+        `<tbody>${trs}</tbody></table>`;
 }
 
 /***************************************************************
@@ -306,17 +309,20 @@ function build_dom(gobj)
         : (gobj_read_attr(gobj, "yuno_label") || gobj_read_attr(gobj, "node") || t("statistics"));
 
     priv.$refresh = createElement2(
-        ["button", {class: "button is-small", type: "button",
+        ["button", {class: "STATS_REFRESH button", type: "button",
                     title: t("refresh"), "aria-label": t("refresh"),
                     "data-i18n-title": "refresh", "data-i18n-aria-label": "refresh"},
-            [["span", {class: "icon is-small"}, [["i", {class: "yi-arrows-rotate"}]]]],
+            [["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]]],
             {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
     );
 
     priv.$toolbar = createElement2(
-        ["div", {class: "is-flex is-align-items-center mb-2", style: "gap:0.5rem;"}, [
-            ["span", {class: "is-family-monospace is-size-7 has-text-weight-semibold"}, heading],
-            ["span", {style: "margin-left:auto;"}, [priv.$refresh]]
+        ["div", {class: "STATS_TOOLBAR is-flex is-align-items-center mb-2",
+                 style: "gap:0.5rem;"}, [
+            ["span", {class: "STATS_HEADING is-family-monospace is-size-7 " +
+                             "has-text-weight-semibold"}, heading],
+            ["span", {class: "STATS_TOOLBAR_END", style: "margin-left:auto;"},
+                [priv.$refresh]]
         ]]
     );
     $c.appendChild(priv.$toolbar);
@@ -329,7 +335,8 @@ function build_dom(gobj)
     $c.appendChild(priv.$cards);
 
     priv.$notif = createElement2(
-        ["div", {class: "notification is-light", style: "display:none;", i18n: "not connected to an agent"},
+        ["div", {class: "STATS_NOTICE notification is-light", style: "display:none;",
+                 i18n: "not connected to an agent"},
             "Not connected"]
     );
     $c.appendChild(priv.$notif);
@@ -362,7 +369,7 @@ function render_cards(gobj)
 
     if(!targets.length) {
         priv.$cards.appendChild(createElement2(
-            ["p", {class: "has-text-grey is-size-7 p-2", i18n: "pick yunos hint"},
+            ["p", {class: "STATS_EMPTY has-text-grey is-size-7 p-2", i18n: "pick yunos hint"},
                 "Select one or more yunos in Nodes."]
         ));
         refresh_language(priv.$cards, t);
@@ -372,32 +379,34 @@ function render_cards(gobj)
     for(let tgt of targets) {
         let $body = createElement2(
             ["div", {class: "STATS_TABLE", style: "overflow:auto;"},
-                `<p class="has-text-grey is-size-7">…</p>`]
+                `<p class="STATS_WAITING has-text-grey is-size-7">…</p>`]
         );
         /*  Per-card reset: zero THIS yuno's RSTATS counters (icon-only, the
          *  title carries the meaning — mobile-friendly).  */
         let $reset = createElement2(
-            ["button", {class: "button is-small is-white STATS_RESET", type: "button",
+            ["button", {class: "STATS_RESET button is-white", type: "button",
                         title: t("reset stats"), "aria-label": t("reset stats"),
                         "data-i18n-title": "reset stats", "data-i18n-aria-label": "reset stats"},
-                [["span", {class: "icon is-small"}, [["i", {class: "yi-broom"}]]]],
+                [["span", {class: "icon"}, [["i", {class: "yi-broom"}]]]],
                 {click: () => gobj_send_event(gobj, "EV_RESET_STATS",
                     {node: tgt.node, yuno_id: tgt.yuno_id}, gobj)}]
         );
         let $card = createElement2(
             ["div", {class: "card STATS_CARD", style: "width:20rem; max-width:100%;"},
                 [
-                    ["div", {class: "card-content", style: "padding:0.9rem;"},
+                    ["div", {class: "STATS_CARD_CONTENT card-content", style: "padding:0.9rem;"},
                         [
-                            ["div", {class: "is-flex is-align-items-center mb-1", style: "gap:0.5rem;"},
+                            ["div", {class: "STATS_CARD_HEAD is-flex is-align-items-center mb-1",
+                                     style: "gap:0.5rem;"},
                                 [
-                                    ["p", {class: "is-size-6 has-text-weight-bold is-family-monospace",
+                                    ["p", {class: "STATS_CARD_TITLE is-size-6 has-text-weight-bold " +
+                                                  "is-family-monospace",
                                            style: "flex:1 1 auto; min-width:0; overflow:hidden; " +
                                                   "text-overflow:ellipsis; white-space:nowrap;"}, tgt.label],
                                     $reset
                                 ]
                             ],
-                            ["p", {class: "is-size-7 has-text-grey mb-2"}, tgt.node],
+                            ["p", {class: "STATS_CARD_NODE is-size-7 has-text-grey mb-2"}, tgt.node],
                             $body
                         ]
                     ]

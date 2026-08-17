@@ -229,6 +229,39 @@ must return a Promise). Where the browser needs an answer the action cannot
 give — Tab completion deciding `preventDefault` — the action reports through
 `priv` and the handler reads it back.
 
+## Logical DOM names
+
+Every block a gclass builds carries a name in `UPPER_SNAKE`, so the tree is
+self-describing in the browser Inspector: a bare `<pre class="is-size-7 mb-2">`
+tells you nothing, `CONSOLE_COMMENT` tells you what it is. The case is the
+namespace — **uppercase = logical block, lowercase = styling** (Bulma today,
+anything else tomorrow) — and the logical name comes first in the attribute.
+
+**Each view owns a prefix, and no two share one.** The picker of the
+Statistics/Schemas tree used to write `STATS_TOOLBAR` / `STATS_REFRESH` while
+the cards view wrote `STATS_CARD`, so `.STATS_REFRESH` matched a control in a
+view that does not own it — which is exactly what these names exist to prevent:
+
+| Prefix | View |
+|---|---|
+| `CONSOLE_` (+ `HELP_`, `HISTORY_`) | `C_AGENT_CONSOLE` — the Commands console |
+| `NODES_` | `C_NODES` — the flat node picker |
+| `STATNODES_` | `C_STATS_NODES` — the nodes→yunos tree picker |
+| `STATS_` | `C_AGENT_STATS` — the counter cards |
+| `TTY_` | `C_AGENT_TTY` — the terminal |
+| `TREEDB_`, `TREEDB_VIEW_` | `C_AGENT_TREEDB` (the tab) and `C_AGENT_TREEDB_VIEW` |
+| `ACCOUNT_`, `PREF_`, `SK_`, `ABOUT_`, `DIAG_` | `C_ACCOUNT_VIEW` — its four sections |
+
+They are primarily debug aids, but styling them is fine where useful (the
+`.CONSOLE_INPUT_ROW` and `.STATS_CARD` rules in `src/app.css`). Tabulator cells
+are drawn from HTML strings by formatters, so their names live in those strings
+(`NODES_HOST`, `STATNODES_YUNO`, `STATS_VALUE`).
+
+**Button size: the default, or bigger — never `is-small`.** A small control is
+hard to hit, and on a phone it makes the action look like chrome. The one
+exception left in this app is `TTY_KEY`, the mobile key bar: nine keys have to
+fit across a 360px screen, which is the dense-grid case. It says so in the code.
+
 ## i18n
 
 Every text goes through i18n **and must be able to change language** (the full

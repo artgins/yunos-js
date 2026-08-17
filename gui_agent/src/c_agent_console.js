@@ -222,13 +222,14 @@ function build_empty_state(gobj)
         ["div", {class: "C_AGENT_CONSOLE CONSOLE_CARD view-card",
                  style: "display:flex; align-items:center; justify-content:center; height:100%;"},
             [
-                ["div", {class: "has-text-grey has-text-centered", style: "max-width:32rem;"},
+                ["div", {class: "CONSOLE_EMPTY has-text-grey has-text-centered",
+                         style: "max-width:32rem;"},
                     [
-                        ["p", {class: "is-size-4 mb-2"},
+                        ["p", {class: "CONSOLE_EMPTY_ICON is-size-4 mb-2"},
                             [["span", {class: "icon is-large"}, [["i", {class: "yi-terminal"}]]]]],
-                        ["p", {class: "is-size-5", i18n: "no consoles"},
+                        ["p", {class: "CONSOLE_EMPTY_TITLE is-size-5", i18n: "no consoles"},
                             "No consoles open"],
-                        ["p", {class: "is-size-6 mt-2", i18n: "pick nodes hint"},
+                        ["p", {class: "CONSOLE_EMPTY_HINT is-size-6 mt-2", i18n: "pick nodes hint"},
                             "Select one or more nodes in Nodes to open a console tab for each."]
                     ]
                 ]
@@ -448,12 +449,12 @@ function build_ui(gobj)
     /*  Font size A− / [N px] / A+ for CONSOLE_RESPONSE_TEXT: a TEMPORARY,
      *  per-console nudge (the persisted default lives in Settings, mirroring the
      *  Terminal's TTY_HOST control). Icon-only buttons with a title carrying the
-     *  meaning; is-small to match the adjacent copy button in this dense row. */
+     *  meaning. */
     priv.$font_dec = createElement2(
-        ["button", {class: "CONSOLE_FONT_DEC button is-small is-ghost", type: "button",
+        ["button", {class: "CONSOLE_FONT_DEC button is-ghost", type: "button",
                     title: t("font smaller"), "aria-label": t("font smaller"),
                     "data-i18n-title": "font smaller", "data-i18n-aria-label": "font smaller"},
-            [["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-minus"}]]]],
+            [["span", {class: "icon"}, [["i", {class: "yi-magnifying-glass-minus"}]]]],
             {click: () => gobj_send_event(gobj, "EV_FONT_SIZE", {delta: -1}, gobj)}]
     );
     priv.$font_size_label = createElement2(
@@ -462,17 +463,17 @@ function build_ui(gobj)
             priv.font_size + " px"]
     );
     priv.$font_inc = createElement2(
-        ["button", {class: "CONSOLE_FONT_INC button is-small is-ghost", type: "button",
+        ["button", {class: "CONSOLE_FONT_INC button is-ghost", type: "button",
                     title: t("font larger"), "aria-label": t("font larger"),
                     "data-i18n-title": "font larger", "data-i18n-aria-label": "font larger"},
-            [["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-plus"}]]]],
+            [["span", {class: "icon"}, [["i", {class: "yi-magnifying-glass-plus"}]]]],
             {click: () => gobj_send_event(gobj, "EV_FONT_SIZE", {delta: +1}, gobj)}]
     );
 
     let $copy = createElement2(
-        ["button", {class: "CONSOLE_COPY button is-small is-ghost", type: "button",
+        ["button", {class: "CONSOLE_COPY button is-ghost", type: "button",
                     title: t("copy response"), "data-i18n-title": "copy response"},
-            [["span", {class: "icon is-small"}, [["i", {class: "yi-copy"}]]]]]
+            [["span", {class: "icon"}, [["i", {class: "yi-copy"}]]]]]
     );
     $copy.disabled = true;
     $copy.addEventListener("click",
@@ -519,8 +520,8 @@ function build_ui(gobj)
                     $input_control,
                     help_pop.control,
                     hist_pop.control,
-                    ["div", {class: "control"}, [$clear]],
-                    ["div", {class: "control"}, [$exec]]
+                    ["div", {class: "CONSOLE_CLEAR_CONTROL control"}, [$clear]],
+                    ["div", {class: "CONSOLE_EXEC_CONTROL control"}, [$exec]]
                 ]],
                 $hint,
                 $status_row,
@@ -790,10 +791,12 @@ function clear_console(gobj)
 function build_popover(gobj, kind, icon, title)
 {
     let $content = createElement2(
-        ["div", {class: "dropdown-content", style: "max-height:22rem; overflow:auto;"}, []]
+        ["div", {class: `CONSOLE_${kind}_CONTENT dropdown-content`,
+                 style: "max-height:22rem; overflow:auto;"}, []]
     );
     let $btn = createElement2(
-        ["button", {class: "button", type: "button", "aria-haspopup": "true", title: title},
+        ["button", {class: `CONSOLE_${kind}_BTN button`, type: "button",
+                    "aria-haspopup": "true", title: title},
             [["span", {class: "icon"}, [["i", {class: icon}]]]]]
     );
     let $dd = createElement2(
@@ -866,7 +869,8 @@ function fill_help_popover(gobj)
     let names = command_names(gobj).sort();
     if(names.length === 0) {
         $c.appendChild(createElement2(
-            ["div", {class: "dropdown-item has-text-grey", i18n: "no commands"}, t("no commands")]));
+            ["div", {class: "HELP_EMPTY dropdown-item has-text-grey", i18n: "no commands"},
+                t("no commands")]));
         return;
     }
     for(let name of names) {
@@ -874,11 +878,11 @@ function fill_help_popover(gobj)
         let sig = (cmd && cmd.params && cmd.params.length)
             ? " " + cmd.params.map((p) => `[${p}]`).join(" ") : "";
         let $item = createElement2(
-            ["a", {class: "dropdown-item is-family-monospace",
+            ["a", {class: "HELP_ITEM dropdown-item is-family-monospace",
                    style: "white-space:normal;", title: (cmd && cmd.desc) ? cmd.desc : ""},
                 [
-                    ["span", {class: "has-text-weight-semibold"}, name],
-                    ["span", {class: "has-text-grey"}, sig]
+                    ["span", {class: "HELP_ITEM_NAME has-text-weight-semibold"}, name],
+                    ["span", {class: "HELP_ITEM_SIG has-text-grey"}, sig]
                 ]
             ]
         );
@@ -944,14 +948,15 @@ function fill_hist_popover(gobj)
     $c.replaceChildren();
     if(priv.history.length === 0) {
         $c.appendChild(createElement2(
-            ["div", {class: "dropdown-item has-text-grey", i18n: "no history yet"}, t("no history yet")]));
+            ["div", {class: "HISTORY_EMPTY dropdown-item has-text-grey", i18n: "no history yet"},
+                t("no history yet")]));
         return;
     }
 
     /*  Sort header: recency vs frequency.  */
     let mk_sort_btn = (mode, key, text) => {
         let $b = createElement2(
-            ["button", {class: "button is-small", type: "button", i18n: key}, text]);
+            ["button", {class: "HISTORY_SORT button", type: "button", i18n: key}, text]);
         if(priv.hist_sort === mode) {
             $b.classList.add("is-info", "is-selected");
         }
@@ -962,10 +967,11 @@ function fill_hist_popover(gobj)
         return $b;
     };
     $c.appendChild(createElement2(
-        ["div", {class: "dropdown-item", style: "display:flex; gap:0.5rem;"},
+        ["div", {class: "HISTORY_SORT_ROW dropdown-item", style: "display:flex; gap:0.5rem;"},
             [mk_sort_btn("time", "recent", t("recent")),
              mk_sort_btn("freq", "frequent", t("frequent"))]]));
-    $c.appendChild(createElement2(["hr", {class: "dropdown-divider"}]));
+    $c.appendChild(createElement2(
+        ["hr", {class: "HISTORY_DIVIDER dropdown-divider"}]));
 
     let entries = priv.history.slice();
     if(priv.hist_sort === "freq") {
@@ -973,45 +979,46 @@ function fill_hist_popover(gobj)
     }
     for(let e of entries) {
         let $run = createElement2(
-            ["button", {class: "HISTORY_RUN button is-small is-ghost", type: "button",
+            ["button", {class: "HISTORY_RUN button is-ghost", type: "button",
                         title: t("run this command"), "aria-label": t("run this command"),
                         "data-i18n-title": "run this command",
                         "data-i18n-aria-label": "run this command"},
-                [["span", {class: "icon is-small"}, [["i", {class: "yi-play"}]]]]]);
+                [["span", {class: "icon"}, [["i", {class: "yi-play"}]]]]]);
         $run.addEventListener("click", (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
             gobj_send_event(gobj, "EV_RUN_HISTORY", {cmd: e.cmd}, gobj);
         });
         let $add = createElement2(
-            ["button", {class: "HISTORY_ADD button is-small is-ghost", type: "button",
+            ["button", {class: "HISTORY_ADD button is-ghost", type: "button",
                         title: t("add to shortkeys"), "aria-label": t("add to shortkeys"),
                         "data-i18n-title": "add to shortkeys",
                         "data-i18n-aria-label": "add to shortkeys"},
-                [["span", {class: "icon is-small"}, [["i", {class: "yi-plus"}]]]]]);
+                [["span", {class: "icon"}, [["i", {class: "yi-plus"}]]]]]);
         $add.addEventListener("click", (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
             gobj_send_event(gobj, "EV_ADD_SHORTKEY", {cmd: e.cmd}, gobj);
         });
         let $del = createElement2(
-            ["button", {class: "HISTORY_DEL button is-small is-ghost", type: "button",
+            ["button", {class: "HISTORY_DEL button is-ghost", type: "button",
                         title: t("remove from history"), "aria-label": t("remove from history"),
                         "data-i18n-title": "remove from history",
                         "data-i18n-aria-label": "remove from history"},
-                [["span", {class: "icon is-small"}, [["i", {class: "yi-xmark"}]]]]]);
+                [["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]]]]);
         $del.addEventListener("click", (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
             gobj_send_event(gobj, "EV_REMOVE_HISTORY", {cmd: e.cmd}, gobj);
         });
         let $item = createElement2(
-            ["a", {class: "dropdown-item is-family-monospace",
+            ["a", {class: "HISTORY_ITEM dropdown-item is-family-monospace",
                    style: "white-space:normal; display:flex; align-items:center; gap:0.5rem;",
                    title: e.cmd},
                 [
-                    ["span", {style: "flex:1; min-width:0; overflow-wrap:anywhere;"}, e.cmd],
-                    ["span", {class: "is-size-7 has-text-grey"}, `×${e.count}`]
+                    ["span", {class: "HISTORY_ITEM_CMD",
+                              style: "flex:1; min-width:0; overflow-wrap:anywhere;"}, e.cmd],
+                    ["span", {class: "HISTORY_ITEM_COUNT is-size-7 has-text-grey"}, `×${e.count}`]
                 ]
             ]
         );

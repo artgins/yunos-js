@@ -128,7 +128,8 @@ function mt_create(gobj)
     }
 
     let $c = createElement2(
-        ["div", {class: "view-card", style: "display:flex; flex-direction:column; height:100%;"}, []]
+        ["div", {class: `${GCLASS_NAME} NODES_CARD view-card`,
+                 style: "display:flex; flex-direction:column; height:100%;"}, []]
     );
     gobj_write_attr(gobj, "$container", $c);
 }
@@ -339,7 +340,7 @@ function build_dom(gobj)
      *  No title/subtitle block — the nav already labels the view, and
      *  on mobile every extra header line steals the table's space.  */
     let $input = createElement2(["input", {
-        class:        "input",
+        class:        "NODES_SEARCH input",
         type:         "text",
         placeholder:  t("search nodes"),
         "aria-label": t("search nodes"),
@@ -349,11 +350,13 @@ function build_dom(gobj)
     }]);
     priv.$input = $input;
 
-    let $count = createElement2(["span", {class: "is-size-7 has-text-grey"}, ""]);
+    let $count = createElement2(
+        ["span", {class: "NODES_COUNT is-size-7 has-text-grey"}, ""]);
     priv.$count = $count;
 
     let $search_control = createElement2(
-        ["div", {class: "control has-icons-left", style: "flex:0 1 22rem; min-width:0;"}, [
+        ["div", {class: "NODES_SEARCH_CONTROL control has-icons-left",
+                 style: "flex:0 1 22rem; min-width:0;"}, [
             $input,
             ["span", {class: "icon is-left"}, [
                 ["span", {class: "yi-magnifying-glass"}, ""]
@@ -397,15 +400,16 @@ function build_dom(gobj)
 
     /*  Tabulator host  */
     priv.$tablewrap = createElement2(
-        ["div", {style: "flex:1; min-height:0;"}, [
-            ["div", {id: priv.table_id}, []]
+        ["div", {class: "NODES_TABLEWRAP", style: "flex:1; min-height:0;"}, [
+            ["div", {class: "NODES_TABLE", id: priv.table_id}, []]
         ]]
     );
     $c.appendChild(priv.$tablewrap);
 
     /*  Not-connected notice (Tabulator's own placeholder covers no-nodes)  */
     priv.$notif = createElement2(
-        ["div", {class: "notification is-light", style: "display:none;", i18n: "not connected to an agent"},
+        ["div", {class: "NODES_NOTICE notification is-light", style: "display:none;",
+                 i18n: "not connected to an agent"},
             "Not connected"]
     );
     $c.appendChild(priv.$notif);
@@ -428,7 +432,7 @@ function make_columns(gobj)
         let n = cell.getData();
         let host = n.host || n.uuid || "";
         if(is_selected_node(gobj, n)) {
-            return `<span class="has-text-weight-bold">${esc(host)}</span>`;
+            return `<span class="NODES_HOST has-text-weight-bold">${esc(host)}</span>`;
         }
         return esc(host);
     }
@@ -436,8 +440,8 @@ function make_columns(gobj)
     /*  uuid: muted monospace  */
     function uuid_formatter(cell)
     {
-        return `<span class="is-family-monospace is-size-7" style="color:#9AA7B4;">` +
-               `${esc(cell.getValue() || "")}</span>`;
+        return `<span class="NODES_UUID is-family-monospace is-size-7" ` +
+               `style="color:#9AA7B4;">${esc(cell.getValue() || "")}</span>`;
     }
 
     /*  Per-row checkbox: checked when the node has an open Console tab.
@@ -446,7 +450,8 @@ function make_columns(gobj)
     function sel_formatter(cell)
     {
         let checked = is_selected_node(gobj, cell.getData()) ? " checked" : "";
-        return `<input type="checkbox" class="node-sel"${checked} aria-label="open console tab">`;
+        return `<input type="checkbox" class="NODES_SEL node-sel"${checked} ` +
+            `aria-label="open console tab">`;
     }
 
     function sel_click(e, cell)
@@ -468,7 +473,8 @@ function make_columns(gobj)
         let nodes = gobj_read_attr(gobj, "nodes") || [];
         let sel = config ? agent_config_get_selected_nodes(config, ws).length : 0;
         let checked = (nodes.length > 0 && sel >= nodes.length) ? " checked" : "";
-        return `<input type="checkbox" class="node-sel-all"${checked} aria-label="select all nodes">`;
+        return `<input type="checkbox" class="NODES_SEL_ALL node-sel-all"${checked} ` +
+            `aria-label="select all nodes">`;
     }
 
     function selall_click(e, column)

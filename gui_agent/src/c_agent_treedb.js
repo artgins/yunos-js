@@ -291,7 +291,7 @@ function build_ui(gobj)
      *  re-read it, and that means a restart. The button says `apply`
      *  because that is the intent; the confirmation says what it does.  */
     priv.$apply = createElement2(
-        ["button", {class: "button TREEDB_APPLY",
+        ["button", {class: "TREEDB_APPLY button",
                     title: t("apply schema"), "aria-label": t("apply schema"),
                     "data-i18n-title": "apply schema",
                     "data-i18n-aria-label": "apply schema"},
@@ -943,14 +943,14 @@ function ac_apply_changes(gobj, event, kw, src)
                 t("apply restart warning")],
             ["div", {class: "TREEDB_APPLY_ACTIONS is-align-items-center",
                      style: "display:flex; gap:.5rem; justify-content:flex-end;"}, [
-                ["button", {class: "button TREEDB_APPLY_CANCEL"},
+                ["button", {class: "TREEDB_APPLY_CANCEL button"},
                     [["span", {i18n: "cancel"}, t("cancel")]],
                     {click: (e) => {
                         e.stopPropagation();
                         gobj_send_event(gobj, "EV_APPLY_CANCELLED", {}, gobj);
                     }}
                 ],
-                ["button", {class: "button is-warning TREEDB_APPLY_CONFIRM"},
+                ["button", {class: "TREEDB_APPLY_CONFIRM button is-warning"},
                     [
                         ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
                         ["span", {i18n: "apply"}, t("apply")]

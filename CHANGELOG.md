@@ -23,6 +23,39 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **The DOM says what it is: logical names on every block, and two views stop
+    answering to the same prefix.** A bare `<pre class="is-size-7 mb-2">` is
+    unidentifiable in the Inspector, which is why the convention exists — and
+    most of this app was ignoring it: the Preferences page carried **2** logical
+    names in 745 lines, the counter cards 2, the terminal 2, both node pickers 2
+    each. They now carry 52, 20, 12, 14 and 17.
+
+    The collision was the part that actually cost something. The nodes→yunos
+    **picker** (`C_STATS_NODES`) wrote `STATS_TOOLBAR` / `STATS_REFRESH` /
+    `STATS_COPY` while the **cards** view (`C_AGENT_STATS`) wrote `STATS_CARD` /
+    `STATS_TABLE` / `STATS_RESET` — so `.STATS_REFRESH` matched a control in a
+    view that does not own it, and since the picker stays mounted (hidden) next
+    to the open tab, aiming at the Statistics Refresh hit the invisible one.
+    That is exactly what a per-view prefix prevents: the picker is `STATNODES_*`
+    now, and each view's prefix is listed in the README.
+
+    Tabulator draws its cells from HTML strings, so the names had to go in the
+    formatters too (`NODES_HOST`, `NODES_SEL`, `STATNODES_YUNO`, `STATS_VALUE`,
+    …) — the only way to identify a cell in devtools.
+
+- **`is-small` is gone from every button except the mobile key bar.** A small
+    control is hard to hit and makes the action read as chrome; the user's rule
+    is default size or bigger. Promoted: the Statistics *Refresh* and per-card
+    *Reset*, the console's *Copy* and font steppers (whose comment claimed
+    `is-small` was needed "to match the adjacent copy button" — it was matching
+    itself), the three history-row buttons and the Recent/Frequent sort, the
+    Terminal's *Reconnect* and font buttons, and the whole shortkeys manager
+    (both inputs, *Add*, and the per-row delete). Each icon dropped its
+    `icon is-small` in the same edit so the glyph keeps its proportion.
+
+    `TTY_KEY` keeps it, with the reason written next to it: nine keys have to
+    fit across a 360px phone, the dense-grid exception.
+
 - **The FSM sweep reaches the rest of the app: every action crosses the
     automaton now.** An earlier pass did the node tables and parts of the
     console, and its changelog line claimed more than it delivered — the four

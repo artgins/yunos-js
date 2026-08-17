@@ -122,7 +122,8 @@ function mt_create(gobj)
     }
     gobj_subscribe_event(gobj, null, {}, subscriber);
 
-    let $c = createElement2(["div", {class: "view-card account-view"}, []]);
+    let $c = createElement2(
+        ["div", {class: `${GCLASS_NAME} ACCOUNT_CARD view-card account-view`}, []]);
     gobj_write_attr(gobj, "$container", $c);
     render(gobj);
 }
@@ -212,16 +213,18 @@ function render(gobj)
 function page_header(title_key, title_text, sub_key, sub_text)
 {
     let children = [
-        ["h1", {class: "title is-3", style: `color:${ACCENT}; margin-bottom:0.25rem;`, i18n: title_key},
+        ["h1", {class: "ACCOUNT_TITLE title is-3",
+                style: `color:${ACCENT}; margin-bottom:0.25rem;`, i18n: title_key},
             title_text]
     ];
     if(sub_key) {
         children.push(
-            ["p", {class: "subtitle is-6", style: "color:#5B6B7E; margin-bottom:1rem;", i18n: sub_key},
+            ["p", {class: "ACCOUNT_SUBTITLE subtitle is-6",
+                   style: "color:#5B6B7E; margin-bottom:1rem;", i18n: sub_key},
                 sub_text]
         );
     }
-    return ["div", {style: "margin-bottom:0.5rem;"}, children];
+    return ["div", {class: "ACCOUNT_HEADER", style: "margin-bottom:0.5rem;"}, children];
 }
 
 /***************************************************************
@@ -239,7 +242,7 @@ function build_preference(gobj)
     {
         let btns = options.map(function(opt) {
             let active = (opt.value === current);
-            let cls = "button" + (active ? " is-primary is-selected" : "");
+            let cls = "PREF_SEGMENT_ITEM button" + (active ? " is-primary is-selected" : "");
             let kids = [];
             if(opt.icon) {
                 kids.push(["span", {class: "icon"}, [["span", {class: opt.icon}, ""]]]);
@@ -250,7 +253,7 @@ function build_preference(gobj)
             return ["button", {type: "button", class: cls}, kids,
                 {click: function() { on_pick(opt.value); }}];
         });
-        return ["div", {class: "buttons has-addons"}, btns];
+        return ["div", {class: "PREF_SEGMENT buttons has-addons"}, btns];
     }
 
     let theme_seg = segment(
@@ -327,14 +330,15 @@ function build_preference(gobj)
      *  opt-in polling exception, applied live by the open stats views.  */
     let stats_refresh = config ? agent_config_get_stats_refresh(config) : 2;
     let $refresh_sel = createElement2(
-        ["select", {"aria-label": t("stats refresh"), "data-i18n-aria-label": "stats refresh"},
+        ["select", {class: "PREF_STATS_REFRESH",
+                    "aria-label": t("stats refresh"), "data-i18n-aria-label": "stats refresh"},
             [0, 1, 2, 5, 10, 30].map((s) => ["option", {value: String(s)}, (s === 0 ? t("off") : `${s} s`)]),
             {change: (e) => gobj_send_event(gobj, "EV_SET_STATS_REFRESH",
                 {secs: parseInt(e.target.value, 10)}, gobj)}
         ]
     );
     $refresh_sel.value = String(stats_refresh);
-    let stats_refresh_ctrl = ["div", {class: "select"}, [$refresh_sel]];
+    let stats_refresh_ctrl = ["div", {class: "PREF_SELECT select"}, [$refresh_sel]];
 
     /*  Terminal font size — the shared DEFAULT for every Terminal tab
      *  (same persisted value the tab's A− / A+ buttons drive). A stepper so
@@ -343,7 +347,8 @@ function build_preference(gobj)
     let font_size = tty_get_font_size();
     function font_button(icon, title_key, at_limit, on_click)
     {
-        let attrs = {type: "button", class: "button",
+        let cls = (title_key === "font smaller") ? "PREF_FONT_DEC" : "PREF_FONT_INC";
+        let attrs = {type: "button", class: `${cls} button`,
                      title: t(title_key), "aria-label": t(title_key),
                      "data-i18n-title": title_key, "data-i18n-aria-label": title_key};
         if(at_limit) {
@@ -353,13 +358,14 @@ function build_preference(gobj)
             [["span", {class: "icon"}, [["span", {class: icon}, ""]]]],
             {click: on_click}];
     }
-    let font_seg = ["div", {class: "buttons has-addons"},
+    let font_seg = ["div", {class: "PREF_FONT_SEG buttons has-addons"},
         [
             font_button("yi-magnifying-glass-minus", "font smaller", font_size <= FONT_SIZE_MIN,
                 function() {
                     gobj_send_event(gobj, "EV_SET_TTY_FONT_SIZE", {delta: -1}, gobj);
                 }),
-            ["button", {type: "button", class: "button is-static", style: "min-width:4.5rem;"},
+            ["button", {type: "button", class: "PREF_FONT_SIZE button is-static",
+                        style: "min-width:4.5rem;"},
                 `${font_size} px`],
             font_button("yi-magnifying-glass-plus", "font larger", font_size >= FONT_SIZE_MAX,
                 function() {
@@ -372,14 +378,15 @@ function build_preference(gobj)
      *  persisted value the console's A− / A+ buttons seed from); open consoles
      *  pick a change up on their next (re)open.  */
     let console_font_size = get_console_font_size();
-    let console_font_seg = ["div", {class: "buttons has-addons"},
+    let console_font_seg = ["div", {class: "PREF_CONSOLE_FONT_SEG buttons has-addons"},
         [
             font_button("yi-magnifying-glass-minus", "font smaller",
                 console_font_size <= CONSOLE_FONT_SIZE_MIN,
                 function() {
                     gobj_send_event(gobj, "EV_SET_CONSOLE_FONT_SIZE", {delta: -1}, gobj);
                 }),
-            ["button", {type: "button", class: "button is-static", style: "min-width:4.5rem;"},
+            ["button", {type: "button", class: "PREF_CONSOLE_FONT_SIZE button is-static",
+                        style: "min-width:4.5rem;"},
                 `${console_font_size} px`],
             font_button("yi-magnifying-glass-plus", "font larger",
                 console_font_size >= CONSOLE_FONT_SIZE_MAX,
@@ -391,19 +398,19 @@ function build_preference(gobj)
 
     function field(label_key, label_text, control)
     {
-        return ["div", {class: "field", style: "margin-bottom:1.25rem;"},
+        return ["div", {class: "PREF_FIELD field", style: "margin-bottom:1.25rem;"},
             [
-                ["label", {class: "label", i18n: label_key}, label_text],
-                ["div", {class: "control"}, [control]]
+                ["label", {class: "PREF_LABEL label", i18n: label_key}, label_text],
+                ["div", {class: "PREF_CONTROL control"}, [control]]
             ]
         ];
     }
 
     return ce(
-        ["div", {},
+        ["div", {class: "PREF_PAGE"},
             [
                 page_header("preferences", "Preferences", "appearance", "Appearance"),
-                ["div", {class: "box", style: "max-width:540px;"},
+                ["div", {class: "PREF_BOX box", style: "max-width:540px;"},
                     [
                         field("theme", "Theme", theme_seg),
                         field("language", "Language", lang_seg),
@@ -440,7 +447,8 @@ function build_shortkeys(gobj)
     let list_children = [];
     if(keys.length === 0) {
         list_children.push(
-            ["p", {class: "has-text-grey", i18n: "no shortkeys yet"}, "No shortkeys defined"]);
+            ["p", {class: "SK_EMPTY has-text-grey", i18n: "no shortkeys yet"},
+                "No shortkeys defined"]);
     }
     for(let key of keys) {
         let this_key = key;
@@ -449,13 +457,13 @@ function build_shortkeys(gobj)
                      style: "display:flex; align-items:center; gap:0.5rem; padding:0.35rem 0; " +
                             "border-bottom:1px solid var(--bulma-border, #dbdbdb);"},
                 [
-                    ["span", {class: "has-text-weight-semibold is-family-monospace",
+                    ["span", {class: "SK_KEY has-text-weight-semibold is-family-monospace",
                               style: "min-width:3.5rem;"}, this_key],
-                    ["span", {class: "has-text-grey is-family-monospace is-size-7",
+                    ["span", {class: "SK_CMD has-text-grey is-family-monospace is-size-7",
                               style: "flex:1; min-width:0; word-break:break-all;"}, shortkeys[this_key]],
-                    ["button", {class: "button is-small is-ghost", type: "button",
+                    ["button", {class: "SK_DEL button is-ghost", type: "button",
                                 title: t("remove shortkey"), "data-i18n-title": "remove shortkey"},
-                        [["span", {class: "icon is-small"}, [["span", {class: "yi-trash"}, ""]]]],
+                        [["span", {class: "icon"}, [["span", {class: "yi-trash"}, ""]]]],
                         {click: function() {
                             gobj_send_event(gobj, "EV_REMOVE_SHORTKEY",
                                 {key: this_key}, gobj);
@@ -467,10 +475,10 @@ function build_shortkeys(gobj)
 
     /*  Add form: key + command inputs. Enter in either, or the Add button,
      *  saves and re-renders (which clears the inputs).  */
-    let $key = ce(["input", {class: "input is-small is-family-monospace", type: "text",
+    let $key = ce(["input", {class: "SK_ADD_KEY input is-family-monospace", type: "text",
                              placeholder: "key", "aria-label": "key",
                              style: "max-width:7rem;"}]);
-    let $cmd = ce(["input", {class: "input is-small is-family-monospace", type: "text",
+    let $cmd = ce(["input", {class: "SK_ADD_CMD input is-family-monospace", type: "text",
                              placeholder: t("command template"), "aria-label": "command"}]);
 
     /*  The action reads the two inputs back from priv, so nothing but the
@@ -491,20 +499,20 @@ function build_shortkeys(gobj)
     $cmd.addEventListener("keydown", on_enter);
 
     /*  NORM clear (✕) on both free-text inputs — handy on mobile.  */
-    let $key_control = ce(["div", {class: "control"}, [$key]]);
-    let $cmd_control = ce(["div", {class: "control is-expanded"}, [$cmd]]);
+    let $key_control = ce(["div", {class: "SK_ADD_KEY_CONTROL control"}, [$key]]);
+    let $cmd_control = ce(["div", {class: "SK_ADD_CMD_CONTROL control is-expanded"}, [$cmd]]);
     attach_clear($key_control, $key);
     attach_clear($cmd_control, $cmd);
 
     let add_row = ce(
-        ["div", {class: "field has-addons", style: "margin-top:0.75rem;"},
+        ["div", {class: "SK_ADD_ROW field has-addons", style: "margin-top:0.75rem;"},
             [
                 $key_control,
                 $cmd_control,
-                ["div", {class: "control"},
-                    [["button", {class: "button is-small is-primary", type: "button"},
+                ["div", {class: "SK_ADD_CONTROL control"},
+                    [["button", {class: "SK_ADD button is-primary", type: "button"},
                         [
-                            ["span", {class: "icon is-small"}, [["span", {class: "yi-plus"}, ""]]],
+                            ["span", {class: "icon"}, [["span", {class: "yi-plus"}, ""]]],
                             ["span", {i18n: "add"}, "Add"]
                         ],
                         {click: do_add}]]
@@ -514,10 +522,11 @@ function build_shortkeys(gobj)
     );
 
     return ce(
-        ["div", {class: "box", style: "max-width:540px;"},
+        ["div", {class: "SK_BOX box", style: "max-width:540px;"},
             [
-                ["label", {class: "label", i18n: "shortkeys"}, "Shortkeys"],
-                ["p", {class: "help", style: "margin-bottom:0.75rem;", i18n: "shortkeys hint"},
+                ["label", {class: "SK_LABEL label", i18n: "shortkeys"}, "Shortkeys"],
+                ["p", {class: "SK_HINT help", style: "margin-bottom:0.75rem;",
+                       i18n: "shortkeys hint"},
                     "First token of a command; expands to the template with $1 $2 … as args. Shared by all nodes."],
                 ["div", {class: "SK_LIST"}, list_children],
                 add_row
@@ -548,20 +557,23 @@ function build_diagnostics(gobj)
 
     function row(label_key, label_text, value, value_attrs)
     {
-        return ["tr", {},
+        let td_attrs = Object.assign({class: "DIAG_VALUE"}, value_attrs || {});
+        return ["tr", {class: "DIAG_ROW"},
             [
-                ["th", {style: "white-space:nowrap; color:#5B6B7E; font-weight:600; width:14rem;",
+                ["th", {class: "DIAG_LABEL",
+                        style: "white-space:nowrap; color:#5B6B7E; font-weight:600; width:14rem;",
                         i18n: label_key}, label_text],
-                ["td", value_attrs || {}, String(value)]
+                ["td", td_attrs, String(value)]
             ]
         ];
     }
 
     let node_cell = node
-        ? ["td", {style: "font-family:monospace;"}, node]
-        : ["td", {i18n: "none"}, "None"];
+        ? ["td", {class: "DIAG_VALUE", style: "font-family:monospace;"}, node]
+        : ["td", {class: "DIAG_VALUE", i18n: "none"}, "None"];
 
     let conn_attrs = {
+        class: "DIAG_VALUE DIAG_CONNECTION",
         i18n: connected ? "connected" : "disconnected",
         style: `font-weight:600; color:${connected ? "#1FAE6F" : "#D64545"};`
     };
@@ -575,8 +587,9 @@ function build_diagnostics(gobj)
         row("control center", "Control center", dep.cc_url, {style: "font-family:monospace;"}),
         row("auth bff", "Auth BFF", dep.bff_url, {style: "font-family:monospace;"}),
         row("connected", connected ? "Connected" : "Disconnected", "", conn_attrs),
-        ["tr", {}, [
-            ["th", {style: "white-space:nowrap; color:#5B6B7E; font-weight:600; width:14rem;",
+        ["tr", {class: "DIAG_ROW"}, [
+            ["th", {class: "DIAG_LABEL",
+                    style: "white-space:nowrap; color:#5B6B7E; font-weight:600; width:14rem;",
                     i18n: "active node"}, "Active node"],
             node_cell
         ]],
@@ -584,11 +597,13 @@ function build_diagnostics(gobj)
             logged ? username : "", logged ? {} : {i18n: "logged out"})
     ];
 
-    return ["div", {class: "box"},
+    return ["div", {class: "DIAG_BOX box"},
         [
-            ["h2", {class: "title is-5", style: "margin-bottom:0.75rem;", i18n: "diagnostics"},
+            ["h2", {class: "DIAG_TITLE title is-5", style: "margin-bottom:0.75rem;",
+                    i18n: "diagnostics"},
                 "Diagnostics"],
-            ["table", {class: "table is-fullwidth is-narrow", style: "margin-bottom:0;"},
+            ["table", {class: "DIAG_TABLE table is-fullwidth is-narrow",
+                       style: "margin-bottom:0;"},
                 [["tbody", {}, rows]]
             ]
         ]
@@ -604,36 +619,41 @@ function build_about(gobj)
     let plane_label = (dep.plane === "agent22") ? "agent22" : "agents";
 
     return ce(
-        ["div", {class: "account-about", style: "max-width:640px;"},
+        ["div", {class: "ABOUT_PAGE account-about", style: "max-width:640px;"},
             [
                 page_header("about", "About", null, ""),
 
                 /*  Product header — logo + identity as a left-aligned
                  *  media object, same box width as the diagnostics below
                  *  so the two sections read as one page.  */
-                ["div", {class: "box"},
+                ["div", {class: "ABOUT_BOX box"},
                     [
-                        ["div", {style: "display:flex; gap:1rem; align-items:center;"},
+                        ["div", {class: "ABOUT_MEDIA",
+                                 style: "display:flex; gap:1rem; align-items:center;"},
                             [
                                 ["img", {
+                                    class: "ABOUT_MARK",
                                     src: "/agent-mark.svg",
                                     alt: "Agent Console",
                                     width: "60",
                                     height: "60",
                                     style: "flex:0 0 auto;"
                                 }, ""],
-                                ["div", {style: "flex:1 1 auto; min-width:0;"},
+                                ["div", {class: "ABOUT_IDENTITY",
+                                         style: "flex:1 1 auto; min-width:0;"},
                                     [
-                                        ["h2", {class: "title is-4", style: "margin-bottom:0.15rem;",
+                                        ["h2", {class: "ABOUT_NAME title is-4",
+                                                style: "margin-bottom:0.15rem;",
                                                 i18n: "agent console"}, "Agent Console"],
-                                        ["p", {class: "subtitle is-6",
+                                        ["p", {class: "ABOUT_VERSION subtitle is-6",
                                                style: "color:#5B6B7E; margin-bottom:0.6rem;"},
                                             `v${pkg.version || ""} · ${dep.tenant} · ${plane_label}`],
-                                        ["p", {style: "color:#5B6B7E; margin-bottom:0.75rem;",
+                                        ["p", {class: "ABOUT_DESCRIPTION",
+                                               style: "color:#5B6B7E; margin-bottom:0.75rem;",
                                                i18n: "about description"},
                                             "Browser console to operate Yuneta agents through the control center."],
                                         ["a", {
-                                            class: "button is-link is-light is-small",
+                                            class: "ABOUT_DOC button is-link is-light",
                                             href: "https://doc.yuneta.io",
                                             target: "_blank",
                                             rel: "noopener noreferrer"

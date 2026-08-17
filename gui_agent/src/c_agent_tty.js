@@ -159,7 +159,8 @@ function mt_create(gobj)
     }
 
     let $c = createElement2(
-        ["div", {class: "view-card C_AGENT_TTY", style: "display:flex; flex-direction:column; height:100%;"}, []]
+        ["div", {class: `${GCLASS_NAME} TTY_CARD view-card`,
+                 style: "display:flex; flex-direction:column; height:100%;"}, []]
     );
     gobj_write_attr(gobj, "$container", $c);
 }
@@ -421,40 +422,51 @@ function build_dom(gobj)
 
     let node = gobj_read_attr(gobj, "node") || "";
 
-    priv.$status = createElement2(["span", {class: "is-size-7 has-text-grey"}, ""]);
+    priv.$status = createElement2(
+        ["span", {class: "TTY_STATUS is-size-7 has-text-grey"}, ""]);
 
     /*  Font size A− / A+ (icon-only; a title carries the meaning on mobile).  */
     priv.$font_dec = createElement2(
-        ["button", {class: "button is-small", type: "button", style: "margin-left:auto;",
+        ["button", {class: "TTY_FONT_DEC button", type: "button", style: "margin-left:auto;",
                     title: t("font smaller"), "aria-label": t("font smaller"),
                     "data-i18n-title": "font smaller", "data-i18n-aria-label": "font smaller"},
-            ["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-minus"}]]],
+            ["span", {class: "icon"}, [["i", {class: "yi-magnifying-glass-minus"}]]],
             {click: () => gobj_send_event(gobj, "EV_FONT_SIZE", {delta: -1}, gobj)}]
     );
     priv.$font_inc = createElement2(
-        ["button", {class: "button is-small", type: "button",
+        ["button", {class: "TTY_FONT_INC button", type: "button",
                     title: t("font larger"), "aria-label": t("font larger"),
                     "data-i18n-title": "font larger", "data-i18n-aria-label": "font larger"},
-            ["span", {class: "icon is-small"}, [["i", {class: "yi-magnifying-glass-plus"}]]],
+            ["span", {class: "icon"}, [["i", {class: "yi-magnifying-glass-plus"}]]],
             {click: () => gobj_send_event(gobj, "EV_FONT_SIZE", {delta: +1}, gobj)}]
     );
 
     /*  Reconnect: icon + label; the label is hidden on mobile so the button
      *  stays legible (icon-only) on a narrow toolbar.  */
     priv.$reconnect = createElement2(
-        ["button", {class: "button is-small", type: "button",
+        ["button", {class: "TTY_RECONNECT button", type: "button",
                     title: t("reconnect"), "aria-label": t("reconnect"),
                     "data-i18n-title": "reconnect", "data-i18n-aria-label": "reconnect"},
             [
-                ["span", {class: "icon is-small"}, [["i", {class: "yi-arrows-rotate"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "reconnect"}, "Reconnect"]
             ],
             {click: () => gobj_send_event(gobj, "EV_RECONNECT", {}, gobj)}]
     );
 
+    /*  The node id is data (never translated); the empty state IS a string,
+     *  so only that one carries a key — an `i18n: ""` would hand
+     *  refresh_language an empty key to look up.  */
+    let $node_label = node
+        ? createElement2(["span", {class: "TTY_NODE is-family-monospace is-size-7 " +
+                                          "has-text-weight-semibold"}, node])
+        : createElement2(["span", {class: "TTY_NODE is-size-7 has-text-weight-semibold",
+                                   i18n: "select a node"}, t("select a node")]);
+
     priv.$toolbar = createElement2(
-        ["div", {class: "is-flex is-align-items-center mb-2", style: "gap:0.5rem;"}, [
-            ["span", {class: "is-family-monospace is-size-7 has-text-weight-semibold"}, node || t("select a node")],
+        ["div", {class: "TTY_TOOLBAR is-flex is-align-items-center mb-2",
+                 style: "gap:0.5rem;"}, [
+            $node_label,
             priv.$status,
             priv.$font_dec,
             priv.$font_inc,
@@ -506,9 +518,13 @@ function build_keybar(gobj)
             let content = (seq === "\r")
                 ? [["span", {style: "display:inline-block; transform:scale(1.5);"}, label]]
                 : label;
+            /*  is-small is DELIBERATE here, and the only place left in this
+             *  app: nine keys have to fit across a 360px phone, which is the
+             *  dense-grid exception to the default-size rule (a calendar cell
+             *  is the other one). The glyph is bumped back up below.  */
             let $b = createElement2(
                 ["button", {
-                    class: "button is-small is-family-monospace TTY_KEY",
+                    class: "TTY_KEY button is-small is-family-monospace",
                     type: "button", tabindex: "-1",
                     style: `flex:${grow} 1 0; min-width:2.1rem; padding-left:0.3rem; ` +
                            "padding-right:0.3rem; " + glyph,
@@ -533,7 +549,8 @@ function build_keybar(gobj)
             }
             return $b;
         });
-        return createElement2(["div", {class: "is-flex", style: "gap:0.25rem;"}, btns]);
+        return createElement2(
+            ["div", {class: "TTY_KEYBAR_ROW is-flex", style: "gap:0.25rem;"}, btns]);
     });
 
     priv.$keybar = createElement2(

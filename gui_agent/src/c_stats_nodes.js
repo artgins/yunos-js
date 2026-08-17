@@ -143,7 +143,8 @@ function mt_create(gobj)
     }
 
     let $c = createElement2(
-        ["div", {class: "view-card", style: "display:flex; flex-direction:column; height:100%;"}, []]
+        ["div", {class: `${GCLASS_NAME} STATNODES_CARD view-card`,
+                 style: "display:flex; flex-direction:column; height:100%;"}, []]
     );
     gobj_write_attr(gobj, "$container", $c);
 }
@@ -355,7 +356,7 @@ function build_dom(gobj)
     clear_node($c);
 
     let $input = createElement2(["input", {
-        class:        "input",
+        class:        "STATNODES_SEARCH input",
         type:         "text",
         placeholder:  t("search nodes"),
         "aria-label": t("search nodes"),
@@ -365,11 +366,13 @@ function build_dom(gobj)
     }]);
     priv.$input = $input;
 
-    let $count = createElement2(["span", {class: "is-size-7 has-text-grey"}, ""]);
+    let $count = createElement2(
+        ["span", {class: "STATNODES_COUNT is-size-7 has-text-grey"}, ""]);
     priv.$count = $count;
 
     let $search_control = createElement2(
-        ["div", {class: "control has-icons-left", style: "flex:0 1 22rem; min-width:0;"}, [
+        ["div", {class: "STATNODES_SEARCH_CONTROL control has-icons-left",
+                 style: "flex:0 1 22rem; min-width:0;"}, [
             $input,
             ["span", {class: "icon is-left"}, [
                 ["span", {class: "yi-magnifying-glass"}, ""]
@@ -383,7 +386,7 @@ function build_dom(gobj)
      *  "Actualizar" do not both fit at 360px in Spanish.  */
     let $copy = createElement2(
         ["button", {
-            class:        "STATS_COPY button",
+            class:        "STATNODES_COPY button",
             type:         "button",
             style:        "margin-left:auto;",
             title:        t("copy the rows shown as json"),
@@ -401,25 +404,27 @@ function build_dom(gobj)
     priv.$copy = $copy;
 
     priv.$toolbar = createElement2(
-        ["div", {class: "STATS_TOOLBAR is-flex is-align-items-center mb-2", style: "gap:0.5rem;"}, [
+        ["div", {class: "STATNODES_TOOLBAR is-flex is-align-items-center mb-2",
+                 style: "gap:0.5rem;"}, [
             $search_control,
             $count,
             $copy,
-            ["button", {class: "STATS_REFRESH button", type: "button", i18n: "refresh"},
+            ["button", {class: "STATNODES_REFRESH button", type: "button", i18n: "refresh"},
                 "Refresh", {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
         ]]
     );
     $c.appendChild(priv.$toolbar);
 
     priv.$tablewrap = createElement2(
-        ["div", {style: "flex:1; min-height:0;"}, [
-            ["div", {id: priv.table_id}, []]
+        ["div", {class: "STATNODES_TABLEWRAP", style: "flex:1; min-height:0;"}, [
+            ["div", {class: "STATNODES_TABLE", id: priv.table_id}, []]
         ]]
     );
     $c.appendChild(priv.$tablewrap);
 
     priv.$notif = createElement2(
-        ["div", {class: "notification is-light", style: "display:none;", i18n: "not connected to an agent"},
+        ["div", {class: "STATNODES_NOTICE notification is-light", style: "display:none;",
+                 i18n: "not connected to an agent"},
             "Not connected"]
     );
     $c.appendChild(priv.$notif);
@@ -453,10 +458,11 @@ function make_columns(gobj)
         let r = cell.getData();
         if(r._type === "yuno") {
             let sel = is_yuno_selected(gobj, r.node, r.yuno_id);
-            let cls = sel ? "has-text-weight-bold" : "";
-            return `<span class="${cls}">${esc(r.label)}</span>`;
+            let cls = sel ? " has-text-weight-bold" : "";
+            return `<span class="STATNODES_YUNO${cls}">${esc(r.label)}</span>`;
         }
-        return `<span class="has-text-weight-semibold">${esc(r.host)}</span>`;
+        return `<span class="STATNODES_NODE has-text-weight-semibold">` +
+            `${esc(r.host)}</span>`;
     }
 
     /*  Info: node -> "v<version> · <role>"; yuno -> running badge.  */
@@ -469,16 +475,18 @@ function make_columns(gobj)
              *  tab for it. Unknown (not probed, or the probe failed)
              *  keeps the running badge — silence is not a "no".  */
             if(has_no_treedb(gobj, r)) {
-                return `<span class="has-text-grey is-size-7">` +
+                return `<span class="STATNODES_INFO has-text-grey is-size-7">` +
                     `${esc(t("no treedb in this yuno"))}</span>`;
             }
             return r.running
-                ? `<span class="has-text-success is-size-7">${esc(t("running"))}</span>`
-                : `<span class="has-text-grey is-size-7">${esc(t("stopped"))}</span>`;
+                ? `<span class="STATNODES_INFO has-text-success is-size-7">` +
+                    `${esc(t("running"))}</span>`
+                : `<span class="STATNODES_INFO has-text-grey is-size-7">` +
+                    `${esc(t("stopped"))}</span>`;
         }
         let v = r.version ? `v${esc(r.version)}` : "";
         let role = r.role ? ` · ${esc(r.role)}` : "";
-        return `<span class="is-size-7 has-text-grey">${v}${role}</span>`;
+        return `<span class="STATNODES_INFO is-size-7 has-text-grey">${v}${role}</span>`;
     }
 
     /*  Checkbox: only yuno rows are selectable (a node is a container).  */
@@ -492,8 +500,8 @@ function make_columns(gobj)
         /*  Not selectable when it has nothing to open. Kept in the list
          *  (it IS a yuno of the node) but with the checkbox off.  */
         let disabled = (has_no_treedb(gobj, r) && !checked) ? " disabled" : "";
-        return `<input type="checkbox" class="node-sel"${checked}${disabled} ` +
-            `aria-label="open stats tab">`;
+        return `<input type="checkbox" class="STATNODES_SEL node-sel"` +
+            `${checked}${disabled} aria-label="open stats tab">`;
     }
 
     function sel_click(e, cell)
