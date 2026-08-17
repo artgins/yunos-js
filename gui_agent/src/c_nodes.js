@@ -46,6 +46,13 @@ import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
+    version_cmp,
+    version_gte,
+    node_id,
+    parse_agent_line,
+    esc,
+} from "./agent_helpers.js";
+import {
     agent_config_get_selected_nodes,
     agent_config_set_selected_nodes,
     agent_config_is_node_selected,
@@ -205,17 +212,6 @@ function clear_node($n)
 }
 
 /***************************************************************
- *  Minimal HTML escaping for values rendered as Tabulator
- *  formatter HTML (host/role/version/uuid come from the agent).
- ***************************************************************/
-function esc(s)
-{
-    return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => {
-        return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;"}[c];
-    });
-}
-
-/***************************************************************
  *  Ask the control center for the connected nodes.
  ***************************************************************/
 function request_agents(gobj)
@@ -227,77 +223,6 @@ function request_agents(gobj)
          *  not a service and cannot receive the inter-yuno reply).  */
         agent_link_command(link, "list-agents", {});
     }
-}
-
-/***************************************************************
- *  Parse one list-agents line:
- *  "UUID:<uuid> (<role>,<ver>),  HOSTNAME:'<host>'"
- ***************************************************************/
-function parse_agent_line(s)
-{
-    s = String(s || "");
-    let uuid = (/UUID:(\S+)/.exec(s) || [])[1] || "";
-    let rv   = /\(([^,]+),\s*([^)]+)\)/.exec(s);
-    let host = (/HOSTNAME:'([^']*)'/.exec(s) || [])[1] || "";
-    return {
-        uuid:    uuid,
-        role:    rv ? rv[1].trim() : "",
-        version: rv ? rv[2].trim() : "",
-        host:    host
-    };
-}
-
-/***************************************************************
- *  A node's id for selection/routing: host preferred, else uuid.
- ***************************************************************/
-function node_id(n)
-{
-    return (n && (n.host || n.uuid)) || "";
-}
-
-/***************************************************************
- *  Dotted-version compare: is a >= b? ("7.7.0" >= "7.7.0" -> true).
- *  Missing components count as 0; a missing/empty `b` accepts all.
- ***************************************************************/
-function version_tuple(v)
-{
-    return String(v || "").split(".").map((x) => parseInt(x, 10) || 0);
-}
-
-function version_gte(a, b)
-{
-    if(!b) {
-        return true;
-    }
-    let A = version_tuple(a);
-    let B = version_tuple(b);
-    let n = Math.max(A.length, B.length);
-    for(let i = 0; i < n; i++) {
-        let d = (A[i] || 0) - (B[i] || 0);
-        if(d !== 0) {
-            return d > 0;
-        }
-    }
-    return true;
-}
-
-/***************************************************************
- *  Tabulator column sorter: compare two dotted versions numerically
- *  (so 7.10.0 > 7.9.0, unlike a plain string sort). Returns the
- *  ascending delta; Tabulator flips it for a "desc" sort.
- ***************************************************************/
-function version_cmp(a, b)
-{
-    let A = version_tuple(a);
-    let B = version_tuple(b);
-    let n = Math.max(A.length, B.length);
-    for(let i = 0; i < n; i++) {
-        let d = (A[i] || 0) - (B[i] || 0);
-        if(d !== 0) {
-            return d;
-        }
-    }
-    return 0;
 }
 
 /***************************************************************

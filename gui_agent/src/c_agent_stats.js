@@ -51,6 +51,7 @@ import {t} from "i18next";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
+import {esc, fmt_value} from "./agent_helpers.js";
 import {
     agent_config_get_selected_nodes,
     agent_config_get_stats_refresh,
@@ -212,30 +213,6 @@ function clear_node($n)
     while($n && $n.firstChild) {
         $n.removeChild($n.firstChild);
     }
-}
-
-function esc(s)
-{
-    return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => {
-        return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;"}[c];
-    });
-}
-
-/***************************************************************
- *  Format a counter value. Integers get "." thousands grouping
- *  (fixed separator — NOT navigator.language, the crash landmine).
- ***************************************************************/
-function fmt_value(v)
-{
-    if(v === null || v === undefined) {
-        return "";
-    }
-    if(typeof v === "number" && Number.isInteger(v)) {
-        let neg = v < 0 ? "-" : "";
-        let s = String(Math.abs(v));
-        return neg + s.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-    }
-    return String(v);
 }
 
 /***************************************************************

@@ -53,6 +53,13 @@ import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
+    version_cmp,
+    version_gte,
+    node_id,
+    parse_agent_line,
+    esc,
+} from "./agent_helpers.js";
+import {
     agent_config_is_node_selected,
     agent_config_toggle_selected_node,
     stats_sel_id,
@@ -214,77 +221,6 @@ function clear_node($n)
     while($n && $n.firstChild) {
         $n.removeChild($n.firstChild);
     }
-}
-
-function esc(s)
-{
-    return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => {
-        return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;"}[c];
-    });
-}
-
-/***************************************************************
- *  Dotted-version compare helpers (shared shape with C_NODES).
- ***************************************************************/
-function version_tuple(v)
-{
-    return String(v || "").split(".").map((x) => parseInt(x, 10) || 0);
-}
-
-function version_gte(a, b)
-{
-    if(!b) {
-        return true;
-    }
-    let A = version_tuple(a);
-    let B = version_tuple(b);
-    let n = Math.max(A.length, B.length);
-    for(let i = 0; i < n; i++) {
-        let d = (A[i] || 0) - (B[i] || 0);
-        if(d !== 0) {
-            return d > 0;
-        }
-    }
-    return true;
-}
-
-function version_cmp(a, b)
-{
-    let A = version_tuple(a);
-    let B = version_tuple(b);
-    let n = Math.max(A.length, B.length);
-    for(let i = 0; i < n; i++) {
-        let d = (A[i] || 0) - (B[i] || 0);
-        if(d !== 0) {
-            return d;
-        }
-    }
-    return 0;
-}
-
-/***************************************************************
- *  A node's id: host preferred, else uuid.
- ***************************************************************/
-function node_id(n)
-{
-    return (n && (n.host || n.uuid)) || "";
-}
-
-/***************************************************************
- *  Parse one list-agents line into a node.
- ***************************************************************/
-function parse_agent_line(s)
-{
-    s = String(s || "");
-    let uuid = (/UUID:(\S+)/.exec(s) || [])[1] || "";
-    let rv   = /\(([^,]+),\s*([^)]+)\)/.exec(s);
-    let host = (/HOSTNAME:'([^']*)'/.exec(s) || [])[1] || "";
-    return {
-        uuid:    uuid,
-        role:    rv ? rv[1].trim() : "",
-        version: rv ? rv[2].trim() : "",
-        host:    host
-    };
 }
 
 /***************************************************************

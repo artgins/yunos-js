@@ -58,6 +58,11 @@ import {yui_copy_text, yui_copy_table_json} from "@yuneta/gobj-ui/src/yui_clipbo
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
+    split_args,
+    apply_shortkey,
+    normalize_history,
+} from "./agent_helpers.js";
+import {
     agent_config_get_display_mode,
     agent_config_get_history,
     agent_config_set_history,
@@ -551,39 +556,6 @@ function build_ui(gobj)
     document.addEventListener("click", priv.doc_click);
 
     refresh_language($c, t);
-}
-
-/***************************************************************
- *  Normalize a persisted history into deduped entries
- *  {cmd, count, last}, most-recently-used first. Accepts the legacy
- *  format (plain strings, repetitions allowed): duplicates collapse
- *  into one entry whose count is the number of occurrences, and the
- *  original order is preserved via synthetic descending `last`.
- ***************************************************************/
-function normalize_history(list)
-{
-    let entries = [];
-    let index = {};
-    let now = Date.now();
-    for(let it of (Array.isArray(list) ? list : [])) {
-        let is_entry = it && typeof it === "object";
-        let cmd = is_entry ? it.cmd : it;
-        if(typeof cmd !== "string" || !cmd) {
-            continue;
-        }
-        let count = (is_entry && it.count > 0) ? it.count : 1;
-        if(Object.prototype.hasOwnProperty.call(index, cmd)) {
-            entries[index[cmd]].count += count;
-            continue;
-        }
-        index[cmd] = entries.length;
-        entries.push({
-            cmd:   cmd,
-            count: count,
-            last:  (is_entry && it.last > 0) ? it.last : now - entries.length
-        });
-    }
-    return entries;
 }
 
 /***************************************************************
@@ -1803,48 +1775,6 @@ function destroy_table(gobj)
 }
 
 /***************************************************************
- *  Split a command line into tokens, shell-style: whitespace
- *  separates, single/double quotes are removable delimiters that
- *  may appear anywhere in a token (so `command="a b"` is ONE token
- *  `command=a b`). Used to pick the shortkey / its positional args
- *  and to parse the local shortkey-management commands.
- ***************************************************************/
-function split_args(s)
-{
-    let tokens = [];
-    let cur = "";
-    let has = false;      /*  saw a char (even in empty quotes) → emit a token  */
-    let quote = null;
-    for(let i = 0; i < s.length; i++) {
-        let ch = s[i];
-        if(quote) {
-            if(ch === quote) {
-                quote = null;
-            } else {
-                cur += ch;
-            }
-            has = true;
-        } else if(ch === "\"" || ch === "'") {
-            quote = ch;
-            has = true;
-        } else if(ch === " " || ch === "\t") {
-            if(has) {
-                tokens.push(cur);
-                cur = "";
-                has = false;
-            }
-        } else {
-            cur += ch;
-            has = true;
-        }
-    }
-    if(has) {
-        tokens.push(cur);
-    }
-    return tokens;
-}
-
-/***************************************************************
  *  Parse `k=v` tokens (already quote-resolved by split_args) into a
  *  plain object. Tokens without '=' are ignored. First token (the
  *  command name) is expected to be sliced off by the caller.
@@ -1931,25 +1861,7 @@ function handle_local_command(gobj, cmd)
 function expand_shortkey(gobj, cmd)
 {
     let config = gobj_read_attr(gobj, "config_svc");
-    let shortkeys = config ? agent_config_get_shortkeys(config) : null;
-    if(!shortkeys) {
-        return cmd;
-    }
-    let tokens = split_args(cmd);
-    if(tokens.length === 0) {
-        return cmd;
-    }
-    let key = tokens[0];
-    if(!Object.prototype.hasOwnProperty.call(shortkeys, key)) {
-        return cmd;
-    }
-    let out = shortkeys[key];
-    let args = tokens.slice(1);
-    /*  Replace $N high-to-low so $1 never clobbers $10, $11, …  */
-    for(let i = args.length; i >= 1; i--) {
-        out = out.split("$" + i).join(args[i - 1]);
-    }
-    return out;
+    return apply_shortkey(config ? agent_config_get_shortkeys(config) : null, cmd);
 }
 
 /***************************************************************

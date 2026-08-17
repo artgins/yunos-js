@@ -283,7 +283,14 @@ cd yunos/js/gui_agent
 npm install
 npm run dev        # vite dev server
 npm run build      # production bundle into dist/
+npm test           # unit tests of src/agent_helpers.js (vitest)
+npm run qa         # drive the DEPLOYED plane in a real browser
 ```
+
+`npm test` covers the data-in/data-out half of the app — versions, the
+`list-agents` parser, the quote-aware command splitter, shortkey expansion, the
+command history. Everything that needs a yuno, a shell and a backend is
+`scripts/qa.mjs`'s job instead.
 
 ## Roadmap
 
@@ -336,6 +343,25 @@ This yuno is JavaScript and deploys independently of the SDK (see
 `deploy-com.sh`). The per-release detail lives in this repo's own
 `CHANGELOG.md` (repo root); this section keeps the durable, feature-level
 summary.
+
+### 0.7.0
+
+- **Every action crosses the FSM.** Executing a command, the whole Preferences
+  page, the Terminal key bar and the Statistics toolbar used to do their work in
+  DOM closures, invisible to the `machine` trace. See *Every action crosses the
+  FSM* above for the contract, including its two commented exceptions.
+- **The Statistics auto-refresh is a periodic `C_TIMER`**, so its tick is
+  `EV_TIMEOUT_PERIODIC` and the `timer_periodic` trace level silences it;
+  deferrals are posted events (`gobj_post_event`), not `setTimeout(…, 0)`.
+- **The DOM names itself**: a logical `UPPER_SNAKE` class on every meaningful
+  block, one prefix per view (see *Logical DOM names*), and `is-small` gone from
+  every button except the mobile key bar.
+- **The login screen is static** — no drifting orbs, no rotating spark, no
+  fade-in, no transitions.
+- **First unit tests** (`npm test`, 43 of them) over the new
+  `src/agent_helpers.js`, which also de-duplicated nine functions that had been
+  copied between the views.
+- Removed: `src/c_gui_agent_view.js`, a Phase-0 placeholder view no route used.
 
 ### 0.6.0
 

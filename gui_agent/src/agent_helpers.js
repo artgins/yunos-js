@@ -1,0 +1,297 @@
+/***********************************************************************
+ *          agent_helpers.js
+ *
+ *      The logic of this console that is DATA IN, DATA OUT: no gobj, no
+ *      DOM, no i18next, no imports at all. Two reasons it lives here
+ *      instead of inside the views.
+ *
+ *      1. It is the part that can be TESTED. Everything else in this app
+ *         needs a running yuno, a shell and a backend answering over a
+ *         websocket, which is what `scripts/qa.mjs` is for; these are
+ *         plain functions with edge cases, and edge cases are what a unit
+ *         test is good at (see agent_helpers.test.js). Same split
+ *         gui_treedb made with `tranger_helpers.js`.
+ *
+ *      2. Five of them were DUPLICATED verbatim between the two node
+ *         pickers (`version_tuple` / `version_gte` / `version_cmp` /
+ *         `node_id` / `parse_agent_line`) and `esc` sat in three files.
+ *         Identical copies today, and the kind of thing that quietly
+ *         diverges the first time one of them is fixed.
+ *
+ *      What deliberately did NOT move here: anything reading a gobj attr
+ *      or touching the DOM. `expand_shortkey` stays in the console
+ *      because it reads the shortkey dict off the config service; what
+ *      moved is its pure half, `apply_shortkey(shortkeys, cmd)`.
+ *
+ *          Copyright (c) 2026, ArtGins.
+ *          All Rights Reserved.
+ ***********************************************************************/
+
+
+                    /***************************
+                     *      Versions
+                     ***************************/
+
+
+/***************************************************************
+ *  A dotted version as numbers. Missing or non-numeric components
+ *  count as 0, so "7.7" and "7.7.0" compare equal and a stray
+ *  "7.x.1" does not throw.
+ ***************************************************************/
+function version_tuple(v)
+{
+    return String(v || "").split(".").map((x) => parseInt(x, 10) || 0);
+}
+
+/***************************************************************
+ *  Is a >= b? ("7.7.0" >= "7.7.0" -> true). An empty `b` accepts
+ *  everything, which is how the Terminal workspace lists nodes of
+ *  every agent version while Commands/Statistics/Schemas ask for
+ *  7.7.0 (the marker of controlcenter command/stats forwarding).
+ ***************************************************************/
+function version_gte(a, b)
+{
+    if(!b) {
+        return true;
+    }
+    let A = version_tuple(a);
+    let B = version_tuple(b);
+    let n = Math.max(A.length, B.length);
+    for(let i = 0; i < n; i++) {
+        let d = (A[i] || 0) - (B[i] || 0);
+        if(d !== 0) {
+            return d > 0;
+        }
+    }
+    return true;
+}
+
+/***************************************************************
+ *  Tabulator column sorter: compare two dotted versions NUMERICALLY,
+ *  so 7.10.0 sorts above 7.9.0 — which a plain string sort gets
+ *  backwards. Returns the ascending delta; Tabulator flips it for a
+ *  "desc" sort.
+ ***************************************************************/
+function version_cmp(a, b)
+{
+    let A = version_tuple(a);
+    let B = version_tuple(b);
+    let n = Math.max(A.length, B.length);
+    for(let i = 0; i < n; i++) {
+        let d = (A[i] || 0) - (B[i] || 0);
+        if(d !== 0) {
+            return d;
+        }
+    }
+    return 0;
+}
+
+
+                    /***************************
+                     *      Nodes
+                     ***************************/
+
+
+/***************************************************************
+ *  A node's id for selection and routing: the hostname when the
+ *  agent reports one, else its uuid.
+ ***************************************************************/
+function node_id(n)
+{
+    return (n && (n.host || n.uuid)) || "";
+}
+
+/***************************************************************
+ *  One `list-agents` line into a node record. The agent answers
+ *  free text, e.g.
+ *
+ *      Yuneta agent (yuneta_agent, 7.12.0) UUID:abc-123 HOSTNAME:'nitro'
+ *
+ *  so this is four regexes and no assumptions: a field that is not
+ *  there comes back as "" rather than undefined, because these values
+ *  reach Tabulator cells and a `undefined` renders as the word.
+ ***************************************************************/
+function parse_agent_line(s)
+{
+    s = String(s || "");
+    let uuid = (/UUID:(\S+)/.exec(s) || [])[1] || "";
+    let rv   = /\(([^,]+),\s*([^)]+)\)/.exec(s);
+    let host = (/HOSTNAME:'([^']*)'/.exec(s) || [])[1] || "";
+    return {
+        uuid:    uuid,
+        role:    rv ? rv[1].trim() : "",
+        version: rv ? rv[2].trim() : "",
+        host:    host
+    };
+}
+
+
+                    /***************************
+                     *      Rendering
+                     ***************************/
+
+
+/***************************************************************
+ *  HTML-escape a value that goes into a formatter's markup string.
+ *  Tabulator formatters and the stats cards build HTML by hand, and
+ *  every string in them comes from an agent — a role, a hostname, a
+ *  counter name — so it gets escaped.
+ ***************************************************************/
+function esc(s)
+{
+    return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => {
+        return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;"}[c];
+    });
+}
+
+/***************************************************************
+ *  Format a counter. Integers get "." thousands grouping with a
+ *  FIXED separator, never `Intl` + `navigator.language`: a browser
+ *  reporting a non-standard language throws `RangeError: invalid
+ *  language tag` there, and Playwright's firefox reports the literal
+ *  string "undefined" (which is how this app learned).
+ ***************************************************************/
+function fmt_value(v)
+{
+    if(v === null || v === undefined) {
+        return "";
+    }
+    if(typeof v === "number" && Number.isInteger(v)) {
+        let neg = v < 0 ? "-" : "";
+        let s = String(Math.abs(v));
+        return neg + s.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    }
+    return String(v);
+}
+
+
+                    /***************************
+                     *      Console commands
+                     ***************************/
+
+
+/***************************************************************
+ *  Split a command line into tokens, quote-aware ('…' and "…"),
+ *  the way ycli does it. Empty quotes ARE a token — `error ""`
+ *  passes an empty argument on purpose — which is what `has`
+ *  tracks: a token is emitted because something was seen, not
+ *  because characters accumulated.
+ ***************************************************************/
+function split_args(s)
+{
+    let tokens = [];
+    let cur = "";
+    let has = false;      /*  saw a char (even in empty quotes) → emit a token  */
+    let quote = null;
+    for(let i = 0; i < String(s || "").length; i++) {
+        let ch = s[i];
+        if(quote) {
+            if(ch === quote) {
+                quote = null;
+            } else {
+                cur += ch;
+            }
+            has = true;
+        } else if(ch === "\"" || ch === "'") {
+            quote = ch;
+            has = true;
+        } else if(ch === " " || ch === "\t") {
+            if(has) {
+                tokens.push(cur);
+                cur = "";
+                has = false;
+            }
+        } else {
+            cur += ch;
+            has = true;
+        }
+    }
+    if(has) {
+        tokens.push(cur);
+    }
+    return tokens;
+}
+
+/***************************************************************
+ *  ycli's shortkeys: the FIRST token of a command is looked up in a
+ *  {key: template} dict, and a hit expands to the template with
+ *  `$1 $2 …` replaced by the following positional args.
+ *
+ *  The substitution runs HIGH TO LOW on purpose: replacing $1 first
+ *  would eat the "$1" inside "$10" and leave a stray "0".
+ *
+ *  No match (or no dict) returns the command untouched — a shortkey
+ *  manager must never swallow what the operator typed.
+ ***************************************************************/
+function apply_shortkey(shortkeys, cmd)
+{
+    if(!shortkeys || typeof shortkeys !== "object") {
+        return cmd;
+    }
+    let tokens = split_args(cmd);
+    if(tokens.length === 0) {
+        return cmd;
+    }
+    let key = tokens[0];
+    if(!Object.prototype.hasOwnProperty.call(shortkeys, key)) {
+        return cmd;
+    }
+    let out = shortkeys[key];
+    let args = tokens.slice(1);
+    for(let i = args.length; i >= 1; i--) {
+        out = out.split("$" + i).join(args[i - 1]);
+    }
+    return out;
+}
+
+/***************************************************************
+ *  Normalize a persisted command history into deduped entries
+ *  `{cmd, count, last}`, most-recently-used first.
+ *
+ *  It accepts the LEGACY format too — a plain array of strings with
+ *  repetitions — because a browser that used an older build still
+ *  holds one: duplicates collapse into a single entry whose `count`
+ *  is the number of occurrences, and the original order survives via
+ *  a synthetic descending `last`.
+ *
+ *  `now` is a parameter so a test can pin it; callers omit it.
+ ***************************************************************/
+function normalize_history(list, now)
+{
+    let entries = [];
+    let index = {};
+    let stamp = (now === undefined) ? Date.now() : now;
+    for(let it of (Array.isArray(list) ? list : [])) {
+        let is_entry = it && typeof it === "object";
+        let cmd = is_entry ? it.cmd : it;
+        if(typeof cmd !== "string" || !cmd) {
+            continue;
+        }
+        let count = (is_entry && it.count > 0) ? it.count : 1;
+        if(Object.prototype.hasOwnProperty.call(index, cmd)) {
+            entries[index[cmd]].count += count;
+            continue;
+        }
+        index[cmd] = entries.length;
+        entries.push({
+            cmd:   cmd,
+            count: count,
+            last:  (is_entry && it.last > 0) ? it.last : stamp - entries.length
+        });
+    }
+    return entries;
+}
+
+
+export {
+    version_tuple,
+    version_gte,
+    version_cmp,
+    node_id,
+    parse_agent_line,
+    esc,
+    fmt_value,
+    split_args,
+    apply_shortkey,
+    normalize_history,
+};

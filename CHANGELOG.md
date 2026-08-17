@@ -19,9 +19,45 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
-## Unreleased
+## 0.7.0 — 2026-08-17
 
 ### gui_agent
+
+- **The first unit tests of this SPA, and nine functions that were copied
+    around.** `vitest` sat in devDependencies with no `test` script and no test
+    file. What is testable without a yuno, a shell and a backend is the
+    data-in/data-out half, so it now lives in `src/agent_helpers.js` with
+    `src/agent_helpers.test.js` over it — the same split gui_treedb made with
+    `tranger_helpers.js`. **43 tests**, `npm test`.
+
+    The extraction paid for itself twice: **five** of those functions were
+    duplicated verbatim between the two node pickers (`version_tuple` /
+    `version_gte` / `version_cmp` / `node_id` / `parse_agent_line`), `esc` sat
+    in three files and `clear_node` in four. Identical copies today, which is
+    what a pair of files looks like right before one of them gets fixed alone.
+
+    What the tests pin is the edge cases, because that is where these
+    functions earn their keep — they exist to survive input the app does not
+    control: `7.10.0 > 7.9.0` (the reason the version column is not a string
+    sort, asserted next to what a string sort would have said), a
+    `list-agents` line missing half its fields answering `""` and never
+    `undefined` (which Tabulator renders as the word), `error ""` passing an
+    empty argument through the quote-aware splitter, a legacy plain-string
+    command history collapsing into `{cmd, count, last}` without losing its
+    order, and `$1` not eating the `1` of `$10`.
+
+    That last one is worth the paragraph: the suite passed on the first run,
+    which is never a good sign, so I mutated the three functions the tests
+    claim to protect. Two mutations were caught. The `$1`/`$10` one was NOT —
+    the test used `a1…a11` as values, and replacing `$1` first turns `$10`
+    into `a10`, which is accidentally the right answer. The test now uses
+    values that do not look like their own index, and fails against the
+    broken order.
+
+    Deliberately NOT extracted: anything that reads a gobj attr or touches
+    the DOM. `expand_shortkey` stays in the console because it reads the
+    shortkey dict off the config service; what moved is its pure half,
+    `apply_shortkey(shortkeys, cmd)`.
 
 - **The login screen stops moving, and a dead view is gone.** `login.css` was
     the last place in the app with animation: two ambient orbs drifting on a 22 s
