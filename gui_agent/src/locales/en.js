@@ -176,6 +176,7 @@ const en = {
         "applying": "Applying…",
         "pending changes": "Pending changes",
         "no treedb in this yuno": "This yuno exposes no treedb",
+        "no yuno with a treedb": "No yuno with a treedb",
         "topics":            "Topics",
         "no topics":         "No topics",
         "schema":            "Schema",

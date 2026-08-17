@@ -248,7 +248,32 @@ function build_tree(gobj)
         let loaded = priv.yunos[id];
         if(Array.isArray(loaded)) {
             for(let y of loaded) {
+                /*  Schemas: a yuno with no treedb leads NOWHERE in this
+                 *  workspace, so it is not in the list at all — it used to be
+                 *  listed with its checkbox off, which is a row that exists
+                 *  only to be refused.
+                 *
+                 *  Only a KNOWN "none" is dropped. A probe still in flight or
+                 *  one that failed (no permission, dropped link) keeps its
+                 *  row, because "could not ask" is not "has none" — the same
+                 *  rule the status column has always followed. And a yuno
+                 *  that is already SELECTED stays visible whatever the probe
+                 *  says: it has an open tab, and a tab whose row vanished
+                 *  from the picker cannot be unchecked.  */
+                if(has_no_treedb(gobj, y) && !is_yuno_selected(gobj, y.node, y.yuno_id)) {
+                    continue;
+                }
                 children.push(y);
+            }
+            if(children.length === 0 && loaded.length > 0) {
+                /*  Every yuno of this node was filtered out. An expander that
+                 *  opens into nothing reads as a bug; one grey line reads as
+                 *  an answer.  */
+                children.push({
+                    _key:  id + "\u001Fnone",
+                    _type: "empty",
+                    node:  id
+                });
             }
         }
         tree.push({
@@ -397,6 +422,10 @@ function make_columns(gobj)
             let cls = sel ? " has-text-weight-bold" : "";
             return `<span class="STATNODES_YUNO${cls}">${esc(r.label)}</span>`;
         }
+        if(r._type === "empty") {
+            return `<span class="STATNODES_EMPTY has-text-grey is-size-7">` +
+                `${esc(t("no yuno with a treedb"))}</span>`;
+        }
         return `<span class="STATNODES_NODE has-text-weight-semibold">` +
             `${esc(r.host)}</span>`;
     }
@@ -419,6 +448,9 @@ function make_columns(gobj)
                     `${esc(t("running"))}</span>`
                 : `<span class="STATNODES_INFO has-text-grey is-size-7">` +
                     `${esc(t("stopped"))}</span>`;
+        }
+        if(r._type === "empty") {
+            return "";
         }
         let v = r.version ? `v${esc(r.version)}` : "";
         let role = r.role ? ` · ${esc(r.role)}` : "";
@@ -712,8 +744,22 @@ function set_yuno_treedbs(gobj, node, yuno_id, data, result)
     if(Array.isArray(data)) {
         count = data.filter((sv) => sv && sv.gclass === "C_NODE").length;
     }
+    let had = priv.treedbs[key];
     priv.treedbs[key] = (count > 0);
-    refresh_active(gobj);
+
+    /*  A yuno the probe just answered "no treedb" for LEAVES the list in this
+     *  workspace (build_tree drops it), and dropping a row is a data change:
+     *  refresh_active() only re-runs the formatters of rows that are already
+     *  there, which is why the row used to stay, greyed, saying so. Rebuild
+     *  instead — the posted EV_RENDER_TREE collapses the flurry of per-yuno
+     *  answers into ONE setData.  */
+    if(count === 0 && gobj_read_bool_attr(gobj, "with_treedb_check")) {
+        schedule_render(gobj);
+        return;
+    }
+    if(had !== priv.treedbs[key]) {
+        refresh_active(gobj);
+    }
 }
 
 
@@ -751,7 +797,32 @@ function ac_render_tree(gobj, event, kw, src)
     let tree = build_tree(gobj);
     if(table) {
         if(table._ready) {
-            table.setData(tree);
+            /*  setData RESETS the tree: `dataTreeStartExpanded: false` means
+             *  every node comes back collapsed, so a rebuild would close the
+             *  node the operator has open — and this workspace rebuilds
+             *  precisely while they are looking at it (a yuno leaves the list
+             *  when its probe answers "no treedb"). Remember what was open
+             *  and re-open it.
+             *
+             *  Re-expanding fires `dataTreeRowExpanded` again, which is
+             *  harmless: probe_node_treedbs() is idempotent per yuno.  */
+            let open = {};
+            table.getRows().forEach(function(row) {
+                let d = row.getData();
+                if(d && d._key && row.isTreeExpanded && row.isTreeExpanded()) {
+                    open[d._key] = true;
+                }
+            });
+            Promise.resolve(table.setData(tree)).then(function() {
+                table.getRows().forEach(function(row) {
+                    let d = row.getData();
+                    if(d && open[d._key] && row.treeExpand) {
+                        row.treeExpand();
+                    }
+                });
+            }).catch(function(err) {
+                log_error(`${gobj_short_name(gobj)}: setData failed: ${err && err.message}`);
+            });
         } else {
             table._pendingData = tree;
         }

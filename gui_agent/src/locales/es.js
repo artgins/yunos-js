@@ -180,6 +180,7 @@ const es = {
         "applying": "Aplicando…",
         "pending changes": "Cambios sin aplicar",
         "no treedb in this yuno": "Este yuno no expone ningún treedb",
+        "no yuno with a treedb": "Ningún yuno con treedb",
         "topics":            "Topics",
         "no topics":         "Sin topics",
         "schema":            "Esquema",

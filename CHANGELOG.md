@@ -19,6 +19,37 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## Unreleased
+
+### gui_agent
+
+- **The Schemas picker lists only yunos that HAVE a treedb.** They used to be
+    listed with the checkbox off and *"this yuno exposes no treedb"* in the
+    status column — a row whose only purpose was to be refused. In this
+    workspace such a yuno leads nowhere, so it is not in the list.
+
+    Two rules survive the change. A **known** "none" is what gets dropped: a
+    probe in flight or one that failed (no permission, dropped link) keeps its
+    row, because "could not ask" is not "has none". And a yuno that is already
+    **selected** stays visible whatever the probe says — it has an open tab, and
+    a tab whose row vanished from the picker could not be unchecked. The status
+    text stays for that case. A node whose every yuno was filtered out shows one
+    grey line, *"no yuno with a treedb"*, instead of an expander that opens into
+    nothing.
+
+    It took two bugs to actually work, both worth knowing:
+
+    - `set_yuno_treedbs()` answered a probe with `refresh_active()`, which only
+      re-runs the FORMATTERS of the rows already on screen. Dropping a row is a
+      data change, so the row stayed, greyed, saying it had no treedb. It now
+      rebuilds (the posted `EV_RENDER_TREE`, which collapses the flurry of
+      per-yuno answers into one `setData`).
+    - and that rebuild **closed the node the operator had open**: Tabulator's
+      `setData` resets the tree and `dataTreeStartExpanded` is false. Since this
+      workspace now rebuilds precisely while someone is looking at an expanded
+      node, `ac_render_tree` remembers which nodes are open and re-expands them
+      after the data lands.
+
 ## 0.7.0 — 2026-08-17
 
 ### gui_agent
