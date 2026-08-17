@@ -25,6 +25,7 @@ const en = {
         "install": "Install",
         "not now": "Not now",
         "loading": "Loading",
+        "treedb editor failed": "The schema editor could not be loaded",
         "page size": "Page Size",
         "show page": "Show Page",
         "first": "First",

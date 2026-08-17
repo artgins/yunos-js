@@ -52,14 +52,7 @@ import {register_c_yui_nav}    from "@yuneta/gobj-ui/src/c_yui_nav.js";
 import {register_c_yui_node}   from "@yuneta/gobj-ui/src/c_yui_node.js";
 import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
 import {register_c_yui_window_manager} from "@yuneta/gobj-ui/src/c_yui_window_manager.js";
-import {register_c_yui_gobj_tree_js} from "@yuneta/gobj-ui/src/c_yui_gobj_tree_js.js";
 import {register_c_yui_json}   from "@yuneta/gobj-ui/src/c_yui_json.js";
-
-/*  TreeDB editor (Schemas workspace): the topics view, the per-topic
- *  table+form it builds, and the schema graph its landing toggles to.  */
-import {register_c_yui_treedb_topics}          from "@yuneta/gobj-ui/src/c_yui_treedb_topics.js";
-import {register_c_yui_treedb_topic_with_form} from "@yuneta/gobj-ui/src/c_yui_treedb_topic_with_form.js";
-import {register_c_yui_treedb_schema}          from "@yuneta/gobj-ui/src/c_yui_treedb_schema.js";
 
 import {register_c_app} from "./c_app.js";
 import {register_c_account_view} from "./c_account_view.js";
@@ -128,15 +121,13 @@ function main()
     register_c_yui_node();
     register_c_yui_window();     // legacy window host for the developer panel
     register_c_yui_window_manager(); // dock/taskbar for windows (Developer monitor)
-    register_c_yui_gobj_tree_js();   // gobj tree of this yuno (Frontend view window)
     register_c_yui_json();           // lazy JSON tree viewer (console answers)
 
-    /*  TreeDB editor of the Schemas workspace. C_YUI_TREEDB_TOPICS builds a
-     *  C_YUI_TREEDB_TOPIC_WITH_FORM per topic (which registers C_YUI_FORM
-     *  itself) and a C_YUI_TREEDB_SCHEMA for its schema-graph landing.  */
-    register_c_yui_treedb_topics();
-    register_c_yui_treedb_topic_with_form();
-    register_c_yui_treedb_schema();
+    /*  NOT registered here: the treedb editor of the Schemas workspace, the
+     *  Frontend-view window and xterm. They carry vanilla-jsoneditor,
+     *  @antv/g6 and @xterm — 60% of what this bundle used to download to
+     *  show a node list — so each loads with the thing that needs it
+     *  (src/lazy_modules.js).  */
 
     /*  App root + config + login + link services + views  */
     register_c_app();

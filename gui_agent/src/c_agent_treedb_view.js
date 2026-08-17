@@ -47,10 +47,13 @@ import {
     empty_string,
 } from "@yuneta/gobj-js";
 
+import {t} from "i18next";
+
 import {yui_mount_service_view} from "@yuneta/gobj-ui/src/c_yui_service_view.js";
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {agent_link_is_connected} from "./c_agent_link.js";
+import {treedb_editor_ready, load_treedb_editor} from "./lazy_modules.js";
 
 
 /***************************************************************
@@ -271,6 +274,24 @@ function build_adapter(gobj)
 }
 
 /***************************************************************
+ *  The editor chunk settled. Mount on success; on failure the line
+ *  says what happened and stays — reopening the tab retries, because
+ *  the loader dropped its promise.
+ ***************************************************************/
+function ac_editor_ready(gobj, event, kw, src)
+{
+    if(!(kw && kw.ok)) {
+        let priv = gobj.priv;
+        if(priv.$loading) {
+            priv.$loading.textContent = t("treedb editor failed");
+            priv.$loading.setAttribute("data-i18n", "treedb editor failed");
+        }
+        return 0;   /*  Error already logged by the loader  */
+    }
+    return mount_view(gobj);
+}
+
+/***************************************************************
  *  Mount the library view on this treedb. It fetches its schema in
  *  mt_start, so this runs once: another treedb is another NODE of
  *  the tree, with its own view.
@@ -286,6 +307,20 @@ function mount_view(gobj)
         log_error(`${gobj_short_name(gobj)}: mounted without a treedb name`);
         return -1;
     }
+
+    /*  C_YUI_TREEDB_TOPICS is not in the initial bundle: the Schemas tab
+     *  started its chunk when it was created (lazy_modules.js), and on a
+     *  fast link it is already here. When it is not, say so and mount from
+     *  the ACTION that the resolved import fires — a promise settling is an
+     *  OS notification, so it enters the machine as an event.  */
+    if(!treedb_editor_ready()) {
+        show_loading(gobj);
+        load_treedb_editor().then(function(ok) {
+            gobj_send_event(gobj, "EV_EDITOR_READY", {ok: !!ok}, gobj);
+        });
+        return 0;
+    }
+    clear_loading(gobj);
     if(!priv.adapter && build_adapter(gobj) < 0) {
         return -1;      /*  Error already logged  */
     }
@@ -339,6 +374,34 @@ function mount_view(gobj)
     }
     notify_view_transport(gobj, agent_link_is_connected(priv.link));
     return 0;
+}
+
+/***************************************************************
+ *  While the editor chunk is on the wire. One line, in the body the
+ *  view already owns, replaced by the mounted view.
+ ***************************************************************/
+function show_loading(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.$body || priv.$loading) {
+        return;
+    }
+    priv.$loading = createElement2(
+        ["p", {class: "TREEDB_VIEW_LOADING p-4 has-text-grey", i18n: "loading"},
+            t("loading")]
+    );
+    priv.$body.appendChild(priv.$loading);
+}
+
+function clear_loading(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.$loading) {
+        if(priv.$loading.parentNode) {
+            priv.$loading.parentNode.removeChild(priv.$loading);
+        }
+        priv.$loading = null;
+    }
 }
 
 /***************************************************************
@@ -532,7 +595,8 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_ROUTE_CHANGED",        ac_route_changed,     null],
             ["EV_TOPIC_SELECTED",       ac_topic_selected,    null],
-            ["EV_RECORD_WRITTEN",       ac_record_written,    null]
+            ["EV_RECORD_WRITTEN",       ac_record_written,    null],
+            ["EV_EDITOR_READY",         ac_editor_ready,      null]
         ]]
     ];
 
@@ -544,7 +608,8 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",          0],
         ["EV_ROUTE_CHANGED",     0],
         ["EV_TOPIC_SELECTED",    0],
-        ["EV_RECORD_WRITTEN",    0]
+        ["EV_RECORD_WRITTEN",    0],
+        ["EV_EDITOR_READY",      0]
     ];
 
     __gclass__ = gclass_create(

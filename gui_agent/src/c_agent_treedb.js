@@ -92,6 +92,7 @@ import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.
 import {yui_shell_show_modal, yui_shell_show_error} from "@yuneta/gobj-ui/src/shell_modals.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
+import {load_treedb_editor} from "./lazy_modules.js";
 import {agent_config_get_nav_mode} from "./c_agent_config.js";
 
 
@@ -190,6 +191,14 @@ function mt_create(gobj)
     if(config) {
         gobj_subscribe_event(config, "EV_NAV_MODE_CHANGED", {}, gobj);
     }
+
+    /*  The treedb editor is not in the initial bundle (it carries @antv/g6
+     *  and vanilla-jsoneditor — see src/lazy_modules.js). Start it HERE, so
+     *  the chunk downloads while the node answers the `services` discovery
+     *  below: by the time a treedb node mounts its view, it is there. The
+     *  view gates on it anyway, because "usually in time" is not a
+     *  guarantee.  */
+    load_treedb_editor();
 
     build_ui(gobj);
 }

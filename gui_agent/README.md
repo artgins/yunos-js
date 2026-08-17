@@ -283,7 +283,40 @@ cd yunos/js/gui_agent
 npm install
 npm run dev        # vite dev server
 npm run build      # production bundle into dist/
+npm run qa         # drive the DEPLOYED plane in a real browser
 ```
+
+### What loads when
+
+The first screen of this console is a node list, so the entry chunk carries
+that and nothing more: **~227 kB gzipped** (plus ~89 kB of CSS), where a single
+eager bundle used to be **1.07 MB**. Three things arrive with the feature that
+needs them, wired in [`src/lazy_modules.js`](src/lazy_modules.js):
+
+| Chunk | gzip | Loaded by |
+|---|---|---|
+| `@antv/g6` + its `@antv/*` stack | ~403 kB | the account menu's **Frontend view**, and the Schemas **graph** landing (they share it) |
+| `vanilla-jsoneditor` + CodeMirror + tom-select | ~333 kB | the **Schemas** editor (`C_YUI_FORM`'s raw-JSON field) |
+| `@xterm` + fit/serialize addons + its CSS | ~89 kB | the **Terminal** |
+
+Two consequences worth knowing:
+
+- **Registration moved with the code.** `main.js` no longer registers
+  `C_YUI_TREEDB_*` or `C_YUI_GOBJ_TREE_JS`; the loader registers each once,
+  guarded by `gclass_find_by_name()` (registering twice logs *"GClass ALREADY
+  created"*). The Schemas tab starts its load in `mt_create`, so the chunk
+  travels while the node answers the `services` discovery and the mount finds
+  it there; the mount gates on it anyway.
+- **A settled import is an event.** No loader runs application logic in a
+  `.then()`: the caller turns the resolution into `EV_EDITOR_READY`,
+  `EV_TTY_LIBS_READY` or `EV_FRONTEND_VIEW_READY` and does the work in the
+  action, so the wait and its failure show up in the `machine` trace like
+  everything else.
+
+`npm run validate-locales` follows `import()` as well as static imports — the
+day the treedb editor became a dynamic chunk, a scan that only read static
+imports stopped checking its ~25 keys, and an unvalidated key renders as itself
+in every language.
 
 ## Roadmap
 
