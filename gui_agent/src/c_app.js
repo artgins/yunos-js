@@ -68,7 +68,6 @@ import {
 } from "@yuneta/gobj-ui/src/yui_dev.js";
 
 import {setup_frontend_view} from "@yuneta/gobj-ui/src/yui_frontend_view.js";
-import {frontend_view_ready, load_frontend_view} from "./lazy_modules.js";
 
 import {switch_locale, current_locale} from "./locales/locales.js";
 import {current_theme, apply_theme, toggle_theme} from "./theme.js";
@@ -916,29 +915,6 @@ function ac_open_frontend_view(gobj, event, kw, src)
         gobj_destroy(win);
         return 0;
     }
-    /*  The gobj tree draws with G6, which is not in the initial bundle
-     *  (src/lazy_modules.js). First open of the session pays the chunk; the
-     *  resolved import comes back as an event, and the window opens in its
-     *  action.  */
-    if(!frontend_view_ready()) {
-        load_frontend_view().then(function(ok) {
-            gobj_send_event(gobj, "EV_FRONTEND_VIEW_READY", {ok: !!ok}, gobj);
-        });
-        return 0;
-    }
-    setup_frontend_view(gobj);
-    return 0;
-}
-
-/***************************************************************
- *  The G6 chunk settled: open the window, or say nothing more than
- *  the loader already logged.
- ***************************************************************/
-function ac_frontend_view_ready(gobj, event, kw, src)
-{
-    if(!(kw && kw.ok)) {
-        return 0;   /*  Error already logged  */
-    }
     setup_frontend_view(gobj);
     return 0;
 }
@@ -1225,7 +1201,6 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_LANGUAGE",  ac_toggle_language, null],
             ["EV_OPEN_DEVTOOLS",    ac_open_devtools,   null],
             ["EV_OPEN_FRONTEND_VIEW", ac_open_frontend_view, null],
-            ["EV_FRONTEND_VIEW_READY", ac_frontend_view_ready, null],
             ["EV_OPEN_SITEMAP",     ac_open_sitemap,    null],
             ["EV_OPEN_ABOUT",       ac_open_about,      null],
             /*  multi-agent console tabs  */
@@ -1257,7 +1232,6 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_LANGUAGE",  0],
         ["EV_OPEN_DEVTOOLS",    0],
         ["EV_OPEN_FRONTEND_VIEW", 0],
-        ["EV_FRONTEND_VIEW_READY", 0],
         ["EV_OPEN_SITEMAP",     0],
         ["EV_OPEN_ABOUT",       0],
         ["EV_SELECTED_NODES_CHANGED", 0],

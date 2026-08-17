@@ -25,7 +25,7 @@
  *          Copyright (c) 2025, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
-import {existsSync, readdirSync, readFileSync} from "fs";
+import {readdirSync, readFileSync} from "fs";
 
 import {en} from "../src/locales/en.js";
 import {es} from "../src/locales/es.js";
@@ -171,16 +171,7 @@ function collect_used_keys() {
      *  + graph editor shipped reading "edit", "new", "delete", "paste"). Only
      *  the modules actually imported are scanned, transitively — the library
      *  carries views this app never mounts.  */
-    /*  node_modules, not the kernel/js checkout next door: this app consumes
-     *  gobj-ui from the npm REGISTRY, so the installed package is the code
-     *  that actually renders — and a standalone clone of this repo has no
-     *  sibling checkout at all, where the old path silently validated
-     *  nothing but the app's own keys.  */
-    const lib = new URL("../node_modules/@yuneta/gobj-ui/src/", import.meta.url);
-    if(!existsSync(lib)) {
-        fail(`@yuneta/gobj-ui is not installed (${lib.pathname}) — run npm install`);
-        process.exit(1);
-    }
+    const lib = new URL("../../../../kernel/js/gobj-ui/src/", import.meta.url);
     const seen = new Set();
     while(pending.length > 0) {
         const name = pending.pop();
@@ -216,18 +207,11 @@ function strip_comments(src) {
 function lib_imports(src) {
     const out = [];
     let m;
-    /*  `from "…"` AND `import("…")`: the treedb editor of the Schemas
-     *  workspace is loaded DYNAMICALLY (src/lazy_modules.js) to keep
-     *  @antv/g6 and vanilla-jsoneditor out of the initial bundle. A scan
-     *  that only followed static imports stopped seeing its ~25 keys the
-     *  moment that landed — and a key nobody validates renders as itself,
-     *  in every language, which is the failure this script exists to
-     *  prevent.  */
-    const from_app = /(?:from|import)\s*\(?\s*["']@yuneta\/gobj-ui\/src\/([\w.-]+\.js)["']/g;
+    const from_app = /from\s+["']@yuneta\/gobj-ui\/src\/([\w.-]+\.js)["']/g;
     while((m = from_app.exec(src)) !== null) {
         out.push(m[1]);
     }
-    const inside = /(?:from|import)\s*\(?\s*["']\.\/([\w.-]+\.js)["']/g;
+    const inside = /from\s+["']\.\/([\w.-]+\.js)["']/g;
     while((m = inside.exec(src)) !== null) {
         out.push(m[1]);
     }

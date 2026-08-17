@@ -25,7 +25,6 @@ const es = {
         "install": "Instalar",
         "not now": "Ahora no",
         "loading": "Cargando",
-        "treedb editor failed": "No se pudo cargar el editor de esquemas",
         "page size": "Filas por página",
         "show page": "Ir a la página",
         "first": "Primera",

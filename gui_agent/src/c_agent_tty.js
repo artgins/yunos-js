@@ -67,11 +67,12 @@ import {
 
 import {t} from "i18next";
 
+import {Terminal} from "@xterm/xterm";
+import {FitAddon} from "@xterm/addon-fit";
+import {SerializeAddon} from "@xterm/addon-serialize";
+import "@xterm/xterm/css/xterm.css";
+
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
-/*  xterm (+ its two addons and CSS) is ~89 kB gzipped for a workspace the
- *  operator has to open: it is loaded on demand, and the resolved import
- *  enters the FSM as EV_TTY_LIBS_READY. See src/lazy_modules.js.  */
-import {xterm_classes, load_xterm} from "./lazy_modules.js";
 import {agent_config_remove_selected_node} from "./c_agent_config.js";
 import {current_theme} from "./theme.js";
 import {install_touch_scroll} from "./tty_touch_scroll.js";
@@ -569,17 +570,12 @@ function create_terminal(gobj)
     if(priv.term) {
         return;
     }
-    let xterm = xterm_classes();
-    if(!xterm) {
-        log_error(`${gobj_short_name(gobj)}: create_terminal before xterm loaded`);
-        return;
-    }
     let theme = (current_theme() === "light") ? TERM_THEME_LIGHT : TERM_THEME_DARK;
     /*  Seed this tab's live size from the persisted default (Settings). The
      *  A− / A+ buttons mutate priv.font_size only; a fresh view (reopened tab)
      *  starts from the default again. */
     priv.font_size = get_font_size();
-    let term = new xterm.Terminal({
+    let term = new Terminal({
         cursorBlink:  true,
         convertEol:   false,
         fontFamily:   "monospace",
@@ -587,9 +583,9 @@ function create_terminal(gobj)
         scrollback:   5000,
         theme:        theme
     });
-    let fit = new xterm.FitAddon();
+    let fit = new FitAddon();
     term.loadAddon(fit);
-    let serializer = new xterm.SerializeAddon();
+    let serializer = new SerializeAddon();
     term.loadAddon(serializer);
     term.open(priv.$term);
     try {
@@ -1073,36 +1069,6 @@ function ac_tty_boot(gobj, event, kw, src)
     if(!gobj_is_running(gobj)) {
         return 0;   /*  stopped between the post and its delivery  */
     }
-    /*  xterm is not in the initial bundle. The first terminal of the session
-     *  pays one chunk; every later tab finds it loaded and boots straight
-     *  away.  */
-    if(!xterm_classes()) {
-        set_status(gobj, "loading", "Loading");
-        load_xterm().then(function(mod) {
-            gobj_send_event(gobj, "EV_TTY_LIBS_READY", {ok: !!mod}, gobj);
-        });
-        return 0;
-    }
-    create_terminal(gobj);
-    open_console(gobj);
-    return 0;
-}
-
-/***************************************************************
- *  xterm arrived (or did not). A promise settling is an OS
- *  notification, so it comes in as an event and the work happens
- *  here — including the guard for a tab closed while it was in
- *  flight.
- ***************************************************************/
-function ac_tty_libs_ready(gobj, event, kw, src)
-{
-    if(!gobj_is_running(gobj)) {
-        return 0;
-    }
-    if(!(kw && kw.ok)) {
-        set_status(gobj, "failed", "Failed");
-        return 0;   /*  Error already logged by the loader  */
-    }
     create_terminal(gobj);
     open_console(gobj);
     return 0;
@@ -1375,7 +1341,6 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
             /*  from the card: toolbar + mobile key bar  */
             ["EV_TTY_BOOT",  ac_tty_boot,  null],
-            ["EV_TTY_LIBS_READY", ac_tty_libs_ready, null],
             ["EV_RECONNECT", ac_reconnect, null],
             ["EV_FONT_SIZE", ac_font_size, null],
             ["EV_KEY",       ac_key,       null],
@@ -1395,7 +1360,6 @@ function create_gclass(gclass_name)
         ["EV_TTY_CLOSE", 0],
         ["EV_MT_COMMAND_ANSWER", 0],
         ["EV_TTY_BOOT",  0],
-        ["EV_TTY_LIBS_READY", 0],
         ["EV_RECONNECT", 0],
         ["EV_FONT_SIZE", 0],
         ["EV_KEY",       0],

@@ -50,21 +50,7 @@ export default defineConfig({
     },
     build: {
         sourcemap: true,
-        /*
-         *  Rollup splits on the dynamic import()s of src/lazy_modules.js, so
-         *  the entry chunk carries the login screen, the shell and the two
-         *  table workspaces, and nothing else: ~227 kB gzipped where it used
-         *  to be 1.07 MB. What is left out arrives with the feature that
-         *  needs it — @antv/g6 (~403 kB gz, the Frontend-view window and the
-         *  schema graph), vanilla-jsoneditor + CodeMirror (~333 kB gz, the
-         *  Schemas editor) and @xterm (~89 kB gz, the Terminal).
-         *
-         *  The limit is 1500 and not the 6000 that used to sit here silencing
-         *  everything: @antv/g6 is a 1.4 MB third-party mass we do not
-         *  control, and this leaves the warning able to fire when OUR chunks
-         *  grow. Raising it is not the fix — splitting is.
-         */
-        chunkSizeWarningLimit: 1500
+        chunkSizeWarningLimit: 6000
     },
     server: {
         watch: {

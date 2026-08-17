@@ -23,51 +23,6 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
-- **The initial download drops from 1.07 MB to 227 kB gzipped.** The app shipped
-    as ONE eager chunk, so opening a node list paid for a graph engine, a code
-    editor and a terminal emulator. Measured per package first (gzip, the only
-    figure that travels), then split on `import()` — `src/lazy_modules.js`:
-
-    | Chunk | gzip | Arrives with |
-    |---|---|---|
-    | `@antv/g6` + `@antv/*` | ~403 kB | the account menu's **Frontend view**, and the Schemas **graph** landing |
-    | `vanilla-jsoneditor` + CodeMirror + tom-select | ~333 kB | the **Schemas** editor |
-    | `@xterm` + addons + CSS | ~89 kB | the **Terminal** |
-
-    The measurement is what made it work. Splitting the schema graph moved
-    **2 kB** and left G6 exactly where it was, because the package's real
-    holder was `c_yui_gobj_tree_js.js` — the *Frontend view* developer window,
-    registered eagerly in `main.js` for a window most sessions never open.
-    Guessing which import to cut would have shipped a change that measured
-    nothing.
-
-    Registration moved with the code: `main.js` registers neither
-    `C_YUI_TREEDB_*` nor `C_YUI_GOBJ_TREE_JS` any more, and each loader
-    registers once behind `gclass_find_by_name()` (twice logs *"GClass ALREADY
-    created"*). The Schemas tab starts its load in `mt_create`, so the chunk
-    downloads while the node answers the `services` discovery — but the mount
-    still gates on it, because "usually in time" is not a guarantee, and it
-    shows a line while it waits.
-
-    And no loader does work in a `.then()`: a settled import is an OS
-    notification, so it enters the FSM as `EV_EDITOR_READY`,
-    `EV_TTY_LIBS_READY` or `EV_FRONTEND_VIEW_READY` and the action does the
-    mounting — the wait and its failure are in the `machine` trace like
-    anything else.
-
-    `chunkSizeWarningLimit` went from **6000** (which silenced everything,
-    including the 3.8 MB it was hiding) to 1500: high enough not to nag about
-    the third-party `@antv` mass, low enough to fire when our own chunks grow.
-
-- **`npm run validate-locales` follows `import()`, and reads the package that
-    ships.** Making the treedb editor a dynamic chunk silently took its ~25 keys
-    out of the scan — an unvalidated key renders as itself, in every language,
-    which is the exact failure the script exists to catch. It now matches
-    dynamic imports too, and scans `node_modules/@yuneta/gobj-ui` (the code that
-    actually renders) instead of the `kernel/js` checkout next door, which does
-    not even exist in a standalone clone of this repo — where the old path
-    quietly validated nothing but the app's own keys.
-
 - **The login screen stops moving, and a dead view is gone.** `login.css` was
     the last place in the app with animation: two ambient orbs drifting on a 22 s
     loop, a conic-gradient spark rotating on a 24 s one, and the card fading up
