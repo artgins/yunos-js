@@ -21,7 +21,14 @@ the submodule flow. This file only adds the yunos-js-specific layer on top.
   registry**, like wattyzer — not on the `kernel/js/*` checkouts. So a local
   edit to those libraries does NOT reach these SPAs: publish the library, then
   raise the range in the yuno's `package.json`.
-- To ship: commit on `main` here, then **bump the `yunos/js` submodule pointer
-  in yunetas**.
+- To ship: commit on `main` here, **tag the release**, then **bump the
+  `yunos/js` submodule pointer in yunetas**.
+- **Releases are tagged, no `v` prefix** — `0.7.0`, the same convention as
+  gobj-js and gobj-ui (started at `0.7.0` on 2026-08-17; the earlier releases
+  the CHANGELOG names are untagged). **Both yunos carry the SAME version**, as
+  they have since 0.3.0: one `## <version> — <date>` heading in the shared
+  CHANGELOG, and both `package.json` bumped together even when a cycle only
+  touched one of them. Before creating a tag, `git tag -l | grep <version>`:
+  two tags of one version pointing at different commits is a serious error.
 - gui_agent deploys are a build + rsync via its `deploy-com.sh` — a commit
   alone does not update the live site.
