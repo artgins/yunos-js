@@ -101,6 +101,13 @@ let PRIVATE_DATA = {
     link:           null,
     live_hosts:     {},     /*  set of node ids currently in list-agents  */
     nak_recovering: false,  /*  a NAK is being recovered via silent refresh  */
+    /*  Last route visited INSIDE each node tab, keyed "<ws>|<id>".  A tab
+     *  whose content has depth -- Schemas, where the tail is
+     *  <treedb>/<topic> -- is left where the operator was, not at its
+     *  root, when they come back to it.  */
+    tab_routes:     {},
+    last_tab_base:  "",     /*  base of the previous route, to tell entering a
+                                tab from walking up inside it  */
 };
 
 let __gclass__ = null;
@@ -392,6 +399,52 @@ function node_tab_route(ws, id)
     return node_home_route(ws) + "/" + encodeURIComponent(id);
 }
 
+function tab_key(ws, id)
+{
+    return ws + "|" + id;
+}
+
+function priv_tab_routes(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.tab_routes) {
+        priv.tab_routes = {};
+    }
+    return priv.tab_routes;
+}
+
+/***************************************************************
+ *  Where a tab's nav item points: the last position visited inside
+ *  it, or its root the first time. Only positions of tabs that are
+ *  still open survive -- see prune_tab_routes().
+ ***************************************************************/
+function tab_route_of(gobj, ws, id)
+{
+    return priv_tab_routes(gobj)[tab_key(ws, id)] || node_tab_route(ws, id);
+}
+
+/***************************************************************
+ *  Forget the remembered position of every tab of `ws` that is no
+ *  longer open: a tab closed and opened again starts at its root,
+ *  and a route into a treedb that is not there any more is not
+ *  something to navigate back into.
+ ***************************************************************/
+function prune_tab_routes(gobj, ws, nodes)
+{
+    let routes = priv_tab_routes(gobj);
+    let open = {};
+    for(let n of (nodes || [])) {
+        if(n && n.id) {
+            open[tab_key(ws, n.id)] = true;
+        }
+    }
+    for(let k in routes) {
+        if(k.startsWith(ws + "|") && !open[k]) {
+            delete routes[k];
+        }
+    }
+}
+
 /*  Resolve "/<ws>/..." to a KNOWN workspace id, or "".  */
 function ws_from_route(route)
 {
@@ -511,6 +564,8 @@ function rebuild_workspace_tabs(gobj, ws)
         return;
     }
 
+    prune_tab_routes(gobj, ws, nodes);
+
     for(let n of nodes) {
         /*  For the yuno-unit workspace, the selected id is the composite
          *  "node<US>yuno_id"; the connection dot + tab kw need the node part.  */
@@ -534,6 +589,11 @@ function rebuild_workspace_tabs(gobj, ws)
              *  the live list-agents set, red when it dropped. A CSS circle
              *  (app.css) keyed off the connected/disconnected class below.  */
             icon:     "agent-conn-dot",
+            /*  The BASE route, always: yui_shell_set_submenu() registers
+             *  it in the shell's item index -- it is where this tab's view
+             *  is mounted and what a deep link resolves to. Returning the
+             *  operator to their position inside the tab is done in
+             *  ac_route_changed(), not by moving the mount.  */
             route:    node_tab_route(ws, n.id),
             class:    connected ? "yui-nav-connected" : "yui-nav-disconnected",
             closable: true,
@@ -588,9 +648,9 @@ function workspace_first_route(gobj, ws)
     }
     let active = config ? agent_config_get_active_tab(config, ws) : "";
     if(active && nodes.some((n) => n && n.id === active)) {
-        return node_tab_route(ws, active);
+        return tab_route_of(gobj, ws, active);
     }
-    return node_tab_route(ws, nodes[0].id);
+    return tab_route_of(gobj, ws, nodes[0].id);
 }
 
 /*
@@ -1064,6 +1124,7 @@ function ac_nav_item_close(gobj, event, kw, src)
  ***************************************************************/
 function ac_route_changed(gobj, event, kw, src)
 {
+    let priv = gobj.priv;
     let base = (kw && kw.base) || "";
 
     /*  On a real, resolved node tab (/<ws>/node/<id>) → remember it as this
@@ -1076,8 +1137,49 @@ function ac_route_changed(gobj, event, kw, src)
         if(config && agent_config_is_node_selected(config, hit.ws, hit.id)) {
             agent_config_set_active_tab(config, hit.ws, hit.id);
         }
+        /*
+         *  ...and WHERE in the tab. A tab's nav item is a FIXED route (the
+         *  base, which is where its view is mounted), so clicking back onto
+         *  it landed on the tab's root and threw away the position inside:
+         *  open a topic in Schemas, look at another tab, come back, and the
+         *  topic was gone.
+         *
+         *  The tail belongs to the tab (Schemas: `<treedb>/<topic>`), so it
+         *  is remembered here and replayed when the tab is ENTERED AGAIN.
+         *  "Entered again" is the whole subtlety: arriving at the root of
+         *  the tab you were already in is the way OUT of a topic -- the
+         *  view's own "Topics" button -- and replaying the position there
+         *  would make that button do nothing. So the previous base has to
+         *  be a different tab for the position to be restored.
+         */
+        let inner = (kw && kw.subpath) || "";
+        let key = tab_key(hit.ws, hit.id);
+        let routes = priv_tab_routes(gobj);
+        let prev_base = priv.last_tab_base || "";
+        priv.last_tab_base = base;
+
+        if(inner) {
+            routes[key] = `${base}/${inner}`;
+            return 0;
+        }
+        if(prev_base === base) {
+            routes[key] = base;     /*  moved UP inside the tab: also a position  */
+            return 0;
+        }
+        let back = routes[key];
+        if(back && back !== base) {
+            /*  Deferred and `replace`, like every other normalization here:
+             *  nobody navigated to the root on purpose, so it must not
+             *  become a Back entry of its own.  */
+            gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {route: back}, gobj);
+        }
         return 0;
     }
+
+    /*  Not on a node tab: leaving the tabs entirely (Preferences, a picker)
+     *  must not read later as "still in the same tab", or coming back would
+     *  be taken for walking up inside it and the position would be lost.  */
+    priv.last_tab_base = "";
 
     let ws = "";
     for(let w in WORKSPACES) {

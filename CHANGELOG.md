@@ -23,6 +23,24 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **fix: a tab forgot where you were inside it.** Open a topic in a Schemas
+    tab, look at another tab, come back — and you landed on the treedb cards
+    with the topic gone. A tab's nav item carries a FIXED route (its base), so
+    clicking it always navigated to the root and the position was thrown away.
+
+    The route cannot simply be made deeper: `yui_shell_set_submenu()` registers
+    `item.route` in the shell's item index, so it is where that tab's view is
+    MOUNTED and what a deep link resolves to — moving it would move the mount
+    and prune the base. `C_APP` remembers the last position of each tab
+    instead, and replays it when the tab is entered again.
+
+    "Entered again" is the whole subtlety: arriving at the root of the tab you
+    were already in is the way OUT of a topic — the view's own *Topics* button
+    — and replaying the position there would make that button do nothing. So
+    the restore only fires when the previous route belonged to a DIFFERENT tab,
+    and walking up inside a tab is itself recorded as the new position. The
+    memory is dropped when a tab is closed.
+
 - **feat: the record GRAPH is a position of the Schemas url.** Under a treedb
     the subpath is now `<topic>[/info]`, `schema` or **`graph[/<topic>]`**, and
     the third icon of every topic card goes to the last one:
