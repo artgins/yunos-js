@@ -98,7 +98,8 @@ ack plus the agent's asynchronous real answer).
 
 ## Schemas: the treedb views over the agent's control plane
 
-The Schemas workspace mounts gobj-ui's treedb editor (`C_YUI_TREEDB_TOPICS`)
+The Schemas workspace mounts gobj-ui's treedb views — the topic editor
+(`C_YUI_TREEDB_TOPICS`) and the record graph (`C_YUI_TREEDB_GRAPH`) —
 **unchanged**, pointed at one treedb of one yuno. It opens the yuno's
 `treedb_system_schema` — the treedb where every schema of that yuno lives as
 data (`treedbs` → `topics` → `cols`). Editing it there is how a schema changes
@@ -108,10 +109,14 @@ without touching the C literal; the change reaches the yuno on its next restart
 **Which treedbs a yuno has is discovered, not assumed.** A yuno exposes them as
 services, so one round trip answers it —
 `command-yuno id=<yuno> service=__yuno__ command=services` — and the `C_NODE`
-rows are the treedbs this console can talk to. They fill a selector in the tab
-toolbar, `treedb_system_schema` first and selected; picking another one tears
-the mount down (view **and** adapter, so no answer of the old one lands in the
-new table) and builds a fresh one. The others are offered because an operator
+rows are the treedbs this console can talk to. They become the children of a
+`C_YUI_NODE` rooted at the tab's route, `treedb_system_schema` first — so the
+depth (yuno → treedb → topic) is NAVIGATION, addressable in the url, and how it
+is drawn (strips, back, breadcrumb) is a Preferences choice. Each treedb is a
+`link` node with its own viewer, `C_AGENT_TREEDB_VIEW`, which owns the tail of
+the url below it and holds that treedb's adapter: switching treedbs is a
+navigation, and no answer of one lands in another's table. The others are
+offered because an operator
 already on the node should not need a second SPA and a second session to look
 at the data — `gui_treedb` remains the browser for someone whose job is the
 data itself.
@@ -179,6 +184,32 @@ controlcenter — the work is done, the answer is lost. The tab gives up after
 30 s and says so, but after a `kill` that means the yuno is DOWN and stays
 down. Deploy the agent before using Apply on a node.
 
+**Two views of one treedb, two positions of one url.** Below a treedb the
+subpath is the viewer's: `<topic>` opens its table, `<topic>/info` its info
+panel, `schema` the schema-graph landing, and **`graph[/<topic>]`** the record
+GRAPH (gobj-ui's `C_YUI_TREEDB_GRAPH` over G6), optionally focused on one
+topic. The third icon of every topic card goes there, and the graph's *Topics*
+button comes back. That is the whole navigation: the graph is not a sibling tab
+as in `gui_treedb`, because here a tab is a YUNO.
+
+Two decisions worth keeping:
+
+- The graph is mounted **lazily**, on the first navigation to `graph`. G6 is
+  the heaviest thing this workspace can draw, most visits to a treedb never ask
+  for it, and it measures its canvas when first shown — a graph created hidden
+  would size itself to a zero rect.
+- It opens with the **`dagre`** layout instead of the library's first one,
+  `manual`. Manual places nodes where the records say they are, and a schema
+  treedb carries no geometry, so it opened as one diagonal pile of 265 `cols`.
+  Dagre is hierarchical, which is the shape of what is drawn: treedbs → topics
+  → cols. It is only the FIRST value — `layout` is `SDF_PERSIST` and loaded
+  after the mount kw, so the operator's own choice wins from the second visit.
+
+A write made in the graph marks *Apply* exactly like one made in the table
+(gobj-ui 5.16.0 publishes `EV_RECORD_WRITTEN` from both) — except a save of the
+graph LAYOUT, which lands in the treedb's `__graphs__` topic and is the view's
+own bookkeeping, not a schema change.
+
 **Only the MASTER can edit; a replica opens read-only.** A treedb whose tranger
 this yuno does not master is a replica: the yuno refuses every write on it
 (SDK 7.13.0), and before that it *accepted* them into memory and lost them at
@@ -187,7 +218,9 @@ the next reload. So the tab asks each discovered treedb
 `{treedb_name, master, schema_version, topics}` — and mounts the editor with
 gobj-ui's `readonly`: no edition mode, no new/delete/paste, no in-row icons, and
 the record form opens with its cells locked and only *copy* on its toolbar. The
-form still opens, because reading is the point of a replica.
+form still opens, because reading is the point of a replica. The graph takes the
+same flag and loses its `edition` mode, the only one that draws the create /
+delete / link affordances.
 
 The flag is per TREEDB, not per yuno: a yuno is routinely the master of its
 `treedb_system_schema` and a replica of a data treedb it shares. Which one it

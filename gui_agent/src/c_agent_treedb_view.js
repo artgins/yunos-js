@@ -17,9 +17,12 @@
  *          - the routing adapter (C_AGENT_TREEDB_LINK), one per mount:
  *            it carries WHICH treedb is open and is the transport the
  *            library view talks to.
- *          - the library view (C_YUI_TREEDB_TOPICS) on top of it.
+ *          - the library views on top of it: the topic editor
+ *            (C_YUI_TREEDB_TOPICS) and, under `graph`, the record graph
+ *            (C_YUI_TREEDB_GRAPH).  Both talk to the SAME adapter and
+ *            both are two positions of one url, not two tabs.
  *          - the translation between the node's `subpath` and the
- *            view's own events, in both directions.
+ *            views' own events, in both directions.
  *
  *      WHAT IT DOES NOT OWN: the yuno.  Discovery, the apply sequence
  *      and the pending-changes flag are yuno-level and stay in the tab;
@@ -63,6 +66,11 @@ const GCLASS_NAME = "C_AGENT_TREEDB_VIEW";
  *  to, found by walking up the tree this view hangs from.  */
 const OWNER_GCLASS = "C_AGENT_TREEDB";
 
+/*  The subpath under a treedb that opens the RECORD graph, alone or
+ *  followed by the topic to focus (`graph/cols`).  Reserved, like
+ *  `schema`: a topic with this name is not reachable by its own name.  */
+const GRAPH_SEG = "graph";
+
 
 /***************************************************************
  *              Attrs
@@ -80,11 +88,13 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    link:    null,  /*  C_AGENT_LINK, the shared session  */
-    adapter: null,  /*  C_AGENT_TREEDB_LINK (pure child)  */
-    view:    null,  /*  C_YUI_TREEDB_TOPICS (named service)  */
-    seg:     null,  /*  subpath last applied or navigated (loop guard)  */
-    $body:   null,
+    link:        null,  /*  C_AGENT_LINK, the shared session  */
+    adapter:     null,  /*  C_AGENT_TREEDB_LINK (pure child)  */
+    view:        null,  /*  C_YUI_TREEDB_TOPICS (named service)  */
+    graph:       null,  /*  C_YUI_TREEDB_GRAPH (named service, LAZY)  */
+    seg:         null,  /*  subpath last applied or navigated (loop guard)  */
+    $body:       null,
+    $graph_body: null,
 };
 
 let __gclass__ = null;
@@ -152,6 +162,9 @@ function mt_stop(gobj)
     if(priv.view && gobj_is_running(priv.view)) {
         gobj_stop(priv.view);
     }
+    if(priv.graph && gobj_is_running(priv.graph)) {
+        gobj_stop(priv.graph);
+    }
     if(priv.adapter && gobj_is_running(priv.adapter)) {
         gobj_stop(priv.adapter);
     }
@@ -160,17 +173,19 @@ function mt_stop(gobj)
 /***************************************************************
  *          Framework Method: Destroy
  *
- *  The view is a service created with this gobj as its parent and
- *  the adapter is a pure child: gobj_destroy cascades onto both.
+ *  The views are services created with this gobj as their parent and
+ *  the adapter is a pure child: gobj_destroy cascades onto all three.
  ***************************************************************/
 function mt_destroy(gobj)
 {
     let priv = gobj.priv;
 
     priv.view = null;
+    priv.graph = null;
     priv.adapter = null;
     priv.link = null;
     priv.$body = null;
+    priv.$graph_body = null;
 
     let $c = gobj_read_attr(gobj, "$container");
     if($c && $c.parentNode) {
@@ -201,10 +216,18 @@ function build_ui(gobj)
         ["div", {class: "TREEDB_VIEW_BODY", style: "flex:1 1 auto; min-height:0;"}, []]
     );
 
+    /*  The graph's own body, born hidden and filled on the first
+     *  navigation to `graph`: G6 is the heaviest thing this workspace can
+     *  mount and most visits to a treedb never ask for it.  */
+    priv.$graph_body = createElement2(
+        ["div", {class: "TREEDB_VIEW_GRAPH_BODY is-hidden",
+                 style: "flex:1 1 auto; min-height:0;"}, []]
+    );
+
     let $c = createElement2(
         ["div", {class: `${GCLASS_NAME} TREEDB_VIEW_CARD`,
                  style: "display:flex; flex-direction:column; height:100%;"},
-            [priv.$body]]
+            [priv.$body, priv.$graph_body]]
     );
     gobj_write_attr(gobj, "$container", $c);
 }
@@ -292,12 +315,10 @@ function mount_view(gobj)
         return -1;      /*  Error already logged  */
     }
 
-    /*  The url under this treedb is `<topic>[/info]` (or `schema`), so
-     *  the library view's base IS this node's route: from there it
-     *  routes its own topics (cards, landing toggle, site map). No
-     *  `graph` action: this workspace mounts no graph view, and a card
-     *  icon that navigates nowhere is worse than one that is not
-     *  there.  */
+    /*  The url under this treedb is `<topic>[/info]`, `schema` or
+     *  `graph[/<topic>]`, so the library view's base IS this node's
+     *  route: from there it routes its own topics (cards, landing
+     *  toggle, site map).  */
     let base = base_route(gobj);
     let kw = {
         treedb_name:        gobj_read_str_attr(gobj, "treedb_name"),
@@ -318,7 +339,11 @@ function mount_view(gobj)
         kw.base_route = base;
         kw.card_action_routes = {
             info:  `#${base}/{topic}/info`,
-            table: `#${base}/{topic}`
+            table: `#${base}/{topic}`,
+            /*  The third icon of a card: the SAME treedb drawn as a graph
+             *  of records, focused on this topic. It is a position under
+             *  this node, not a sibling tab as in gui_treedb.  */
+            graph: `#${base}/${GRAPH_SEG}/{topic}`
         };
         kw.landing_routes = {cards: `#${base}`, schema: `#${base}/schema`};
     }
@@ -345,6 +370,114 @@ function mount_view(gobj)
     }
     notify_view_transport(gobj, agent_link_is_connected(priv.link));
     return 0;
+}
+
+/***************************************************************
+ *  The record graph of the SAME treedb, on the SAME adapter: the
+ *  topics editor and the graph are two positions of one url, and a
+ *  second transport would mean a second answer stream to
+ *  disambiguate.
+ *
+ *  Mounted on the first navigation to `graph` and never taken down
+ *  again: G6 is the heaviest thing this workspace can draw, and it
+ *  measures its canvas when it is first SHOWN — creating it hidden
+ *  would size it to a zero rect.
+ ***************************************************************/
+function mount_graph(gobj)
+{
+    let priv = gobj.priv;
+
+    if(priv.graph) {
+        return 0;
+    }
+    if(!priv.adapter && build_adapter(gobj) < 0) {
+        return -1;      /*  Error already logged  */
+    }
+
+    let base = base_route(gobj);
+    let kw = {
+        treedb_name: gobj_read_str_attr(gobj, "treedb_name"),
+        /*  Same fact as the editor's: on a replica the yuno refuses every
+         *  write, so the graph opens without its `edition` mode.  */
+        readonly:    gobj_read_bool_attr(gobj, "readonly"),
+        system:      true,
+        /*  The library's first layout is `manual`, which places nodes
+         *  where the records say they are -- and a SCHEMA treedb carries
+         *  no geometry, so it opens as one diagonal pile of 265 `cols`.
+         *  `dagre` is hierarchical, which is the shape of what is drawn
+         *  here: treedbs -> topics -> cols. It is only the FIRST value:
+         *  `layout` is SDF_PERSIST and loaded after this kw, so the
+         *  operator's own choice wins from the second visit on.  */
+        layout:      "dagre"
+    };
+    if(!empty_string(base)) {
+        /*  A ROUTE for the site map, a HREF for the anchor: the graph
+         *  declares `<base>/graph/<topic>` as its own sub-routes and its
+         *  way back is the cards landing of this same treedb.  */
+        kw.base_route = `${base}/${GRAPH_SEG}`;
+        kw.back_route = `#${base}`;
+    }
+
+    let graph = yui_mount_service_view(gobj, {
+        gclass:    "C_YUI_TREEDB_GRAPH",
+        name:      `treedb_graph_${clean_id(gobj)}`,
+        kw:        kw,
+        transport: priv.adapter
+    });
+    if(!graph) {
+        return -1;      /*  Error already logged  */
+    }
+    priv.graph = graph;
+
+    let $g = gobj_read_attr(graph, "$container");
+    if($g) {
+        priv.$graph_body.appendChild($g);
+    } else {
+        log_error(`${gobj_short_name(gobj)}: hosted graph exposes no $container`);
+    }
+    if(!gobj_is_running(graph)) {
+        gobj_start(graph);
+    }
+    notify_view_transport(gobj, agent_link_is_connected(priv.link));
+    return 0;
+}
+
+/***************************************************************
+ *  Swap the two bodies. `is-hidden` and not an inline display:
+ *  Bulma's helper carries !important and would win over it anyway.
+ *
+ *  Both views are told, because both draw on being shown: the editor
+ *  re-opens its landing or its topic, and the graph re-fits its
+ *  canvas to a rect that was zero while it was hidden.
+ ***************************************************************/
+function show_graph(gobj, on)
+{
+    let priv = gobj.priv;
+
+    if(on && mount_graph(gobj) < 0) {
+        return -1;      /*  Error already logged  */
+    }
+    priv.$body.classList.toggle("is-hidden", !!on);
+    priv.$graph_body.classList.toggle("is-hidden", !on);
+
+    if(on) {
+        if(priv.view) {
+            gobj_send_event(priv.view, "EV_HIDE", {}, gobj);
+        }
+        gobj_send_event(priv.graph, "EV_SHOW", {}, gobj);
+    } else if(priv.graph) {
+        gobj_send_event(priv.graph, "EV_HIDE", {}, gobj);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  `graph` alone, or `graph/<topic>`: the record graph of this
+ *  treedb, optionally focused on one topic.
+ ***************************************************************/
+function is_graph_seg(seg)
+{
+    return seg === GRAPH_SEG || seg.startsWith(`${GRAPH_SEG}/`);
 }
 
 /***************************************************************
@@ -381,7 +514,8 @@ function navigate_seg(gobj, seg)
 /***************************************************************
  *  Apply the part of the subpath this view owns: a bare topic
  *  opens its table, `<topic>/info` its info panel, `schema` the
- *  schema-graph landing, and nothing at all the topic grid.
+ *  schema-graph landing, `graph[/<topic>]` the record graph, and
+ *  nothing at all the topic grid.
  ***************************************************************/
 function apply_seg(gobj, seg)
 {
@@ -390,6 +524,17 @@ function apply_seg(gobj, seg)
     if(!priv.view) {
         return;
     }
+    if(is_graph_seg(seg)) {
+        if(show_graph(gobj, true) < 0) {
+            return;     /*  Error already logged  */
+        }
+        let topic = seg.slice(GRAPH_SEG.length + 1);
+        if(!empty_string(topic)) {
+            gobj_send_event(priv.graph, "EV_SET_FOCUS_TOPIC", {topic: topic}, gobj);
+        }
+        return;
+    }
+    show_graph(gobj, false);
     if(empty_string(seg)) {
         gobj_send_event(priv.view, "EV_SHOW", {href: ""}, gobj);
         return;
@@ -415,8 +560,10 @@ function notify_view_transport(gobj, connected)
 {
     let priv = gobj.priv;
 
-    if(priv.view && gobj_has_event(priv.view, "EV_TRANSPORT_STATE", 0)) {
-        gobj_send_event(priv.view, "EV_TRANSPORT_STATE", {connected: !!connected}, gobj);
+    for(let view of [priv.view, priv.graph]) {
+        if(view && gobj_has_event(view, "EV_TRANSPORT_STATE", 0)) {
+            gobj_send_event(view, "EV_TRANSPORT_STATE", {connected: !!connected}, gobj);
+        }
     }
 }
 
@@ -468,13 +615,20 @@ function ac_route_changed(gobj, event, kw, src)
  *  The hosted view selected a topic: mirror it into the URL, so a
  *  reload or a shared link lands on it. An EMPTY topic is the way
  *  back to the topic grid.
+ *
+ *  The graph's EV_OPERATION_MODE_CHANGED lands here too, and lands
+ *  on the `undefined` exit: the mode is a PERSISTED preference of
+ *  the graph, not a position, and the segment under `graph` is
+ *  already spoken for by the focus topic. It is declared and routed
+ *  rather than left out, because the graph publishes it to its
+ *  parent and an undeclared event is an FSM error.
  ***************************************************************/
 function ac_topic_selected(gobj, event, kw, src)
 {
     let topic = kw ? kw.topic : undefined;
 
     if(topic === undefined) {
-        return 0;   /*  a stray echo  */
+        return 0;   /*  a stray echo, or the graph's operation mode  */
     }
     navigate_seg(gobj, topic || "");
     return 0;
@@ -538,6 +692,7 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_ROUTE_CHANGED",        ac_route_changed,     null],
             ["EV_TOPIC_SELECTED",       ac_topic_selected,    null],
+            ["EV_OPERATION_MODE_CHANGED", ac_topic_selected,  null],
             ["EV_RECORD_WRITTEN",       ac_record_written,    null]
         ]]
     ];
@@ -550,6 +705,7 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",          0],
         ["EV_ROUTE_CHANGED",     0],
         ["EV_TOPIC_SELECTED",    0],
+        ["EV_OPERATION_MODE_CHANGED", 0],
         ["EV_RECORD_WRITTEN",    0]
     ];
 

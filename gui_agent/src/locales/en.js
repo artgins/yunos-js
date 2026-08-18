@@ -291,6 +291,36 @@ const en = {
         "login feature stats":   "Live statistics & health",
         "login feature terminal":"Interactive node terminal",
 
+        /*  The treedb record graph (C_YUI_TREEDB_GRAPH + its G6 canvas):
+            the library translates through THIS app's i18next.  */
+        "zoom in":              "Zoom in",
+        "zoom out":             "Zoom out",
+        "auto fit":             "Auto fit",
+        "reset zoom":           "Reset zoom",
+        "exit full screen":     "Exit full screen",
+        "enter full screen":    "Enter full screen",
+        "create node":          "Create node",
+        "redo":                 "Redo",
+        "link to hook":         "Link to hook",
+        "edge properties":      "Edge properties",
+        "unlink":               "Unlink",
+        "this edge":            "This edge",
+        "same type edges":      "Same type edges",
+        "all edges":            "All edges",
+        "node properties":      "Node properties",
+        "delete node":          "Delete node",
+        "this node":            "This node",
+        "same topic nodes":     "Same topic nodes",
+        "all nodes":            "All nodes",
+        "no fields":            "No fields",
+        "topic":                "Topic",
+        "node id":              "Node id",
+        "resize all":           "Resize all",
+        "resize topic nodes":   "Resize topic nodes",
+        "resize all ports":     "Resize all ports",
+        "resize topic ports":   "Resize topic ports",
+        "operation mode":       "Operation mode",
+
         /* keep this last so adding new keys above never hits the comma trap */
         "_xxx":              "last key — insert new ones above"
     }

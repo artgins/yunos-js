@@ -23,6 +23,38 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **feat: the record GRAPH is a position of the Schemas url.** Under a treedb
+    the subpath is now `<topic>[/info]`, `schema` or **`graph[/<topic>]`**, and
+    the third icon of every topic card goes to the last one:
+    `C_AGENT_TREEDB_VIEW` hosts gobj-ui's `C_YUI_TREEDB_GRAPH` beside the topic
+    editor, on the SAME routing adapter, and swaps the two bodies by url. The
+    graph's *Topics* button comes back to the cards. Not a sibling tab as in
+    `gui_treedb`: here a tab is a YUNO.
+
+    It is mounted **lazily**, on the first navigation to `graph` — G6 is the
+    heaviest thing this workspace can draw, most visits never ask for it, and it
+    measures its canvas when first shown, so a graph created hidden would size
+    itself to a zero rect. It opens with the **`dagre`** layout rather than the
+    library's `manual`, which places nodes where the records say they are: a
+    schema treedb carries no geometry, so it opened as one diagonal pile of 265
+    `cols`. Only the first value — `layout` is `SDF_PERSIST` and loaded after
+    the mount kw, so the operator's choice wins from the second visit on.
+
+    A replica hands the graph the same `readonly` the editor gets, and it loses
+    its `edition` mode. A write made in the graph marks *Apply* like one made in
+    the table; a save of the graph LAYOUT does not, because it lands in the
+    treedb's `__graphs__` topic and is the view's own bookkeeping.
+
+- **fix: the adapter did not declare the treedb LINK events.** The graph
+    subscribes to `EV_TREEDB_NODE_LINKED` / `EV_TREEDB_NODE_UNLINKED` on its
+    transport the moment it loads a topic, and `gobj_subscribe_event` refuses an
+    event that is not in the publisher's output list — so leaving them out of
+    `C_AGENT_TREEDB_LINK` did not cost an edge that fails to redraw, it cost the
+    SUBSCRIPTION, refused with an error before any write happened. They are
+    declared and echoed now, rebuilt from the two refs of the REQUEST
+    (`<topic>^<id>[^<hook>]`), which is the only place a link is described: the
+    answer of `link-nodes` does not carry them.
+
 - **fix: every Schemas tab was eating the other tabs' `treedb-info` answers.**
     Introduced by the read-only wiring the same day and caught in the browser
     console: *"C_AGENT_TREEDB^view_schemas_node: no route for this tab: no tree
@@ -112,6 +144,15 @@ on its own, outside the yunetas superproject.
       workspace now rebuilds precisely while someone is looking at an expanded
       node, `ac_render_tree` remembers which nodes are open and re-expands them
       after the data lands.
+
+### gui_treedb
+
+- **fix: `EV_RECORD_WRITTEN` was an FSM error on every write.** Both hosted
+    views publish it to their parent (CHILD subscription model) and
+    `C_TREEDB_VIEW` did not declare it, so each write logged *"Event NOT DEFINED
+    in state"*. This app is a data browser and has nothing to finish after a
+    write — the views redraw from the treedb's own `EV_TREEDB_NODE_*` — so the
+    action is empty and says why.
 
 ## 0.7.0 — 2026-08-17
 

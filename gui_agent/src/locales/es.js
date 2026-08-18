@@ -295,6 +295,36 @@ const es = {
         "login feature stats":   "Estadísticas y salud en vivo",
         "login feature terminal":"Terminal interactivo de nodo",
 
+        /*  El grafo de registros de treedb (C_YUI_TREEDB_GRAPH y su lienzo
+            G6): la libreria traduce con el i18next de ESTA app.  */
+        "zoom in":              "Acercar",
+        "zoom out":             "Alejar",
+        "auto fit":             "Ajustar a la vista",
+        "reset zoom":           "Restablecer zoom",
+        "exit full screen":     "Salir de pantalla completa",
+        "enter full screen":    "Pantalla completa",
+        "create node":          "Crear nodo",
+        "redo":                 "Rehacer",
+        "link to hook":         "Enlazar al hook",
+        "edge properties":      "Propiedades del enlace",
+        "unlink":               "Desenlazar",
+        "this edge":            "Este enlace",
+        "same type edges":      "Enlaces del mismo tipo",
+        "all edges":            "Todos los enlaces",
+        "node properties":      "Propiedades del nodo",
+        "delete node":          "Borrar nodo",
+        "this node":            "Este nodo",
+        "same topic nodes":     "Nodos del mismo topic",
+        "all nodes":            "Todos los nodos",
+        "no fields":            "Sin campos",
+        "topic":                "Topic",
+        "node id":              "Id del nodo",
+        "resize all":           "Redimensionar todo",
+        "resize topic nodes":   "Redimensionar los nodos del topic",
+        "resize all ports":     "Redimensionar todos los puertos",
+        "resize topic ports":   "Redimensionar los puertos del topic",
+        "operation mode":       "Modo de operación",
+
         /* mantener al final — insertar nuevas claves antes */
         "_xxx":              "última clave — insertar nuevas antes"
     }

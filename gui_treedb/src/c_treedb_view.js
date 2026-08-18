@@ -442,6 +442,24 @@ function rebind_hosted_view(gobj)
 
 
 /***************************************************************
+ *  A hosted view WROTE a record and the yuno took it. This app is a
+ *  data browser: the write is finished when the treedb has it, and
+ *  the views redraw themselves from the treedb's own EV_TREEDB_NODE_*
+ *  events. Nothing to do here.
+ *
+ *  It is declared and not left out because both hosted views publish
+ *  it to their parent (CHILD subscription model), and an event a
+ *  parent does not declare is an FSM error on every write. The host
+ *  that DOES act on it is gui_agent's schema editor, where the write
+ *  is only half the job: the owning yuno still has to be restarted to
+ *  re-read the schema.
+ ***************************************************************/
+function ac_record_written(gobj, event, kw, src)
+{
+    return 0;
+}
+
+/***************************************************************
  *  Child → selection changed (TOPICS: a topic tab; GRAPH: the operation
  *  mode). Mirror it into the URL as <base_route>/<seg> so reload / deep
  *  link restores it. The `seg` dedup skips the navigate when this is just
@@ -620,6 +638,7 @@ function create_gclass(gclass_name)
         ["ST_IDLE", [
             ["EV_TOPIC_SELECTED",         ac_child_selected, null],
             ["EV_OPERATION_MODE_CHANGED", ac_child_selected, null],
+            ["EV_RECORD_WRITTEN",         ac_record_written, null],
             ["EV_ROUTE_CHANGED",          ac_route_changed,  null],
             ["EV_ON_OPEN",                ac_transport_open, null],
             ["EV_ON_CLOSE",               ac_transport_close, null]
@@ -629,6 +648,7 @@ function create_gclass(gclass_name)
     const event_types = [
         ["EV_TOPIC_SELECTED",         0],
         ["EV_OPERATION_MODE_CHANGED", 0],
+        ["EV_RECORD_WRITTEN",         0],
         ["EV_ROUTE_CHANGED",          0],
         ["EV_ON_OPEN",                0],
         ["EV_ON_CLOSE",               0]

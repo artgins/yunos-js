@@ -55,8 +55,11 @@
  *      small — but a view that wrote a record would show a stale table,
  *      which reads as a failed write.  For its OWN writes the adapter
  *      therefore echoes the corresponding EV_TREEDB_NODE_* locally, from
- *      the answer it just received.  It is a LOCAL echo, not the
- *      treedb's event: another operator's change is not seen here.
+ *      the answer it just received — except for a link, which the answer
+ *      does not describe: LINKED/UNLINKED are rebuilt from the two refs
+ *      of the REQUEST, which is where the graph put them.  It is a LOCAL
+ *      echo either way, not the treedb's event: another operator's
+ *      change is not seen here.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -263,7 +266,11 @@ function mt_command_parser(gobj, command, kw, src)
         md_command:  is_object(kw.__md_command__) ? kw.__md_command__ : {},
         treedb_name: kw_get_str(gobj, kw, "treedb_name", treedb, 0),
         topic_name:  kw_get_str(gobj, kw, "topic_name", "", 0),
-        record:      is_object(kw.record) ? kw.record : null
+        record:      is_object(kw.record) ? kw.record : null,
+        /*  A link names its two ends and no topic: `<topic>^<id>^<hook>`
+         *  for the parent, `<topic>^<id>` for the child.  */
+        parent_ref:  kw_get_str(gobj, kw, "parent_ref", "", 0),
+        child_ref:   kw_get_str(gobj, kw, "child_ref", "", 0)
     };
 
     /*  No `src`: the answer is addressed to the link service, which
@@ -310,6 +317,29 @@ function echo_node_event(gobj, pend, kw)
 {
     let event;
     let node;
+
+    /*  A link is not a node event: it names the two ends it joined and
+     *  the graph re-reads both from the treedb. The refs are the view's
+     *  own, `<topic>^<id>[^<hook>]`.  */
+    if(pend.command === "link-nodes" || pend.command === "unlink-nodes") {
+        let parent = String(pend.parent_ref || "").split("^");
+        let child = String(pend.child_ref || "").split("^");
+        if(empty_string(parent[1]) || empty_string(child[1])) {
+            return;     /*  a ref we cannot split: nothing honest to echo  */
+        }
+        gobj_publish_event(gobj,
+            (pend.command === "link-nodes")
+                ? "EV_TREEDB_NODE_LINKED" : "EV_TREEDB_NODE_UNLINKED",
+            {
+                treedb_name:       pend.treedb_name,
+                parent_topic_name: parent[0],
+                parent_id:         parent[1],
+                child_topic_name:  child[0],
+                child_id:          child[1]
+            }
+        );
+        return;
+    }
 
     switch(pend.command) {
         case "create-node":
@@ -466,18 +496,25 @@ function create_gclass(gclass_name)
     /*---------------------------------------------*
      *          Events
      *
-     *  The three node events are declared as OUTPUT because the hosted
-     *  view SUBSCRIBES to them on its transport — which is this gobj —
+     *  The five node events are declared as OUTPUT because the hosted
+     *  views SUBSCRIBE to them on their transport — which is this gobj —
      *  and gobj_subscribe_event refuses an event that is not in the
      *  publisher's output list. They are published only as the local
      *  echo of our own writes (see the header), so a tab with no topic
      *  open has no subscriber for them: NO_WARN_SUBS.
+     *
+     *  LINKED/UNLINKED are the graph's: it subscribes to them treedb-wide
+     *  the moment it loads a topic, so leaving them undeclared does not
+     *  cost an edge that fails to redraw — it costs the SUBSCRIPTION,
+     *  refused with an error before any write happens.
      *---------------------------------------------*/
     const out = event_flag_t.EVF_OUTPUT_EVENT | event_flag_t.EVF_NO_WARN_SUBS;
     const event_types = [
-        ["EV_TREEDB_NODE_CREATED", out],
-        ["EV_TREEDB_NODE_UPDATED", out],
-        ["EV_TREEDB_NODE_DELETED", out],
+        ["EV_TREEDB_NODE_CREATED",  out],
+        ["EV_TREEDB_NODE_UPDATED",  out],
+        ["EV_TREEDB_NODE_DELETED",  out],
+        ["EV_TREEDB_NODE_LINKED",   out],
+        ["EV_TREEDB_NODE_UNLINKED", out],
         ["EV_MT_COMMAND_ANSWER",   0],
         ["EV_ON_OPEN",             0],
         ["EV_ON_CLOSE",            0]
