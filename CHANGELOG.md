@@ -177,11 +177,19 @@ on its own, outside the yunetas superproject.
     the backends page is. It has no submenu either, so the tab strip collapses
     while it is on stage.
 
-    And the workspace picker — tab 0 of Topics/Graphs — is labelled **Select**
-    (`yi-square-check`) instead of *Connections*. Two different pages had
-    carried that one label: the backends manager and the tab where you tick
-    which treedbs of a backend to open. It went unnoticed while one of them
-    hid under the avatar; with both on screen at once it had to give.
+    And the workspace picker — tab 0 of Topics/Graphs — is **Select**
+    (`yi-square-check`) instead of *Connections*, **path included**:
+    `/<ws>/connections` → **`/<ws>/select`**. Two different pages had carried
+    that one name: the backends manager and the tab where you tick which
+    treedbs of a backend to open. It went unnoticed while one of them hid under
+    the avatar; with both on screen at once it had to give — and a name has to
+    say what the thing is, in the URL as much as on the tab.
+
+    Two consequences worth knowing. A bookmark of `/<ws>/connections` no longer
+    resolves — this is a browser-local dev tool, so there is no redirect from
+    the old path. And the persisted active-tab sentinel `"__connections__"`
+    became `"__picker__"`; a value stored under the old name simply falls
+    through to the first open treedb tab, once.
 
 - **fix: `EV_RECORD_WRITTEN` was an FSM error on every write.** Both hosted
     views publish it to their parent (CHILD subscription model) and

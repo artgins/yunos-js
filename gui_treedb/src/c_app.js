@@ -85,10 +85,15 @@ import {deploy_info} from "./conf/deploy.js";
  ***************************************************************/
 const GCLASS_NAME = "C_TREEDB_APP";
 
-/*  Sentinel active-tab id for the Connections (picker) tab, so it is a
- *  first-class resting position remembered like any treedb tab — the URL
- *  is the authority for "where you are" (ROUTING.md §3). */
-const CONNECTIONS_TAB = "__connections__";
+/*  Sentinel active-tab id for the picker tab, so it is a first-class
+ *  resting position remembered like any treedb tab — the URL is the
+ *  authority for "where you are" (ROUTING.md §3).
+ *
+ *  It used to be "__connections__", named after the label the picker
+ *  carried before the backends page took that name back. A stored value
+ *  from then no longer matches and simply falls through to the first open
+ *  treedb tab, once. */
+const PICKER_TAB = "__picker__";
 
 /*  The two workspaces and the treedb view each mounts.  */
 const WORKSPACES = {
@@ -307,7 +312,7 @@ function destroy_shell(gobj)
  ***************************************************************/
 function picker_route(ws)
 {
-    return "/" + ws + "/connections";
+    return "/" + ws + "/select";
 }
 
 function db_home_route(ws)
@@ -478,7 +483,7 @@ function workspace_first_route(gobj, ws)
     };
     let active = config ? treedb_config_get_active_tab(config, ws) : "";
     /*  The picker is a remembered resting position too (ROUTING.md §3). */
-    if(active === CONNECTIONS_TAB) {
+    if(active === PICKER_TAB) {
         return picker_route(ws);
     }
     let open = selected.filter(has_tab);
@@ -1195,14 +1200,14 @@ function ac_route_changed(gobj, event, kw, src)
      *  a real, resolved treedb tab (base === /<ws>/db/<sel>).  */
     gobj.priv.mounted_base = base;
 
-    /*  On the Connections (picker) tab → remember it as the active position,
-     *  so switching workspaces and back returns to Connections instead of
-     *  jumping to a treedb tab (the URL is the authority, ROUTING.md §3). */
+    /*  On the picker tab → remember it as the active position, so switching
+     *  workspaces and back returns to the picker instead of jumping to a
+     *  treedb tab (the URL is the authority, ROUTING.md §3). */
     if(base === picker_route(ws)) {
         let config = gobj_find_service("treedb_config", false);
         if(config) {
             gobj_send_event(config, "EV_SET_ACTIVE_TAB",
-                {workspace: ws, id: CONNECTIONS_TAB}, gobj);
+                {workspace: ws, id: PICKER_TAB}, gobj);
         }
         return 0;
     }

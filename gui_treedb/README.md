@@ -29,10 +29,12 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   access_token is never stored here). An import ADDS: every connection arrives
   with a fresh id (the id is what the open tabs and Tranger views are keyed by)
   and disabled (importing a file must not open sockets).
-  The picker — tab 0 of Topics/Graphs, labelled **Select** — chooses which
-  services to open per workspace. It is NOT the Connections rail item: that one
-  manages the backends, this one ticks which of a backend's treedbs to open, and
-  they carried the same label until they ended up one click apart. A connection whose backend is down is retried with a **backoff**
+  The picker — tab 0 of Topics/Graphs, at **`/<ws>/select`** and labelled
+  **Select** — chooses which services to open per workspace. It is NOT the
+  Connections rail item: that one manages the backends, this one ticks which of
+  a backend's treedbs to open. Both the label and the path used to say
+  *connections*, which was only survivable while one of the two hid under the
+  avatar. A connection whose backend is down is retried with a **backoff**
   (5s → 60s, jittered), not every 5s for ever.
 - **Service discovery:** on the first connect of a never-scanned connection,
   `C_TREEDB_LINKS` discovers the yuno's **`C_NODE` / `C_TRANGER`** services

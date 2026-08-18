@@ -13,10 +13,10 @@
         },
 
         "stages": {
-            "main": { "zone": "center", "default_route": "/topics/connections" }
+            "main": { "zone": "center", "default_route": "/topics/select" }
         },
 
-        "_routes_comment": "Resolution-ancestor routes for the per-workspace dynamic treedb tabs (a tab /<ws>/db/<sel> resolves here on F5 before the controller rebuilds it). Both point at the workspace picker so an F5 shows the connection manager while the backend connects; once EV_ON_OPEN rebuilds the tab, C_TREEDB_APP.restore_tab_from_url re-navigates to it so the reload lands on the tab the operator was on. /connections and /preferences are first-level routes: /connections is the first item of the rail (and is also reached from each workspace picker), /preferences hangs off the avatar menu, and both stay ROUTES so they are linkable, survive an F5 and appear in the site map. They are two pages and not one because they are two different things: the backends are what the app BROWSES -- shared by both workspaces, the thing a picker sends you to -- while preferences are what this browser chose.",
+        "_routes_comment": "Resolution-ancestor routes for the per-workspace dynamic treedb tabs (a tab /<ws>/db/<sel> resolves here on F5 before the controller rebuilds it). Both point at the workspace picker (/<ws>/select) so an F5 shows the treedb selector while the backend connects; once EV_ON_OPEN rebuilds the tab, C_TREEDB_APP.restore_tab_from_url re-navigates to it so the reload lands on the tab the operator was on. /connections and /preferences are first-level routes: /connections is the first item of the rail (the BACKENDS manager; the per-workspace /<ws>/select is a different page -- which treedbs of a backend to open -- and links to it), /preferences hangs off the avatar menu, and both stay ROUTES so they are linkable, survive an F5 and appear in the site map. They are two pages and not one because they are two different things: the backends are what the app BROWSES -- shared by both workspaces, the thing a picker sends you to -- while preferences are what this browser chose.",
         "routes": {
             "/connections": {
                 "stage": "main",
@@ -56,7 +56,7 @@
                 "wordmark": "TreeDB GUI",
                 "alt": "TreeDB GUI",
                 "aria_label": "TreeDB GUI home",
-                "action": { "type": "navigate", "route": "/topics/connections" }
+                "action": { "type": "navigate", "route": "/topics/select" }
             },
             {
                 "id": "lang",
@@ -157,7 +157,7 @@
                                 "id": "picker",
                                 "name": "select",
                                 "icon": "yi-square-check",
-                                "route": "/topics/connections",
+                                "route": "/topics/select",
                                 "target": {
                                     "stage": "main",
                                     "gclass": "C_TREEDB_PICKER",
@@ -183,7 +183,7 @@
                                 "id": "picker",
                                 "name": "select",
                                 "icon": "yi-square-check",
-                                "route": "/graphs/connections",
+                                "route": "/graphs/select",
                                 "target": {
                                     "stage": "main",
                                     "gclass": "C_TREEDB_PICKER",
