@@ -7,10 +7,15 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 ## Architecture
 
 - **Shell:** the declarative shell drives the nav; `src/app_config.json` declares
-  the rail (Topics / Graphs), and both entries are WORK. The two setup pages
-  hang off the toolbar avatar as first-level routes with no rail entry:
-  `/connections` (the backends, also reached from each workspace picker) and
-  `/preferences` (what this browser chose). Views are mounted by gclass name.
+  the rail — **Connections / Topics / Graphs**: the backends first, because they
+  are where a session starts and both work entries depend on them, then the work
+  itself. `/preferences` (what this browser chose) stays a first-level route off
+  the toolbar avatar. Views are mounted by gclass name.
+
+  The Connections rail item declares a `route` and **no** `target`: `/connections`
+  is in `shell.routes`, and the shell's `build_item_index()` fills a menu entry
+  that has a route but no target from there — so one place, not two, says which
+  gclass the backends page is.
 - **Connections:** the user configures backends at runtime in **Connections** (an
   editable Tabulator table: `url`, `remote_yuno_role`, `remote_yuno_service`),
   persisted in browser localStorage (`C_TREEDB_CONFIG`). Each connection is

@@ -165,6 +165,18 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
+- **Connections moved from the account menu to the rail.** The backends are
+    where a session starts and both work entries depend on them, so they are
+    the first rail item now — **Connections / Topics / Graphs** — instead of an
+    entry under the toolbar avatar, which keeps `/preferences` and the
+    developer / informative entries.
+
+    The rail item declares a `route` and **no** `target`: `/connections` is
+    already in `shell.routes`, and `build_item_index()` fills a menu entry that
+    has a route but no target from there, so only one place says which gclass
+    the backends page is. It has no submenu either, so the tab strip collapses
+    while it is on stage.
+
 - **fix: `EV_RECORD_WRITTEN` was an FSM error on every write.** Both hosted
     views publish it to their parent (CHILD subscription model) and
     `C_TREEDB_VIEW` did not declare it, so each write logged *"Event NOT DEFINED
