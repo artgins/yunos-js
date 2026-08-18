@@ -345,6 +345,7 @@ const es = {
         "service": "Servicio",
         "from": "Desde",
         "to": "Hasta",
+        "select":               "Seleccionar",
         "select dates please": "Selecciona fechas por favor",
         "login failed": "Error de inicio de sesión",
 

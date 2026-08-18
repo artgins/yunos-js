@@ -177,6 +177,12 @@ on its own, outside the yunetas superproject.
     the backends page is. It has no submenu either, so the tab strip collapses
     while it is on stage.
 
+    And the workspace picker — tab 0 of Topics/Graphs — is labelled **Select**
+    (`yi-square-check`) instead of *Connections*. Two different pages had
+    carried that one label: the backends manager and the tab where you tick
+    which treedbs of a backend to open. It went unnoticed while one of them
+    hid under the avatar; with both on screen at once it had to give.
+
 - **fix: `EV_RECORD_WRITTEN` was an FSM error on every write.** Both hosted
     views publish it to their parent (CHILD subscription model) and
     `C_TREEDB_VIEW` did not declare it, so each write logged *"Event NOT DEFINED

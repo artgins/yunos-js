@@ -33,13 +33,13 @@
             "/topics/db": {
                 "stage": "main",
                 "gclass": "C_TREEDB_PICKER",
-                "kw": { "workspace": "topics", "title": "connections" },
+                "kw": { "workspace": "topics", "title": "select" },
                 "lifecycle": "keep_alive"
             },
             "/graphs/db": {
                 "stage": "main",
                 "gclass": "C_TREEDB_PICKER",
-                "kw": { "workspace": "graphs", "title": "connections" },
+                "kw": { "workspace": "graphs", "title": "select" },
                 "lifecycle": "keep_alive"
             }
         }
@@ -155,13 +155,13 @@
                         "items": [
                             {
                                 "id": "picker",
-                                "name": "connections",
-                                "icon": "yi-cloudversify",
+                                "name": "select",
+                                "icon": "yi-square-check",
                                 "route": "/topics/connections",
                                 "target": {
                                     "stage": "main",
                                     "gclass": "C_TREEDB_PICKER",
-                                    "kw": { "workspace": "topics", "title": "connections" },
+                                    "kw": { "workspace": "topics", "title": "select" },
                                     "lifecycle": "keep_alive"
                                 }
                             }
@@ -181,13 +181,13 @@
                         "items": [
                             {
                                 "id": "picker",
-                                "name": "connections",
-                                "icon": "yi-cloudversify",
+                                "name": "select",
+                                "icon": "yi-square-check",
                                 "route": "/graphs/connections",
                                 "target": {
                                     "stage": "main",
                                     "gclass": "C_TREEDB_PICKER",
-                                    "kw": { "workspace": "graphs", "title": "connections" },
+                                    "kw": { "workspace": "graphs", "title": "select" },
                                     "lifecycle": "keep_alive"
                                 }
                             }

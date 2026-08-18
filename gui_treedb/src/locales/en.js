@@ -344,6 +344,7 @@ const en = {
         "service": "Service",
         "from": "From",
         "to": "To",
+        "select":               "Select",
         "select dates please": "Select dates please",
         "login failed": "Login failed",
 

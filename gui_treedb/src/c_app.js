@@ -327,14 +327,18 @@ function picker_item(ws)
 {
     return {
         id:       "picker",
-        name:     "connections",
-        icon:     "yi-cloudversify",
+        /*  "select", not "connections": the rail entry of that name is the
+         *  BACKENDS page (C_TREEDB_CONNECTIONS), and this tab is where you
+         *  tick which treedbs of a backend to open. Two things one click
+         *  apart cannot share a label.  */
+        name:     "select",
+        icon:     "yi-square-check",
         route:    picker_route(ws),
         closable: false,
         target: {
             stage:     "main",
             gclass:    "C_TREEDB_PICKER",
-            kw:        {workspace: ws, title: "connections"},
+            kw:        {workspace: ws, title: "select"},
             lifecycle: "keep_alive"
         }
     };
