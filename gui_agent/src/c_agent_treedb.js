@@ -91,6 +91,7 @@ import {yui_node_set_nav_mode} from "@yuneta/gobj-ui/src/c_yui_node.js";
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_shell_show_modal, yui_shell_show_error} from "@yuneta/gobj-ui/src/shell_modals.js";
 
+import {is_agent_yuno, cmd2agent_service} from "./agent_helpers.js";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {agent_config_get_nav_mode} from "./c_agent_config.js";
 
@@ -368,7 +369,7 @@ function request_treedbs(gobj)
 
     let kw_send = {
         agent_id:  node,
-        cmd2agent: `command-yuno id="${yuno}" service="__yuno__" command="services"`
+        cmd2agent: cmd2agent_service(yuno, "__yuno__", "services")
     };
     msg_iev_write_key(kw_send, "console_purpose", PURPOSE);
     msg_iev_write_key(kw_send, "console_node", node);
@@ -456,7 +457,7 @@ function probe_master(gobj, treedb_name)
     }
     let kw_send = {
         agent_id:  node,
-        cmd2agent: `command-yuno id="${yuno_id}" service="${treedb_name}" command="treedb-info"`
+        cmd2agent: cmd2agent_service(yuno_id, treedb_name, "treedb-info")
     };
     msg_iev_write_key(kw_send, "console_purpose", MASTER_PURPOSE);
     /*  Tagged like the discovery request: the answer has to be recognisable
@@ -648,6 +649,21 @@ function render_apply(gobj)
     let priv = gobj.priv;
     if(!priv.$apply || !priv.$pending) {
         return;
+    }
+    /*
+     *  The AGENT's own treedbs can be edited from here, but not APPLIED:
+     *  applying is restarting the owning yuno, and the agent is not one of
+     *  the yunos it manages -- `kill-yuno` does nothing to it. It is
+     *  restarted on the node (`yuneta_agent --stop` / `--start`). So the
+     *  button is disabled and says why, instead of sending three commands
+     *  that would report success and change nothing.
+     */
+    if(is_agent_yuno(gobj_read_str_attr(gobj, "yuno_id"))) {
+        priv.$apply.disabled = true;
+        priv.$apply.title = t("apply needs a node restart");
+        priv.$apply.setAttribute("aria-label", t("apply needs a node restart"));
+        priv.$apply.setAttribute("data-i18n-title", "apply needs a node restart");
+        priv.$apply.setAttribute("data-i18n-aria-label", "apply needs a node restart");
     }
     priv.$apply.classList.toggle("is-warning", priv.dirty);
     priv.$pending.classList.toggle("is-hidden", !priv.dirty);
@@ -1032,6 +1048,13 @@ function ac_apply_changes(gobj, event, kw, src)
 
     if(priv.modal) {
         return 0;   /*  already asking  */
+    }
+    if(is_agent_yuno(gobj_read_str_attr(gobj, "yuno_id"))) {
+        /*  Hiding a button is not refusing an action: the event can still
+         *  arrive from a keyboard path. See render_apply().  */
+        log_error(`${gobj_short_name(gobj)}: apply refused, the agent is not ` +
+            `a managed yuno -- restart it on the node`);
+        return -1;
     }
     let shell = yui_shell_of(gobj);
     if(!shell) {

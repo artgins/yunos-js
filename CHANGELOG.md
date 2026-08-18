@@ -23,6 +23,29 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **feat: the node's own AGENT is offered in the Schemas picker.** It never
+    appears in `list-yunos` — it is the daemon that answers that command, not
+    one of the yunos it manages — and yet it runs the same kind of services,
+    its treedbs included (`treedb_yuneta_agent`, `treedb_system_schema`,
+    `treedb_authzs`), which were unreachable from this console.
+
+    The picker prepends a row for it under the sentinel yuno id `__agent__`,
+    and everything downstream is unchanged except ONE line: the inner command
+    is the agent's own `command-agent service=<treedb>` instead of
+    `command-yuno id=<yuno> service=<treedb>`. That line is
+    `cmd2agent_service()` in `agent_helpers.js` (3 unit tests), used by the
+    four places that address a service behind an agent — the picker's treedb
+    and master probes, the tab's discovery, and the routing adapter.
+
+    On the `.ovh` plane the same row reaches **`yuneta_agent22`**: `deploy.js`
+    maps the serving host to its control center, so the two planes need no
+    separate code.
+
+    **Apply is disabled on that tab.** Applying is restarting the owning yuno
+    and the agent is not one of them — `kill-yuno` does nothing to it, it is
+    restarted on the node with `--stop` / `--start`. The button says so, and
+    the event is refused as well: hiding a button is not refusing an action.
+
 - **fix: a tab forgot where you were inside it.** Open a topic in a Schemas
     tab, look at another tab, come back — and you landed on the treedb cards
     with the topic gone. A tab's nav item carries a FIXED route (its base), so

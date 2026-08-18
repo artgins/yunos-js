@@ -14,6 +14,9 @@
  ***********************************************************************/
 import { describe, test, expect } from "vitest";
 import {
+    AGENT_YUNO_ID,
+    is_agent_yuno,
+    cmd2agent_service,
     version_tuple,
     version_gte,
     version_cmp,
@@ -323,5 +326,27 @@ describe("normalize_history", () => {
         const out = normalize_history(["a", "b", "b", "c", "c", "c"], NOW);
         const by_freq = out.slice().sort((x, y) => (y.count - x.count) || (y.last - x.last));
         expect(by_freq.map((e) => e.cmd)).toEqual(["c", "b", "a"]);
+    });
+});
+
+
+describe("cmd2agent_service", () => {
+    test("addresses a managed yuno through command-yuno", () => {
+        expect(cmd2agent_service("1630", "treedb_authzs", "topics")).toBe(
+            'command-yuno id="1630" service="treedb_authzs" command="topics"'
+        );
+    });
+
+    test("addresses the agent itself through its own command-agent", () => {
+        expect(cmd2agent_service(AGENT_YUNO_ID, "treedb_yuneta_agent", "topics")).toBe(
+            'command-agent service="treedb_yuneta_agent" command="topics"'
+        );
+    });
+
+    test("tells the agent sentinel from a real yuno id", () => {
+        expect(is_agent_yuno(AGENT_YUNO_ID)).toBe(true);
+        expect(is_agent_yuno("1630")).toBe(false);
+        expect(is_agent_yuno("")).toBe(false);
+        expect(is_agent_yuno(undefined)).toBe(false);
     });
 });

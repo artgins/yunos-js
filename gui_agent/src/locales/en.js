@@ -321,6 +321,8 @@ const en = {
         "resize topic ports":   "Resize topic ports",
         "operation mode":       "Operation mode",
 
+        "apply needs a node restart": "Applying is restarting the yuno, and the agent is not one: restart it on the node",
+
         /* keep this last so adding new keys above never hits the comma trap */
         "_xxx":              "last key — insert new ones above"
     }

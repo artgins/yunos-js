@@ -19,6 +19,11 @@
  *              cmd2agent="command-yuno id=<yuno> service=<treedb>
  *                         command=<the view's command>"
  *
+ *      ...unless the treedb belongs to the AGENT itself, which is not a
+ *      managed yuno and answers for its own services with its own
+ *      `command-agent service=<treedb>`.  That is the only difference,
+ *      and it lives in cmd2agent_service() (agent_helpers.js).
+ *
  *      `gobj_command()` dispatches to `gclass.gmt.mt_command_parser`
  *      BEFORE anything else, so a gclass implementing it can take the
  *      view's command verbatim, re-wrap it, and answer the view in the
@@ -83,6 +88,7 @@ import {
     empty_string,
 } from "@yuneta/gobj-js";
 
+import {cmd2agent_service} from "./agent_helpers.js";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 
 
@@ -254,8 +260,7 @@ function mt_command_parser(gobj, command, kw, src)
     delete kw_send.__md_command__;
 
     kw_send.agent_id = node;
-    kw_send.cmd2agent =
-        `command-yuno id="${yuno_id}" service="${treedb}" command="${command}"`;
+    kw_send.cmd2agent = cmd2agent_service(yuno_id, treedb, command);
 
     msg_iev_write_key(kw_send, "console_purpose", PURPOSE);
     msg_iev_write_key(kw_send, "treedb_seq", String(seq));

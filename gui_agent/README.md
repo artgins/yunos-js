@@ -106,6 +106,24 @@ data (`treedbs` → `topics` → `cols`). Editing it there is how a schema chang
 without touching the C literal; the change reaches the yuno on its next restart
 (`kill-yuno` + `run-yuno`).
 
+**The node's own AGENT is one of the entries.** It never appears in
+`list-yunos` — it is the daemon that ANSWERS that command, not one of the yunos
+it manages — and yet it runs the same kind of services, its treedbs included
+(`treedb_yuneta_agent`, `treedb_system_schema`, `treedb_authzs`). The Schemas
+picker therefore prepends a row for it, under the sentinel yuno id
+`__agent__`, and everything downstream is unchanged except ONE line: the inner
+command is the agent's own `command-agent service=<treedb>` instead of
+`command-yuno id=<yuno> service=<treedb>`. That line is `cmd2agent_service()`
+in `agent_helpers.js`, used by all four places that address a service behind an
+agent. On the `.ovh` plane the same row reaches **`yuneta_agent22`**, because
+`deploy.js` maps the serving host to its control center — no extra code.
+
+What it cannot do there is **Apply**: applying is restarting the owning yuno,
+and the agent is not one of the yunos it manages, so `kill-yuno` does nothing
+to it. The button is disabled on that tab and says the agent must be restarted
+on the node (`yuneta_agent --stop` / `--start`); the event is refused too, since
+hiding a button is not refusing an action.
+
 **Which treedbs a yuno has is discovered, not assumed.** A yuno exposes them as
 services, so one round trip answers it —
 `command-yuno id=<yuno> service=__yuno__ command=services` — and the `C_NODE`

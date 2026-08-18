@@ -53,6 +53,8 @@ import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
+    AGENT_YUNO_ID,
+    cmd2agent_service,
     version_cmp,
     version_gte,
     node_id,
@@ -692,7 +694,7 @@ function probe_master(gobj, node, yuno_id, treedb_name)
     }
     let kw_send = {
         agent_id:  node,
-        cmd2agent: `command-yuno id="${yuno_id}" service="${treedb_name}" command="treedb-info"`
+        cmd2agent: cmd2agent_service(yuno_id, treedb_name, "treedb-info")
     };
     msg_iev_write_key(kw_send, "console_purpose", MASTER_PURPOSE);
     msg_iev_write_key(kw_send, "console_node", node);
@@ -778,7 +780,7 @@ function probe_treedbs(gobj, node, yuno_id)
 
     let kw_send = {
         agent_id:  node,
-        cmd2agent: `command-yuno id="${yuno_id}" service="__yuno__" command="services"`
+        cmd2agent: cmd2agent_service(yuno_id, "__yuno__", "services")
     };
     msg_iev_write_key(kw_send, "console_purpose", CHECK_PURPOSE);
     msg_iev_write_key(kw_send, "console_node", node);
@@ -828,6 +830,29 @@ function set_node_yunos(gobj, node, data)
             });
         }
     }
+    /*
+     *  The node's own AGENT, first. It never appears in `list-yunos` --
+     *  it is the daemon that ANSWERS it, not one of the yunos it manages
+     *  -- and yet it runs the same kind of services, its treedbs
+     *  included. Only the Schemas picker offers it: this is the one
+     *  workspace that has something to do with a treedb, and the row is
+     *  addressed with the agent's own `command-agent` from here on.
+     *
+     *  On the .ovh plane the agent this reaches IS yuneta_agent22, so
+     *  the same row shows that one with no extra code (deploy.js maps
+     *  the host to its control center).
+     */
+    if(gobj_read_bool_attr(gobj, "with_treedb_check")) {
+        rows.unshift({
+            _key:     stats_sel_id(node, AGENT_YUNO_ID),
+            _type:    "yuno",
+            node:     node,
+            yuno_id:  AGENT_YUNO_ID,
+            label:    "yuneta_agent",
+            running:  true
+        });
+    }
+
     priv.yunos[node] = rows;
     schedule_render(gobj);
 }

@@ -283,7 +283,42 @@ function normalize_history(list, now)
 }
 
 
+/***************************************************************
+ *  Addressing a SERVICE behind a node's agent.
+ *
+ *  A managed yuno is reached with the agent's `command-yuno id=<yuno>`.
+ *  The AGENT ITSELF is not a managed yuno -- it never appears in
+ *  `list-yunos` -- but it runs the same kind of services, its own
+ *  treedbs included (`treedb_yuneta_agent`, `treedb_system_schema`,
+ *  `treedb_authzs`), and it reaches them with its own `command-agent
+ *  service=<svc>`.
+ *
+ *  So the two differ in ONE line, and this is that line: everything
+ *  else -- discovery, the treedb views, the routing adapter -- is the
+ *  same. `AGENT_YUNO_ID` is the sentinel this app uses for the agent
+ *  wherever a yuno id is expected; it cannot collide with a real one,
+ *  which is a number.
+ ***************************************************************/
+const AGENT_YUNO_ID = "__agent__";
+
+function is_agent_yuno(yuno_id)
+{
+    return yuno_id === AGENT_YUNO_ID;
+}
+
+function cmd2agent_service(yuno_id, service, command)
+{
+    if(is_agent_yuno(yuno_id)) {
+        return `command-agent service="${service}" command="${command}"`;
+    }
+    return `command-yuno id="${yuno_id}" service="${service}" command="${command}"`;
+}
+
+
 export {
+    AGENT_YUNO_ID,
+    is_agent_yuno,
+    cmd2agent_service,
     version_tuple,
     version_gte,
     version_cmp,

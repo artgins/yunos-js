@@ -325,6 +325,8 @@ const es = {
         "resize topic ports":   "Redimensionar los puertos del topic",
         "operation mode":       "Modo de operación",
 
+        "apply needs a node restart": "Aplicar es reiniciar el yuno, y el agente no lo es: reinicialo en el nodo",
+
         /* mantener al final — insertar nuevas claves antes */
         "_xxx":              "última clave — insertar nuevas antes"
     }
