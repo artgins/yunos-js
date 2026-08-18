@@ -124,6 +124,30 @@ to it. The button is disabled on that tab and says the agent must be restarted
 on the node (`yuneta_agent --stop` / `--start`); the event is refused too, since
 hiding a button is not refusing an action.
 
+**What is edited here is not what C declares, and nothing said so.** A treedb
+opens from its projection in `__system__`, the projector never deletes, and a
+re-projection publishes under a version of its own — so `schema_version` 24
+over `c_schema_version` 23 is the shape of an operator edit AND the shape of a
+plain re-projection. The **Differences** button answers which: it asks each
+`C_TREEDB` service of the yuno for `diff-schema` (SDK > 7.13.0) and shows one
+row per difference — `changed`, `only_in_stored` (an operator addition, or a
+topic a later schema dropped and the upsert kept), `only_in_c` (declared and
+never projected) or `version` — with what the command says about the versions
+above them.
+
+Three things about its scope, and each is a property of the backend:
+
+- The command belongs to `C_TREEDB`, the service that owns `__system__`, not to
+  the treedb's `C_NODE`. It is a different service, so it takes a different
+  `read` permission: an identity that reads the schemas can still be refused
+  here, and the report says so, per service.
+- It compares against the schema the treedb was **opened** with, so a treedb
+  opened from its projection alone has no other half and answers nothing.
+- A treedb that no `C_TREEDB` opened — `treedb_authzs`, built by `C_AUTHZ`
+  straight on a tranger — is owned by none and appears in no row.
+
+A node too old to know the command says so in the same dialog, per service.
+
 **Which treedbs a yuno has is discovered, not assumed.** A yuno exposes them as
 services, so one round trip answers it —
 `command-yuno id=<yuno> service=__yuno__ command=services` — and the `C_NODE`

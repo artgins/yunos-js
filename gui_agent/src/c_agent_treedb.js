@@ -44,6 +44,17 @@
  *      neither timer nor polling — and it ends by re-discovering, which
  *      re-mounts the view against the schema the yuno has just re-read.
  *
+ *      WHAT IS EDITED HERE IS NOT WHAT C DECLARES, and nothing said so.
+ *      A treedb opens from its projection in `__system__`, the projector
+ *      never deletes, and a re-projection publishes under a version of
+ *      its own — so `schema_version` 24 over `c_schema_version` 23 is
+ *      the shape of an operator edit AND the shape of a plain
+ *      re-projection. The `differences` button asks each `C_TREEDB`
+ *      service of the yuno for `diff-schema` (SDK > 7.13.0) and shows
+ *      the answer as a table: one row per difference, plus what the
+ *      command says about the versions. A node too old to know the
+ *      command says so in the same dialog, per service.
+ *
  *      STATES, because each is a different screen and a different set of
  *      legal actions:
  *          ST_IDLE         no yuno picked, or no session yet
@@ -114,6 +125,19 @@ const MASTER_PURPOSE = "treedbmaster";
  *  every answer to every panel, and each filters on its own purpose.  */
 const PURPOSE = "treedbs";
 
+/*  Marker of the per-owner `diff-schema` request: what the stored schema
+ *  says that the schema compiled in C does not.  */
+const DIFF_PURPOSE = "treedbdiff";
+
+/*  What `kind` a difference is, as an i18n key. A kind this console does
+ *  not know is shown as it came: a newer node may report one.  */
+const DIFF_KINDS = {
+    "changed":          "changed",
+    "only_in_stored":   "only in stored",
+    "only_in_c":        "only in c",
+    "version":          "version mismatch"
+};
+
 /*  How long a step of the apply sequence may take before the tab stops
  *  waiting. Generous: the agent answers each one when it is DONE, and
  *  "done" for a kill is the killed yuno's channel closing.  */
@@ -145,8 +169,14 @@ let PRIVATE_DATA = {
     seg:         null,  /*  subpath of the url under this tab  */
     apply_timer: null,  /*  deadline of the step in flight  */
     modal:       null,  /*  the apply confirmation  */
-    $toolbar:    null,  /*  pending flag + apply  */
+    owners:      null,  /*  discovered C_TREEDB service names  */
+    diff_rows:   null,  /*  differences gathered from every owner  */
+    diff_notes:  null,  /*  what each owner said about them  */
+    diff_left:   0,     /*  `diff-schema` answers still owed  */
+    diff_modal:  null,  /*  the differences report  */
+    $toolbar:    null,  /*  differences + pending flag + apply  */
     $apply:      null,
+    $diff:       null,
     $pending:    null,
     $notice:     null,  /*  shown while there is no tree  */
     $body:       null,  /*  where the tree's container is mounted  */
@@ -172,8 +202,12 @@ function mt_create(gobj)
     let priv = gobj.priv;
 
     priv.treedbs = [];
+    priv.owners = [];
     priv.master = {};             /*  treedb name -> true|false (absent = unknown)  */
     priv.master_left = 0;         /*  treedb-info answers still owed  */
+    priv.diff_rows = [];
+    priv.diff_notes = [];
+    priv.diff_left = 0;
     priv.dirty = false;
 
     /*
@@ -314,6 +348,27 @@ function build_ui(gobj)
             }}
         ]
     );
+    /*  What the yuno's schemas hold that its C literals do not. Read-only,
+     *  so it needs no confirmation — it opens a report.  */
+    priv.$diff = createElement2(
+        ["button", {class: "TREEDB_DIFF button",
+                    title: t("schema differences"), "aria-label": t("schema differences"),
+                    "data-i18n-title": "schema differences",
+                    "data-i18n-aria-label": "schema differences"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-magnifying-glass"}]]],
+                /*  Three controls in one row: the label is dropped on a
+                    narrow screen, where "Cambios sin aplicar" + "Aplicar"
+                    already fill it. The title carries the meaning there.  */
+                ["span", {class: "is-hidden-mobile", i18n: "differences"},
+                    t("differences")]
+            ],
+            {click: (e) => {
+                e.stopPropagation();
+                gobj_send_event(gobj, "EV_DIFF_SCHEMA", {}, gobj);
+            }}
+        ]
+    );
     priv.$pending = createElement2(
         ["span", {class: "TREEDB_PENDING has-text-warning-dark is-hidden",
                   i18n: "pending changes"},
@@ -330,7 +385,7 @@ function build_ui(gobj)
             [
                 ["div", {class: "TREEDB_TOOLBAR_END is-align-items-center",
                          style: "display:flex; gap:.5rem; margin-left:auto;"},
-                    [priv.$pending, priv.$apply]]
+                    [priv.$diff, priv.$pending, priv.$apply]]
             ]
         ]
     );
@@ -414,6 +469,26 @@ function treedbs_of(data)
 }
 
 /***************************************************************
+ *  The C_TREEDB services of the answer: the ones that OWN the
+ *  schemas, and the only ones that can compare them.
+ *
+ *  A yuno can run more than one, and a treedb opened by nobody's
+ *  C_TREEDB (`treedb_authzs`, built by C_AUTHZ straight on a
+ *  tranger) is owned by none — it has no projection to compare
+ *  with, and no answer here claims otherwise.
+ ***************************************************************/
+function schema_owners_of(data)
+{
+    if(!Array.isArray(data)) {
+        return [];
+    }
+    return data
+        .filter((s) => s && s.gclass === "C_TREEDB" && !empty_string(s.service))
+        .map((s) => s.service)
+        .sort();
+}
+
+/***************************************************************
  *  This tab's route: the tree of treedbs is rooted here, and a
  *  treedb node's own route is this plus its name.
  ***************************************************************/
@@ -466,6 +541,189 @@ function probe_master(gobj, treedb_name)
     msg_iev_write_key(kw_send, "console_yuno", yuno_id);
     msg_iev_write_key(kw_send, "console_treedb", treedb_name);
     agent_link_command(link, "command-agent", kw_send);
+}
+
+/***************************************************************
+ *  Ask ONE `C_TREEDB` service what its stored schemas hold that the
+ *  schemas compiled in C do not (`diff-schema`, SDK > 7.13.0).
+ *
+ *  No `treedb_name`: the command answers for every treedb that
+ *  service opened, which is this tab's scope — and the parameter
+ *  would travel inside `command-yuno`'s own kw, where any name of a
+ *  column of `list-yunos` selects a yuno instead.
+ ***************************************************************/
+function request_diff(gobj, owner)
+{
+    let link = link_service(gobj);
+    let node = gobj_read_str_attr(gobj, "node");
+    let yuno_id = gobj_read_str_attr(gobj, "yuno_id");
+
+    if(!link || !agent_link_is_connected(link)) {
+        return diff_answered(gobj, owner, null);
+    }
+    let kw_send = {
+        agent_id:  node,
+        cmd2agent: cmd2agent_service(yuno_id, owner, "diff-schema")
+    };
+    msg_iev_write_key(kw_send, "console_purpose", DIFF_PURPOSE);
+    /*  Tagged like every other request of this tab: the link re-publishes
+     *  each answer to every panel, and several of these tabs are open.  */
+    msg_iev_write_key(kw_send, "console_node", node);
+    msg_iev_write_key(kw_send, "console_yuno", yuno_id);
+    msg_iev_write_key(kw_send, "console_owner", owner);
+    agent_link_command(link, "command-agent", kw_send);
+    return 0;
+}
+
+/***************************************************************
+ *  One `diff-schema` answer (or its failure). When the last one
+ *  lands, the report is shown — including the failures, which are
+ *  the interesting case on a node too old to know the command.
+ ***************************************************************/
+function diff_answered(gobj, owner, kw)
+{
+    let priv = gobj.priv;
+
+    if(priv.diff_left <= 0) {
+        return 0;   /*  a late or duplicated answer: the report is done  */
+    }
+    if(!kw) {
+        priv.diff_notes.push(`${owner}: ${t("not connected to an agent")}`);
+    } else if(typeof kw.result === "number" && kw.result < 0) {
+        priv.diff_notes.push(`${owner}: ${kw.comment || ""}`);
+    } else {
+        if(kw.comment) {
+            priv.diff_notes.push(kw.comment);
+        }
+        if(Array.isArray(kw.data)) {
+            priv.diff_rows = priv.diff_rows.concat(kw.data);
+        }
+    }
+    priv.diff_left--;
+    if(priv.diff_left > 0) {
+        return 0;   /*  still waiting for the others  */
+    }
+    render_diff_button(gobj);
+    return show_diff_report(gobj);
+}
+
+/***************************************************************
+ *  One cell of the report. A value can be any json the schema
+ *  declares (a `flag` list, an `enum`, a `hook` mapping), and a
+ *  cell is one line: no indentation is shown, so none is chosen.
+ ***************************************************************/
+function diff_value(value)
+{
+    if(value === null || value === undefined) {
+        return "";
+    }
+    if(typeof value === "string") {
+        return value;
+    }
+    return JSON.stringify(value);
+}
+
+/***************************************************************
+ *  One row of the report.
+ ***************************************************************/
+function diff_row_element(row)
+{
+    let kind = (row && row.kind) || "";
+    let key = DIFF_KINDS[kind];
+    /*  A kind this console does not know carries no key: i18next answers
+     *  an unknown key with the key itself, which would read as a
+     *  translation nobody wrote.  */
+    let $kind = key?
+        ["td", {class: "TREEDB_DIFF_KIND", i18n: key}, t(key)]:
+        ["td", {class: "TREEDB_DIFF_KIND"}, kind];
+
+    return createElement2(
+        ["tr", {class: "TREEDB_DIFF_ROW"}, [
+            $kind,
+            ["td", {class: "TREEDB_DIFF_TREEDB"}, (row && row.treedb) || ""],
+            ["td", {class: "TREEDB_DIFF_TOPIC"}, (row && row.topic) || ""],
+            ["td", {class: "TREEDB_DIFF_COL"}, (row && row.col) || ""],
+            ["td", {class: "TREEDB_DIFF_ATTR"}, (row && row.attr) || ""],
+            ["td", {class: "TREEDB_DIFF_STORED",
+                    style: "white-space:pre-wrap; word-break:break-all;"},
+                diff_value(row && row.stored)],
+            ["td", {class: "TREEDB_DIFF_FROM_C",
+                    style: "white-space:pre-wrap; word-break:break-all;"},
+                diff_value(row && row.from_c)]
+        ]]
+    );
+}
+
+/***************************************************************
+ *  The report: what each owner said about the versions, and one
+ *  row per difference. Read-only, so it is a dialog with nothing
+ *  to confirm.
+ ***************************************************************/
+function show_diff_report(gobj)
+{
+    let priv = gobj.priv;
+    let shell = yui_shell_of(gobj);
+
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell to show the differences`);
+        return 0;
+    }
+    if(priv.diff_modal) {
+        priv.diff_modal.close();
+        priv.diff_modal = null;
+    }
+
+    /*  The summary comes from the yuno (it names versions and counts), so
+     *  it is DATA: shown as it came, never translated.  */
+    let $summary = createElement2(
+        ["div", {class: "TREEDB_DIFF_SUMMARY is-size-7 has-text-grey mb-3",
+                 style: "white-space:pre-wrap;"},
+            priv.diff_notes.join("\n")]
+    );
+
+    let $body;
+    if(priv.diff_rows.length === 0) {
+        $body = createElement2(
+            ["p", {class: "TREEDB_DIFF_NONE", i18n: "no schema differences"},
+                t("no schema differences")]
+        );
+    } else {
+        $body = createElement2(
+            ["div", {class: "TREEDB_DIFF_TABLE_WRAP", style: "overflow-x:auto;"}, [
+                ["table", {class: "TREEDB_DIFF_TABLE table is-narrow is-fullwidth is-size-7"}, [
+                    ["thead", {}, [
+                        ["tr", {}, [
+                            ["th", {i18n: "difference"}, t("difference")],
+                            ["th", {i18n: "treedb"}, t("treedb")],
+                            ["th", {i18n: "topic"}, t("topic")],
+                            ["th", {i18n: "column"}, t("column")],
+                            ["th", {i18n: "attribute"}, t("attribute")],
+                            ["th", {i18n: "stored"}, t("stored")],
+                            ["th", {i18n: "from c"}, t("from c")]
+                        ]]
+                    ]],
+                    ["tbody", {}, priv.diff_rows.map(diff_row_element)]
+                ]]
+            ]]
+        );
+    }
+
+    let $content = createElement2(
+        ["div", {class: "TREEDB_DIFF_DIALOG box"}, [$summary, $body]]
+    );
+
+    priv.diff_modal = yui_shell_show_modal(shell, $content, {
+        dialog: true,
+        logical_class: "TREEDB_DIFF_DIALOG",
+        title: "schema differences",
+        title_prefix: gobj_read_str_attr(gobj, "yuno_label") ||
+                      gobj_read_str_attr(gobj, "yuno_id"),
+        t: t,
+        on_close: function() {
+            priv.diff_modal = null;
+        }
+    });
+    return 0;
 }
 
 /***************************************************************
@@ -670,6 +928,27 @@ function render_apply(gobj)
 }
 
 /***************************************************************
+ *  The differences button: off while there is nothing to ask
+ *  (no C_TREEDB service in this yuno) and while an answer is owed.
+ ***************************************************************/
+function render_diff_button(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.$diff) {
+        return;
+    }
+    let none = !priv.owners || priv.owners.length === 0;
+    let busy = priv.diff_left > 0;
+    let key = none? "no schema owner in this yuno": (busy? "comparing": "schema differences");
+
+    priv.$diff.disabled = none || busy;
+    priv.$diff.title = t(key);
+    priv.$diff.setAttribute("aria-label", t(key));
+    priv.$diff.setAttribute("data-i18n-title", key);
+    priv.$diff.setAttribute("data-i18n-aria-label", key);
+}
+
+/***************************************************************
  *  True when an answer carries OUR markers (the link re-publishes
  *  every answer of the session to every panel).
  ***************************************************************/
@@ -772,6 +1051,7 @@ function render_state(gobj)
     let ready = !!priv.tree;
 
     render_apply(gobj);
+    render_diff_button(gobj);
     priv.$toolbar.classList.toggle("is-hidden", !ready);
     priv.$body.classList.toggle("is-hidden", !ready);
     priv.$notice.classList.toggle("is-hidden", ready);
@@ -875,10 +1155,11 @@ function ac_mt_command_answer(gobj, event, kw, src)
 {
     let priv = gobj.priv;
 
-    /*  Two kinds of answer are OURS: the `services` discovery and the
-     *  per-treedb `treedb-info`. Anything else belongs to another panel.  */
+    /*  Three kinds of answer are OURS: the `services` discovery, the
+     *  per-treedb `treedb-info` and the per-owner `diff-schema`. Anything
+     *  else belongs to another panel.  */
     let purpose = msg_iev_read_key(kw, "console_purpose");
-    if(purpose !== PURPOSE && purpose !== MASTER_PURPOSE) {
+    if(purpose !== PURPOSE && purpose !== MASTER_PURPOSE && purpose !== DIFF_PURPOSE) {
         return 0;   /*  another panel's answer  */
     }
 
@@ -891,6 +1172,16 @@ function ac_mt_command_answer(gobj, event, kw, src)
     if(msg_iev_read_key(kw, "console_node") !== gobj_read_str_attr(gobj, "node") ||
             msg_iev_read_key(kw, "console_yuno") !== gobj_read_str_attr(gobj, "yuno_id")) {
         return 0;   /*  another tab's  */
+    }
+
+    if(purpose === DIFF_PURPOSE) {
+        let stack_d = msg_iev_get_stack(gobj, kw, "command_stack", false);
+        let outer_d = kw_get_str(gobj, stack_d, "command", "", 0);
+        let failed_d = (typeof kw.result === "number" && kw.result < 0);
+        if(outer_d === "command-agent" && !failed_d) {
+            return 0;   /*  dispatch ack: the real answer is still coming  */
+        }
+        return diff_answered(gobj, msg_iev_read_key(kw, "console_owner") || "", kw);
     }
 
     if(purpose === MASTER_PURPOSE) {
@@ -915,6 +1206,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
     }
     if(failed) {
         priv.treedbs = [];
+        priv.owners = [];
         priv.notice = kw.comment || "";
         gobj_change_state(gobj, "ST_EMPTY");
         render_state(gobj);
@@ -923,6 +1215,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
 
     priv.notice = "";
     priv.treedbs = treedbs_of(kw.data);
+    priv.owners = schema_owners_of(kw.data);
     if(priv.treedbs.length === 0) {
         gobj_change_state(gobj, "ST_EMPTY");
         render_state(gobj);
@@ -1038,6 +1331,40 @@ function ac_record_written(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The differences asked for: one `diff-schema` per C_TREEDB
+ *  service of the yuno, and the report when the last one answers.
+ ***************************************************************/
+function ac_diff_schema(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    if(priv.diff_left > 0) {
+        return 0;   /*  already asking  */
+    }
+    if(!priv.owners || priv.owners.length === 0) {
+        /*  Disabling a button is not refusing an action: the event can
+         *  still arrive from a keyboard path. See render_diff_button().  */
+        log_error(`${gobj_short_name(gobj)}: no C_TREEDB service in this yuno`);
+        return -1;
+    }
+    let link = link_service(gobj);
+    if(!link || !agent_link_is_connected(link)) {
+        log_error(`${gobj_short_name(gobj)}: cannot compare schemas — not in session`);
+        return -1;
+    }
+
+    priv.diff_rows = [];
+    priv.diff_notes = [];
+    priv.diff_left = priv.owners.length;
+    render_diff_button(gobj);
+
+    for(let owner of priv.owners) {
+        request_diff(gobj, owner);
+    }
+    return 0;
+}
+
+/***************************************************************
  *  Apply asked for. What it does is restart the owning yuno, and
  *  that disconnects every client of it — so it is confirmed, with
  *  the yuno named, before anything is sent.
@@ -1125,6 +1452,11 @@ function ac_apply_cancelled(gobj, event, kw, src)
  ***************************************************************/
 function ac_apply_confirmed(gobj, event, kw, src)
 {
+    /*  A comparison in flight is dropped here: while the sequence runs,
+     *  every answer is routed to ac_apply_answer, so its own would never
+     *  arrive and the button would stay off for good.  */
+    gobj.priv.diff_left = 0;
+
     let priv = gobj.priv;
     let yuno = gobj_read_str_attr(gobj, "yuno_id");
 
@@ -1322,6 +1654,7 @@ function create_gclass(gclass_name)
             ["EV_ON_OPEN",              ac_on_open_ready,     null],
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
+            ["EV_DIFF_SCHEMA",          ac_diff_schema,       null],
             ["EV_APPLY_CHANGES",        ac_apply_changes,     null],
             ["EV_APPLY_CONFIRMED",      ac_apply_confirmed,   null],
             ...dialog_events,
@@ -1364,6 +1697,7 @@ function create_gclass(gclass_name)
         ["EV_ON_OPEN",           0],
         ["EV_ON_CLOSE",          0],
         ["EV_MT_COMMAND_ANSWER", 0],
+        ["EV_DIFF_SCHEMA",       0],
         ["EV_APPLY_CHANGES",     0],
         ["EV_APPLY_CONFIRMED",   0],
         ["EV_APPLY_CANCELLED",   0],

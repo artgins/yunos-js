@@ -23,6 +23,27 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **feat(schemas): a `Differences` button says what the stored schema holds
+    that the schema in C does not.** The workspace edits a schema that lives in
+    `__system__` as data, the projector never deletes, and a re-projection
+    publishes under a version of its own — so `schema_version` 24 over
+    `c_schema_version` 23 is the shape of an operator edit AND the shape of a
+    plain re-projection, and nothing here told them apart.
+
+    The button asks each `C_TREEDB` service the yuno exposes (discovery already
+    listed them; it kept only the `C_NODE` ones) for `diff-schema` (SDK >
+    7.13.0), and reports one row per difference: `kind`, treedb, topic, column,
+    attribute, stored value, value from C. A service that refuses or does not
+    know the command says so in the same dialog, next to the ones that
+    answered.
+
+    Read-only, so it opens a report and confirms nothing. It is an FSM action
+    (`EV_DIFF_SCHEMA` in `ST_READY`) whose answer arrives as
+    `EV_MT_COMMAND_ANSWER` under its own `console_purpose`, like the discovery
+    and the per-treedb `treedb-info` beside it. An `Apply` started while a
+    comparison is in flight drops it: during the restart sequence every answer
+    is routed to the apply steps.
+
 - **feat: the node's own AGENT is offered in the Schemas picker.** It never
     appears in `list-yunos` — it is the daemon that answers that command, not
     one of the yunos it manages — and yet it runs the same kind of services,
