@@ -715,7 +715,10 @@ function show_diff_report(gobj)
     priv.diff_modal = yui_shell_show_modal(shell, $content, {
         dialog: true,
         logical_class: "TREEDB_DIFF_DIALOG",
-        title: "schema differences",
+        /*  The button's own key is a SENTENCE: it explains the action from a
+            tooltip. A dialog header is a name, and the data half (the yuno)
+            is already beside it.  */
+        title: "differences",
         title_prefix: gobj_read_str_attr(gobj, "yuno_label") ||
                       gobj_read_str_attr(gobj, "yuno_id"),
         t: t,
