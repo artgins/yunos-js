@@ -21,6 +21,25 @@ on its own, outside the yunetas superproject.
 
 ## Unreleased
 
+### gui_agent and gui_treedb
+
+- **chore: `@yuneta/gobj-ui` `^5.16.0` -> `^5.17.0`**, which is where both
+    treedb views learned to be readable on a schema.
+
+    `C_YUI_TREEDB_SCHEMA` (the `/schema` landing of a treedb) now draws what a
+    schema `.c` literal draws in ASCII — one card per topic with its fields, one
+    edge per hook leaving the row that declares it — instead of one labelled dot
+    per topic. On `treedb_system_schema` that is the difference between three
+    boxes and a fan of 163 numbered nodes.
+
+    `C_G6_NODES_TREE` (the record graph) now labels a card by the topic's
+    SECONDARY key when the primary one is a rowid or a uuid, keeping the pkey as
+    the tooltip. That is what the Schemas workspace was showing as `181`, `225`,
+    `193`: `treedb_system_schema` keys `topics` and `cols` by rowid and holds
+    the name in `value`. It needs a node built from SDK > 7.13.0, whose
+    `tranger2_topic_desc()` carries `pkey2s`; against an older node the label
+    falls back to the id as before.
+
 ### gui_agent
 
 - **feat(schemas): a `Differences` button says what the stored schema holds
