@@ -81,9 +81,12 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
-- **chore: `@yuneta/gobj-ui` `^6.0.0` -> `^6.1.2`, app `0.7.1`.** A
+- **chore: `@yuneta/gobj-ui` `^6.0.0` -> `^6.2.1`, app `0.7.2`.** A
     dependency-only bump, so the two consumers of the v2 line stay on one
-    version. Nothing in 6.1.x changes what this app draws: the schema landing
+    version. Nothing in 6.2.x changes what this app does either: the nav item
+    that points at a remembered position is opt-in (`remember_position`) and
+    this app does not set it — worth knowing that the option exists, because
+    its own workspaces have the same shape. Nothing in 6.1.x changes what this app draws: the schema landing
     it mounts is handed a `node_route` (`card_action_routes` in `c_app.js`), so
     a node click is a hash navigation here exactly as before — and since 6.1.2
     publishing that click instead is opt-in (`with_node_click`), which this app
