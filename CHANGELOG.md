@@ -23,6 +23,24 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent and gui_treedb
 
+- **chore: `@yuneta/gobj-js` `^7.12.0` -> `^7.13.2`, `@yuneta/gobj-ui`
+    `^5.17.0` -> `^6.0.0`**, which is where a `qualified` pkey becomes a key
+    the store hands out instead of one the operator is asked to type.
+
+    The SDK re-keyed the `topics` and `cols` topics of
+    `treedb_system_schema`: they carried a rowid, they now carry the qualified
+    name — the id of the parent, a dot, and the record's own name
+    (`treedb_yunovatioscodb.yunos.yuno_role`). For the Schemas workspace that
+    changes three things: a card is labelled by the leaf and not by the whole
+    path, the create form stops asking for the id, and **editing a column is an
+    update**. It used to be a create — a rowid pkey has no update — so every
+    save appended a second column under the same name.
+
+    gobj-ui 6.0.0 is a dependency-only major: no API moved, it raises its own
+    peer floor to gobj-js `^7.13.2`, which is why both ranges travel together.
+    Against a node whose SDK still keys those topics by rowid nothing changes;
+    the flag is absent and every path takes its previous branch.
+
 - **chore: `@yuneta/gobj-ui` `^5.16.0` -> `^5.17.0`**, which is where both
     treedb views learned to be readable on a schema.
 
