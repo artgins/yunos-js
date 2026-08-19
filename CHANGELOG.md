@@ -23,6 +23,9 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **chore: `@yuneta/gobj-ui` `^6.0.0` -> `^6.1.2`**, which is where the schema
+    editor lives.
+
 - **feat: the Schemas workspace edits a schema AS A SCHEMA.** Every schema a
     yuno holds lives in its `treedb_system_schema`, stored as data in three flat
     topics linked by fkeys — `treedbs` -> `topics` -> `cols`. That is the right
@@ -62,6 +65,16 @@ on its own, outside the yunetas superproject.
 - **fix: the FIRST route of a mount is no longer swallowed.** `null` ("nothing
     applied yet") and `""` ("the bare route") were read as one, so the route
     that decides which landing a treedb gets never arrived.
+
+### gui_treedb
+
+- **chore: `@yuneta/gobj-ui` `^6.0.0` -> `^6.1.2`, app `0.7.1`.** A
+    dependency-only bump, so the two consumers of the v2 line stay on one
+    version. Nothing in 6.1.x changes what this app draws: the schema landing
+    it mounts is handed a `node_route` (`card_action_routes` in `c_app.js`), so
+    a node click is a hash navigation here exactly as before — and since 6.1.2
+    publishing that click instead is opt-in (`with_node_click`), which this app
+    does not set.
 
 ### gui_agent and gui_treedb
 

@@ -62,7 +62,7 @@ consumes them — not from the `kernel/js/*` submodule checkouts:
 
 ```
 @yuneta/gobj-js ^7.13.2     (publishes only dist/ → resolved to its bundle)
-@yuneta/gobj-ui ^6.1.1      (v2 / main line; imported as SOURCE by specifier,
+@yuneta/gobj-ui ^6.1.2      (v2 / main line; imported as SOURCE by specifier,
                              @yuneta/gobj-ui/src/*.js via its exports map)
 ```
 
