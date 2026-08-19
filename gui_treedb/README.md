@@ -224,6 +224,30 @@ origin), the two time units (seconds vs `sf_t_ms` milliseconds), a record free
 to carry its own field named like a metadata column — and there a test can
 reach them with no DOM, no Tabulator and no websocket.
 
+## A tab keeps what it had open
+
+A tab's nav item is a **fixed route**: `yui_shell_set_submenu()` registers it in
+the shell's item index, and that route is where the tab's view is *mounted* and
+what a deep link resolves to. So the position inside a tab cannot travel in the
+item — moving it would move the mount — and is **replayed** when the tab is
+entered again (`route_helpers.js`, `tab_position_plan()`).
+
+Which tab was active was already remembered (`active_tabs`); the topic open
+inside it was not, so clicking back onto a tab landed on its cards and browser
+Back was the only way to the table that was there.
+
+*Entered again* is the whole subtlety, and it is why the decision is a tested
+function rather than three lines inside an action: arriving at the root of the
+tab you were **already** in is the way OUT of a topic — the view's own
+"← Topics" button — and replaying the position there would make that button do
+nothing. The previous base has to be a different tab for the position to come
+back. A tab that is closed takes its remembered position with it.
+
+Same mechanism as the agent console's node tabs. Not to be confused with
+gobj-ui's `remember_position`, which does the equivalent for a `C_YUI_NODE`
+tree, where an item route is only a link and moving it is free; this app has no
+node tree.
+
 ## Update js packages
 
 ONLY one time: to update all js packages, install the module::

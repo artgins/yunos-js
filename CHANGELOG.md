@@ -81,6 +81,20 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
+- **fix: a tab keeps what it had open, app `0.7.3`.** Which tab was active was
+    already remembered; the topic open inside it was not, so clicking back onto
+    a tab landed on its cards and browser Back was the only way to the table
+    that was there.
+
+    A tab's nav item is a FIXED route — `yui_shell_set_submenu()` registers it
+    in the shell's item index, and that route is where the tab's view is
+    MOUNTED and what a deep link resolves to — so the position cannot travel in
+    the item the way it does in a `C_YUI_NODE` tree. It is replayed when the tab
+    is ENTERED AGAIN, which is the whole subtlety: arriving at the root of the
+    tab you were already in is the way OUT of a topic (the view's own
+    "← Topics" button), and replaying there would make that button do nothing.
+    The decision is a tested function, `tab_position_plan()`.
+
 - **chore: `@yuneta/gobj-ui` `^6.0.0` -> `^6.2.1`, app `0.7.2`.** A
     dependency-only bump, so the two consumers of the v2 line stay on one
     version. Nothing in 6.2.x changes what this app does either: the nav item

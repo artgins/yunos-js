@@ -29,12 +29,14 @@ import {
     gclass_create, log_error, log_warning, gobj_short_name,
     gobj_read_attr, gobj_write_str_attr,
     gobj_create_service, gobj_create_pure_child,
-    gobj_subscribe_event, gobj_send_event,
+    gobj_subscribe_event, gobj_send_event, gobj_post_event,
     gobj_change_state,
     gobj_find_service,
     gobj_start_tree, gobj_stop_tree, gobj_destroy, gobj_is_running,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
+
+import {tab_position_plan} from "./route_helpers.js";
 
 import {t} from "i18next";
 
@@ -375,6 +377,11 @@ function rebuild_workspace_tabs(gobj, ws)
     let links = gobj_find_service("treedb_links", false);
     let selected = config ? treedb_config_get_selected(config, ws) : [];
     let items = [picker_item(ws)];
+
+    /*  A tab that is no longer open takes its remembered position with
+     *  it: reopened, it starts at its landing.  */
+    prune_tab_routes(gobj, ws,
+        selected.map(treedb_config_normalize_sel).filter(Boolean));
 
     for(let raw_sel of selected) {
         let sel = treedb_config_normalize_sel(raw_sel);
@@ -1188,17 +1195,40 @@ function ac_nav_item_close(gobj, event, kw, src)
  *  Remember the active tab per workspace so a return / reload restores
  *  it.
  ***************************************************************/
+/***************************************************************
+ *  Put the url where it should have been, without a Back entry.
+ *
+ *  Posted, never called inline: it is reached from inside the
+ *  publish of a route change, and navigating there would re-enter
+ *  the shell mid-publish.
+ ***************************************************************/
+function ac_normalize_route(gobj, event, kw, src)
+{
+    let route = (kw && kw.route) || "";
+
+    if(!route || !gobj.priv.shell) {
+        return 0;
+    }
+    yui_shell_navigate(gobj.priv.shell, route, {replace: true});
+    return 0;
+}
+
 function ac_route_changed(gobj, event, kw, src)
 {
+    let priv = gobj.priv;
     let base = (kw && kw.base) || "";
     let ws = ws_from_route(base);
     if(!ws) {
+        /*  Not a workspace route at all (login, settings): the tab we were
+         *  in is left behind, and coming back to it must not read as
+         *  walking up inside it.  */
+        priv.last_tab_base = "";
         return 0;
     }
     /*  Remember the resolved base so restore_tab_from_url can tell an
      *  unbuilt-tab fallback (base === /<ws>/db, the picker is showing) from
      *  a real, resolved treedb tab (base === /<ws>/db/<sel>).  */
-    gobj.priv.mounted_base = base;
+    priv.mounted_base = base;
 
     /*  On the picker tab → remember it as the active position, so switching
      *  workspaces and back returns to the picker instead of jumping to a
@@ -1225,8 +1255,45 @@ function ac_route_changed(gobj, event, kw, src)
                     {workspace: ws, id: sel_id_}, gobj);
             }
         }
+
+        /*
+         *  ...and WHERE in the tab. Which tab was active was already
+         *  remembered; the topic open inside it was not, so clicking back
+         *  onto a tab landed on its cards and browser Back was the only way
+         *  to the table that was there.
+         *
+         *  "Entered again" is the whole subtlety: arriving at the root of the
+         *  tab you were ALREADY in is the way OUT of a topic — the view's own
+         *  "← Topics" button, `landing_routes.cards` — and replaying the
+         *  position there would make that button do nothing. So the previous
+         *  base has to be a different tab for the position to come back.
+         */
+        let key = tab_key(ws, sel_id_);
+        let routes = priv_tab_routes(gobj);
+        let plan = tab_position_plan(
+            priv.last_tab_base || "",
+            base,
+            (kw && kw.subpath) || "",
+            routes[key]
+        );
+        priv.last_tab_base = base;
+
+        if(plan.record) {
+            routes[key] = plan.record;
+        }
+        if(plan.replay) {
+            /*  Deferred and `replace`: nobody navigated to the root on
+             *  purpose, so it must not become a Back entry of its own. A
+             *  posted event and not a timer — a deferral is not a time.  */
+            gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {route: plan.replay}, gobj);
+        }
         return 0;
     }
+
+    /*  Not on a treedb tab: leaving the tabs entirely (Settings, a picker)
+     *  must not read later as "still in the same tab", or coming back would
+     *  be taken for walking up inside it and the position would be lost.  */
+    priv.last_tab_base = "";
 
     if(base === db_home_route(ws)) {
         /*  Landed on the workspace home /<ws>/db. Two ways to get here:
@@ -1275,6 +1342,57 @@ function ac_route_changed(gobj, event, kw, src)
         return 0;
     }
     return 0;
+}
+
+/***************************************************************
+ *  WHERE A TAB WAS LEFT.
+ *
+ *  A tab's nav item is a FIXED route: `yui_shell_set_submenu()`
+ *  registers it in the shell's item index, and that route is
+ *  where the tab's view is MOUNTED and what a deep link resolves
+ *  to. So the position inside a tab cannot travel in the item —
+ *  moving it would move the mount — and is replayed instead when
+ *  the tab is entered again. Same mechanism as the agent console.
+ *
+ *  In memory only: a position is worth restoring while the app is
+ *  open, and a reload has the url, which is the authority.
+ ***************************************************************/
+function tab_key(ws, id)
+{
+    return ws + "|" + id;
+}
+
+function priv_tab_routes(gobj)
+{
+    let priv = gobj.priv;
+
+    if(!priv.tab_routes) {
+        priv.tab_routes = {};
+    }
+    return priv.tab_routes;
+}
+
+/***************************************************************
+ *  Forget the position of every tab of `ws` that is no longer
+ *  open: a tab closed and opened again starts at its landing, and
+ *  a route into a treedb that is not there any more is not
+ *  somewhere to navigate back into.
+ ***************************************************************/
+function prune_tab_routes(gobj, ws, sels)
+{
+    let routes = priv_tab_routes(gobj);
+    let open = {};
+
+    for(let sel of (sels || [])) {
+        if(sel && sel.id) {
+            open[tab_key(ws, sel.id)] = true;
+        }
+    }
+    for(let k in routes) {
+        if(k.startsWith(ws + "|") && !open[k]) {
+            delete routes[k];
+        }
+    }
 }
 
 function decode_tail(s)
@@ -1352,7 +1470,8 @@ function create_gclass(gclass_name)
             ["EV_SELECTED_TREEDBS_CHANGED", ac_selected_treedbs_changed, null],
             ["EV_CONNECTIONS_CHANGED",      ac_connections_changed,      null],
             ["EV_NAV_ITEM_CLOSE",   ac_nav_item_close,  null],
-            ["EV_ROUTE_CHANGED",    ac_route_changed,   null]
+            ["EV_ROUTE_CHANGED",    ac_route_changed,   null],
+            ["EV_NORMALIZE_ROUTE",  ac_normalize_route, null]
         ]]
     ];
 
@@ -1376,7 +1495,8 @@ function create_gclass(gclass_name)
         ["EV_SELECTED_TREEDBS_CHANGED", 0],
         ["EV_CONNECTIONS_CHANGED",      0],
         ["EV_NAV_ITEM_CLOSE",   0],
-        ["EV_ROUTE_CHANGED",    0]
+        ["EV_ROUTE_CHANGED",    0],
+        ["EV_NORMALIZE_ROUTE",  0]
     ];
 
     __gclass__ = gclass_create(
