@@ -301,6 +301,14 @@ function normalize_history(list, now)
  ***************************************************************/
 const AGENT_YUNO_ID = "__agent__";
 
+/*  The treedb every yuno with a C_TREEDB keeps its own schemas in, as
+ *  data: treedbs -> topics -> cols. The Schemas workspace exists for
+ *  it, and three files address it by name — the tab that opens it, the
+ *  viewer that decides which landing it gets, and the picker that marks
+ *  a yuno without one.  */
+const SYSTEM_TREEDB = "treedb_system_schema";
+
+
 function is_agent_yuno(yuno_id)
 {
     return yuno_id === AGENT_YUNO_ID;
@@ -317,6 +325,7 @@ function cmd2agent_service(yuno_id, service, command)
 
 export {
     AGENT_YUNO_ID,
+    SYSTEM_TREEDB,
     is_agent_yuno,
     cmd2agent_service,
     version_tuple,

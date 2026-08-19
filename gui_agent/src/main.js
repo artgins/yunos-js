@@ -61,6 +61,7 @@ import {register_c_yui_treedb_topics}          from "@yuneta/gobj-ui/src/c_yui_t
 import {register_c_yui_treedb_topic_with_form} from "@yuneta/gobj-ui/src/c_yui_treedb_topic_with_form.js";
 import {register_c_yui_treedb_schema}          from "@yuneta/gobj-ui/src/c_yui_treedb_schema.js";
 import {register_c_yui_treedb_graph}           from "@yuneta/gobj-ui/src/c_yui_treedb_graph.js";
+import {register_c_yui_schema_editor}          from "@yuneta/gobj-ui/src/c_yui_schema_editor.js";
 import {register_c_g6_nodes_tree}              from "@yuneta/gobj-ui/src/c_g6_nodes_tree.js";
 
 import {register_c_app} from "./c_app.js";
@@ -140,6 +141,7 @@ function main()
     register_c_yui_treedb_topic_with_form();
     register_c_yui_treedb_schema();
     register_c_yui_treedb_graph();   // the treedb as a graph of records (Schemas)
+    register_c_yui_schema_editor();  // the schemas of a yuno, edited as schemas (Schemas)
     register_c_g6_nodes_tree();      // its G6 canvas
 
     /*  App root + config + login + link services + views  */

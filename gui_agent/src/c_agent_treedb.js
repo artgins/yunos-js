@@ -102,7 +102,7 @@ import {yui_node_set_nav_mode} from "@yuneta/gobj-ui/src/c_yui_node.js";
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_shell_show_modal, yui_shell_show_error} from "@yuneta/gobj-ui/src/shell_modals.js";
 
-import {is_agent_yuno, cmd2agent_service} from "./agent_helpers.js";
+import {is_agent_yuno, cmd2agent_service, SYSTEM_TREEDB} from "./agent_helpers.js";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {agent_config_get_nav_mode} from "./c_agent_config.js";
 
@@ -112,8 +112,6 @@ import {agent_config_get_nav_mode} from "./c_agent_config.js";
  ***************************************************************/
 const GCLASS_NAME = "C_AGENT_TREEDB";
 
-/*  The treedb every yuno with a C_TREEDB keeps its own schemas in.  */
-const SYSTEM_TREEDB = "treedb_system_schema";
 
 /*  Marker of the per-treedb `treedb-info` request: it answers whether this
  *  yuno is the MASTER of that treedb, which decides whether its editor is
@@ -162,6 +160,10 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
+    /*  What the schema editor last said about the whole store: shown in
+     *  the apply confirmation, because applying is the restart.  */
+    schema_check:   null,
+
     treedbs:     null,  /*  discovered C_NODE service names  */
     notice:      "",    /*  explicit text when a key does not say it all  */
     tree:        null,  /*  C_YUI_NODE root: one child per treedb  */
@@ -1400,6 +1402,7 @@ function ac_apply_changes(gobj, event, kw, src)
                 `${label} · ${gobj_read_str_attr(gobj, "node")}`],
             ["p", {class: "TREEDB_APPLY_WARN mb-4", i18n: "apply restart warning"},
                 t("apply restart warning")],
+            apply_check_notice(gobj),
             ["div", {class: "TREEDB_APPLY_ACTIONS is-align-items-center",
                      style: "display:flex; gap:.5rem; justify-content:flex-end;"}, [
                 ["button", {class: "TREEDB_APPLY_CANCEL button"},
@@ -1432,6 +1435,70 @@ function ac_apply_changes(gobj, event, kw, src)
             priv.modal = null;
         }
     });
+    return 0;
+}
+
+/***************************************************************
+ *  WHAT IS ABOUT TO BE RESTARTED ONTO.
+ *
+ *  The schema editor checks the whole store on every settle and
+ *  sends the count here. Applying is restarting the yuno that
+ *  owns the schema, so a schema the treedb would refuse costs an
+ *  outage to find out about — and the message lands in that
+ *  yuno's log, on the node, minutes later.
+ *
+ *  It does not REFUSE the apply. The operator may be restarting
+ *  for another reason, or may know better than the checks; what
+ *  is not acceptable is finding out afterwards.
+ ***************************************************************/
+function apply_check_notice(gobj)
+{
+    let priv = gobj.priv;
+    let check = priv.schema_check;
+
+    if(!check || (!check.errors && !check.warnings)) {
+        return ["span", {class: "TREEDB_APPLY_CHECK_NONE"}, ""];
+    }
+
+    let $lines = (check.first || []).map((finding) => {
+        let where = finding.col
+            ? `${finding.topic}.${finding.col}`
+            : (finding.topic || "");
+        return ["li", {class: "TREEDB_APPLY_CHECK_LINE"}, [
+            ["span", {i18n: finding.code}, t(finding.code)],
+            ["code", {class: "ml-2"}, `${where}`]
+        ]];
+    });
+
+    return ["div", {class: "TREEDB_APPLY_CHECK notification " +
+                           (check.errors ? "is-danger" : "is-warning") +
+                           " is-light p-3 mb-4"}, [
+        ["p", {class: "TREEDB_APPLY_CHECK_COUNT is-size-7 has-text-weight-semibold"}, [
+            ["span", {i18n: "errors"}, t("errors")],
+            ["span", {class: "ml-1"}, `${check.errors}`],
+            ["span", {class: "ml-3", i18n: "warnings"}, t("warnings")],
+            ["span", {class: "ml-1"}, `${check.warnings}`]
+        ]],
+        ["ul", {class: "TREEDB_APPLY_CHECK_LINES is-size-7 mt-1"}, $lines]
+    ]];
+}
+
+/***************************************************************
+ *  The editor checked the store: keep the count for the next
+ *  confirmation. Kept and not shown: the toolbar already carries
+ *  the pending-changes flag, and a second permanent badge for
+ *  something the editor says better on its own screen would be
+ *  noise.
+ ***************************************************************/
+function ac_schema_checked(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    priv.schema_check = {
+        errors:   (kw && kw.errors) || 0,
+        warnings: (kw && kw.warnings) || 0,
+        first:    (kw && kw.first) || []
+    };
     return 0;
 }
 
@@ -1610,7 +1677,8 @@ function create_gclass(gclass_name)
      *  arrives here whatever this tab is doing.
      *---------------------------------------------*/
     const view_events = [
-        ["EV_RECORD_WRITTEN",       ac_record_written,    null]
+        ["EV_RECORD_WRITTEN",       ac_record_written,    null],
+        ["EV_SCHEMA_CHECKED",       ac_schema_checked,    null]
     ];
     /*  The apply confirmation can be answered in any state it can be
      *  opened in, and it can only be opened where there is something to
@@ -1708,7 +1776,8 @@ function create_gclass(gclass_name)
         ["EV_DISCOVER",          0],
         ["EV_ROUTE_CHANGED",     0],
         ["EV_NAV_MODE_CHANGED",  0],
-        ["EV_RECORD_WRITTEN",    0]
+        ["EV_RECORD_WRITTEN",    0],
+        ["EV_SCHEMA_CHECKED",    0]
     ];
 
     __gclass__ = gclass_create(

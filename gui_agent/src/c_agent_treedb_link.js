@@ -84,6 +84,7 @@ import {
     msg_iev_push_stack,
     msg_iev_get_stack,
     kw_get_str,
+    kw_get_bool,
     is_object,
     empty_string,
 } from "@yuneta/gobj-js";
@@ -120,7 +121,7 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     seq:     0,     /*  request counter, echoed in __md_iev__  */
-    pending: null,  /*  seq -> {view, command, md_command, treedb_name, topic_name, record}  */
+    pending: null,  /*  seq -> {view, command, md_command, treedb_name, topic_name, record, options}  */
 };
 
 let __gclass__ = null;
@@ -272,6 +273,9 @@ function mt_command_parser(gobj, command, kw, src)
         treedb_name: kw_get_str(gobj, kw, "treedb_name", treedb, 0),
         topic_name:  kw_get_str(gobj, kw, "topic_name", "", 0),
         record:      is_object(kw.record) ? kw.record : null,
+        /*  Kept because the ECHO depends on it: `create` says an
+         *  update-node was a creation (see echo_node_event).  */
+        options:     is_object(kw.options) ? kw.options : {},
         /*  A link names its two ends and no topic: `<topic>^<id>^<hook>`
          *  for the parent, `<topic>^<id>` for the child.  */
         parent_ref:  kw_get_str(gobj, kw, "parent_ref", "", 0),
@@ -352,7 +356,17 @@ function echo_node_event(gobj, pend, kw)
             node = is_object(kw.data) ? kw.data : pend.record;
             break;
         case "update-node":
-            event = "EV_TREEDB_NODE_UPDATED";
+            /*  `update-node` with `options.create` is an UPSERT, and it is
+             *  how every view here creates a node — the fkey carried in
+             *  the record only becomes a link through the `autolink` that
+             *  travels with it, which plain create-node does not do.
+             *
+             *  So the ECHO has to say which of the two it was, and only
+             *  the request knows: a subscriber told "updated" about a node
+             *  it has never seen answers that its table is missing a row,
+             *  which is true and is not the news. It is a creation.  */
+            event = kw_get_bool(gobj, pend.options, "create", false, 0)
+                ? "EV_TREEDB_NODE_CREATED" : "EV_TREEDB_NODE_UPDATED";
             node = is_object(kw.data) ? kw.data : pend.record;
             break;
         case "delete-node":

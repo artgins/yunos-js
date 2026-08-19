@@ -55,6 +55,7 @@ import {yui_mount_service_view} from "@yuneta/gobj-ui/src/c_yui_service_view.js"
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {agent_link_is_connected} from "./c_agent_link.js";
+import {SYSTEM_TREEDB} from "./agent_helpers.js";
 
 
 /***************************************************************
@@ -70,6 +71,17 @@ const OWNER_GCLASS = "C_AGENT_TREEDB";
  *  followed by the topic to focus (`graph/cols`).  Reserved, like
  *  `schema`: a topic with this name is not reachable by its own name.  */
 const GRAPH_SEG = "graph";
+
+/*  The subpath that opens the SCHEMA EDITOR, and its own tail below it
+ *  (`edit/<treedb>/<topic>`).  On the system-schema treedb it is where
+ *  a bare route lands: the three meta topics are the STORAGE of every
+ *  schema the yuno has, and the editor is what they mean.  */
+const EDIT_SEG = "edit";
+
+/*  ...which leaves the meta topics needing an address of their own, so
+ *  the raw tables keep one.  It cannot be `topics`: that is the name of
+ *  a real topic of this treedb, and the tail already means a topic.  */
+const RAW_SEG = "raw";
 
 
 /***************************************************************
@@ -92,9 +104,11 @@ let PRIVATE_DATA = {
     adapter:     null,  /*  C_AGENT_TREEDB_LINK (pure child)  */
     view:        null,  /*  C_YUI_TREEDB_TOPICS (named service)  */
     graph:       null,  /*  C_YUI_TREEDB_GRAPH (named service, LAZY)  */
+    editor:      null,  /*  C_YUI_SCHEMA_EDITOR (named service, LAZY)  */
     seg:         null,  /*  subpath last applied or navigated (loop guard)  */
-    $body:       null,
-    $graph_body: null,
+    $body:        null,
+    $graph_body:  null,
+    $editor_body: null,
 };
 
 let __gclass__ = null;
@@ -165,6 +179,9 @@ function mt_stop(gobj)
     if(priv.graph && gobj_is_running(priv.graph)) {
         gobj_stop(priv.graph);
     }
+    if(priv.editor && gobj_is_running(priv.editor)) {
+        gobj_stop(priv.editor);
+    }
     if(priv.adapter && gobj_is_running(priv.adapter)) {
         gobj_stop(priv.adapter);
     }
@@ -182,10 +199,12 @@ function mt_destroy(gobj)
 
     priv.view = null;
     priv.graph = null;
+    priv.editor = null;
     priv.adapter = null;
     priv.link = null;
     priv.$body = null;
     priv.$graph_body = null;
+    priv.$editor_body = null;
 
     let $c = gobj_read_attr(gobj, "$container");
     if($c && $c.parentNode) {
@@ -224,10 +243,17 @@ function build_ui(gobj)
                  style: "flex:1 1 auto; min-height:0;"}, []]
     );
 
+    /*  ...and the schema editor's, born hidden for the same reason: on a
+     *  treedb that is not the system one it is never mounted at all.  */
+    priv.$editor_body = createElement2(
+        ["div", {class: "TREEDB_VIEW_EDITOR_BODY is-hidden",
+                 style: "flex:1 1 auto; min-height:0;"}, []]
+    );
+
     let $c = createElement2(
         ["div", {class: `${GCLASS_NAME} TREEDB_VIEW_CARD`,
                  style: "display:flex; flex-direction:column; height:100%;"},
-            [priv.$body, priv.$graph_body]]
+            [priv.$body, priv.$graph_body, priv.$editor_body]]
     );
     gobj_write_attr(gobj, "$container", $c);
 }
@@ -369,6 +395,12 @@ function mount_view(gobj)
         gobj_start(view);
     }
     notify_view_transport(gobj, agent_link_is_connected(priv.link));
+
+    /*  Now there is something to apply it TO. A route that arrived
+     *  before this ran was recorded and dropped (`if(!priv.view)`), and
+     *  a mount with no route at all still has a landing to choose — on
+     *  the system-schema treedb they are not the same screen.  */
+    apply_seg(gobj, priv.seg || "");
     return 0;
 }
 
@@ -443,30 +475,108 @@ function mount_graph(gobj)
 }
 
 /***************************************************************
- *  Swap the two bodies. `is-hidden` and not an inline display:
- *  Bulma's helper carries !important and would win over it anyway.
+ *  The SCHEMA EDITOR on this treedb, on the SAME adapter.
  *
- *  Both views are told, because both draw on being shown: the editor
- *  re-opens its landing or its topic, and the graph re-fits its
- *  canvas to a rect that was zero while it was hidden.
+ *  Only the system-schema treedb has one: it is the treedb whose
+ *  records ARE the schemas of the yuno, and the editor is the
+ *  screen those three flat topics never were. Any other treedb
+ *  holds data, and its screen is the topic editor next door.
+ *
+ *  Mounted on the first navigation to `edit`, like the graph, and
+ *  for the same reason: it fetches three topics on start and most
+ *  visits to a data treedb never ask for it.
  ***************************************************************/
-function show_graph(gobj, on)
+function has_editor(gobj)
+{
+    return gobj_read_str_attr(gobj, "treedb_name") === SYSTEM_TREEDB;
+}
+
+function mount_editor(gobj)
 {
     let priv = gobj.priv;
 
-    if(on && mount_graph(gobj) < 0) {
+    if(priv.editor) {
+        return 0;
+    }
+    if(!has_editor(gobj)) {
+        log_error(`${gobj_short_name(gobj)}: no schema editor on a data treedb`);
+        return -1;
+    }
+    if(!priv.adapter && build_adapter(gobj) < 0) {
         return -1;      /*  Error already logged  */
     }
-    priv.$body.classList.toggle("is-hidden", !!on);
-    priv.$graph_body.classList.toggle("is-hidden", !on);
 
-    if(on) {
-        if(priv.view) {
-            gobj_send_event(priv.view, "EV_HIDE", {}, gobj);
+    let base = base_route(gobj);
+    let kw = {
+        treedb_name: gobj_read_str_attr(gobj, "treedb_name"),
+        /*  Same fact as the other two views': on a replica the yuno
+         *  refuses every write, so the editor opens without them.  */
+        readonly:    gobj_read_bool_attr(gobj, "readonly")
+    };
+    if(!empty_string(base)) {
+        kw.base_route = `${base}/${EDIT_SEG}`;
+    }
+
+    let editor = yui_mount_service_view(gobj, {
+        gclass:    "C_YUI_SCHEMA_EDITOR",
+        name:      `schema_editor_${clean_id(gobj)}`,
+        kw:        kw,
+        transport: priv.adapter
+    });
+    if(!editor) {
+        return -1;      /*  Error already logged  */
+    }
+    priv.editor = editor;
+
+    let $e = gobj_read_attr(editor, "$container");
+    if($e) {
+        priv.$editor_body.appendChild($e);
+    } else {
+        log_error(`${gobj_short_name(gobj)}: hosted editor exposes no $container`);
+    }
+    if(!gobj_is_running(editor)) {
+        gobj_start(editor);
+    }
+    notify_view_transport(gobj, agent_link_is_connected(priv.link));
+    return 0;
+}
+
+/***************************************************************
+ *  Swap the bodies. `is-hidden` and not an inline display:
+ *  Bulma's helper carries !important and would win over it anyway.
+ *
+ *  Every view is told, because each draws on being shown: the
+ *  editor re-opens its position, the topic editor its landing or
+ *  its topic, and the graph re-fits a canvas that was zero-sized
+ *  while it was hidden.
+ ***************************************************************/
+function show_pane(gobj, which)
+{
+    let priv = gobj.priv;
+
+    if(which === "graph" && mount_graph(gobj) < 0) {
+        return -1;      /*  Error already logged  */
+    }
+    if(which === "editor" && mount_editor(gobj) < 0) {
+        return -1;      /*  Error already logged  */
+    }
+
+    let panes = [
+        {name: "view",   $body: priv.$body,        view: priv.view},
+        {name: "graph",  $body: priv.$graph_body,  view: priv.graph},
+        {name: "editor", $body: priv.$editor_body, view: priv.editor}
+    ];
+    for(let pane of panes) {
+        if(!pane.$body) {
+            continue;
         }
-        gobj_send_event(priv.graph, "EV_SHOW", {}, gobj);
-    } else if(priv.graph) {
-        gobj_send_event(priv.graph, "EV_HIDE", {}, gobj);
+        pane.$body.classList.toggle("is-hidden", pane.name !== which);
+        if(!pane.view) {
+            continue;
+        }
+        if(pane.name !== which) {
+            gobj_send_event(pane.view, "EV_HIDE", {}, gobj);
+        }
     }
     return 0;
 }
@@ -478,6 +588,15 @@ function show_graph(gobj, on)
 function is_graph_seg(seg)
 {
     return seg === GRAPH_SEG || seg.startsWith(`${GRAPH_SEG}/`);
+}
+
+/***************************************************************
+ *  `edit` alone, or `edit/<treedb>[/<topic>]`: the schema editor
+ *  and the position inside it, which is its own to read.
+ ***************************************************************/
+function is_edit_seg(seg)
+{
+    return seg === EDIT_SEG || seg.startsWith(`${EDIT_SEG}/`);
 }
 
 /***************************************************************
@@ -512,10 +631,23 @@ function navigate_seg(gobj, seg)
 }
 
 /***************************************************************
- *  Apply the part of the subpath this view owns: a bare topic
- *  opens its table, `<topic>/info` its info panel, `schema` the
- *  schema-graph landing, `graph[/<topic>]` the record graph, and
- *  nothing at all the topic grid.
+ *  Apply the part of the subpath this view owns.
+ *
+ *      edit[/<treedb>[/<topic>|/diagram]]   the schema editor
+ *      raw                                  the meta topics, as tables
+ *      graph[/<topic>]                      the record graph
+ *      <topic>[/info]                       one meta topic
+ *      schema                               the schema-graph landing
+ *      (nothing)                            the editor on the system
+ *                                           treedb, the topic grid on
+ *                                           any other
+ *
+ *  A BARE ROUTE LANDS ON THE EDITOR because of what this treedb
+ *  is: `treedbs`, `topics` and `cols` are the STORAGE of every
+ *  schema the yuno has, and reading them as three tables is
+ *  reading a schema by its rows. The tables keep their address
+ *  (`raw`, and each topic by name), because storage is exactly
+ *  what an operator sometimes needs to see.
  ***************************************************************/
 function apply_seg(gobj, seg)
 {
@@ -524,18 +656,40 @@ function apply_seg(gobj, seg)
     if(!priv.view) {
         return;
     }
+    if(is_edit_seg(seg)) {
+        if(show_pane(gobj, "editor") < 0) {
+            /*  No editor here (a data treedb, or the gclass is not
+             *  registered): the topic grid is what this treedb has.  */
+            show_pane(gobj, "view");
+            gobj_send_event(priv.view, "EV_SHOW", {href: ""}, gobj);
+            return;
+        }
+        gobj_send_event(priv.editor, "EV_SHOW",
+            {subpath: seg.slice(EDIT_SEG.length + 1)}, gobj);
+        return;
+    }
     if(is_graph_seg(seg)) {
-        if(show_graph(gobj, true) < 0) {
+        if(show_pane(gobj, "graph") < 0) {
             return;     /*  Error already logged  */
         }
+        gobj_send_event(priv.graph, "EV_SHOW", {}, gobj);
         let topic = seg.slice(GRAPH_SEG.length + 1);
         if(!empty_string(topic)) {
             gobj_send_event(priv.graph, "EV_SET_FOCUS_TOPIC", {topic: topic}, gobj);
         }
         return;
     }
-    show_graph(gobj, false);
-    if(empty_string(seg)) {
+
+    if(empty_string(seg) && has_editor(gobj)) {
+        /*  Normalize: the position is the editor's, so the url says so
+         *  and a reload lands back on it.  */
+        navigate_seg(gobj, EDIT_SEG);
+        apply_seg(gobj, EDIT_SEG);
+        return;
+    }
+
+    show_pane(gobj, "view");
+    if(empty_string(seg) || seg === RAW_SEG) {
         gobj_send_event(priv.view, "EV_SHOW", {href: ""}, gobj);
         return;
     }
@@ -560,7 +714,7 @@ function notify_view_transport(gobj, connected)
 {
     let priv = gobj.priv;
 
-    for(let view of [priv.view, priv.graph]) {
+    for(let view of [priv.view, priv.graph, priv.editor]) {
         if(view && gobj_has_event(view, "EV_TRANSPORT_STATE", 0)) {
             gobj_send_event(view, "EV_TRANSPORT_STATE", {connected: !!connected}, gobj);
         }
@@ -603,7 +757,11 @@ function ac_route_changed(gobj, event, kw, src)
     let priv = gobj.priv;
     let seg = (kw && kw.subpath) || "";
 
-    if(seg === (priv.seg || "")) {
+    /*  `null` is "nothing applied yet" and "" is "the bare route": they
+     *  are not the same, and reading them as one swallowed the FIRST
+     *  route of every mount — which is the one that decides which
+     *  landing this treedb gets.  */
+    if(priv.seg !== null && seg === priv.seg) {
         return 0;   /*  the echo of what we just navigated  */
     }
     priv.seg = seg;
@@ -631,6 +789,41 @@ function ac_topic_selected(gobj, event, kw, src)
         return 0;   /*  a stray echo, or the graph's operation mode  */
     }
     navigate_seg(gobj, topic || "");
+    return 0;
+}
+
+/***************************************************************
+ *  The schema editor moved. Its position is the tail under
+ *  `edit`, and the url is this view's to write: the editor
+ *  navigates nothing itself, the same contract the topic editor
+ *  has with EV_TOPIC_SELECTED.
+ ***************************************************************/
+function ac_position_changed(gobj, event, kw, src)
+{
+    let sub = (kw && kw.subpath) || "";
+
+    navigate_seg(gobj, sub ? `${EDIT_SEG}/${sub}` : EDIT_SEG);
+    return 0;
+}
+
+/***************************************************************
+ *  The schema editor checked the whole store. It is the tab that
+ *  APPLIES — restarting the yuno is its job — so the count goes
+ *  where the button is.
+ ***************************************************************/
+function ac_schema_checked(gobj, event, kw, src)
+{
+    let tab = owner_tab(gobj);
+
+    if(!tab) {
+        return -1;      /*  Error already logged  */
+    }
+    gobj_send_event(tab, "EV_SCHEMA_CHECKED", {
+        treedb_name: gobj_read_str_attr(gobj, "treedb_name"),
+        errors:      (kw && kw.errors) || 0,
+        warnings:    (kw && kw.warnings) || 0,
+        first:       (kw && kw.first) || []
+    }, gobj);
     return 0;
 }
 
@@ -693,7 +886,9 @@ function create_gclass(gclass_name)
             ["EV_ROUTE_CHANGED",        ac_route_changed,     null],
             ["EV_TOPIC_SELECTED",       ac_topic_selected,    null],
             ["EV_OPERATION_MODE_CHANGED", ac_topic_selected,  null],
-            ["EV_RECORD_WRITTEN",       ac_record_written,    null]
+            ["EV_RECORD_WRITTEN",       ac_record_written,    null],
+            ["EV_POSITION_CHANGED",     ac_position_changed,  null],
+            ["EV_SCHEMA_CHECKED",       ac_schema_checked,    null]
         ]]
     ];
 
@@ -706,7 +901,9 @@ function create_gclass(gclass_name)
         ["EV_ROUTE_CHANGED",     0],
         ["EV_TOPIC_SELECTED",    0],
         ["EV_OPERATION_MODE_CHANGED", 0],
-        ["EV_RECORD_WRITTEN",    0]
+        ["EV_RECORD_WRITTEN",    0],
+        ["EV_POSITION_CHANGED",  0],
+        ["EV_SCHEMA_CHECKED",    0]
     ];
 
     __gclass__ = gclass_create(

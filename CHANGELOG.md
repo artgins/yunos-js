@@ -21,6 +21,48 @@ on its own, outside the yunetas superproject.
 
 ## Unreleased
 
+### gui_agent
+
+- **feat: the Schemas workspace edits a schema AS A SCHEMA.** Every schema a
+    yuno holds lives in its `treedb_system_schema`, stored as data in three flat
+    topics linked by fkeys — `treedbs` -> `topics` -> `cols`. That is the right
+    storage and it was the whole screen: adding one column to one topic meant
+    finding it in a table holding every column of every topic of every treedb
+    the yuno has, composing the parent fkey by hand, and remembering to raise a
+    `topic_version` that nothing asks about.
+
+    The new landing of that treedb is gobj-ui's **`C_YUI_SCHEMA_EDITOR`**:
+    treedb -> topics -> columns in declared order, with the storage composed
+    underneath. The columns **reorder by dragging** (`order` is a field, so a
+    drop writes the rows whose place actually changed); the **flags** are
+    checkboxes that say what they do; **check** reports what the treedb would
+    refuse before the restart that finds out; **export** gives the schema as its
+    C literal, because an edit made here works and lives nowhere the next build
+    knows about; **import** shows a plan before it runs; and the **diagram**
+    finally draws the schema being edited rather than the meta schema —
+    treedbs/topics/cols, the same three cards on every yuno.
+
+    **The versions travel with every write** and the operator is never asked to
+    remember either: `topic_version`, without which the persisted
+    `topic_cols.json` masks the whole edit and the restart succeeds having
+    changed nothing, and `schema_version`, which is what publishes the schema as
+    a whole. The Apply confirmation — the one that restarts the yuno — now says
+    how many errors the check found, because that restart is what makes a broken
+    schema expensive.
+
+    The raw meta tables keep their address (`raw`, and each topic by name); a
+    bare route on that treedb lands on the editor.
+
+- **fix: the routing adapter echoes CREATED for a create.** `update-node` with
+    `options.create` is an upsert and is how every view here creates a node —
+    the fkey in the record only becomes a link through the `autolink` that
+    travels with it. Echoed as "updated", a subscriber answered that its table
+    is missing a row, which is true and is not the news.
+
+- **fix: the FIRST route of a mount is no longer swallowed.** `null` ("nothing
+    applied yet") and `""` ("the bare route") were read as one, so the route
+    that decides which landing a treedb gets never arrived.
+
 ### gui_agent and gui_treedb
 
 - **chore: `@yuneta/gobj-js` `^7.12.0` -> `^7.13.2`, `@yuneta/gobj-ui`

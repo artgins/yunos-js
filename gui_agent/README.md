@@ -61,8 +61,8 @@ Both kernel JS packages come from the **npm registry**, the same way wattyzer
 consumes them — not from the `kernel/js/*` submodule checkouts:
 
 ```
-@yuneta/gobj-js ^7.10.0     (publishes only dist/ → resolved to its bundle)
-@yuneta/gobj-ui ^5.14.1     (v2 / main line; imported as SOURCE by specifier,
+@yuneta/gobj-js ^7.13.2     (publishes only dist/ → resolved to its bundle)
+@yuneta/gobj-ui ^6.1.1      (v2 / main line; imported as SOURCE by specifier,
                              @yuneta/gobj-ui/src/*.js via its exports map)
 ```
 
@@ -98,13 +98,36 @@ ack plus the agent's asynchronous real answer).
 
 ## Schemas: the treedb views over the agent's control plane
 
-The Schemas workspace mounts gobj-ui's treedb views — the topic editor
-(`C_YUI_TREEDB_TOPICS`) and the record graph (`C_YUI_TREEDB_GRAPH`) —
-**unchanged**, pointed at one treedb of one yuno. It opens the yuno's
-`treedb_system_schema` — the treedb where every schema of that yuno lives as
-data (`treedbs` → `topics` → `cols`). Editing it there is how a schema changes
-without touching the C literal; the change reaches the yuno on its next restart
-(`kill-yuno` + `run-yuno`).
+The Schemas workspace mounts gobj-ui's treedb views, pointed at one treedb of
+one yuno. It opens the yuno's `treedb_system_schema` — the treedb where every
+schema of that yuno lives as data (`treedbs` → `topics` → `cols`). Editing it
+there is how a schema changes without touching the C literal; the change
+reaches the yuno on its next restart (`kill-yuno` + `run-yuno`).
+
+**A bare route on that treedb lands on the SCHEMA EDITOR**
+(`C_YUI_SCHEMA_EDITOR`, gobj-ui ≥ 6.1.0), under the reserved segment `edit`.
+Those three topics are the *storage* of every schema the yuno has, and reading
+them as three tables is reading a schema by its rows: adding one column to one
+topic meant finding it in a table holding every column of every topic of every
+treedb, composing the parent fkey by hand, and remembering a version nothing
+asks about. The editor puts the schema back together — treedb → topics →
+columns in declared order, columns reordered by dragging, flags as checkboxes
+that say what they do, the schema *drawn* from the records being edited, a
+**check** of what the treedb would refuse, an **export** as the C literal and
+an **import** shown as a plan before it runs.
+
+**Every write it makes carries both versions**, and the operator is asked to
+remember neither: `topic_version`, without which the persisted
+`topic_cols.json` masks the edit — the restart succeeds and nothing moved — and
+`schema_version`, which is what publishes the schema as a whole (raising it is
+safe: re-projection from C compares `c_schema_version`, the version of the
+literal, precisely so an edit made here survives every start). The **Apply**
+confirmation says how many errors the check found, because Apply is the restart.
+
+The raw meta tables are still there and still addressable: `raw` for the topic
+grid, and each of the three by its own name. They are the topic editor
+(`C_YUI_TREEDB_TOPICS`) and the record graph (`C_YUI_TREEDB_GRAPH`), mounted
+**unchanged**, on the same adapter.
 
 **The node's own AGENT is one of the entries.** It never appears in
 `list-yunos` — it is the daemon that ANSWERS that command, not one of the yunos
@@ -191,7 +214,23 @@ and hands the answer back in the shape the view already understands.
 `C_AGENT_TREEDB` is the tab: it creates the adapter, mounts the view with
 `yui_mount_service_view()` (transport = the adapter), and waits for the session
 before mounting, because the view fetches its schema in `mt_start` and a second
-fetch would build a second set of topic services.
+fetch would build a second set of topic services. The schema editor and the
+record graph hang off the SAME adapter, mounted lazily on the first navigation
+to `edit` / `graph`: a second transport would mean a second answer stream to
+disambiguate.
+
+Two things the adapter learned from the editor, and both are scars of their own:
+
+- **`update-node` with `options.create` is a CREATION**, and the echo has to say
+  so. It is how every view here creates a node — the fkey carried in the record
+  only becomes a link through the `autolink` that travels with it, which plain
+  `create-node` does not do. Echoed as "updated", a subscriber answers that its
+  table is missing a row: true, and not the news.
+- **`autolink` rewrites a node's links from the fkey fields the record carries**,
+  so it belongs to a create and to nothing else. On a partial update it finds
+  none and reads that as "no parents" — raising a topic's version detached that
+  topic from its treedb, and the write answered success. The editor sends only
+  what changed, so every one of its updates is partial.
 
 Three things the adapter is built around, all of them scars:
 
@@ -438,6 +477,24 @@ This yuno is JavaScript and deploys independently of the SDK (see
 `deploy-com.sh`). The per-release detail lives in this repo's own
 `CHANGELOG.md` (repo root); this section keeps the durable, feature-level
 summary.
+
+### 0.8.0
+
+- **The Schemas workspace edits a schema as a schema**, not as the three flat
+  topics that store it: gobj-ui's `C_YUI_SCHEMA_EDITOR` is the landing of
+  `treedb_system_schema` (segment `edit`; the raw tables keep `raw` and their
+  own names). Columns in declared order and reordered by dragging, flags as
+  checkboxes that say what they do, the schema drawn from the records being
+  edited, a check of what the treedb would refuse, an export as the C literal,
+  an import shown as a plan. **Both versions travel with every write** —
+  `topic_version`, without which the restart succeeds having changed nothing,
+  and `schema_version`, which publishes the schema — and the Apply confirmation
+  reports what the check found, because Apply is the restart.
+- **The routing adapter echoes CREATED for a create** (`update-node` +
+  `options.create` is an upsert), so a sibling view stops answering that its
+  table is missing a row.
+- **The first route of a mount is applied**: `null` and `""` were read as one,
+  so the route that decides a treedb's landing never arrived.
 
 ### 0.7.0
 
