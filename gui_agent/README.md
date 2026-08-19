@@ -62,7 +62,7 @@ consumes them — not from the `kernel/js/*` submodule checkouts:
 
 ```
 @yuneta/gobj-js ^7.13.2     (publishes only dist/ → resolved to its bundle)
-@yuneta/gobj-ui ^6.1.2      (v2 / main line; imported as SOURCE by specifier,
+@yuneta/gobj-ui ^6.2.1      (v2 / main line; imported as SOURCE by specifier,
                              @yuneta/gobj-ui/src/*.js via its exports map)
 ```
 
@@ -477,6 +477,18 @@ This yuno is JavaScript and deploys independently of the SDK (see
 `deploy-com.sh`). The per-release detail lives in this repo's own
 `CHANGELOG.md` (repo root); this section keeps the durable, feature-level
 summary.
+
+### 0.8.1
+
+- **A yuno tab names its NODE too** — `yuneta_agent · wattyzer`. Every node runs
+  a `yuneta_agent`, so two tabs of two nodes read the same and there was no way
+  to tell which one you were typing into. The yuno stays first: it is what was
+  picked and what the eye scans for, and a tab strip truncates at the end.
+- **The strip of treedbs remembers what each one had open**
+  (`remember_position`, gobj-ui 6.2.1). Opening a topic, moving to a sibling
+  treedb and coming back landed on the cards, with browser Back the only way to
+  the table that was there. The strip is a row of tabs and a treedb has a
+  position inside it, so the item points at it.
 
 ### 0.8.0
 

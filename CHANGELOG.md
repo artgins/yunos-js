@@ -23,7 +23,20 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
-- **chore: `@yuneta/gobj-ui` `^6.0.0` -> `^6.1.2`**, which is where the schema
+- **fix: a yuno tab names its NODE too** (`yuneta_agent · wattyzer`). Every node
+    runs a `yuneta_agent`, so two tabs of two nodes read the same and there was
+    no way to know which one you were typing into. The yuno stays first: it is
+    what was picked and what the eye scans for, and a tab strip truncates at the
+    end. Both halves are DATA — a yuno role and a hostname — never i18n keys.
+
+- **fix: the strip of treedbs remembers what each one had open**
+    (`remember_position`, gobj-ui 6.2.1). Open a topic inside a treedb, move to
+    a sibling, come back — and it was at its cards, with browser Back the only
+    way to the table that was there. That strip is a row of tabs and a treedb
+    has a position inside it, so its item points at that position. Reported from
+    `treedb_authzs/users`.
+
+- **chore: `@yuneta/gobj-ui` `^6.0.0` -> `^6.2.1`**, which is where the schema
     editor lives.
 
 - **feat: the Schemas workspace edits a schema AS A SCHEMA.** Every schema a

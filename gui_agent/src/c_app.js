@@ -581,9 +581,22 @@ function rebuild_workspace_tabs(gobj, ws)
         if(spec.routed) {
             kw.base_route = node_tab_route(ws, n.id);
         }
+        /*  A yuno-unit tab is named by the YUNO, and that is not enough
+         *  to tell two of them apart: every node runs a `yuneta_agent`,
+         *  so two tabs of two nodes read the same and the operator has
+         *  no way to know which one they are typing into. The node
+         *  qualifies it, after the yuno — the yuno is what was picked
+         *  and what the eye scans for, and a tab strip truncates at the
+         *  end, so the half that must survive goes first. Both halves
+         *  are DATA (a hostname, a yuno role), never i18n keys.  */
+        let tab_name = n.host || n.id;
+        if(is_yuno && n.host && parsed.node) {
+            tab_name = `${n.host} · ${parsed.node}`;
+        }
         items.push({
             id:       "node-" + n.id,
-            name:     n.host || n.id,
+            name:     tab_name,
+            tooltip:  tab_name,
             /*  Per-tab connection status dot: a small circle (like the old
              *  global toolbar dot, but one per tab) — green when the node is in
              *  the live list-agents set, red when it dropped. A CSS circle

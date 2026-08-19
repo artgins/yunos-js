@@ -807,6 +807,11 @@ function build_tree(gobj)
                         gobj_read_str_attr(gobj, "yuno_id"),
             base_route: base,
             nav_mode:   nav_mode(gobj),
+            /*  This strip IS a row of tabs, and a treedb has a position
+             *  inside it: the topic that is open. Without this, coming
+             *  back to a treedb landed on its cards and browser Back was
+             *  the only way to the table that was there.  */
+            remember_position: true,
             projection: {
                 index:  {layout: "cards"},
                 chrome: [
