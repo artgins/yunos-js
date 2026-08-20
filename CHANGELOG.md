@@ -81,6 +81,34 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
+- **fix: coming back from Select lands where the tab was left, app `0.7.5`.**
+    A tab replays its position when it is ENTERED AGAIN, and "again" is
+    decided by whether the previous route was another tab. The picker returned
+    from that decision early, so the tab it left behind stayed on record as
+    the one we were in: going to Select and back read exactly like the view's
+    own "← Topics" (walking UP out of a topic), which does not replay — and
+    RECORDS the root, so the position was not only skipped, it was erased.
+
+    The tab we were in is now consumed at the one point every route passes
+    through and written again only by the tab branch, so a route that forgets
+    to clear it cannot exist.
+
+- **feat: a Topics tab says which node it browses, app `0.7.4`.** A tab is
+    labelled with the treedb name, and a treedb name is not unique across
+    backends: two tabs reading `treedb_yuneta_agent` are two different machines.
+    The connection url now prints in the view's toolbar (gobj-ui `source_url`),
+    not in the tab label — a tab wide enough for
+    `wss://artgins.yunetacontrol.com:1996` is a tab bar with room for one tab.
+
+- **change: Connections is the third rail entry, not the first.** The rail opens
+    on the work — Topics, Graphs — and the backends are where you go when one
+    has to be added or fixed, which is not what a session is spent doing. The
+    landing route is unchanged (`/topics/select`), and `/connections` is the
+    same route, linkable and in the site map as before.
+
+- **chore: `@yuneta/gobj-ui` `^6.2.1` -> `^6.3.0`**, which is where `source_url`
+    lives.
+
 - **fix: a tab keeps what it had open, app `0.7.3`.** Which tab was active was
     already remembered; the topic open inside it was not, so clicking back onto
     a tab landed on its cards and browser Back was the only way to the table

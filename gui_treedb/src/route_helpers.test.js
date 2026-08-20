@@ -47,6 +47,14 @@ describe("the root of a tab you are coming back to", () => {
             {record: null, replay: `${A}/users`});
     });
 
+    test("...including from OUTSIDE the tabs — the picker, the settings", () => {
+        /*  The caller says "no tab" with an empty prev_base. It must, or a
+         *  return from Select reads as the walk UP that records the root
+         *  (and the tab comes back on its cards, its position gone).  */
+        expect(tab_position_plan("", A, "", `${A}/users`)).toEqual(
+            {record: null, replay: `${A}/users`});
+    });
+
     test("...and does nothing when the tab was left at its own root", () => {
         expect(tab_position_plan(B, A, "", A)).toEqual({record: null, replay: null});
     });

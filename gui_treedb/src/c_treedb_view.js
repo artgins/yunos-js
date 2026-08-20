@@ -66,6 +66,7 @@ SDATA(data_type_t.DTP_STRING,   "title",       0,  "",    "Tab title"),
 SDATA(data_type_t.DTP_STRING,   "base_route",  0,  "",    "This view's declared tab route (for the topic/mode deep link)"),
 SDATA(data_type_t.DTP_JSON,     "card_action_routes", 0, null, "Topic-card hash-route templates {info,table,graph} forwarded to C_YUI_TREEDB_TOPICS (topics workspace only)"),
 SDATA(data_type_t.DTP_JSON,     "landing_routes", 0, null, "Landing sub-view hashes {cards,schema} forwarded to C_YUI_TREEDB_TOPICS (topics workspace only)"),
+SDATA(data_type_t.DTP_STRING,   "source_url",  0,  "",    "The connection's url, forwarded to C_YUI_TREEDB_TOPICS so its toolbar says which node it browses (topics workspace only)"),
 SDATA(data_type_t.DTP_STRING,   "back_route",  0,  "",    "Hash route for the graph view's '← topics' button, forwarded to C_YUI_TREEDB_GRAPH (graphs workspace only)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,  "Root HTML element (mounted by the shell)"),
 SDATA_END()
@@ -285,6 +286,11 @@ function build_hosted_view(gobj, remote)
         /*  Its own base route, so it can declare its sub-routes (topics,
          *  /info, /schema) to the site map (ROUTING.md contributor). */
         kw.base_route = gobj_read_attr(gobj, "base_route");
+        /*  Which node this tab browses. The tab is labelled with the
+         *  treedb name, and two connections serve treedbs of the same
+         *  name, so the url goes to the toolbar — there is no room for
+         *  it in a tab. */
+        kw.source_url = gobj_read_attr(gobj, "source_url");
     }
     if(view_gclass === "C_YUI_TREEDB_GRAPH") {
         /*  '← topics' button back to the topics grid (only this view declares it). */

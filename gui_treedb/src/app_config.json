@@ -1,5 +1,5 @@
 {
-    "_comment": "TreeDB GUI shell config. Three primary options: Connections (the backends this app browses, where a session starts) and then the WORK -- Topics (table editors) and Graphs (node graphs). Preferences hangs off the toolbar avatar as /preferences. Two per-workspace rails — Topics (table editors) and Graphs (node graphs). Each declares ONLY its fixed picker tab (C_TREEDB_PICKER: manage connections + check which treedbs to open); the C_TREEDB_APP controller replaces the submenu at runtime, keeping the picker as tab 0 and appending one closable tab per selected treedb of a CONNECTED backend. The picker target.kw carries only the workspace string; the dynamic treedb tabs carry the live gobj_remote_yuno pointer (built in JS via yui_shell_set_submenu). Theme/language/logout live in the top toolbar. Connections + tokens are browser-local (localStorage).",
+    "_comment": "TreeDB GUI shell config. Three primary options, the WORK first: Topics (table editors), Graphs (node graphs), and last Connections (the backends this app browses). Preferences hangs off the toolbar avatar as /preferences. Two per-workspace rails — Topics (table editors) and Graphs (node graphs). Each declares ONLY its fixed picker tab (C_TREEDB_PICKER: manage connections + check which treedbs to open); the C_TREEDB_APP controller replaces the submenu at runtime, keeping the picker as tab 0 and appending one closable tab per selected treedb of a CONNECTED backend. The picker target.kw carries only the workspace string; the dynamic treedb tabs carry the live gobj_remote_yuno pointer (built in JS via yui_shell_set_submenu). Theme/language/logout live in the top toolbar. Connections + tokens are browser-local (localStorage).",
 
     "shell": {
         "breakpoints": "bulma",
@@ -16,7 +16,7 @@
             "main": { "zone": "center", "default_route": "/topics/select" }
         },
 
-        "_routes_comment": "Resolution-ancestor routes for the per-workspace dynamic treedb tabs (a tab /<ws>/db/<sel> resolves here on F5 before the controller rebuilds it). Both point at the workspace picker (/<ws>/select) so an F5 shows the treedb selector while the backend connects; once EV_ON_OPEN rebuilds the tab, C_TREEDB_APP.restore_tab_from_url re-navigates to it so the reload lands on the tab the operator was on. /connections and /preferences are first-level routes: /connections is the first item of the rail (the BACKENDS manager; the per-workspace /<ws>/select is a different page -- which treedbs of a backend to open -- and links to it), /preferences hangs off the avatar menu, and both stay ROUTES so they are linkable, survive an F5 and appear in the site map. They are two pages and not one because they are two different things: the backends are what the app BROWSES -- shared by both workspaces, the thing a picker sends you to -- while preferences are what this browser chose.",
+        "_routes_comment": "Resolution-ancestor routes for the per-workspace dynamic treedb tabs (a tab /<ws>/db/<sel> resolves here on F5 before the controller rebuilds it). Both point at the workspace picker (/<ws>/select) so an F5 shows the treedb selector while the backend connects; once EV_ON_OPEN rebuilds the tab, C_TREEDB_APP.restore_tab_from_url re-navigates to it so the reload lands on the tab the operator was on. /connections and /preferences are first-level routes: /connections is the last item of the rail (the BACKENDS manager; the per-workspace /<ws>/select is a different page -- which treedbs of a backend to open -- and links to it), /preferences hangs off the avatar menu, and both stay ROUTES so they are linkable, survive an F5 and appear in the site map. They are two pages and not one because they are two different things: the backends are what the app BROWSES -- shared by both workspaces, the thing a picker sends you to -- while preferences are what this browser chose.",
         "routes": {
             "/connections": {
                 "stage": "main",
@@ -81,7 +81,7 @@
                 "aria_label": "Account menu",
                 "action": {
                     "type": "dropdown",
-                    "_items_comment": "Account menu: the operator's own preferences first, then the developer tools and the informative entries. The BACKENDS are not here: they are a rail item (/connections), because they are where a session starts and both workspaces depend on them.",
+                    "_items_comment": "Account menu: the operator's own preferences first, then the developer tools and the informative entries. The BACKENDS are not here: they are a rail item (/connections), because both workspaces depend on them and a picker sends you there.",
                     "items": [
                         {
                             "id": "preferences",
@@ -135,14 +135,6 @@
             },
             "items": [
                 {
-                    "_comment": "No target and no submenu on purpose: /connections is declared in shell.routes, and build_item_index fills a menu item that has a route but no target from there. So there is ONE place that says which gclass the backends page is.",
-                    "id": "connections",
-                    "name": "connections",
-                    "icon": "yi-cloudversify",
-                    "tooltip": "Manage the backends this app browses",
-                    "route": "/connections"
-                },
-                {
                     "id": "topics",
                     "name": "topics",
                     "icon": "yi-table",
@@ -193,6 +185,14 @@
                             }
                         ]
                     }
+                },
+                {
+                    "_comment": "Third and last, after the work: the rail opens on what the operator came to do (Topics, Graphs) and this is where they go when a backend has to be added or fixed. Declared with no target and no submenu on purpose: /connections is declared in shell.routes, and build_item_index fills a menu item that has a route but no target from there. So there is ONE place that says which gclass the backends page is.",
+                    "id": "connections",
+                    "name": "connections",
+                    "icon": "yi-cloudversify",
+                    "tooltip": "Manage the backends this app browses",
+                    "route": "/connections"
                 }
             ]
         }

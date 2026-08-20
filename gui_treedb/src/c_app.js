@@ -425,6 +425,14 @@ function rebuild_workspace_tabs(gobj, ws)
                 cards:  "#" + tab_route,
                 schema: "#" + tab_route + "/schema"
             };
+            /*  The tab is labelled with the treedb name, and the same
+             *  treedb name lives on more than one backend: two tabs
+             *  reading `treedb_yuneta_agent` are two different nodes.
+             *  The url says which one, and it says it in the view's
+             *  toolbar, because a tab label carrying a wss url is a tab
+             *  label nobody can read. */
+            let conn = config ? treedb_config_get_connection(config, sel.conn_id) : null;
+            target_kw.source_url = (conn && conn.url) || "";
         }
         /*  The graph view's "← topics" button jumps back to the sibling
          *  topics tab (its cards grid). */
@@ -1218,11 +1226,19 @@ function ac_route_changed(gobj, event, kw, src)
     let priv = gobj.priv;
     let base = (kw && kw.base) || "";
     let ws = ws_from_route(base);
+
+    /*  The tab we were in is left behind by EVERY route that is not a tab —
+     *  a login, the settings, the picker — and coming back to it must not
+     *  read as walking up inside it. So it is consumed here, at the one
+     *  point every route passes through, and written again only by the tab
+     *  branch below. It used to be cleared near the end instead, which the
+     *  picker's early return jumped over: Select and back onto the same tab
+     *  looked exactly like the view's own "← Topics", so the position was
+     *  overwritten with the root and the tab came back on its cards.  */
+    let prev_tab_base = priv.last_tab_base || "";
+    priv.last_tab_base = "";
+
     if(!ws) {
-        /*  Not a workspace route at all (login, settings): the tab we were
-         *  in is left behind, and coming back to it must not read as
-         *  walking up inside it.  */
-        priv.last_tab_base = "";
         return 0;
     }
     /*  Remember the resolved base so restore_tab_from_url can tell an
@@ -1271,7 +1287,7 @@ function ac_route_changed(gobj, event, kw, src)
         let key = tab_key(ws, sel_id_);
         let routes = priv_tab_routes(gobj);
         let plan = tab_position_plan(
-            priv.last_tab_base || "",
+            prev_tab_base,
             base,
             (kw && kw.subpath) || "",
             routes[key]
@@ -1289,11 +1305,6 @@ function ac_route_changed(gobj, event, kw, src)
         }
         return 0;
     }
-
-    /*  Not on a treedb tab: leaving the tabs entirely (Settings, a picker)
-     *  must not read later as "still in the same tab", or coming back would
-     *  be taken for walking up inside it and the position would be lost.  */
-    priv.last_tab_base = "";
 
     if(base === db_home_route(ws)) {
         /*  Landed on the workspace home /<ws>/db. Two ways to get here:

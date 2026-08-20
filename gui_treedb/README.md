@@ -7,10 +7,10 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 ## Architecture
 
 - **Shell:** the declarative shell drives the nav; `src/app_config.json` declares
-  the rail — **Connections / Topics / Graphs**: the backends first, because they
-  are where a session starts and both work entries depend on them, then the work
-  itself. `/preferences` (what this browser chose) stays a first-level route off
-  the toolbar avatar. Views are mounted by gclass name.
+  the rail — **Topics / Graphs / Connections**: the work first, and the backends
+  last, where you go when one has to be added or fixed. `/preferences` (what this
+  browser chose) stays a first-level route off the toolbar avatar. Views are
+  mounted by gclass name.
 
   The Connections rail item declares a `route` and **no** `target`: `/connections`
   is in `shell.routes`, and the shell's `build_item_index()` fills a menu entry
