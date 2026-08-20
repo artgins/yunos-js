@@ -62,9 +62,11 @@ import {
     esc,
 } from "./agent_helpers.js";
 import {
+    agent_config_get_selected_nodes,
     agent_config_is_node_selected,
     agent_config_toggle_selected_node,
     stats_sel_id,
+    stats_sel_parse,
 } from "./c_agent_config.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
 import {
@@ -240,6 +242,34 @@ function is_yuno_selected(gobj, node, yuno_id)
     let config = gobj_read_attr(gobj, "config_svc");
     let ws = gobj_read_attr(gobj, "workspace");
     return !!(config && agent_config_is_node_selected(config, ws, stats_sel_id(node, yuno_id)));
+}
+
+/***************************************************************
+ *  The yunos of one node that have a tab open, by their label.
+ *
+ *  Read from the SELECTION and not from the loaded children, because
+ *  this is asked precisely when the children are NOT on screen: a
+ *  collapsed node hides the rows that carry the checkbox, and a node
+ *  whose list-yunos has not answered yet has no children at all.
+ ***************************************************************/
+function selected_yunos_of_node(gobj, node)
+{
+    let config = gobj_read_attr(gobj, "config_svc");
+    let ws = gobj_read_attr(gobj, "workspace");
+    if(!config) {
+        return [];
+    }
+    let open = [];
+    for(let sel of agent_config_get_selected_nodes(config, ws)) {
+        if(!sel || !sel.id) {
+            continue;
+        }
+        let parsed = stats_sel_parse(sel.id);
+        if(parsed.node === node) {
+            open.push(sel.host || parsed.yuno_id);
+        }
+    }
+    return open;
 }
 
 /***************************************************************
@@ -435,8 +465,24 @@ function make_columns(gobj)
             return `<span class="STATNODES_EMPTY has-text-grey is-size-7">` +
                 `${esc(t("no yuno with a treedb"))}</span>`;
         }
+        /*  Which of this node's yunos are open. The tab strip says it for
+         *  the ACTIVE tab only, and the checkbox that says it here is on a
+         *  child row — invisible while the node is collapsed, which is how
+         *  a node is read most of the time. So the node row carries it: the
+         *  labels of its open yunos, the same text the tabs are named
+         *  after.  */
+        let open = selected_yunos_of_node(gobj, r._key);
+        let mark = "";
+        if(open.length > 0) {
+            let shown = open.slice(0, 2).join(", ");
+            if(open.length > 2) {
+                shown += ` +${open.length - 2}`;
+            }
+            mark = ` <span class="STATNODES_NODE_OPEN has-text-link is-size-7" ` +
+                `title="${esc(t("open in this workspace"))}">${esc(shown)}</span>`;
+        }
         return `<span class="STATNODES_NODE has-text-weight-semibold">` +
-            `${esc(r.host)}</span>`;
+            `${esc(r.host)}</span>${mark}`;
     }
 
     /*  Info: node -> "v<version> · <role>"; yuno -> running badge.  */
@@ -525,11 +571,19 @@ function make_columns(gobj)
         }
     }
 
+    /*  Both text columns WRAP instead of ending in an ellipsis. On a phone
+     *  `fitColumns` leaves the status about half of what "Running Read only"
+     *  needs, and half a status is worse than two lines of it — the same for
+     *  a host name and the yunos it has open. `variableHeight` is what lets
+     *  the row grow to fit; the wrapping itself is CSS (Tabulator's own cell
+     *  rule is nowrap + ellipsis).  */
     return [
         {title: "", field: "_sel", width: 44, headerSort: false, hozAlign: "center",
             formatter: sel_formatter, cellClick: sel_click},
-        {title: t("name"), field: "name", formatter: name_formatter, widthGrow: 2},
-        {title: t("status"), field: "info", formatter: info_formatter, widthGrow: 1}
+        {title: t("name"), field: "name", formatter: name_formatter, widthGrow: 2,
+            variableHeight: true, cssClass: "STATNODES_CELL_WRAP"},
+        {title: t("status"), field: "info", formatter: info_formatter, widthGrow: 1,
+            minWidth: 96, variableHeight: true, cssClass: "STATNODES_CELL_WRAP"}
     ];
 }
 

@@ -330,6 +330,7 @@ const en = {
         "only in c": "Only in C",
         "version mismatch": "Version",
         "no treedb in this yuno": "This yuno exposes no treedb",
+        "open in this workspace": "Open here",
         "no yuno with a treedb": "No yuno with a treedb",
         "master":            "Master",
         "read only":         "Read only",

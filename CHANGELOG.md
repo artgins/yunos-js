@@ -23,6 +23,21 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **fix: a collapsed node says which of its yunos are open, app `0.8.2`.** In
+    Statistics and Schemas what is open is a YUNO, and the checkbox that says
+    so is on a child row — invisible while the node is collapsed, which is how
+    a node is read most of the time. The node row now carries the labels of its
+    open yunos, the same text its tabs are named after (`+N` past the second).
+    It is read from the SELECTION, not from the loaded children: it is asked
+    exactly when the children are not on screen, and a node whose list-yunos
+    has not answered yet has none at all.
+
+- **fix: the status is not cut in half on a phone.** `fitColumns` leaves that
+    column about half of what "Running Read only" needs, and Tabulator ends a
+    cell that does not fit with an ellipsis. Name and status now WRAP instead
+    (`variableHeight` grows the row), so a narrow screen shows two lines rather
+    than half a sentence.
+
 - **fix: a yuno tab names its NODE too** (`yuneta_agent · wattyzer`). Every node
     runs a `yuneta_agent`, so two tabs of two nodes read the same and there was
     no way to know which one you were typing into. The yuno stays first: it is

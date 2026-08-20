@@ -92,3 +92,31 @@
     right: 0;
     width: auto;
 }
+
+/* ====================================================================
+ *  Nodes tree (C_STATS_NODES: the Statistics and Schemas picker).
+ *  Tabulator cells are nowrap + ellipsis, which on a phone cuts the
+ *  status in half ("Running Read o..."). These two columns wrap instead
+ *  — the column carries `variableHeight`, so the row grows to fit.
+ * ==================================================================== */
+.STATNODES_TABLE .tabulator-cell.STATNODES_CELL_WRAP {
+    white-space: normal;
+    text-overflow: clip;
+    line-height: 1.25;
+}
+/*  ...and the cell keeps its OWN height. Tabulator measures the rows once
+ *  and writes that height into every cell, so a column that got narrower
+ *  afterwards — a rotated phone, a resized window — wraps into a height
+ *  nobody re-measured and the second line is cut off. The row itself is
+ *  free (no inline height), so letting these two cells size themselves is
+ *  what makes it grow. */
+.STATNODES_TABLE .tabulator-row .tabulator-cell.STATNODES_CELL_WRAP {
+    height: auto !important;
+}
+/*  The yunos this node has open, beside its host name. It wraps with the
+ *  name and never pushes it out: the name is the identity, this is the
+ *  answer to "what do I have open here". */
+.STATNODES_NODE_OPEN {
+    margin-left: 0.35rem;
+    word-break: break-word;
+}
