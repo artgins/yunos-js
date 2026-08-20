@@ -326,6 +326,8 @@ const es = {
         "the file could not be read": "No se pudo leer el fichero",
         "the file is not a connections export": "El fichero no es una exportación de conexiones",
         "the file holds no usable connection": "El fichero no tiene ninguna conexión usable (hace falta una url)",
+        "this field is required": "Este campo es obligatorio",
+        "all changes will be lost": "Se perderán todos los cambios. ¿Seguro?",
         "columns": "Columnas",
         "choose the columns to show": "Elegir las columnas a mostrar",
         "no topics": "Sin topics",

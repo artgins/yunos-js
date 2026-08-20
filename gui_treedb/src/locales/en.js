@@ -325,6 +325,8 @@ const en = {
         "the file could not be read": "The file could not be read",
         "the file is not a connections export": "The file is not a connections export",
         "the file holds no usable connection": "The file holds no usable connection (a connection needs a url)",
+        "this field is required": "This field is required",
+        "all changes will be lost": "All changes will be lost. Are you sure?",
         "columns": "Columns",
         "choose the columns to show": "Choose the columns to show",
         "no topics": "No topics",

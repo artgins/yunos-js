@@ -343,6 +343,7 @@ const en = {
         "no topics":         "No topics",
         "schema":            "Schema",
         "schema graph":      "Schema graph",
+        "all changes will be lost": "All changes will be lost. Are you sure?",
         "columns":           "Columns",
         "legend": "Legend",
         "choose the columns to show": "Choose the columns to show",

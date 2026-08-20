@@ -347,6 +347,7 @@ const es = {
         "no topics":         "Sin topics",
         "schema":            "Esquema",
         "schema graph":      "Grafo de esquema",
+        "all changes will be lost": "Se perderán todos los cambios. ¿Seguro?",
         "columns":           "Columnas",
         "legend": "Leyenda",
         "choose the columns to show": "Elegir las columnas a mostrar",
