@@ -204,6 +204,8 @@ const es = {
         "show services": "Mostrar los servicios de esta conexión",
         "hide services": "Ocultar los servicios de esta conexión",
         "browse this service": "Explorar este servicio",
+        "browse every service": "Explorar todos los servicios",
+        "legend": "Leyenda",
         "refresh": "Refrescar",
         "load more": "Cargar más",
         "no records": "Sin registros",

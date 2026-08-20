@@ -204,6 +204,8 @@ const en = {
         "show services": "Show the services of this connection",
         "hide services": "Hide the services of this connection",
         "browse this service": "Browse this service",
+        "browse every service": "Browse every service",
+        "legend": "Legend",
         "refresh": "Refresh",
         "load more": "Load more",
         "no records": "No records",

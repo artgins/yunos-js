@@ -486,6 +486,37 @@ function build_services_subtable(gobj, row)
                     return $tag;
                 }},
             {title: t("browse"), field: "selected", minWidth: 100, hozAlign: "center",
+                /*  The HEADER is the select-all. A yuno routinely exposes a
+                 *  dozen services and the only way to take them all was to
+                 *  click each one; the header carries the state of the whole
+                 *  column (all / none / some) and flips it. All-on flips to
+                 *  none; anything else flips to all — which is what "some are
+                 *  ticked and I pressed it" means. */
+                titleFormatter: (cell) => {
+                    let $wrap = document.createElement("span");
+                    $wrap.classList.add("CONNECTIONS_SERVICES_ALL");
+                    let state = services_check_state(gobj, conn_id);
+                    $wrap.setAttribute("role", "checkbox");
+                    $wrap.setAttribute("aria-checked",
+                        state === "all"? "true" : (state === "none"? "false" : "mixed"));
+                    $wrap.setAttribute("title", t("browse every service"));
+                    $wrap.setAttribute("aria-label", t("browse every service"));
+                    let $icon = document.createElement("span");
+                    $icon.classList.add("icon");
+                    let $i = document.createElement("i");
+                    $i.className = (state === "all")? "yi-square-check" : "yi-square";
+                    $icon.appendChild($i);
+                    let $txt = document.createElement("span");
+                    $txt.classList.add("ml-1");
+                    $txt.textContent = t("browse");
+                    $wrap.appendChild($icon);
+                    $wrap.appendChild($txt);
+                    return $wrap;
+                },
+                headerClick: (e) => {
+                    gobj_send_event(gobj, "EV_TOGGLE_ALL_SERVICES",
+                        {conn_id: conn_id}, gobj);
+                },
                 formatter: (cell) => {
                     let on = !!cell.getValue();
                     return `<span class="icon CONNECTIONS_SERVICE_CHECK" role="checkbox" `
@@ -1046,6 +1077,71 @@ function ac_add_conn(gobj, event, kw, src)
  *  Flip a service's `selected` flag (its sub-row checkbox): the
  *  connection's whole service list is rewritten with that one toggled.
  ***************************************************************/
+/***************************************************************
+ *  Is the whole "browse" column of a connection on, off, or mixed?
+ *  Read from the CONFIG and not from the sub-table, so the header is
+ *  right the moment it is drawn — before the table has any rows.
+ ***************************************************************/
+function services_check_state(gobj, conn_id)
+{
+    let config = gobj_find_service("treedb_config", false);
+    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
+    let list = conn ? treedb_config_conn_services(conn) : [];
+    if(!list.length) {
+        return "none";
+    }
+    let on = list.filter((s) => s.selected).length;
+    if(on === 0) {
+        return "none";
+    }
+    if(on === list.length) {
+        return "all";
+    }
+    return "some";
+}
+
+/***************************************************************
+ *  Take every service of a connection, or drop every one.
+ *
+ *  All-on drops them; anything else takes them all — which is what
+ *  "some are ticked and I pressed it" means. A yuno routinely exposes
+ *  a dozen services, and one click each was the only way there was.
+ ***************************************************************/
+function ac_toggle_all_services(gobj, event, kw, src)
+{
+    let conn_id = (kw && kw.conn_id) || "";
+    let config = gobj_find_service("treedb_config", false);
+    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
+    if(!conn) {
+        log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' ` +
+                  `whose services to take`);
+        return -1;
+    }
+
+    let want = (services_check_state(gobj, conn_id) !== "all");
+    let list = treedb_config_conn_services(conn).map((s) => ({
+        service: s.service, gclass: s.gclass, selected: want
+    }));
+    if(!list.length) {
+        return 0;       /*  nothing discovered yet: nothing to take  */
+    }
+    gobj_send_event(config, "EV_SET_CONN_SERVICES",
+        {conn_id: conn_id, services: list}, gobj);
+
+    let sub = gobj.priv.subtables[conn_id];
+    if(sub) {
+        try {
+            sub.getRows().forEach((row) => row.update({selected: want}));
+            /*  The header carries the column's state, so it has to be
+             *  redrawn too — its own cell is not one of the rows. */
+            sub.redraw(true);
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: sub-table mid-rebuild: ${e}`);
+        }
+    }
+    return 0;
+}
+
 function ac_toggle_service(gobj, event, kw, src)
 {
     let conn_id = (kw && kw.conn_id) || "";
@@ -1078,6 +1174,9 @@ function ac_toggle_service(gobj, event, kw, src)
             if(row) {
                 row.update({selected: now_checked});
             }
+            /*  One service changing can flip the whole column between
+             *  all / some / none, and that state lives in the header. */
+            sub.redraw(true);
         } catch(e) {
             log_warning(`${GCLASS_NAME}: sub-table mid-rebuild: ${e}`);
         }
@@ -1400,6 +1499,7 @@ function create_gclass(gclass_name)
             ["EV_ADD_CONN",             ac_add_conn,             null],
             ["EV_CLONE_CONN",           ac_clone_conn,           null],
             ["EV_TOGGLE_SERVICE",       ac_toggle_service,       null],
+            ["EV_TOGGLE_ALL_SERVICES",  ac_toggle_all_services,  null],
             ["EV_REFRESH_SERVICES",     ac_refresh_services,     null],
             ["EV_TOGGLE_CONN_ENABLED",  ac_toggle_conn_enabled,  null],
             ["EV_TOGGLE_CONN_EXPANDED", ac_toggle_conn_expanded, null],
@@ -1421,6 +1521,7 @@ function create_gclass(gclass_name)
         ["EV_ADD_CONN",             0],
         ["EV_CLONE_CONN",           0],
         ["EV_TOGGLE_SERVICE",       0],
+        ["EV_TOGGLE_ALL_SERVICES",  0],
         ["EV_REFRESH_SERVICES",     0],
         ["EV_TOGGLE_CONN_ENABLED",  0],
         ["EV_TOGGLE_CONN_EXPANDED", 0],
