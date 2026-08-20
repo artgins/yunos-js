@@ -320,6 +320,8 @@ const es = {
         "clone": "Clonar",
         "clone this connection": "Clonar esta conexión (mismo backend, deshabilitada hasta que la conectes)",
         "download the connections as a json file": "Descargar las conexiones como fichero JSON",
+        "add the connections on the clipboard": "Añadir las conexiones del portapapeles",
+        "paste the connections here": "Pega aquí las conexiones",
         "add the connections of a json file": "Añadir las conexiones de un fichero JSON (llegan deshabilitadas)",
         "the file could not be read": "No se pudo leer el fichero",
         "the file is not a connections export": "El fichero no es una exportación de conexiones",

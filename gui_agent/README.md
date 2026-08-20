@@ -96,6 +96,35 @@ The Console targets remote role `controlcenter` / service `controlcenter` and
 wraps each typed line in a `command-agent` (which returns a synchronous dispatch
 ack plus the agent's asynchronous real answer).
 
+## Handing the backends to the TreeDB GUI
+
+The Schemas picker copies the yunos it shows as **gui_treedb connections**
+("For TreeDB"), and that app's Connections page pastes them. Retyping a dozen
+`wss://host:port` rows between two tabs of one browser was the alternative.
+
+It works because this picker already asks every yuno what services it runs —
+that is how it knows which ones hold a treedb — and used to throw the answer
+away one line after it arrived. What it did NOT have is the endpoint, so the
+copy makes one `view-config` per yuno and reads:
+
+- the **port**, from `global["<gate>.__json_config_variables__"].__top_url__`
+  (`"wss://0.0.0.0:1602"`). A yuno without it exposes no top gate and can
+  never be a treedb backend, so its absence is the filter: a node with 17
+  yunos contributes the 2 that are reachable.
+- the **host**, which is NOT in that url — the yuno binds `0.0.0.0` and its
+  realm binds `127.0.0.1`. Best evidence first: the filename of
+  `__ssl_certificate__` (the FQDN the certificate is issued for, which is the
+  name a client must use), else the realm id from the same config. Neither is
+  guaranteed, so the url is a **proposal**: connections arrive **disabled** in
+  gui_treedb and the operator fixes the odd one in the table.
+- the **service**, which is the one NAMED like the yuno's role. Not "the first
+  top-service": a yuno flags several (`authz`, `idp`, its gates…) and taking
+  the first made all nine backends of a real scan read `authz`, which is a
+  connection the backend refuses.
+
+Two rows resolving to one url — the same yuno reached through two nodes, or a
+local copy carrying the production realm — are one connection.
+
 ## Schemas: the treedb views over the agent's control plane
 
 The Schemas workspace mounts gobj-ui's treedb views, pointed at one treedb of

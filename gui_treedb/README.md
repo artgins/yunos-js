@@ -25,7 +25,12 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   intent) — editing a row's coordinates disables it until reconnected, so
   typing never auto-connects — and deleting a row asks for confirmation.
   A row can be **cloned** (same backend, new id, disabled), and the whole set
-  **exported / imported** as a JSON file — nothing secret travels (the
+  **exported / imported** as a JSON file — or **pasted** from the clipboard,
+  which is how the agent console hands over the backends it already knows
+  ("For TreeDB" in its Schemas picker): a file on disk between two tabs of one
+  browser is a detour. The clipboard cannot always be read without asking
+  (Firefox refuses outright), so a refusal opens a box to paste into rather
+  than failing. Both roads end in the same import — nothing secret travels (the
   access_token is never stored here). An import ADDS: every connection arrives
   with a fresh id (the id is what the open tabs and Tranger views are keyed by)
   and disabled (importing a file must not open sockets).

@@ -66,7 +66,7 @@ import {t} from "i18next";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
-import {yui_shell_confirm_yesno} from "@yuneta/gobj-ui/src/shell_modals.js";
+import {yui_shell_confirm_yesno, yui_shell_show_modal} from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 
@@ -325,6 +325,26 @@ function build_ui(gobj)
         gobj_send_event(gobj, "EV_PICK_IMPORT_FILE", {}, gobj);
     });
 
+    /*  The same import, without the file. The agent console can put a set of
+     *  connections on the clipboard (its Schemas picker knows every yuno's
+     *  coordinates), and a file on disk between two tabs of one browser is a
+     *  detour. Reads the same document as the file import — it is the same
+     *  event.  */
+    let $paste = createElement2(
+        ["button", {class: "button is-small ml-2 CONNECTIONS_PASTE",
+                    title: t("add the connections on the clipboard"),
+                    "aria-label": t("paste"),
+                    "data-i18n-title": "add the connections on the clipboard",
+                    "data-i18n-aria-label": "paste"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-paste"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "paste"}, t("paste")]
+            ]
+        ]);
+    $paste.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_PASTE_CONNS", {}, gobj);
+    });
+
     /*  The how-to-use paragraph is long, and on a phone it pushed the table
      *  itself below the fold. It lives behind this toggle, folded away until
      *  asked for. Like every other control here, the click is an EVENT.  */
@@ -343,6 +363,7 @@ function build_ui(gobj)
         gobj_send_event(gobj, "EV_TOGGLE_HELP", {}, gobj);
     });
     priv.$help_btn = $help_btn;
+    priv.$paste_btn = $paste;
 
     let $help = createElement2(
         ["p", {class: "is-size-7 has-text-grey mb-3 is-hidden CONNECTIONS_HELP",
@@ -373,7 +394,7 @@ function build_ui(gobj)
                         $help_btn
                     ]],
                     ["div", {class: "CONNECTIONS_ACTIONS is-flex is-align-items-center"},
-                        [$add, $export, $import, $file]]
+                        [$add, $export, $import, $paste, $file]]
                 ]],
                 $help,
                 $scan_errors,
@@ -1408,6 +1429,95 @@ function ac_pick_import_file(gobj, event, kw, src)
  *  adopt whatever local state a previous connection of that id had left
  *  behind. Disabled because importing a file must not open sockets.
  ***************************************************************/
+/***************************************************************
+ *  Import what is on the clipboard.
+ *
+ *  `navigator.clipboard.readText()` is the short path and it is not
+ *  always allowed to take it: Firefox refuses a silent read outright,
+ *  and Chrome may put a permission prompt in the way. So a refusal is
+ *  not an error — it opens a box to paste into, which works in every
+ *  browser and needs nobody's permission. Both roads end in the same
+ *  EV_IMPORT_CONNS as the file import, which is where the document is
+ *  understood.
+ ***************************************************************/
+function ac_paste_conns(gobj, event, kw, src)
+{
+    let read = null;
+    try {
+        read = navigator.clipboard && navigator.clipboard.readText
+             ? navigator.clipboard.readText() : null;
+    } catch(e) {
+        read = null;
+    }
+
+    if(!read) {
+        open_paste_dialog(gobj, "");
+        return 0;
+    }
+
+    read.then((text) => {
+        if(!text || !text.trim()) {
+            open_paste_dialog(gobj, "");
+            return;
+        }
+        gobj_send_event(gobj, "EV_IMPORT_CONNS", {text: text}, gobj);
+    }).catch(() => {
+        open_paste_dialog(gobj, "");
+    });
+
+    return 0;
+}
+
+/***************************************************************
+ *  The box to paste into, for when the clipboard cannot be read.
+ ***************************************************************/
+function open_paste_dialog(gobj, text)
+{
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot open the paste box`);
+        return;
+    }
+
+    let $area = createElement2(
+        ["textarea", {class: "textarea CONNECTIONS_PASTE_AREA", rows: "10",
+                      spellcheck: "false",
+                      placeholder: t("paste the connections here"),
+                      "data-i18n-placeholder": "paste the connections here"}]);
+    $area.value = text || "";
+
+    let $ok = createElement2(
+        ["button", {class: "button is-primary mt-3 CONNECTIONS_PASTE_OK",
+                    i18n: "import"}, t("import")]);
+
+    let $box = createElement2(
+        ["div", {class: "CONNECTIONS_PASTE_BOX"}, [$area, $ok]]);
+
+    let modal = yui_shell_show_modal(shell, $box, {
+        dialog:        true,
+        logical_class: "CONNECTIONS_PASTE_DIALOG",
+        title:         "paste",
+        t:             t
+    });
+
+    $ok.addEventListener("click", () => {
+        let value = $area.value;
+        if(modal && typeof modal.close === "function") {
+            modal.close();
+        }
+        gobj_send_event(gobj, "EV_IMPORT_CONNS", {text: value}, gobj);
+    });
+
+    /*  A paste box the caret is not in is a box you have to click first. */
+    setTimeout(() => {
+        try {
+            $area.focus();
+        } catch(e) {
+            /*  the dialog was closed before the focus landed  */
+        }
+    }, 0);
+}
+
 function ac_import_conns(gobj, event, kw, src)
 {
     let config = gobj_find_service("treedb_config", false);
@@ -1507,7 +1617,8 @@ function create_gclass(gclass_name)
             ["EV_CONFIRM_REMOVE_CONN",  ac_confirm_remove_conn,  null],
             ["EV_EXPORT_CONNS",         ac_export_conns,         null],
             ["EV_PICK_IMPORT_FILE",     ac_pick_import_file,     null],
-            ["EV_IMPORT_CONNS",         ac_import_conns,         null]
+            ["EV_IMPORT_CONNS",         ac_import_conns,         null],
+            ["EV_PASTE_CONNS",          ac_paste_conns,          null]
         ]]
     ];
 
@@ -1529,7 +1640,8 @@ function create_gclass(gclass_name)
         ["EV_CONFIRM_REMOVE_CONN",  0],
         ["EV_EXPORT_CONNS",         0],
         ["EV_PICK_IMPORT_FILE",     0],
-        ["EV_IMPORT_CONNS",         0]
+        ["EV_IMPORT_CONNS",         0],
+        ["EV_PASTE_CONNS",          0]
     ];
 
     __gclass__ = gclass_create(

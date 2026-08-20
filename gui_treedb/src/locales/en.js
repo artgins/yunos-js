@@ -319,6 +319,8 @@ const en = {
         "clone": "Clone",
         "clone this connection": "Clone this connection (same backend, disabled until you connect it)",
         "download the connections as a json file": "Download the connections as a JSON file",
+        "add the connections on the clipboard": "Add the connections on the clipboard",
+        "paste the connections here": "Paste the connections here",
         "add the connections of a json file": "Add the connections of a JSON file (they arrive disabled)",
         "the file could not be read": "The file could not be read",
         "the file is not a connections export": "The file is not a connections export",

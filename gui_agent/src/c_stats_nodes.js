@@ -92,6 +92,21 @@ const CHECK_PURPOSE = "treedbcheck";
  *  the `services` probe that discovered them, and only in this workspace.  */
 const MASTER_PURPOSE = "treedbmaster";
 
+/*  Marker of the per-yuno `view-config` probe that the ytreedb export makes:
+ *  a yuno's PUBLIC endpoint is nowhere else. Its config carries
+ *  `__top_url__` ("wss://0.0.0.0:1602") when — and only when — the yuno
+ *  exposes a top gate at all, so the same answer says both "this can be a
+ *  treedb backend" and "on this port".  */
+const CONNS_PURPOSE = "ytreedbconns";
+
+/*  A scan is one round trip per yuno; give up on the ones that never answer
+ *  rather than leave the button spinning for ever.  */
+const CONNS_TIMEOUT_MS = 15000;
+
+/*  The document gui_treedb's Connections page imports.  */
+const CONNS_KIND = "yuneta.treedb.connections";
+const CONNS_VERSION = 1;
+
 
 /***************************************************************
  *              Attrs
@@ -135,6 +150,8 @@ function mt_create(gobj)
     priv.nodes = [];              /*  parsed list-agents (node rows)  */
     priv.yunos = {};              /*  node id -> [yuno rows] (loaded)  */
     priv.treedbs = {};            /*  sel id -> true|false (undefined = not asked)  */
+    priv.services = {};           /*  sel id -> the `services` answer, verbatim  */
+    priv.conns_scan = null;       /*  the ytreedb export in flight (see ac_copy_conns)  */
     priv.masters = {};            /*  sel id -> {total, master, answered} of its treedbs  */
     priv.render_pending = false;  /*  one-shot setData debounce  */
 
@@ -194,6 +211,15 @@ function mt_stop(gobj)
     clear_timeout(gobj.priv.gobj_timer);
 
     let priv = gobj.priv;
+
+    /*  A ytreedb scan in flight would fire its give-up timer into a stopped
+     *  gobj, and its answers would arrive for a scan nobody is waiting on. */
+    if(priv.conns_scan) {
+        if(priv.conns_scan.timer) {
+            window.clearTimeout(priv.conns_scan.timer);
+        }
+        priv.conns_scan = null;
+    }
     let shell = yui_shell_of(gobj);
     if(shell) {
         gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
@@ -403,12 +429,37 @@ function build_dom(gobj)
 
     priv.$copy = $copy;
 
+    /*  Only in the Schemas picker: it is the one that probes for treedbs, so
+     *  it is the only one that knows which yunos gui_treedb could browse.
+     *  Copying the coordinates beats retyping a dozen `wss://host:port` rows
+     *  into the other app by hand. */
+    let $copy_conns = null;
+    if(gobj_read_bool_attr(gobj, "with_treedb_check")) {
+        $copy_conns = createElement2(
+            ["button", {
+                class:        "STATNODES_COPY_CONNS button",
+                type:         "button",
+                title:        t("copy the yunos shown as treedb connections"),
+                "aria-label": t("copy the yunos shown as treedb connections"),
+                "data-i18n-title": "copy the yunos shown as treedb connections",
+                "data-i18n-aria-label": "copy the yunos shown as treedb connections"
+            }, [
+                ["span", {class: "icon"}, [["span", {class: "yi-link"}, ""]]],
+                ["span", {class: "is-hidden-mobile", i18n: "for treedb"}, "For TreeDB"]
+            ], {
+                click: () => gobj_send_event(gobj, "EV_COPY_CONNS", {}, gobj)
+            }]
+        );
+    }
+    priv.$copy_conns = $copy_conns;
+
     priv.$toolbar = createElement2(
         ["div", {class: "STATNODES_TOOLBAR is-flex is-align-items-center mb-2",
                  style: "gap:0.5rem;"}, [
             $search_control,
             $count,
             $copy,
+            $copy_conns,
             ["button", {class: "STATNODES_REFRESH button", type: "button", i18n: "refresh"},
                 "Refresh", {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
         ]]
@@ -880,6 +931,11 @@ function set_node_yunos(gobj, node, data)
                 node:     node,
                 yuno_id:  id,
                 label:    label,
+                /*  Not shown in any column: these two are what a treedb
+                 *  connection is addressed with (see build_ytreedb_doc). */
+                role:     role,
+                realm:    Array.isArray(y.realm_id)? (y.realm_id[0] || "")
+                                                   : (y.realm_id || ""),
                 running:  y.yuno_running !== false
             });
         }
@@ -934,6 +990,11 @@ function set_yuno_treedbs(gobj, node, yuno_id, data, result)
         names = data.filter((sv) => sv && sv.gclass === "C_NODE")
             .map((sv) => sv.service)
             .filter((x) => typeof x === "string" && x.length > 0);
+        /*  The whole answer, not just the count. This probe already asks
+         *  every yuno what services it runs, which is exactly the list a
+         *  treedb connection needs — it used to be thrown away one line
+         *  after it arrived. */
+        priv.services[key] = data;
     }
     let count = names.length;
     let had = priv.treedbs[key];
@@ -1036,6 +1097,315 @@ function ac_render_tree(gobj, event, kw, src)
  *  checked, otherwise everything the current search leaves on
  *  screen. What you see is what you get.
  ***************************************************************/
+/***************************************************************
+ *  Where a yuno LISTENS, out of its config.
+ *
+ *  `view-config` carries it under
+ *      global["<gate>.__json_config_variables__"].__top_url__
+ *  as "wss://0.0.0.0:<port>" — the BIND address, so the port is
+ *  authoritative and the host is not in there and cannot be. The gate is
+ *  `__top_side__` in every yuno seen so far; the key is matched by its
+ *  suffix rather than by that name, so a yuno that calls its gate
+ *  something else still answers.
+ *
+ *  A yuno with no `__top_url__` exposes no top gate and can never be a
+ *  treedb backend: its absence is an answer, not a failure.
+ *
+ *  The HOST, best evidence first:
+ *    1. `__ssl_certificate__` — its filename is the FQDN the certificate
+ *       is issued for, which is the name a client MUST use. Present on
+ *       some yunos and not others.
+ *    2. the realm id from this same config (`environment.realm_id`),
+ *       which is the public FQDN for realms that publish
+ *       (`app.wattyzer.com`) and is not for the ones that do not
+ *       (`artgins.utilities.all`).
+ *    3. nothing — and the operator fills it in.
+ ***************************************************************/
+function endpoint_of_config(config)
+{
+    let out = {port: "", host: ""};
+    if(!config || typeof config !== "object") {
+        return out;
+    }
+
+    let vars = null;
+    let global_cfg = config.global;
+    if(global_cfg && typeof global_cfg === "object") {
+        for(let key of Object.keys(global_cfg)) {
+            if(!key.endsWith("__json_config_variables__")) {
+                continue;
+            }
+            let candidate = global_cfg[key];
+            if(candidate && typeof candidate === "object" && candidate.__top_url__) {
+                vars = candidate;
+                break;
+            }
+        }
+    }
+    if(!vars) {
+        return out;
+    }
+
+    let m = String(vars.__top_url__).match(/:(\d+)\s*$/);
+    out.port = m ? m[1] : "";
+
+    let cert = vars.__ssl_certificate__;
+    if(typeof cert === "string" && cert) {
+        let base = cert.split("/").pop() || "";
+        out.host = base.replace(/\.(crt|pem|cer)$/i, "");
+    }
+    if(!out.host) {
+        let env = config.environment;
+        if(env && typeof env === "object" && typeof env.realm_id === "string") {
+            out.host = env.realm_id;
+        }
+    }
+
+    return out;
+}
+
+/***************************************************************
+ *  Turn one scanned yuno into a gui_treedb connection.
+ *
+ *  The URL is a PROPOSAL and is marked as one: the port is authoritative
+ *  (it comes from the yuno's own config) but the public host is not. A
+ *  yuno binds 0.0.0.0 and its realm binds 127.0.0.1, so the only name
+ *  anywhere near a public one is the realm's id — which IS the public
+ *  FQDN for the realms that publish (`app.wattyzer.com`) and is not for
+ *  the ones that do not (`artgins.utilities.all`). The operator sees the
+ *  url in the table and fixes it there; the connection arrives disabled
+ *  either way, so a wrong guess opens no socket.
+ ***************************************************************/
+function conn_of_scanned(row, endpoint, services)
+{
+    let host = endpoint.host || row.realm || "";
+    let port = endpoint.port;
+    let browsable = [];
+    let role_service = "";
+
+    if(Array.isArray(services)) {
+        for(let sv of services) {
+            if(!sv || typeof sv.service !== "string" || !sv.service) {
+                continue;
+            }
+            /*  The yuno's own service is the one NAMED like its role.
+             *
+             *  Not "the first top-service": a yuno flags several of them
+             *  (`authz`, `idp`, `emailsender`, its gates…) and the first is
+             *  alphabetical luck — it came out `authz` for all nine backends
+             *  of a real scan, which is a connection the backend refuses.  */
+            if(sv.service === row.role) {
+                role_service = sv.service;
+            }
+            if(sv.gclass === "C_NODE" || sv.gclass === "C_TRANGER") {
+                browsable.push({
+                    service:  sv.service,
+                    gclass:   sv.gclass,
+                    /*  Everything the yuno browses, ticked: the operator asked
+                     *  for this yuno, not for a subset of it, and Connections
+                     *  now unticks the lot with one click on the header. */
+                    selected: true
+                });
+            }
+        }
+    }
+
+    return {
+        label:               `${row.node} · ${row.role || row.label}`,
+        url:                 `wss://${host}:${port}`,
+        remote_yuno_role:    row.role || "",
+        /*  The yuno's own top service, from the same answer that listed
+         *  them — not the role. They match by convention and the identity
+         *  card is refused when they do not. */
+        remote_yuno_service: role_service || row.role || "",
+        services:            browsable
+    };
+}
+
+/***************************************************************
+ *  Finish the scan: build the document, put it on the clipboard.
+ ***************************************************************/
+function finish_conns_scan(gobj)
+{
+    let priv = gobj.priv;
+    let scan = priv.conns_scan;
+    if(!scan) {
+        return;
+    }
+    priv.conns_scan = null;
+    if(scan.timer) {
+        /*  A raw handle, cleared with the raw call: this is the browser's
+         *  timer, not the gobj's C_TIMER (which is already carrying the
+         *  button-reset EV_TIMEOUT and cannot carry two). */
+        window.clearTimeout(scan.timer);
+    }
+
+    let connections = [];
+    /*  Two rows can resolve to ONE endpoint: the same yuno reached through
+     *  two nodes, or a local copy carrying the production realm in its
+     *  config. Same url, same backend — one connection. */
+    let seen = new Set();
+    for(let key of Object.keys(scan.rows)) {
+        let entry = scan.rows[key];
+        if(!entry.endpoint || !entry.endpoint.port) {
+            continue;       /*  no top gate, or never answered  */
+        }
+        let conn = conn_of_scanned(entry.row, entry.endpoint, priv.services[key]);
+        if(seen.has(conn.url)) {
+            continue;
+        }
+        seen.add(conn.url);
+        connections.push(conn);
+    }
+
+    if(!connections.length) {
+        log_error(`${gobj_short_name(gobj)}: none of the ${scan.asked} yunos ` +
+                  `scanned exposes a public gate (no __top_url__)`);
+        yui_button_mark_done(priv.$copy_conns, t("nothing to copy"));
+        set_timeout(priv.gobj_timer, 1800);
+        return;
+    }
+
+    let doc = {
+        kind:        CONNS_KIND,
+        version:     CONNS_VERSION,
+        connections: connections
+    };
+
+    let text = JSON.stringify(doc, null, 4);
+    let done = () => {
+        yui_button_mark_done(priv.$copy_conns, `${connections.length} ${t("copied")}`);
+        set_timeout(priv.gobj_timer, 1800);
+    };
+
+    try {
+        navigator.clipboard.writeText(text).then(done).catch((e) => {
+            log_error(`${gobj_short_name(gobj)}: cannot write the clipboard: ${e}`);
+        });
+    } catch(e) {
+        log_error(`${gobj_short_name(gobj)}: cannot write the clipboard: ${e}`);
+    }
+}
+
+/***************************************************************
+ *  One yuno's config came back.
+ ***************************************************************/
+function set_conns_config(gobj, node, yuno_id, data, result)
+{
+    let priv = gobj.priv;
+    let scan = priv.conns_scan;
+    if(!scan) {
+        return;     /*  timed out, or a stale answer of a previous scan  */
+    }
+    let key = stats_sel_id(node, yuno_id);
+    let entry = scan.rows[key];
+    if(!entry || entry.answered) {
+        return;
+    }
+    entry.answered = true;
+    if(typeof result !== "number" || result >= 0) {
+        entry.endpoint = endpoint_of_config(data);
+    }
+
+    scan.pending--;
+    if(scan.pending <= 0) {
+        finish_conns_scan(gobj);
+    }
+}
+
+/***************************************************************
+ *  Copy the yunos SHOWN as gui_treedb connections.
+ *
+ *  "Shown" and not "selected", like the Copy JSON button beside it: the
+ *  operator filters the tree to what they want and copies that. Only
+ *  yunos known to hold a treedb are asked — the rest cannot be a treedb
+ *  backend whatever their config says.
+ ***************************************************************/
+function ac_copy_conns(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let link = gobj_read_attr(gobj, "link_svc");
+
+    if(priv.conns_scan) {
+        return 0;       /*  one scan at a time  */
+    }
+    if(!link || !agent_link_is_connected(link)) {
+        log_error(`${gobj_short_name(gobj)}: no control-center session, cannot scan`);
+        return -1;
+    }
+
+    let tabulator = gobj_read_attr(gobj, "tabulator");
+    let top = [];
+    try {
+        top = tabulator ? tabulator.getData("active") : [];
+    } catch(e) {
+        top = [];
+    }
+
+    /*  The yunos are `_children` of their node row: this is a dataTree, and
+     *  getData() returns the TOP rows with their children nested. Flatten,
+     *  or the scan walks six node rows and finds no yuno at all. */
+    let rows = [];
+    for(let parent of top) {
+        if(!parent) {
+            continue;
+        }
+        rows.push(parent);
+        if(Array.isArray(parent._children)) {
+            for(let child of parent._children) {
+                rows.push(child);
+            }
+        }
+    }
+
+    let scan = {rows: {}, pending: 0, asked: 0, timer: null};
+    for(let row of rows) {
+        if(!row || row._type !== "yuno" || !row.node || !row.yuno_id) {
+            continue;
+        }
+        let key = stats_sel_id(row.node, row.yuno_id);
+        if(priv.treedbs[key] !== true) {
+            continue;   /*  no treedb: nothing for gui_treedb to browse  */
+        }
+        if(scan.rows[key]) {
+            continue;
+        }
+        scan.rows[key] = {row: row, endpoint: null, answered: false};
+        scan.pending++;
+        scan.asked++;
+    }
+
+    if(!scan.asked) {
+        log_error(`${gobj_short_name(gobj)}: no yuno with a treedb is shown`);
+        yui_button_mark_done(priv.$copy_conns, t("nothing to copy"));
+        set_timeout(priv.gobj_timer, 1800);
+        return 0;
+    }
+
+    priv.conns_scan = scan;
+
+    for(let key of Object.keys(scan.rows)) {
+        let row = scan.rows[key].row;
+        let kw_send = {
+            agent_id:  row.node,
+            cmd2agent: cmd2agent_service(row.yuno_id, "__yuno__", "view-config")
+        };
+        msg_iev_write_key(kw_send, "console_purpose", CONNS_PURPOSE);
+        msg_iev_write_key(kw_send, "console_node", row.node);
+        msg_iev_write_key(kw_send, "console_yuno", row.yuno_id);
+        agent_link_command(link, "command-agent", kw_send);
+    }
+
+    /*  A yuno that never answers must not hold the scan for ever: build the
+     *  document with what did arrive. */
+    scan.timer = window.setTimeout(() => {
+        scan.timer = null;
+        finish_conns_scan(gobj);
+    }, CONNS_TIMEOUT_MS);
+
+    return 0;
+}
+
 function ac_copy_json(gobj, event, kw, src)
 {
     let tabulator = gobj_read_attr(gobj, "tabulator");
@@ -1062,7 +1432,13 @@ function ac_copy_json(gobj, event, kw, src)
  ***************************************************************/
 function ac_timeout(gobj, event, kw, src)
 {
+    /*  Both copy buttons mark themselves done through this one timer; only
+     *  one of them can be marked at a time, and unmarking the other is a
+     *  no-op. */
     yui_button_unmark(gobj.priv.$copy);
+    if(gobj.priv.$copy_conns) {
+        yui_button_unmark(gobj.priv.$copy_conns);
+    }
     return 0;
 }
 
@@ -1106,6 +1482,16 @@ function ac_mt_command_answer(gobj, event, kw, src)
             let yuno_id = msg_iev_read_key(kw, "console_yuno") || "";
             if(node && yuno_id) {
                 set_yuno_treedbs(gobj, node, yuno_id, kw.data, kw.result);
+            }
+        }
+        return 0;
+    }
+    if(purpose === CONNS_PURPOSE) {
+        if(command !== "command-agent") {
+            let node = msg_iev_read_key(kw, "console_node") || "";
+            let yuno_id = msg_iev_read_key(kw, "console_yuno") || "";
+            if(node && yuno_id) {
+                set_conns_config(gobj, node, yuno_id, kw.data, kw.result);
             }
         }
         return 0;
@@ -1239,6 +1625,7 @@ function create_gclass(gclass_name)
             ["EV_REFRESH",              ac_refresh,               null],
             ["EV_RENDER_TREE",          ac_render_tree,            null],
             ["EV_COPY_JSON",            ac_copy_json,              null],
+            ["EV_COPY_CONNS",           ac_copy_conns,             null],
             ["EV_TIMEOUT",              ac_timeout,                null]
         ]]
     ];
@@ -1255,6 +1642,7 @@ function create_gclass(gclass_name)
         ["EV_REFRESH",              0],
         ["EV_RENDER_TREE",          0],
         ["EV_COPY_JSON",            0],
+        ["EV_COPY_CONNS",           0],
         ["EV_TIMEOUT",              0]
     ];
 
