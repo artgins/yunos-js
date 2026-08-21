@@ -281,6 +281,13 @@ function build_hosted_view(gobj, remote)
         /*  Land on a grid of topic cards (list->detail) instead of opening a
          *  topic table straight away. Only this view declares the attrs. */
         kw.with_cards_landing = true;
+        /*  Pull each topic a page at a time. Safe whatever the backend is:
+         *  one that cannot page answers the whole list, and the table reads
+         *  that as one page. And the page is big enough (200) that every
+         *  treedb seen so far arrives whole anyway, paginator hidden — so
+         *  this costs nothing until a topic is genuinely large, which is
+         *  exactly when loading it whole stops being an option. */
+        kw.with_remote_paging = true;
         kw.card_action_routes = gobj_read_attr(gobj, "card_action_routes");
         kw.landing_routes = gobj_read_attr(gobj, "landing_routes");
         /*  Its own base route, so it can declare its sub-routes (topics,
