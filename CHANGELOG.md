@@ -24,7 +24,7 @@ on its own, outside the yunetas superproject.
 ### gui_agent
 
 - **fix: the Schemas workspace's controls are the size of controls, app
-    `0.9.5`** (`@yuneta/gobj-ui` `^7.13.3` -> `^7.13.4`). Every button and icon
+    `0.9.6`** (`@yuneta/gobj-ui` `^7.13.3` -> `^7.13.6`). Every button and icon
     of the schema editor was `is-small`: its toolbar (Diagrama, Comprobar,
     Exportar, Importar, Nueva columna, Recargar), the back arrow, the per-row
     edit/duplicate/delete icons — `is-small` twice, the button and the icon
@@ -33,6 +33,15 @@ on its own, outside the yunetas superproject.
     Aplicar, which are default-sized, and read as a lesser control set. Nothing
     in `C_AGENT_TREEDB` itself needed changing: its buttons were already
     default.
+
+    The dialogs you TYPE into followed (`7.13.5`): the labels, inputs, selects,
+    textareas and flag checkboxes of the column and topic forms were the one
+    size the rest of the editor had just stopped using. And a treedb card is
+    wide enough for a treedb name now (`7.13.6`): the grid started at `9rem`,
+    where `treedb_yuneta_agent` broke into three lines inside its own card.
+
+    What stays small is what is data in bulk — the report tables, the crumbs
+    and the export/import textareas holding a C literal or a JSON dump.
 
 - **feat: the topic tables of the Schemas workspace say how many rows are
     ticked, app `0.9.4`** (`with_selection_bar`, `@yuneta/gobj-ui`
@@ -154,9 +163,9 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
-- **chore: `@yuneta/gobj-ui` `^7.13.3` -> `^7.13.4`, app `0.13.8`** (the schema
-    editor's buttons and icons stop being `is-small`; this app does not mount
-    that editor, so it only travels with the range).
+- **chore: `@yuneta/gobj-ui` `^7.13.3` -> `^7.13.6`, app `0.13.9`** (the schema
+    editor's controls stop being `is-small` and its cards fit a treedb name;
+    this app does not mount that editor, so it only travels with the range).
 
 - **feat: the topic tables say how many rows are ticked, app `0.13.7`**
     (`with_selection_bar`, `@yuneta/gobj-ui` `^7.12.0` -> `^7.13.3`). This app
