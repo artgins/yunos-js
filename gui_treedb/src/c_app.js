@@ -388,14 +388,17 @@ function rebuild_workspace_tabs(gobj, ws)
         if(!sel) {
             continue;
         }
-        let iev = links ? treedb_links_get_iev(links, sel.conn_id) : null;
         let connected = links ? treedb_links_is_connected(links, sel.conn_id) : false;
-        let ever = !!priv.ever_connected[sel.conn_id];
-        if(!iev || (!connected && !ever)) {
-            /*  No transport yet, or never connected: the picker shows it as
-             *  connecting; the tab appears on its first EV_ON_OPEN.  */
-            continue;
-        }
+        /*  A SELECTED treedb always has its tab, connected or not.
+         *
+         *  It used to wait for the connection to reach session at least once,
+         *  which paired with a picker that would not even let you tick a
+         *  disconnected backend: between the two, a treedb you could see
+         *  listed was a treedb you could not open, and nothing said why. The
+         *  selection is a preference; the tab is where that preference lives.
+         *  While there is no session the label is red (`yui-nav-disconnected`)
+         *  and the view inside says "backend not connected" — which is the
+         *  answer to "why is it empty", right where the question is asked.  */
         /*  C_TRANGER services open the raw-records browser (Topics only —
          *  the picker doesn't offer them in Graphs).  */
         let view_gclass = (sel.gclass === "C_TRANGER") ? "C_TRANGER_VIEW" : spec.view;
@@ -488,13 +491,12 @@ function workspace_first_route(gobj, ws)
     let config = gobj_find_service("treedb_config", false);
     let links = gobj_find_service("treedb_links", false);
     let selected = config ? treedb_config_get_selected(config, ws) : [];
+    /*  Selected IS open: rebuild_workspace_tabs() emits a tab for every
+     *  selected treedb, connected or not (red label while there is no
+     *  session). This has to say the same thing, or the resting tab would
+     *  be chosen against a rule the tab strip no longer follows.  */
     let has_tab = function(s) {
-        if(!links || !s) {
-            return false;
-        }
-        let iev = treedb_links_get_iev(links, s.conn_id);
-        return !!iev &&
-            (treedb_links_is_connected(links, s.conn_id) || !!priv.ever_connected[s.conn_id]);
+        return !!s;
     };
     let active = config ? treedb_config_get_active_tab(config, ws) : "";
     /*  The picker is a remembered resting position too (ROUTING.md §3). */
@@ -547,14 +549,13 @@ function restore_tab_from_url(gobj)
         /*  Already resting on this tab (base resolved to it exactly).  */
         return;
     }
-    /*  Only jump once the tab actually exists: its treedb must be selected
-     *  AND its backend connected — the same condition rebuild_workspace_tabs
-     *  uses to emit the tab.  */
+    /*  Only jump once the tab actually exists — which now means only that
+     *  its treedb is SELECTED, the same condition rebuild_workspace_tabs()
+     *  uses to emit it.  */
     let config = gobj_find_service("treedb_config", false);
-    let links = gobj_find_service("treedb_links", false);
     let selected = config ? treedb_config_get_selected(config, ws) : [];
     let hit = selected.find((s) => s && s.id === sel_id_);
-    if(!hit || !(links && treedb_links_is_connected(links, hit.conn_id))) {
+    if(!hit) {
         /*  Tab not available yet; a later EV_ON_OPEN retries this.  */
         return;
     }

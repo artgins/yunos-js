@@ -12,6 +12,20 @@
  *          workspace (per-workspace selection in C_TREEDB_CONFIG); the app
  *          root rebuilds the workspace tabs on the change.
  *
+ *      It is a TABLE, not a list of cards: one deploy centre reaches
+ *      hundreds of nodes, and a card per connection with a line per
+ *      service is a page you scroll for ever and cannot search. A
+ *      Tabulator tree — connection on top, its treedbs underneath —
+ *      sorts, filters and virtualizes, and it is the same object the rest
+ *      of this app is made of.
+ *
+ *      The checkbox does NOT wait for the transport. A selection is a
+ *      PREFERENCE ("open this treedb here"), not an action on a live
+ *      socket: the tab it opens knows how to say "backend not connected"
+ *      and fills in when the session comes up. Disabling it left the
+ *      operator looking at the treedb they wanted, unable to say so, with
+ *      the reason written nowhere.
+ *
  *      A view: it builds its own `$container` for the shell to mount.
  *
  *          Copyright (c) 2026, ArtGins.
@@ -19,7 +33,7 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t,
-    gclass_create, log_error, gobj_short_name,
+    gclass_create, log_error, log_warning, gobj_short_name, gobj_name,
     gobj_read_attr, gobj_write_attr,
     gobj_subscribe_event,
     gobj_unsubscribe_event,
@@ -43,6 +57,10 @@ import {
 } from "./c_treedb_links.js";
 
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_tabulator_lang} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
+
+import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 
 /***************************************************************
@@ -63,7 +81,12 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    $body: null,   /*  where connection cards render  */
+    $body:      null,   /*  the div Tabulator is attached to  */
+    $count:     null,   /*  "N connections · M treedbs · K open"  */
+    $search:    null,
+    table:      null,
+    table_id:   "",
+    search:     "",     /*  survives a re-render (a connection opening)  */
 };
 
 let __gclass__ = null;
@@ -155,6 +178,15 @@ function mt_stop(gobj)
  ***************************************************************/
 function mt_destroy(gobj)
 {
+    let priv = gobj.priv;
+    if(priv.table) {
+        try {
+            priv.table.destroy();
+        } catch(e) {
+            /*  already gone  */
+        }
+        priv.table = null;
+    }
 }
 
 
@@ -168,32 +200,63 @@ function mt_destroy(gobj)
 
 
 /***************************************************************
- *  Build the root container (the shell mounts it).
+ *  Build the root container (the shell mounts it): a toolbar with
+ *  the search box and the count, and the table under it.
  ***************************************************************/
 function build_ui(gobj)
 {
     let priv = gobj.priv;
 
-    let $body = createElement2(["div", {class: "ytreedb-picker-body"}, []]);
-    priv.$body = $body;
+    priv.table_id = `picker-${gobj_name(gobj)}`.replace(/[^A-Za-z0-9_-]/g, "_");
+
+    let $search = createElement2(["input", {
+        class:        "PICKER_SEARCH input",
+        type:         "text",
+        placeholder:  t("search a node or a treedb"),
+        "data-i18n-placeholder": "search a node or a treedb"
+    }]);
+    $search.addEventListener("input", () => {
+        gobj_send_event(gobj, "EV_SEARCH", {text: $search.value || ""}, gobj);
+    });
+    priv.$search = $search;
+
+    let $search_control = createElement2(
+        ["div", {class: "PICKER_SEARCH_CONTROL control has-icons-left",
+                 style: "flex:0 1 22rem; min-width:0;"}, [
+            $search,
+            ["span", {class: "icon is-left"}, [["span", {class: "yi-magnifying-glass"}, ""]]]
+        ]]
+    );
+    attach_clear($search_control, $search);
+
+    priv.$count = createElement2(
+        ["span", {class: "PICKER_COUNT is-size-7 has-text-grey ml-2"}, ""]);
 
     let $manage = createElement2(
-        ["button", {class: "button is-small PICKER_MANAGE",
+        ["button", {class: "button PICKER_MANAGE",
+                    style: "margin-left:auto;",
                     i18n: "manage connections"}, "Manage connections"]);
     $manage.addEventListener("click", () => {
         gobj_send_event(gobj, "EV_MANAGE_CONNECTIONS", {}, gobj);
     });
 
+    let $body = createElement2(
+        ["div", {class: "PICKER_TABLE ytreedb-picker-body", id: priv.table_id}, []]);
+    priv.$body = $body;
+
     let $container = createElement2(
-        ["div", {class: "ytreedb-picker p-4", gclass: "C_TREEDB_PICKER"},
+        ["div", {class: "ytreedb-picker p-4 C_TREEDB_PICKER",
+                 style: "display:flex; flex-direction:column; height:100%;"},
             [
-                ["div", {class: "level mb-3"}, [
-                    ["div", {class: "level-left"}, [
-                        ["h2", {class: "title is-5", i18n: "treedbs"}, "TreeDBs"]
-                    ]],
-                    ["div", {class: "level-right"}, [$manage]]
+                ["div", {class: "PICKER_HEADER is-flex is-align-items-center mb-3",
+                         style: "gap:.5rem; flex-wrap:wrap;"}, [
+                    ["h2", {class: "title is-5 mb-0", i18n: "treedbs"}, "TreeDBs"],
+                    $search_control,
+                    priv.$count,
+                    $manage
                 ]],
-                $body
+                ["div", {class: "PICKER_TABLEWRAP", style: "flex:1; min-height:0;"},
+                    [$body]]
             ]
         ]
     );
@@ -203,13 +266,16 @@ function build_ui(gobj)
 }
 
 /***************************************************************
- *  Empty a DOM node.
+ *  A formatter returns HTML, so whatever comes from the data is
+ *  escaped: a connection label is typed by the operator.
  ***************************************************************/
-function clear_node($el)
+function esc(s)
 {
-    while($el && $el.firstChild) {
-        $el.removeChild($el.firstChild);
-    }
+    return String(s === undefined || s === null ? "" : s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
 }
 
 /***************************************************************
@@ -217,12 +283,9 @@ function clear_node($el)
  ***************************************************************/
 function status_dot(connected)
 {
-    return ["span", {
-        class: "PICKER_STATUS_DOT",
-        style: "display:inline-block; width:0.7em; height:0.7em; border-radius:50%; "
-             + "margin-right:0.5em; vertical-align:middle; background:"
-             + (connected ? "#48c78e" : "#b5b5b5") + ";"
-    }, []];
+    return `<span class="PICKER_STATUS_DOT" style="display:inline-block; ` +
+        `width:0.7em; height:0.7em; border-radius:50%; margin-right:0.5em; ` +
+        `vertical-align:middle; background:${connected ? "#48c78e" : "#b5b5b5"};"></span>`;
 }
 
 /***************************************************************
@@ -232,8 +295,8 @@ function status_dot(connected)
  *  This is the contract — like wattyzer's static route table. We do NOT
  *  fall back to enumerating every `services_roles` key: that offered
  *  NON-treedb services, and sending a treedb `descs` to a ranger fails
- *  with "command not available". When none are selected, the card
- *  shows the "select them in Settings" hint (render_connection).
+ *  with "command not available". When none are selected, the connection
+ *  row says so.
  *
  *  C_TRANGER services (raw record stores) only make sense in the Topics
  *  workspace; Graphs keeps to C_NODE (a raw tranger has no hooks/fkeys
@@ -249,75 +312,16 @@ function connection_services(conn, workspace)
 }
 
 /***************************************************************
- *  Render one connection card with its treedb checkboxes.
+ *  Why a connection is not usable right now, in one line. Empty
+ *  when it is connected and has treedbs to offer.
  ***************************************************************/
-function render_connection(gobj, conn)
+function connection_note(gobj, conn, connected, services)
 {
-    let workspace = gobj_read_attr(gobj, "workspace");
     let links = gobj_find_service("treedb_links", false);
-    let config = gobj_find_service("treedb_config", false);
-    let connected = links ? treedb_links_is_connected(links, conn.id) : false;
     let open_error = (links && !connected) ? treedb_links_get_open_error(links, conn.id) : null;
-    let services = connection_services(conn, workspace);
 
-    let $treedb_list = createElement2(["div", {class: "ytreedb-treedbs mt-2 PICKER_SERVICES"}, []]);
-    if(services.length) {
-        for(let svc of services) {
-            let id = sel_id(conn.id, svc.key);
-            let checked = treedb_config_is_selected(config, workspace, id);
-            let $cb = createElement2(["input", {type: "checkbox"}]);
-            $cb.checked = !!checked;
-            $cb.disabled = !connected;
-            $cb.addEventListener("change", () => {
-                gobj_send_event(config, "EV_TOGGLE_SELECTED",
-                    {
-                        workspace: workspace,
-                        sel: {
-                            conn_id: conn.id,
-                            svc:     svc,
-                            label:   `${svc.service} · ${conn.label}`
-                        }
-                    }, gobj);
-            });
-            /*  Tag EVERY service with its gclass, same colours as the
-             *  Settings table: tagging only C_TRANGER left C_NODE bare, so
-             *  an untagged row read as "no class" instead of "a treedb". */
-            let $svc_label = [["span", {class: "ml-2"}, svc.service]];
-            $svc_label.push(["span",
-                {class: "tag is-light is-size-7 ml-2 PICKER_SERVICE_GCLASS " +
-                        (svc.gclass === "C_TRANGER" ? "is-warning" : "is-info")},
-                svc.gclass]);
-            $treedb_list.appendChild(createElement2(
-                ["label", {class: "checkbox is-block mb-1 PICKER_SERVICE"},
-                    [$cb, ...$svc_label]]
-            ));
-        }
-    } else if(connected) {
-        $treedb_list.appendChild(createElement2(
-            ["p", {class: "is-size-7 has-text-grey", i18n: "no services selected"},
-                "No services selected — pick them in Settings."]));
-    } else if(!conn.enabled) {
-        /*  Configured but not enabled: transports only open from the
-         *  Settings connect button.  */
-        $treedb_list.appendChild(createElement2(
-            ["p", {class: "is-size-7 has-text-grey", i18n: "disconnected - open connections"},
-                "Disconnected — connect it in Settings."]));
-    } else if(!open_error) {
-        /*  Only "connecting" while there is no connect failure; a failure is
-         *  shown at card level below (independent of the treedbs branch). */
-        $treedb_list.appendChild(createElement2(
-            ["p", {class: "is-size-7 has-text-grey", i18n: "connecting"}, "Connecting…"]));
-    }
-
-    let $card_body = [
-        ["div", {class: "mb-1 has-text-weight-semibold"},
-            [status_dot(connected), ["span", {}, conn.label || conn.url]]],
-        ["p", {class: "is-size-7 has-text-grey"},
-            `${conn.url}  ·  ${conn.remote_yuno_role || "?"}/${conn.remote_yuno_service || "?"}`]
-    ];
     if(open_error) {
-        /*  Surface the failure instead of a permanent "Connecting…". Two very
-         *  different ones:
+        /*  Two very different failures:
          *
          *  - a connect failure (bad URL / cert / port / backend down): the
          *    transport keeps retrying and recovers on its own;
@@ -330,42 +334,271 @@ function render_connection(gobj, conn)
         let msg = open_error.rejected
             ? t("access rejected by the backend - fix the roles and reconnect")
             : t("cannot connect - retrying");
-        $card_body.push(["p", {class: "is-size-7 has-text-danger PICKER_CONN_ERROR"},
-            msg + (detail ? ` (${detail})` : "")]);
+        return {text: msg + (detail ? ` (${detail})` : ""), danger: true};
     }
-    $card_body.push($treedb_list);
-
-    return createElement2(
-        ["div", {class: "box p-3 mb-2", gclass: "TREEDB_CONNECTION_CARD"}, $card_body]
-    );
+    if(!services.length) {
+        return {text: t("no services selected"), danger: false};
+    }
+    if(!connected) {
+        return {
+            text: conn.enabled ? t("connecting") : t("disconnected - open connections"),
+            danger: false
+        };
+    }
+    return {text: "", danger: false};
 }
 
 /***************************************************************
- *  (Re)render the body.
+ *  The rows: a connection on top, its treedbs underneath.
  ***************************************************************/
-function render(gobj)
+function build_rows(gobj)
+{
+    let workspace = gobj_read_attr(gobj, "workspace");
+    let config = gobj_find_service("treedb_config", false);
+    let links = gobj_find_service("treedb_links", false);
+    let conns = config ? treedb_config_get_connections(config) : [];
+    let rows = [];
+
+    for(let conn of conns) {
+        let connected = links ? treedb_links_is_connected(links, conn.id) : false;
+        let services = connection_services(conn, workspace);
+        let note = connection_note(gobj, conn, connected, services);
+        let children = [];
+        let open = 0;
+
+        for(let svc of services) {
+            let id = sel_id(conn.id, svc.key);
+            let selected = !!treedb_config_is_selected(config, workspace, id);
+            if(selected) {
+                open++;
+            }
+            children.push({
+                _key:      id,
+                _type:     "svc",
+                conn_id:   conn.id,
+                svc_key:   svc.key,
+                name:      svc.service,
+                gclass:    svc.gclass,
+                selected:  selected,
+                connected: connected,
+                note:      "",
+                danger:    false,
+                /*  the search matches both levels on one string  */
+                _search:   `${conn.label || ""} ${conn.url || ""} ${svc.service}`.toLowerCase()
+            });
+        }
+
+        rows.push({
+            _key:      conn.id,
+            _type:     "conn",
+            conn_id:   conn.id,
+            name:      conn.label || conn.url,
+            gclass:    "",
+            selected:  false,
+            connected: connected,
+            url:       conn.url,
+            role:      `${conn.remote_yuno_role || "?"}/${conn.remote_yuno_service || "?"}`,
+            open:      open,
+            total:     services.length,
+            note:      note.text,
+            danger:    note.danger,
+            _search:   `${conn.label || ""} ${conn.url || ""}`.toLowerCase(),
+            _children: children
+        });
+    }
+    return rows;
+}
+
+/***************************************************************
+ *  Columns. The checkbox is a SERVICE thing: on a connection row the
+ *  cell is empty, and the row is there to group and to say how it is.
+ ***************************************************************/
+function make_columns(gobj)
+{
+    function check_formatter(cell)
+    {
+        let r = cell.getData();
+        if(r._type !== "svc") {
+            return "";
+        }
+        return `<input type="checkbox" class="PICKER_SERVICE_CHECK"` +
+            `${r.selected ? " checked" : ""} aria-label="${t("open in this workspace")}">`;
+    }
+
+    function check_click(e, cell)
+    {
+        let r = cell.getData();
+        if(r._type !== "svc") {
+            return;
+        }
+        gobj_send_event(gobj, "EV_TOGGLE_SERVICE",
+            {conn_id: r.conn_id, svc_key: r.svc_key}, gobj);
+    }
+
+    function name_formatter(cell)
+    {
+        let r = cell.getData();
+        if(r._type === "svc") {
+            return `<span class="PICKER_SERVICE">${esc(r.name)}</span>`;
+        }
+        return status_dot(r.connected) +
+            `<span class="PICKER_CONN has-text-weight-semibold">${esc(r.name)}</span>`;
+    }
+
+    function info_formatter(cell)
+    {
+        let r = cell.getData();
+        if(r._type === "svc") {
+            return r.gclass
+                ? `<span class="tag is-light is-size-7 PICKER_SERVICE_GCLASS ` +
+                  `${r.gclass === "C_TRANGER" ? "is-warning" : "is-info"}">${esc(r.gclass)}</span>`
+                : "";
+        }
+        let bits = [`<span class="PICKER_CONN_URL is-size-7 has-text-grey">` +
+            `${esc(r.url)} · ${esc(r.role)}</span>`];
+        if(r.note) {
+            bits.push(`<span class="PICKER_CONN_NOTE is-size-7 ` +
+                `${r.danger ? "has-text-danger" : "has-text-grey"}"> · ${esc(r.note)}</span>`);
+        }
+        if(r.open > 0) {
+            bits.push(`<span class="PICKER_CONN_OPEN is-size-7 has-text-link"> · ` +
+                `${r.open}/${r.total} ${esc(t("open"))}</span>`);
+        }
+        return bits.join("");
+    }
+
+    return [
+        {title: "", field: "_check", width: 44, minWidth: 44, hozAlign: "center",
+            headerSort: false, resizable: false,
+            formatter: check_formatter, cellClick: check_click},
+        {title: t("treedb"), field: "name", minWidth: 220, widthGrow: 2,
+            formatter: name_formatter},
+        {title: "", field: "_info", minWidth: 260, widthGrow: 3,
+            headerSort: false, formatter: info_formatter}
+    ];
+}
+
+/***************************************************************
+ *  Create the table. Virtual rendering on purpose: this is the view
+ *  that has to survive a deploy centre with hundreds of nodes.
+ ***************************************************************/
+function create_table(gobj)
 {
     let priv = gobj.priv;
     if(!priv.$body) {
         return;
     }
-    clear_node(priv.$body);
 
-    let config = gobj_find_service("treedb_config", false);
-    let conns = config ? treedb_config_get_connections(config) : [];
-    if(!conns.length) {
-        priv.$body.appendChild(createElement2(
-            ["p", {class: "has-text-grey", i18n: "no connections yet"},
-                "No connections yet. Add one in Settings to browse its treedbs."]));
-    }
-    for(let conn of conns) {
-        priv.$body.appendChild(render_connection(gobj, conn));
-    }
-
-    refresh_language(priv.$body, t);
+    let table = new Tabulator(priv.$body, {
+        ...yui_tabulator_lang(t),
+        index:                 "_key",
+        layout:                "fitColumns",
+        maxHeight:             "100%",
+        placeholder:           t("no connections yet"),
+        columnDefaults:        {headerHozAlign: "left", resizable: false},
+        columns:               make_columns(gobj),
+        dataTree:              true,
+        dataTreeStartExpanded: false,
+        dataTreeElementColumn: "name",
+        dataTreeChildField:    "_children"
+    });
+    table._ready = false;
+    table.on("tableBuilt", function() {
+        table._ready = true;
+        reload_table(gobj);
+    });
+    priv.table = table;
 }
 
+/***************************************************************
+ *  Push the rows in, apply the search, say the count.
+ *
+ *  A handful of connections opens expanded — that is the whole screen
+ *  and hiding it would be ceremony. Past that it starts collapsed:
+ *  the search box is how you get to a treedb among hundreds.
+ ***************************************************************/
+function reload_table(gobj)
+{
+    let priv = gobj.priv;
+    let table = priv.table;
+    if(!table || !table._ready) {
+        return;
+    }
 
+    let rows = build_rows(gobj);
+    let expand = rows.length <= 5;
+
+    Promise.resolve(table.setData(rows)).then(function() {
+        apply_search(gobj);
+        if(expand || priv.search) {
+            /*  With a search on, what matches is worth seeing without a
+             *  second click.  */
+            table.getRows().forEach((row) => {
+                if(row.treeExpand) {
+                    row.treeExpand();
+                }
+            });
+        }
+        update_count(gobj, rows);
+    }).catch(function(err) {
+        log_warning(`${gobj_short_name(gobj)}: table mid-rebuild: ${err && err.message}`);
+    });
+}
+
+/***************************************************************
+ *  The search matches a node or a treedb; a connection whose name
+ *  matches keeps all of its treedbs.
+ ***************************************************************/
+function apply_search(gobj)
+{
+    let priv = gobj.priv;
+    let term = (priv.search || "").trim().toLowerCase();
+
+    if(!priv.table || !priv.table._ready) {
+        return;
+    }
+    try {
+        if(!term) {
+            priv.table.clearFilter();
+            return;
+        }
+        priv.table.setFilter((data) => (data._search || "").includes(term));
+    } catch(e) {
+        log_warning(`${gobj_short_name(gobj)}: cannot filter: ${e}`);
+    }
+}
+
+/***************************************************************
+ *  "N connections · M treedbs · K open"
+ ***************************************************************/
+function update_count(gobj, rows)
+{
+    let priv = gobj.priv;
+    if(!priv.$count) {
+        return;
+    }
+    let treedbs = 0;
+    let open = 0;
+    for(let r of rows) {
+        treedbs += (r._children || []).length;
+        open += r.open || 0;
+    }
+    priv.$count.textContent =
+        `${rows.length} ${t("connections")} · ${treedbs} ${t("treedbs")} · ${open} ${t("open")}`;
+}
+
+/***************************************************************
+ *  (Re)render: the table is built once and reloaded from here.
+ ***************************************************************/
+function render(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.table) {
+        create_table(gobj);
+        return;     /*  tableBuilt reloads it  */
+    }
+    reload_table(gobj);
+}
 
 
                     /***************************
@@ -378,6 +611,51 @@ function render(gobj)
 function ac_refresh(gobj, event, kw, src)
 {
     render(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  A tick is an OS notification: its only job is to make an event,
+ *  and the toggle happens HERE.
+ ***************************************************************/
+function ac_toggle_service(gobj, event, kw, src)
+{
+    let workspace = gobj_read_attr(gobj, "workspace");
+    let config = gobj_find_service("treedb_config", false);
+    let conn = config
+        ? treedb_config_get_connections(config).find((c) => c && c.id === kw.conn_id)
+        : null;
+
+    if(!config || !conn) {
+        log_error(`${gobj_short_name(gobj)}: no connection '${kw && kw.conn_id}' to open`);
+        return -1;
+    }
+    let svc = treedb_config_conn_services(conn).find((x) => x && x.key === kw.svc_key);
+    if(!svc) {
+        log_error(`${gobj_short_name(gobj)}: connection '${conn.id}' has no service ` +
+                  `'${kw.svc_key}'`);
+        return -1;
+    }
+
+    gobj_send_event(config, "EV_TOGGLE_SELECTED",
+        {
+            workspace: workspace,
+            sel: {
+                conn_id: conn.id,
+                svc:     svc,
+                label:   `${svc.service} · ${conn.label}`
+            }
+        }, gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The search box typed into.
+ ***************************************************************/
+function ac_search(gobj, event, kw, src)
+{
+    gobj.priv.search = (kw && kw.text) || "";
+    apply_search(gobj);
     return 0;
 }
 
@@ -433,7 +711,9 @@ function create_gclass(gclass_name)
             ["EV_ON_OPEN_ERROR",            ac_refresh, null],
             /*  a language switch is a re-render: this view is built with t()  */
             ["EV_LANGUAGE_CHANGED",         ac_refresh, null],
-            ["EV_MANAGE_CONNECTIONS",       ac_manage_connections, null]
+            ["EV_MANAGE_CONNECTIONS",       ac_manage_connections, null],
+            ["EV_TOGGLE_SERVICE",           ac_toggle_service, null],
+            ["EV_SEARCH",                   ac_search,         null]
         ]]
     ];
 
@@ -444,7 +724,9 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",                 0],
         ["EV_ON_OPEN_ERROR",            0],
         ["EV_LANGUAGE_CHANGED",         0],
-        ["EV_MANAGE_CONNECTIONS",       0]
+        ["EV_MANAGE_CONNECTIONS",       0],
+        ["EV_TOGGLE_SERVICE",           0],
+        ["EV_SEARCH",                   0]
     ];
 
     __gclass__ = gclass_create(

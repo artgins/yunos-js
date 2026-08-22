@@ -201,6 +201,28 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
+- **fix/feat: Seleccionar es una TABLA, y su casilla ya no está prohibida, app
+    `0.13.15`.** Dos cosas que se cruzaban en la misma pantalla:
+
+    La casilla venía `disabled` cuando el backend no estaba conectado, y el
+    motivo sólo se escribía en la rama que NO se pintaba cuando había
+    servicios: el operador veía el treedb que quería abrir, no podía marcarlo,
+    y nada le decía por qué. Una selección es una PREFERENCIA ("abre este
+    treedb aquí"), no una acción sobre un socket vivo — así que la casilla ya
+    no espera al transporte, y **la pestaña se crea igual**, en rojo mientras
+    no hay sesión, con la vista diciendo "backend no conectado" justo donde se
+    hace la pregunta. Eso segundo pedía tocar `C_APP`, que emitía la pestaña
+    sólo si la conexión había llegado a sesión alguna vez: entre las dos
+    mitades, marcar no hacía nada visible.
+
+    Y la presentación pasa de tarjeta-por-conexión a **tabla** (Tabulator en
+    árbol: la conexión arriba, sus treedbs debajo), con buscador sobre los dos
+    niveles, contador (`N conexiones · M treedbs · K abiertos`) y render
+    virtual. Un centro de despliegue alcanza cientos de nodos: una tarjeta por
+    conexión con una línea por servicio es una página de scroll infinito que
+    además no se puede buscar. Se abre desplegada con cinco conexiones o menos;
+    de ahí en adelante arranca plegada y el buscador es el camino.
+
 - **chore: the framework methods answer the contract, app `0.13.14`**
     (`@yuneta/gobj-ui` `^7.14.2` -> `^7.14.3`). Two bare `return;` in
     `C_TRANGER_VIEW.mt_start` and `C_TREEDB_VIEW.mt_create`.
