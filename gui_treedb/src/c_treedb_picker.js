@@ -268,9 +268,13 @@ function build_ui(gobj)
                      *  a phone that wraps this row keeps it where the eye
                      *  starts instead of leaving it floating at the end of a
                      *  line. Same place in the three tables of these apps.  */
-                    $fold,
-                    ["h2", {class: "title is-5 mb-0 ml-1", i18n: "treedbs"}, "TreeDBs"],
-                    $search_control,
+                    ["h2", {class: "title is-5 mb-0", i18n: "treedbs"}, "TreeDBs"],
+                    /*  The fold and the search are ONE wrapping unit (see
+                     *  C_TREEDB_CONNECTIONS): they never end up on different
+                     *  lines.  */
+                    ["div", {class: "PICKER_FINDER is-flex is-align-items-center",
+                             style: "gap:.5rem; flex:1 1 14rem; max-width:24rem; min-width:0;"},
+                        [$fold, $search_control]],
                     priv.$count,
                     ["div", {class: "PICKER_ACTIONS is-flex is-align-items-center",
                              style: "gap:.5rem; margin-left:auto;"},

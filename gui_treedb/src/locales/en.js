@@ -365,6 +365,10 @@ const en = {
         "connected": "Connected",
         "disconnected": "Disconnected",
         "remove": "Remove",
+        "remove several connections": "Remove several connections",
+        "select all": "Select all",
+        "selected to remove": "selected to remove",
+        "removing drops its tabs": "Removing a connection drops its open tabs and its saved views.",
         "cancel": "Cancel",
         "confirm": "Confirm",
         "treedbs": "TreeDBs",   /* workspace picker heading */

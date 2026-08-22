@@ -19,6 +19,37 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.15.1 — 2026-08-23
+
+Dos detalles de la convergencia de 0.15.0: lo que se perdió al adoptar la forma
+del picker, y lo que la cabecera hacía distinto en un móvil.
+
+### gui_treedb
+
+- **fix: vuelve el borrado de varias conexiones, sin tocar el significado de la
+    casilla.** En 0.15.0 la casilla pasó a significar EXAMINAR en las dos
+    tablas — que era el objetivo — y con ella se fue la única forma de borrar
+    varias conexiones de una vez: quedaba borrar de una en una. El botón
+    *Borrar varias* (`CONNECTIONS_DELETE_MANY`) abre un diálogo con **su
+    propia** lista de casillas, un *seleccionar todas* de tres estados y el
+    botón de borrar deshabilitado hasta que hay algo marcado. Las casillas de
+    la tabla no se tocan: seguir marcando "examinar" no arriesga un borrado.
+
+- **fix: el plegado va pegado al buscador también en un móvil.** La cabecera de
+    Conexiones ponía `[título][plegar]` y dejaba caer el buscador a la línea
+    siguiente, así que el mismo control aparecía junto al buscador en Esquemas
+    y junto al título en Conexiones. Ahora plegado y buscador son **una unidad
+    que envuelve junta** (`CONNECTIONS_FINDER` / `PICKER_FINDER` /
+    `STATNODES_FINDER`): en las tres tablas el plegado está inmediatamente a la
+    izquierda de la caja de búsqueda, a 390px igual que a 1440px. Medido, no
+    supuesto.
+
+### gui_agent
+
+- **fix: la misma unidad plegado + buscador** en el picker de nodos de
+    Esquemas (`STATNODES_FINDER`), por lo mismo de arriba: los tres sitios
+    donde el usuario ve la misma tabla ponen el control en el mismo punto.
+
 ## 0.15.0 — 2026-08-23
 
 ### gui_treedb

@@ -126,6 +126,7 @@ let PRIVATE_DATA = {
     $import_notice: null, /*  what the last import added / skipped  */
     $fold:        null,   /*  expand / collapse the whole tree  */
     $count:       null,   /*  "N connections · M services · K to browse"  */
+    delete_modal: null,   /*  the remove-several box, while it is up  */
     $search:      null,
     search:       "",     /*  survives a reload (a scan finishing)  */
     loaded:       false,  /*  past the first load WITH rows  */
@@ -441,6 +442,25 @@ function build_ui(gobj)
     priv.$count = createElement2(
         ["span", {class: "CONNECTIONS_COUNT is-size-7 has-text-grey ml-2"}, ""]);
 
+    /*  Deleting SEVERAL connections without touching the row checkbox — which
+     *  means "browse this treedb" and cannot also mean "kill this backend".
+     *  A deliberate, rare, destructive job gets its own dialog: tick what
+     *  goes, read the list, press once.  */
+    let $delete_many = createElement2(
+        ["button", {class: "button CONNECTIONS_DELETE_MANY ml-1", type: "button",
+                    title: t("remove several connections"),
+                    "aria-label": t("remove several connections"),
+                    "data-i18n-title": "remove several connections",
+                    "data-i18n-aria-label": "remove several connections"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-trash"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "remove"}, "Remove"]
+            ]
+        ]);
+    $delete_many.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_DELETE_MANY", {}, gobj);
+    });
+
     let $container = createElement2(
         ["div", {class: "C_TREEDB_CONNECTIONS ytreedb-connections p-4"},
             [
@@ -450,20 +470,33 @@ function build_ui(gobj)
                  *  table needed (`.level.is-mobile` does not fix it either —
                  *  it only restores `display: flex`, leaving the halves in
                  *  column). A plain flex row that wraps only if it must.  */
+                /*  NOT `space-between`: with the fold and the search as
+                 *  children of this row it pushed them apart — the fold ended
+                 *  up at the right of the title line and the search on the
+                 *  next one. The actions take the right with `margin-left`,
+                 *  the same way the two pickers do it.  */
                 ["div", {class: "CONNECTIONS_HEADER is-flex is-align-items-center "
-                              + "is-justify-content-space-between is-flex-wrap-wrap mb-3"}, [
+                              + "is-flex-wrap-wrap mb-3", style: "gap:.5rem;"}, [
                     /*  The fold belongs with what you are LOOKING at, not
                      *  with what you do to it: left with the title, where it
                      *  stays when the row wraps on a phone.  */
                     ["div", {class: "CONNECTIONS_TITLE is-flex is-align-items-center"}, [
-                        $fold,
-                        ["h2", {class: "title is-5 mb-0 ml-1", i18n: "connections"}, "Connections"],
+                        ["h2", {class: "title is-5 mb-0", i18n: "connections"}, "Connections"],
                         $help_btn
                     ]],
-                    $search_control,
+                    /*  The fold and the search are ONE wrapping unit: the
+                     *  fold sits immediately to the left of the box, and a
+                     *  phone that pushes the pair to the next line takes them
+                     *  together instead of leaving the fold behind, stuck to
+                     *  the title. Same place in the three tables of these
+                     *  apps — same thing, same spot.  */
+                    ["div", {class: "CONNECTIONS_FINDER is-flex is-align-items-center",
+                             style: "gap:.5rem; flex:1 1 14rem; max-width:24rem; min-width:0;"},
+                        [$fold, $search_control]],
                     priv.$count,
-                    ["div", {class: "CONNECTIONS_ACTIONS is-flex is-align-items-center"},
-                        [$add, $export, $import, $paste, $file]]
+                    ["div", {class: "CONNECTIONS_ACTIONS is-flex is-align-items-center",
+                             style: "gap:.5rem; margin-left:auto;"},
+                        [$add, $delete_many, $export, $import, $paste, $file]]
                 ]],
                 $help,
                 $scan_errors,
@@ -1431,6 +1464,141 @@ function ac_search(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The dialog that removes SEVERAL connections.
+ *
+ *  Its own list with its own checkboxes: the table's checkbox says
+ *  which treedbs to browse, and one checkbox cannot mean two things.
+ *  Everything starts unticked — this dialog opens with nothing
+ *  selected to delete, and the operator says what goes.
+ ***************************************************************/
+function ac_delete_many(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let config = gobj_find_service("treedb_config", false);
+    let shell = yui_shell_of(gobj);
+    let conns = config ? treedb_config_get_connections(config) : [];
+
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot open the removal box`);
+        return -1;
+    }
+    if(!conns.length) {
+        return 0;   /*  nothing to remove  */
+    }
+    if(priv.delete_modal) {
+        return 0;   /*  already asking  */
+    }
+
+    let $rows = [];
+    for(let conn of conns) {
+        let $cb = createElement2(["input", {type: "checkbox",
+            class: "CONNECTIONS_DELETE_PICK", "data-conn": conn.id}]);
+        $rows.push(createElement2(
+            ["label", {class: "CONNECTIONS_DELETE_ROW checkbox is-block mb-1"}, [
+                $cb,
+                ["span", {class: "ml-2 has-text-weight-semibold"},
+                    String(conn.label || conn.url || conn.id)],
+                ["span", {class: "ml-2 is-size-7 has-text-grey"}, String(conn.url || "")]
+            ]]
+        ));
+    }
+
+    let $all = createElement2(["input", {type: "checkbox", class: "CONNECTIONS_DELETE_ALL"}]);
+    let $count_line = createElement2(
+        ["p", {class: "CONNECTIONS_DELETE_COUNT is-size-7 has-text-grey mt-2"}, ""]);
+    let $go = createElement2(
+        ["button", {class: "button is-danger CONNECTIONS_DELETE_GO", type: "button",
+                    disabled: "disabled", i18n: "remove"}, "Remove"]);
+
+    let $box = createElement2(
+        ["div", {class: "CONNECTIONS_DELETE_BOX"}, [
+            ["label", {class: "checkbox is-block mb-2 has-text-weight-semibold"}, [
+                $all,
+                ["span", {class: "ml-2", i18n: "select all"}, t("select all")]
+            ]],
+            ["div", {class: "CONNECTIONS_DELETE_LIST", style: "max-height:50vh; overflow:auto;"},
+                $rows],
+            $count_line,
+            ["p", {class: "is-size-7 has-text-grey mb-3", i18n: "removing drops its tabs"},
+                t("removing drops its tabs")],
+            ["div", {class: "is-flex", style: "gap:.5rem; justify-content:flex-end;"}, [
+                ["button", {class: "button CONNECTIONS_DELETE_CANCEL", type: "button",
+                            i18n: "cancel"}, "Cancel"],
+                $go
+            ]]
+        ]]
+    );
+
+    let picks = () => Array.from(
+        $box.querySelectorAll(".CONNECTIONS_DELETE_PICK")).filter(($x) => $x.checked);
+    let refresh = () => {
+        let n = picks().length;
+        $go.disabled = (n === 0);
+        $count_line.textContent = n ? `${n} ${t("selected to remove")}` : "";
+        $all.checked = n > 0 && n === $rows.length;
+        $all.indeterminate = n > 0 && n < $rows.length;
+    };
+
+    $box.addEventListener("change", (e) => {
+        if(e.target === $all) {
+            let on = $all.checked;
+            $box.querySelectorAll(".CONNECTIONS_DELETE_PICK").forEach(($x) => {
+                $x.checked = on;
+            });
+        }
+        refresh();
+    });
+    $box.querySelector(".CONNECTIONS_DELETE_CANCEL").addEventListener("click", () => {
+        if(priv.delete_modal) {
+            priv.delete_modal.close();
+        }
+    });
+    $go.addEventListener("click", () => {
+        /*  The click is an OS notification: the removal happens in the
+         *  action, with the ids it names.  */
+        let ids = picks().map(($x) => $x.getAttribute("data-conn"));
+        if(priv.delete_modal) {
+            priv.delete_modal.close();
+        }
+        gobj_send_event(gobj, "EV_CONFIRM_DELETE_MANY", {conn_ids: ids}, gobj);
+    });
+    refresh();
+
+    priv.delete_modal = yui_shell_show_modal(shell, $box, {
+        dialog: true,
+        logical_class: "CONNECTIONS_DELETE_DIALOG",
+        title: "remove several connections",
+        t: t,
+        on_close: function() {
+            priv.delete_modal = null;
+        }
+    });
+    return 0;
+}
+
+/***************************************************************
+ *  What that dialog decided.
+ ***************************************************************/
+function ac_confirm_delete_many(gobj, event, kw, src)
+{
+    let config = gobj_find_service("treedb_config", false);
+    let ids = (kw && Array.isArray(kw.conn_ids)) ? kw.conn_ids : [];
+
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service, cannot remove`);
+        return -1;
+    }
+    if(!ids.length) {
+        return 0;
+    }
+    let going = new Set(ids);
+    let list = treedb_config_get_connections(config).filter((c) => c && !going.has(c.id));
+    gobj_send_event(config, "EV_SET_CONNECTIONS", {connections: list}, gobj);
+    reload_table(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  Clone a connection: same coordinates, a NEW id, and DISABLED.
  *
  *  Disabled because a clone is a starting point for an edit ("the same
@@ -1720,6 +1888,8 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_CONN_ENABLED",  ac_toggle_conn_enabled,  null],
             ["EV_TOGGLE_FOLD",          ac_toggle_fold,          null],
             ["EV_SEARCH",               ac_search,               null],
+            ["EV_DELETE_MANY",          ac_delete_many,          null],
+            ["EV_CONFIRM_DELETE_MANY",  ac_confirm_delete_many,  null],
             ["EV_REMOVE_CONN",          ac_remove_conn,          null],
             ["EV_CONFIRM_REMOVE_CONN",  ac_confirm_remove_conn,  null],
             ["EV_EXPORT_CONNS",         ac_export_conns,         null],
@@ -1744,6 +1914,8 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_CONN_ENABLED",  0],
         ["EV_TOGGLE_FOLD",          0],
         ["EV_SEARCH",               0],
+        ["EV_DELETE_MANY",          0],
+        ["EV_CONFIRM_DELETE_MANY",  0],
         ["EV_REMOVE_CONN",          0],
         ["EV_CONFIRM_REMOVE_CONN",  0],
         ["EV_EXPORT_CONNS",         0],

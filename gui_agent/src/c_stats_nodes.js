@@ -496,11 +496,14 @@ function build_dom(gobj)
     priv.$toolbar = createElement2(
         ["div", {class: "STATNODES_TOOLBAR is-flex is-align-items-center is-flex-wrap-wrap mb-2",
                  style: "gap:0.5rem;"}, [
-            /*  The fold belongs with what you are LOOKING at, not with what
-             *  you do to it: left with the search box, and it stays there
-             *  when the row wraps on a phone. The actions keep the right.  */
-            $fold,
-            $search_control,
+            /*  The fold and the search are ONE wrapping unit: the fold sits
+             *  immediately to the left of the box and a phone takes them to
+             *  the next line together. Same place in the three tables of
+             *  these apps — same thing, same spot. The actions keep the
+             *  right.  */
+            ["div", {class: "STATNODES_FINDER is-flex is-align-items-center",
+                     style: "gap:0.5rem; flex:1 1 14rem; max-width:24rem; min-width:0;"},
+                [$fold, $search_control]],
             $count,
             $actions
         ]]
