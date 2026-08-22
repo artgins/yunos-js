@@ -134,7 +134,7 @@ function mt_create(gobj)
             ["div", {class: "p-4 has-text-grey", i18n: "backend not connected"},
                 "Backend not connected."]
         ));
-        return;
+        return 0;
     }
 
     build_hosted_view(gobj, remote);

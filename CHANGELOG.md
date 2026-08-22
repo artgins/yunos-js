@@ -23,6 +23,12 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **chore: the framework methods answer the contract, app `0.9.12`**
+    (`@yuneta/gobj-ui` `^7.14.2` -> `^7.14.3`). `C_AGENT_CONSOLE.mt_start`
+    answered a bare `return;` on the empty-state panel, where the contract says
+    a number. Nobody was reading it — which is the point of fixing it before
+    somebody does, as the runtime's own `=== 0` guards just showed.
+
 - **chore: `@yuneta/gobj-js` `^7.13.3` -> `^7.13.5`, app `0.9.11`** — the audit
     of that same trap across the runtime: `mt_publication_pre_filter`, `mt_play`
     and `mt_subscription_added` also read a boolean as if it were the C int.
@@ -194,6 +200,10 @@ on its own, outside the yunetas superproject.
     that decides which landing a treedb gets never arrived.
 
 ### gui_treedb
+
+- **chore: the framework methods answer the contract, app `0.13.14`**
+    (`@yuneta/gobj-ui` `^7.14.2` -> `^7.14.3`). Two bare `return;` in
+    `C_TRANGER_VIEW.mt_start` and `C_TREEDB_VIEW.mt_create`.
 
 - **chore: `@yuneta/gobj-js` `^7.13.3` -> `^7.13.5`, app `0.13.13`** (the audit
     of the same trap across the runtime).

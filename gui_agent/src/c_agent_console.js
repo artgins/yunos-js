@@ -219,7 +219,7 @@ function mt_start(gobj)
 {
 
     if(empty_string(gobj_read_attr(gobj, "node"))) {
-        return;   /*  empty-state panel: nothing to refresh  */
+        return 0;   /*  empty-state panel: nothing to refresh  */
     }
     refresh_status(gobj);
     ensure_commands_cache(gobj);

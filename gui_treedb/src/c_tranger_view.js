@@ -524,7 +524,7 @@ function mt_start(gobj)
      *  rest of its life.  */
     if(!live_transport(gobj)) {
         set_toolbar_enabled(gobj, false);
-        return;
+        return 0;
     }
     gobj_change_state(gobj, "ST_LOADING_TOPICS");
     request_topics(gobj);
