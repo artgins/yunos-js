@@ -19,6 +19,40 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.15.0 — 2026-08-23
+
+### gui_treedb
+
+- **feat: Conexiones y el picker de Esquemas de gui_agent se leen igual.** Las
+    dos tablas muestran lo mismo —un backend y los treedbs que expone— y una se
+    **pega literalmente** en la otra (el botón *Para TreeDB*), pero se
+    presentaban distinto en detalles pequeños y caros: una era un árbol y la
+    otra una tabla plana con una **sub-tabla anidada**; la casilla significaba
+    "abrir" en una y "seleccionar para borrar" en la otra; el estado era un
+    punto con palabra frente a tres columnas de iconos.
+
+    Conexiones adopta la forma del picker:
+
+    - **los servicios son filas hijas**, no una tabla dentro de la fila;
+    - la **casilla significa EXAMINAR** en las dos, con los tres estados en la
+      fila de la conexión (ninguno / algunos / todos);
+    - el **estado** es un punto y una palabra en una celda;
+    - **buscador y contador** como en el picker (`N conexiones · M servicios ·
+      K a examinar`), y el plegado general pegado a la izquierda;
+    - lo que sólo existe aquí —editar la url, conectar, clonar, borrar— se
+      queda aquí, como iconos **al final de la fila**, en una sola celda.
+
+    Con la sub-tabla se va lo que la sostenía: el renderer `basic` (estaba ahí
+    porque una fila era más alta que sus celdas y el editor se salía de
+    pantalla), destruir las sub-tablas antes de cada recarga, y recalcular
+    alturas. Vuelve el render **virtual**, que es lo que hace falta para
+    cientos de backends.
+
+    ⚠️ **Se va el borrado múltiple por selección** (0.13.5): esa casilla ahora
+    significa examinar. Borrar sigue fila a fila con su papelera. Si hace falta
+    recuperarlo, el sitio natural es una acción sobre las conexiones marcadas,
+    no la casilla.
+
 ## 0.14.5 — 2026-08-23
 
 ### gui_agent y gui_treedb

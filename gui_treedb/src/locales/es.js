@@ -32,6 +32,7 @@ const es = {
         "not now": "Ahora no",
         "class": "Clase",
         "browse": "Examinar",
+        "browse all of this connection": "Examinar todos los de esta conexión",
         "cause":                              "Motivo",
         "user":                               "Usuario",
         /*  Tabulator renders its own chrome (paginator, notices): the keys
@@ -180,6 +181,8 @@ const es = {
         "other routes": "Otras rutas",
         "preferences": "Preferencias",
         "connections": "Conexiones",
+        "services": "servicios",
+        "to browse": "a examinar",
         "add connection": "Añadir conexión",
         "manage connections": "Gestionar conexiones",
         "no connections yet": "Aún no hay conexiones",
