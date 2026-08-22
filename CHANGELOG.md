@@ -23,6 +23,17 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **fix: one delete no longer arrives five times, app `0.9.9`**
+    (`@yuneta/gobj-js` `^7.13.2` -> `^7.13.3`). A treedb view subscribes to
+    `EV_TREEDB_NODE_DELETED` once per topic, each with a
+    `{treedb_name, topic_name}` filter — and that filter never filtered
+    anything: `gobj_publish_event()` compared a BOOLEAN with `=== 0`, so a
+    subscription that did not match was published to anyway. Deleting one row
+    reached the table five times (once per topic of the treedb) and the four
+    strays logged *"record not found"*. Measured on the wire first — one frame
+    out, one answer in — which is what said the copies were being made in the
+    browser.
+
 - **fix: after deleting the selected rows, the table still described the
     selection, app `0.9.8`** (`@yuneta/gobj-ui` `^7.14.1` -> `^7.14.2`).
     Tabulator deselects a row it deletes, but SILENTLY — so no
@@ -179,6 +190,9 @@ on its own, outside the yunetas superproject.
     that decides which landing a treedb gets never arrived.
 
 ### gui_treedb
+
+- **fix: one delete no longer arrives once per topic, app `0.13.11`**
+    (`@yuneta/gobj-js` `^7.13.2` -> `^7.13.3`, the `__filter__` fix).
 
 - **fix: after deleting the selected rows, the table still described the
     selection, app `0.13.10`** (`@yuneta/gobj-ui` `^7.13.6` -> `^7.14.2`).
