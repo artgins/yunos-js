@@ -23,6 +23,17 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **fix: the Schemas workspace's controls are the size of controls, app
+    `0.9.5`** (`@yuneta/gobj-ui` `^7.13.3` -> `^7.13.4`). Every button and icon
+    of the schema editor was `is-small`: its toolbar (Diagrama, Comprobar,
+    Exportar, Importar, Nueva columna, Recargar), the back arrow, the per-row
+    edit/duplicate/delete icons — `is-small` twice, the button and the icon
+    inside it, so a 12px target — the version-bump button, the drag handle and
+    every dialog button. They sat directly under this app's own Diferencias /
+    Aplicar, which are default-sized, and read as a lesser control set. Nothing
+    in `C_AGENT_TREEDB` itself needed changing: its buttons were already
+    default.
+
 - **feat: the topic tables of the Schemas workspace say how many rows are
     ticked, app `0.9.4`** (`with_selection_bar`, `@yuneta/gobj-ui`
     `^7.12.0` -> `^7.13.3`). With 200 rows to a page, the checkboxes that
@@ -142,6 +153,10 @@ on its own, outside the yunetas superproject.
     that decides which landing a treedb gets never arrived.
 
 ### gui_treedb
+
+- **chore: `@yuneta/gobj-ui` `^7.13.3` -> `^7.13.4`, app `0.13.8`** (the schema
+    editor's buttons and icons stop being `is-small`; this app does not mount
+    that editor, so it only travels with the range).
 
 - **feat: the topic tables say how many rows are ticked, app `0.13.7`**
     (`with_selection_bar`, `@yuneta/gobj-ui` `^7.12.0` -> `^7.13.3`). This app
