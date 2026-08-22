@@ -444,12 +444,16 @@ function build_ui(gobj)
                  *  column). A plain flex row that wraps only if it must.  */
                 ["div", {class: "CONNECTIONS_HEADER is-flex is-align-items-center "
                               + "is-justify-content-space-between is-flex-wrap-wrap mb-3"}, [
+                    /*  The fold belongs with what you are LOOKING at, not
+                     *  with what you do to it: left with the title, where it
+                     *  stays when the row wraps on a phone.  */
                     ["div", {class: "CONNECTIONS_TITLE is-flex is-align-items-center"}, [
-                        ["h2", {class: "title is-5 mb-0", i18n: "connections"}, "Connections"],
+                        $fold,
+                        ["h2", {class: "title is-5 mb-0 ml-1", i18n: "connections"}, "Connections"],
                         $help_btn
                     ]],
                     ["div", {class: "CONNECTIONS_ACTIONS is-flex is-align-items-center"},
-                        [$fold, $add, $export, $import, $paste, $file]]
+                        [$add, $export, $import, $paste, $file]]
                 ]],
                 $help,
                 $scan_errors,

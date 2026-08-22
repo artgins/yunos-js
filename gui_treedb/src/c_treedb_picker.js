@@ -263,15 +263,18 @@ function build_ui(gobj)
             [
                 ["div", {class: "PICKER_HEADER is-flex is-align-items-center mb-3",
                          style: "gap:.5rem; flex-wrap:wrap;"}, [
-                    ["h2", {class: "title is-5 mb-0", i18n: "treedbs"}, "TreeDBs"],
+                    /*  The fold belongs with what you are LOOKING at, not
+                     *  with what you do to it — and it hugs the LEFT EDGE, so
+                     *  a phone that wraps this row keeps it where the eye
+                     *  starts instead of leaving it floating at the end of a
+                     *  line. Same place in the three tables of these apps.  */
+                    $fold,
+                    ["h2", {class: "title is-5 mb-0 ml-1", i18n: "treedbs"}, "TreeDBs"],
                     $search_control,
                     priv.$count,
-                    /*  The buttons travel TOGETHER: on a phone the group drops
-                     *  to the next line instead of each one landing on a line
-                     *  of its own.  */
                     ["div", {class: "PICKER_ACTIONS is-flex is-align-items-center",
                              style: "gap:.5rem; margin-left:auto;"},
-                        [$fold, $manage]]
+                        [$manage]]
                 ]],
                 ["div", {class: "PICKER_TABLEWRAP", style: "flex:1; min-height:0;"},
                     [$body]]

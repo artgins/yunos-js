@@ -19,6 +19,20 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.14.5 — 2026-08-23
+
+### gui_agent y gui_treedb
+
+- **fix: el plegado general va pegado al borde izquierdo.** Estaba dentro del
+    grupo de acciones (derecha) o justo detrás del buscador, y en un teléfono
+    acababa flotando al final de una línea: donde no se ve. Ahora es el
+    **primer elemento** de la toolbar, antes del título y del buscador, en las
+    tres tablas — el picker de Estadísticas/Esquemas, el de TreeDBs y la tabla
+    de Conexiones. Pliega lo que estás mirando, así que vive donde empieza la
+    mirada, y una fila que envuelve lo deja donde estaba.
+
+    Medido en 390px: el botón queda a la misma x que la toolbar en las tres.
+
 ## 0.14.4 — 2026-08-23
 
 ### gui_agent

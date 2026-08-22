@@ -486,7 +486,6 @@ function build_dom(gobj)
     let $actions = createElement2(
         ["div", {class: "STATNODES_ACTIONS is-flex is-align-items-center",
                  style: "gap:0.5rem; margin-left:auto;"}, [
-            $fold,
             $copy,
             $copy_conns,
             ["button", {class: "STATNODES_REFRESH button", type: "button", i18n: "refresh"},
@@ -497,6 +496,10 @@ function build_dom(gobj)
     priv.$toolbar = createElement2(
         ["div", {class: "STATNODES_TOOLBAR is-flex is-align-items-center is-flex-wrap-wrap mb-2",
                  style: "gap:0.5rem;"}, [
+            /*  The fold belongs with what you are LOOKING at, not with what
+             *  you do to it: left with the search box, and it stays there
+             *  when the row wraps on a phone. The actions keep the right.  */
+            $fold,
             $search_control,
             $count,
             $actions
