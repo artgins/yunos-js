@@ -181,6 +181,7 @@ const en = {
         "check": "Check",
         "export": "Export",
         "new column": "New column",
+        "undo the order": "Undo the order",
         "new topic": "New topic",
         "edit column": "Edit column",
         "duplicate column": "Duplicate column",

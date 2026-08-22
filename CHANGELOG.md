@@ -23,6 +23,16 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **feat: a column drag can be undone, app `0.9.7`** (`@yuneta/gobj-ui`
+    `^7.13.6` -> `^7.14.1`). Dragging a column by its handle is a WRITE —
+    `order` is a field, so the drop lands in the store the moment you let go —
+    and the only way back was dragging every row to where you thought it had
+    been. The editor's toolbar now grows an *Undo the order* button that puts
+    the columns back where they were before the dragging STARTED: the order is
+    remembered once per topic, before the first drag and not before each one.
+    It shows only while there is somewhere to go back to, and a refresh drops
+    it. The key `"undo the order"` is defined here.
+
 - **fix: the Schemas workspace's controls are the size of controls, app
     `0.9.6`** (`@yuneta/gobj-ui` `^7.13.3` -> `^7.13.6`). Every button and icon
     of the schema editor was `is-small`: its toolbar (Diagrama, Comprobar,
