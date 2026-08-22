@@ -23,6 +23,13 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **fix: after deleting the selected rows, the table still described the
+    selection, app `0.9.8`** (`@yuneta/gobj-ui` `^7.14.1` -> `^7.14.2`).
+    Tabulator deselects a row it deletes, but SILENTLY — so no
+    `EV_UNSELECT_ROWS` arrived and the bar kept counting rows that were gone,
+    with Delete and Copy still enabled. Verified on the local node: tick one
+    user, delete it, and the bar and both buttons go with it.
+
 - **feat: a column drag can be undone, app `0.9.7`** (`@yuneta/gobj-ui`
     `^7.13.6` -> `^7.14.1`). Dragging a column by its handle is a WRITE —
     `order` is a field, so the drop lands in the store the moment you let go —
@@ -172,6 +179,9 @@ on its own, outside the yunetas superproject.
     that decides which landing a treedb gets never arrived.
 
 ### gui_treedb
+
+- **fix: after deleting the selected rows, the table still described the
+    selection, app `0.13.10`** (`@yuneta/gobj-ui` `^7.13.6` -> `^7.14.2`).
 
 - **chore: `@yuneta/gobj-ui` `^7.13.3` -> `^7.13.6`, app `0.13.9`** (the schema
     editor's controls stop being `is-small` and its cards fit a treedb name;
