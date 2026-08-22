@@ -374,6 +374,10 @@ function mount_view(gobj)
         kw.landing_routes = {cards: `#${base}`, schema: `#${base}/schema`};
     }
 
+    /*  The selection bar over each topic table ("N selected" + a way out).
+     *  It takes its words from OUR i18n, and both keys are defined here. */
+    kw.with_selection_bar = true;
+
     let view = yui_mount_service_view(gobj, {
         gclass:    "C_YUI_TREEDB_TOPICS",
         name:      `treedb_view_${clean_id(gobj)}`,

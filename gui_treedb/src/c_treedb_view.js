@@ -288,6 +288,10 @@ function build_hosted_view(gobj, remote)
          *  this costs nothing until a topic is genuinely large, which is
          *  exactly when loading it whole stops being an option. */
         kw.with_remote_paging = true;
+        /*  ...which is exactly why the selection bar is worth the two i18n
+         *  keys it asks of us: with a page of 200 rows, the checkboxes that
+         *  say how many are ticked are not all on screen.  */
+        kw.with_selection_bar = true;
         kw.card_action_routes = gobj_read_attr(gobj, "card_action_routes");
         kw.landing_routes = gobj_read_attr(gobj, "landing_routes");
         /*  Its own base route, so it can declare its sub-routes (topics,

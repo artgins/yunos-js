@@ -23,6 +23,18 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **feat: the topic tables of the Schemas workspace say how many rows are
+    ticked, app `0.9.4`** (`with_selection_bar`, `@yuneta/gobj-ui`
+    `^7.12.0` -> `^7.13.3`). With 200 rows to a page, the checkboxes that
+    answer that question are not all on screen, and the toolbar only went
+    enabled or disabled. The bar shows in edition mode, carries no action of
+    its own (Delete and Copy are right above it) and takes its two words from
+    this app's i18n, which is why the flag is opt-in.
+
+    The same gobj-ui range brings the header filter box back to a quiet
+    hairline: it had been wearing the cell editor's border — one hard box per
+    column across the top of every table, link-blue in dark theme.
+
 - **chore: `@yuneta/gobj-ui` `^7.11.1` -> `^7.12.0`, app `0.9.3`.** The Schemas
     workspace's topic tables take the shared selection with it — and with it the
     fix that stops their header checkbox reaching past the header filters.
@@ -130,6 +142,16 @@ on its own, outside the yunetas superproject.
     that decides which landing a treedb gets never arrived.
 
 ### gui_treedb
+
+- **feat: the topic tables say how many rows are ticked, app `0.13.7`**
+    (`with_selection_bar`, `@yuneta/gobj-ui` `^7.12.0` -> `^7.13.3`). This app
+    pulls each topic a PAGE at a time, 200 rows to a page — which is exactly
+    why the count is worth the two i18n keys it asks for: the checkboxes that
+    answer it are not all on screen. The bar shows in edition mode and carries
+    no action of its own; the table's toolbar already has Delete and Copy.
+
+    The same range brings the quiet header filter box (it had been wearing the
+    cell editor's border, one hard box per column, link-blue in dark).
 
 - **chore: `@yuneta/gobj-ui` `^7.11.1` -> `^7.12.0`, app `0.13.6`.** The topic
     tables take the shared selection with it, and with it the fix that stops
