@@ -29,10 +29,14 @@ the submodule flow. This file only adds the yunos-js-specific layer on top.
   `release(...)` commit (the one that bumped both `package.json` AND closed the
   heading — verified per tag, not guessed). The one heading without a version,
   `## 2026-07-08 — shipped with SDK 7.7.2`, predates versioning and has no tag.
-  **Both yunos carry the SAME version**, as
-  they have since 0.3.0: one `## <version> — <date>` heading in the shared
-  CHANGELOG, and both `package.json` bumped together even when a cycle only
-  touched one of them. Before creating a tag, `git tag -l | grep <version>`:
+  **Both yunos carry the SAME version**: one `## <version> — <date>` heading in
+  the shared CHANGELOG, and both `package.json` bumped together even when a
+  cycle only touched one of them. It held from 0.3.0 to 0.7.0, **drifted**
+  between 0.7.0 and 0.14.0 (each yuno bumped its own patch as it changed:
+  `gui_agent` reached 0.9.12 and `gui_treedb` 0.13.15, and the entries of that
+  cycle keep the number they were written with), and was restored at **0.14.0**
+  — a number above both. If you bump one yuno mid-cycle, bump the other with
+  it, or the next release has to pick a number above two lines again. Before creating a tag, `git tag -l | grep <version>`:
   two tags of one version pointing at different commits is a serious error.
 - gui_agent deploys are a build + rsync via its `deploy-com.sh` — a commit
   alone does not update the live site.

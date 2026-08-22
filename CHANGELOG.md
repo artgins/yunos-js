@@ -19,7 +19,13 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
-## Unreleased
+## 0.14.0 — 2026-08-22
+
+Los dos yunos vuelven a **la misma versión**, que es la regla de este repo
+desde `0.3.0` y se había perdido por el camino (`gui_agent` iba por `0.9.x` y
+`gui_treedb` por `0.13.x`; las entradas de abajo conservan el número que cada
+una llevaba al escribirse). `0.14.0` queda por encima de las dos.
+
 
 ### gui_agent
 
