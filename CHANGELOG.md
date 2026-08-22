@@ -23,6 +23,12 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **chore: `@yuneta/gobj-ui` `^7.11.1` -> `^7.12.0`, app `0.9.3`.** The Schemas
+    workspace's topic tables take the shared selection with it — and with it the
+    fix that stops their header checkbox reaching past the header filters.
+    Verified on the deployed console against wattyzer's agent treedb: filter
+    `yunos` by role to 2 of 17, tick the header, and the toolbar acts on 2.
+
 - **feat: the answer table can be narrowed to the rows you mean, app `0.9.2`.**
     `yui_copy_table_json()` has always copied the SELECTION when there is one
     and the whole screen otherwise — and this table had no way to make one, so
@@ -124,6 +130,11 @@ on its own, outside the yunetas superproject.
     that decides which landing a treedb gets never arrived.
 
 ### gui_treedb
+
+- **chore: `@yuneta/gobj-ui` `^7.11.1` -> `^7.12.0`, app `0.13.6`.** The topic
+    tables take the shared selection with it, and with it the fix that stops
+    their header checkbox reaching past the header filters — the button beside
+    that checkbox deletes.
 
 - **feat: the connections table selects rows, and removes the lot, app
     `0.13.5`.** After a scan there are twenty connections in that table, and
