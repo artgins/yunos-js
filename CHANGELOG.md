@@ -23,6 +23,19 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **fix: "For TreeDB" probes what it needs, app `0.9.1`.** The button copies the
+    yunos shown as gui_treedb connections, and only a yuno KNOWN to hold a
+    treedb can be one — but that knowledge arrives from a `services` probe armed
+    by EXPANDING a node, and nowhere else. So over a full tree of treedb
+    backends, with nothing expanded, the button answered *"no yuno with a treedb
+    is shown"*; and with one node open it copied that node and said nothing
+    about the rest, which is the worse half — a partial document that looks
+    complete. The scan now runs in two phases: probe every shown yuno whose
+    treedb state is still unknown, then ask the ones that hold a treedb where
+    they listen. The round trips are bounded by what is in the table and are
+    spent on one deliberate click, and the button carries `is-loading` while
+    they travel.
+
 - **fix: a collapsed node says which of its yunos are open, app `0.8.2`.** In
     Statistics and Schemas what is open is a YUNO, and the checkbox that says
     so is on a child row — invisible while the node is collapsed, which is how

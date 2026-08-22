@@ -219,6 +219,7 @@ function mt_stop(gobj)
             window.clearTimeout(priv.conns_scan.timer);
         }
         priv.conns_scan = null;
+        conns_busy(gobj, false);
     }
     let shell = yui_shell_of(gobj);
     if(shell) {
@@ -983,6 +984,7 @@ function set_yuno_treedbs(gobj, node, yuno_id, data, result)
 
     if(typeof result === "number" && result < 0) {
         delete priv.treedbs[key];   /*  unknown again: a later expand retries  */
+        conns_probe_answered(gobj);
         return;
     }
     let names = [];
@@ -1008,6 +1010,7 @@ function set_yuno_treedbs(gobj, node, yuno_id, data, result)
      *  answers into ONE setData.  */
     if(count === 0 && gobj_read_bool_attr(gobj, "with_treedb_check")) {
         schedule_render(gobj);
+        conns_probe_answered(gobj);
         return;
     }
 
@@ -1021,6 +1024,7 @@ function set_yuno_treedbs(gobj, node, yuno_id, data, result)
     if(had !== priv.treedbs[key]) {
         refresh_active(gobj);
     }
+    conns_probe_answered(gobj);
 }
 
 
@@ -1233,6 +1237,7 @@ function finish_conns_scan(gobj)
         return;
     }
     priv.conns_scan = null;
+    conns_busy(gobj, false);
     if(scan.timer) {
         /*  A raw handle, cleared with the raw call: this is the browser's
          *  timer, not the gobj's C_TIMER (which is already carrying the
@@ -1314,26 +1319,14 @@ function set_conns_config(gobj, node, yuno_id, data, result)
 }
 
 /***************************************************************
- *  Copy the yunos SHOWN as gui_treedb connections.
+ *  The yuno rows the table is showing, flattened.
  *
- *  "Shown" and not "selected", like the Copy JSON button beside it: the
- *  operator filters the tree to what they want and copies that. Only
- *  yunos known to hold a treedb are asked — the rest cannot be a treedb
- *  backend whatever their config says.
+ *  The yunos are `_children` of their node row: this is a dataTree, and
+ *  getData() returns the TOP rows with their children nested. Flatten,
+ *  or a scan walks six node rows and finds no yuno at all.
  ***************************************************************/
-function ac_copy_conns(gobj, event, kw, src)
+function shown_yuno_rows(gobj)
 {
-    let priv = gobj.priv;
-    let link = gobj_read_attr(gobj, "link_svc");
-
-    if(priv.conns_scan) {
-        return 0;       /*  one scan at a time  */
-    }
-    if(!link || !agent_link_is_connected(link)) {
-        log_error(`${gobj_short_name(gobj)}: no control-center session, cannot scan`);
-        return -1;
-    }
-
     let tabulator = gobj_read_attr(gobj, "tabulator");
     let top = [];
     try {
@@ -1342,47 +1335,116 @@ function ac_copy_conns(gobj, event, kw, src)
         top = [];
     }
 
-    /*  The yunos are `_children` of their node row: this is a dataTree, and
-     *  getData() returns the TOP rows with their children nested. Flatten,
-     *  or the scan walks six node rows and finds no yuno at all. */
     let rows = [];
     for(let parent of top) {
-        if(!parent) {
+        if(!parent || !Array.isArray(parent._children)) {
             continue;
         }
-        rows.push(parent);
-        if(Array.isArray(parent._children)) {
-            for(let child of parent._children) {
-                rows.push(child);
+        for(let child of parent._children) {
+            if(!child || child._type !== "yuno" || !child.node || !child.yuno_id) {
+                continue;
             }
+            rows.push(child);
         }
     }
+    return rows;
+}
 
-    let scan = {rows: {}, pending: 0, asked: 0, timer: null};
-    for(let row of rows) {
-        if(!row || row._type !== "yuno" || !row.node || !row.yuno_id) {
-            continue;
+/***************************************************************
+ *  A scan travels: say so on the button. It now spends a round trip
+ *  per shown yuno, and a button that does nothing visible for a few
+ *  seconds reads as broken.
+ ***************************************************************/
+function conns_busy(gobj, busy)
+{
+    let $b = gobj.priv.$copy_conns;
+    if(!$b) {
+        return;
+    }
+    $b.classList.toggle("is-loading", !!busy);
+}
+
+/***************************************************************
+ *  True while any candidate of the running scan is still waiting for
+ *  its `services` answer.
+ *
+ *  In flight is the key PRESENT and undefined, the mark probe_treedbs()
+ *  leaves. A probe that FAILED deletes its key, and a deleted key is not
+ *  waiting: nothing else is going to arrive for it.
+ ***************************************************************/
+function conns_probes_in_flight(gobj)
+{
+    let priv = gobj.priv;
+    let scan = priv.conns_scan;
+    if(!scan) {
+        return false;
+    }
+    for(let key of Object.keys(scan.candidates)) {
+        if(key in priv.treedbs && priv.treedbs[key] === undefined) {
+            return true;
         }
-        let key = stats_sel_id(row.node, row.yuno_id);
+    }
+    return false;
+}
+
+/***************************************************************
+ *  A treedb probe answered while a scan is in its probe phase: move
+ *  on when it was the last one owed.
+ ***************************************************************/
+function conns_probe_answered(gobj)
+{
+    let scan = gobj.priv.conns_scan;
+    if(!scan || scan.phase !== "probe") {
+        return;
+    }
+    if(conns_probes_in_flight(gobj)) {
+        return;
+    }
+    start_conns_config_phase(gobj);
+}
+
+/***************************************************************
+ *  Phase two: ask every candidate that DOES hold a treedb where it
+ *  listens (`view-config`).
+ ***************************************************************/
+function start_conns_config_phase(gobj)
+{
+    let priv = gobj.priv;
+    let scan = priv.conns_scan;
+    let link = gobj_read_attr(gobj, "link_svc");
+
+    if(!scan || scan.phase !== "probe") {
+        return;
+    }
+    if(scan.timer) {
+        window.clearTimeout(scan.timer);
+        scan.timer = null;
+    }
+    scan.phase = "config";
+
+    for(let key of Object.keys(scan.candidates)) {
         if(priv.treedbs[key] !== true) {
             continue;   /*  no treedb: nothing for gui_treedb to browse  */
         }
-        if(scan.rows[key]) {
-            continue;
-        }
-        scan.rows[key] = {row: row, endpoint: null, answered: false};
+        scan.rows[key] = {row: scan.candidates[key], endpoint: null, answered: false};
         scan.pending++;
         scan.asked++;
     }
 
     if(!scan.asked) {
         log_error(`${gobj_short_name(gobj)}: no yuno with a treedb is shown`);
+        priv.conns_scan = null;
+        conns_busy(gobj, false);
         yui_button_mark_done(priv.$copy_conns, t("nothing to copy"));
         set_timeout(priv.gobj_timer, 1800);
-        return 0;
+        return;
     }
-
-    priv.conns_scan = scan;
+    if(!link || !agent_link_is_connected(link)) {
+        log_error(`${gobj_short_name(gobj)}: no control-center session, cannot scan`);
+        priv.conns_scan = null;
+        conns_busy(gobj, false);
+        return;
+    }
 
     for(let key of Object.keys(scan.rows)) {
         let row = scan.rows[key].row;
@@ -1401,6 +1463,82 @@ function ac_copy_conns(gobj, event, kw, src)
     scan.timer = window.setTimeout(() => {
         scan.timer = null;
         finish_conns_scan(gobj);
+    }, CONNS_TIMEOUT_MS);
+}
+
+/***************************************************************
+ *  Copy the yunos SHOWN as gui_treedb connections.
+ *
+ *  "Shown" and not "selected", like the Copy JSON button beside it: the
+ *  operator filters the tree to what they want and copies that.
+ *
+ *  The button PROBES what it needs, in two phases. A yuno is only KNOWN
+ *  to hold a treedb once its `services` answer has arrived, and that
+ *  probe is armed by EXPANDING its node — nowhere else. So the button
+ *  answered "no yuno with a treedb is shown" over a full tree of them
+ *  whenever nobody had opened a node, and with one node open it copied
+ *  that node and said nothing about the rest, which is the worse half:
+ *  a partial document that looks complete. Probe every shown yuno whose
+ *  treedb state is still unknown, then ask the ones that hold a treedb
+ *  where they listen. The round trips are bounded by what is in the
+ *  table and they are spent on one deliberate click.
+ ***************************************************************/
+function ac_copy_conns(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let link = gobj_read_attr(gobj, "link_svc");
+
+    if(priv.conns_scan) {
+        return 0;       /*  one scan at a time  */
+    }
+    if(!link || !agent_link_is_connected(link)) {
+        log_error(`${gobj_short_name(gobj)}: no control-center session, cannot scan`);
+        return -1;
+    }
+
+    let scan = {
+        phase:      "probe",
+        candidates: {},     /*  key -> row: shown yunos that may hold a treedb  */
+        rows:       {},     /*  key -> {row, endpoint, answered}: config phase  */
+        pending:    0,
+        asked:      0,
+        timer:      null
+    };
+    for(let row of shown_yuno_rows(gobj)) {
+        let key = stats_sel_id(row.node, row.yuno_id);
+        if(priv.treedbs[key] === false) {
+            continue;   /*  asked already: no treedb, nothing for gui_treedb  */
+        }
+        scan.candidates[key] = row;
+    }
+
+    if(!Object.keys(scan.candidates).length) {
+        log_error(`${gobj_short_name(gobj)}: no yuno with a treedb is shown`);
+        yui_button_mark_done(priv.$copy_conns, t("nothing to copy"));
+        set_timeout(priv.gobj_timer, 1800);
+        return 0;
+    }
+
+    priv.conns_scan = scan;
+    conns_busy(gobj, true);
+
+    /*  probe_treedbs() is idempotent per yuno and marks the key in flight,
+     *  so a probe already travelling is simply waited for.  */
+    for(let key of Object.keys(scan.candidates)) {
+        let row = scan.candidates[key];
+        probe_treedbs(gobj, row.node, row.yuno_id);
+    }
+
+    if(!conns_probes_in_flight(gobj)) {
+        start_conns_config_phase(gobj);
+        return 0;
+    }
+
+    /*  A probe that never answers must not hold the scan for ever either:
+     *  go on with the yunos that did answer. */
+    scan.timer = window.setTimeout(() => {
+        scan.timer = null;
+        start_conns_config_phase(gobj);
     }, CONNS_TIMEOUT_MS);
 
     return 0;
