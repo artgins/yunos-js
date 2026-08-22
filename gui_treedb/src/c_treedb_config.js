@@ -727,6 +727,54 @@ function ac_set_conn_expanded(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  Select or deselect MANY services in ONE write.
+ *
+ *  kw: {workspace, sels: [{conn_id, svc, label}], on}
+ *
+ *  One user gesture is one change: ticking a connection's box opens a
+ *  dozen treedbs, and sending a dozen EV_TOGGLE_SELECTED would persist
+ *  the config a dozen times and rebuild the workspace tabs a dozen
+ *  times — the same list arriving at the shell over and over.
+ ***************************************************************/
+function ac_set_services_selected(gobj, event, kw, src)
+{
+    let workspace = (kw && kw.workspace) || "";
+    let sels = (kw && Array.isArray(kw.sels)) ? kw.sels : null;
+    let on = !!(kw && kw.on);
+
+    if(!sels) {
+        log_error(`${GCLASS_NAME}: EV_SET_SERVICES_SELECTED with no selections`);
+        return -1;
+    }
+
+    let list = treedb_config_get_selected(gobj, workspace).slice();
+    for(let sel of sels) {
+        if(!sel || !sel.conn_id || !sel.svc || !sel.svc.key) {
+            log_error(`${GCLASS_NAME}: EV_SET_SERVICES_SELECTED with a bad selection`);
+            continue;
+        }
+        let id = sel_id(sel.conn_id, sel.svc.key);
+        let idx = list.findIndex((s) => s && s.id === id);
+        if(on && idx < 0) {
+            list.push({
+                id:          id,
+                conn_id:     sel.conn_id,
+                svc_key:     sel.svc.key,
+                service:     sel.svc.service,
+                gclass:      sel.svc.gclass,
+                /*  legacy field name, still read by older selections  */
+                treedb_name: sel.svc.service,
+                label:       sel.label || sel.svc.service
+            });
+        } else if(!on && idx >= 0) {
+            list.splice(idx, 1);
+        }
+    }
+    do_set_selected(gobj, workspace, list);
+    return 0;
+}
+
 function ac_toggle_selected(gobj, event, kw, src)
 {
     let sel = kw ? kw.sel : null;
@@ -814,6 +862,7 @@ function create_gclass(gclass_name)
             ["EV_SET_CONN_ENABLED",      ac_set_conn_enabled,      null],
             ["EV_SET_CONN_EXPANDED",     ac_set_conn_expanded,     null],
             ["EV_TOGGLE_SELECTED",       ac_toggle_selected,       null],
+            ["EV_SET_SERVICES_SELECTED", ac_set_services_selected, null],
             ["EV_REMOVE_SELECTED",       ac_remove_selected,       null],
             ["EV_SET_ACTIVE_TAB",        ac_set_active_tab,        null],
             ["EV_SET_LIVE_MAX",          ac_set_live_max,          null],
@@ -833,6 +882,7 @@ function create_gclass(gclass_name)
         ["EV_SET_CONN_ENABLED",         0],
         ["EV_SET_CONN_EXPANDED",        0],
         ["EV_TOGGLE_SELECTED",          0],
+        ["EV_SET_SERVICES_SELECTED",    0],
         ["EV_REMOVE_SELECTED",          0],
         ["EV_SET_ACTIVE_TAB",           0],
         ["EV_SET_LIVE_MAX",             0],

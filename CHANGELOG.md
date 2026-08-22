@@ -19,6 +19,27 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## Unreleased
+
+### gui_treedb
+
+- **feat: la casilla de la conexión abre o cierra TODOS sus treedbs, app
+    `0.14.1`.** Tres estados, que es lo que hay que decir: ninguno, algunos
+    (media marca) y todos. Medio marcada abre el resto — es lo que invita a
+    hacer un clic sobre "todavía no está todo"—, y sólo cierra cuando ya
+    estaban todos abiertos. Va en **un solo evento**
+    (`EV_SET_SERVICES_SELECTED`): mandar una docena de `EV_TOGGLE_SELECTED`
+    guardaría la configuración doce veces y reconstruiría las pestañas doce
+    veces, con la misma lista llegando al shell una y otra vez.
+
+- **fix: marcar ya no pliega el árbol.** `setData()` resetea el árbol y esta
+    tabla se recarga en cada tick, así que marcar un treedb plegaba justo la
+    conexión dentro de la que estabas mirando. Ahora se recuerda qué está
+    abierto y se restaura — lo que el operador plegó a mano sigue plegado.
+    Sólo la PRIMERA carga decide sola, y "primera" significa la primera **con
+    filas**: esta vista se monta antes de que lleguen las conexiones, y una
+    recarga vacía contaba como la primera y dejaba plegada la de verdad.
+
 ## 0.14.0 — 2026-08-22
 
 Los dos yunos vuelven a **la misma versión**, que es la regla de este repo

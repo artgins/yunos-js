@@ -87,6 +87,7 @@ let PRIVATE_DATA = {
     table:      null,
     table_id:   "",
     search:     "",     /*  survives a re-render (a connection opening)  */
+    loaded:     false,  /*  past the first load: what is open is the operator's  */
 };
 
 let __gclass__ = null;
@@ -415,24 +416,45 @@ function build_rows(gobj)
  ***************************************************************/
 function make_columns(gobj)
 {
+    /*  A DOM node and not an HTML string: the connection's box has THREE
+     *  states and `indeterminate` is a property, not an attribute — it
+     *  cannot be written in markup.  */
     function check_formatter(cell)
     {
         let r = cell.getData();
-        if(r._type !== "svc") {
-            return "";
+        let $cb = document.createElement("input");
+        $cb.type = "checkbox";
+
+        if(r._type === "svc") {
+            $cb.className = "PICKER_SERVICE_CHECK";
+            $cb.checked = !!r.selected;
+            $cb.setAttribute("aria-label", t("open in this workspace"));
+            return $cb;
         }
-        return `<input type="checkbox" class="PICKER_SERVICE_CHECK"` +
-            `${r.selected ? " checked" : ""} aria-label="${t("open in this workspace")}">`;
+
+        /*  The connection's own box opens or closes ALL its treedbs at
+         *  once, and says which of the three it is in: none, some, all.  */
+        $cb.className = "PICKER_CONN_CHECK";
+        $cb.disabled = !r.total;
+        $cb.checked = r.total > 0 && r.open === r.total;
+        $cb.indeterminate = r.open > 0 && r.open < r.total;
+        $cb.setAttribute("aria-label", t("open all of this connection"));
+        $cb.title = t("open all of this connection");
+        return $cb;
     }
 
     function check_click(e, cell)
     {
         let r = cell.getData();
-        if(r._type !== "svc") {
+        if(r._type === "svc") {
+            gobj_send_event(gobj, "EV_TOGGLE_SERVICE",
+                {conn_id: r.conn_id, svc_key: r.svc_key}, gobj);
             return;
         }
-        gobj_send_event(gobj, "EV_TOGGLE_SERVICE",
-            {conn_id: r.conn_id, svc_key: r.svc_key}, gobj);
+        if(!r.total) {
+            return;     /*  nothing to open: the box is disabled  */
+        }
+        gobj_send_event(gobj, "EV_TOGGLE_CONNECTION", {conn_id: r.conn_id}, gobj);
     }
 
     function name_formatter(cell)
@@ -526,18 +548,48 @@ function reload_table(gobj)
     }
 
     let rows = build_rows(gobj);
-    let expand = rows.length <= 5;
+
+    /*  `setData()` RESETS the tree, and this table reloads on every tick:
+     *  ticking a treedb would fold the connection you are ticking inside,
+     *  which is the one place the answer has to stay on screen. Remember
+     *  what is open and put it back.
+     *
+     *  Only the FIRST load decides on its own — a handful of connections
+     *  opens expanded because that is the whole screen; past that it starts
+     *  folded and the search box is how you get to a treedb among hundreds.  */
+    let first = !priv.loaded;
+    let open = {};
+    if(!first) {
+        table.getRows().forEach(function(row) {
+            let d = row.getData();
+            if(d && d._key && row.isTreeExpanded && row.isTreeExpanded()) {
+                open[d._key] = true;
+            }
+        });
+    } else if(rows.length <= 5) {
+        for(let r of rows) {
+            open[r._key] = true;
+        }
+    }
 
     Promise.resolve(table.setData(rows)).then(function() {
         apply_search(gobj);
-        if(expand || priv.search) {
+        table.getRows().forEach(function(row) {
+            let d = row.getData();
+            if(!row.treeExpand || !d) {
+                return;
+            }
             /*  With a search on, what matches is worth seeing without a
              *  second click.  */
-            table.getRows().forEach((row) => {
-                if(row.treeExpand) {
-                    row.treeExpand();
-                }
-            });
+            if(open[d._key] || priv.search) {
+                row.treeExpand();
+            }
+        });
+        /*  "Loaded" means loaded WITH something: this view is mounted before
+         *  the connections arrive, and a first reload of an empty table would
+         *  otherwise count as the first load and leave the real one folded.  */
+        if(rows.length) {
+            priv.loaded = true;
         }
         update_count(gobj, rows);
     }).catch(function(err) {
@@ -650,6 +702,51 @@ function ac_toggle_service(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The connection's own box: open ALL its treedbs, or close them all.
+ *
+ *  "All" when some are open too — the half-ticked box reads as "not
+ *  everything yet", and one click finishing the job is what it invites.
+ *  Only when every one is already open does it close them.
+ *
+ *  One event carries the lot: a dozen EV_TOGGLE_SELECTED would persist
+ *  the config a dozen times and rebuild the tabs a dozen times.
+ ***************************************************************/
+function ac_toggle_connection(gobj, event, kw, src)
+{
+    let workspace = gobj_read_attr(gobj, "workspace");
+    let config = gobj_find_service("treedb_config", false);
+    let conn = config
+        ? treedb_config_get_connections(config).find((c) => c && c.id === kw.conn_id)
+        : null;
+
+    if(!config || !conn) {
+        log_error(`${gobj_short_name(gobj)}: no connection '${kw && kw.conn_id}' to open`);
+        return -1;
+    }
+
+    let services = connection_services(conn, workspace);
+    if(!services.length) {
+        log_warning(`${gobj_short_name(gobj)}: connection '${conn.id}' offers no treedb`);
+        return 0;
+    }
+    let open = services.filter(
+        (svc) => treedb_config_is_selected(config, workspace, sel_id(conn.id, svc.key))
+    ).length;
+
+    gobj_send_event(config, "EV_SET_SERVICES_SELECTED",
+        {
+            workspace: workspace,
+            on:        open < services.length,
+            sels:      services.map((svc) => ({
+                conn_id: conn.id,
+                svc:     svc,
+                label:   `${svc.service} · ${conn.label}`
+            }))
+        }, gobj);
+    return 0;
+}
+
+/***************************************************************
  *  The search box typed into.
  ***************************************************************/
 function ac_search(gobj, event, kw, src)
@@ -713,6 +810,7 @@ function create_gclass(gclass_name)
             ["EV_LANGUAGE_CHANGED",         ac_refresh, null],
             ["EV_MANAGE_CONNECTIONS",       ac_manage_connections, null],
             ["EV_TOGGLE_SERVICE",           ac_toggle_service, null],
+            ["EV_TOGGLE_CONNECTION",        ac_toggle_connection, null],
             ["EV_SEARCH",                   ac_search,         null]
         ]]
     ];
@@ -726,6 +824,7 @@ function create_gclass(gclass_name)
         ["EV_LANGUAGE_CHANGED",         0],
         ["EV_MANAGE_CONNECTIONS",       0],
         ["EV_TOGGLE_SERVICE",           0],
+        ["EV_TOGGLE_CONNECTION",        0],
         ["EV_SEARCH",                   0]
     ];
 
