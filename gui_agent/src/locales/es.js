@@ -54,6 +54,8 @@ const es = {
         "copy json":         "Copiar JSON",
         "for treedb":        "Para TreeDB",
         "nothing to copy":   "Nada que copiar",
+        "{{n}} selected": "{{n}} seleccionadas",
+        "clear selection": "Quitar",
         "copy the yunos shown as treedb connections":
                              "Copiar los yunos mostrados como conexiones de TreeDB GUI",
         "copy the rows shown as json": "Copiar en JSON las filas mostradas",

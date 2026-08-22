@@ -23,6 +23,22 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **feat: the answer table can be narrowed to the rows you mean, app `0.9.2`.**
+    `yui_copy_table_json()` has always copied the SELECTION when there is one
+    and the whole screen otherwise — and this table had no way to make one, so
+    half of that sentence was unreachable and Copy could only ever take
+    everything. `list-yunos` on a busy node answers forty rows. The answer table
+    now carries the shared checkbox column (gobj-ui `yui_table_select.js`,
+    `^7.0.0` -> `^7.11.1`) and a bar that says how many are ticked.
+
+    The bar carries **no action**, deliberately: the tables of this app are
+    projections of what the control center answered — nodes, yunos, an agent's
+    reply — not data this app owns, so there is nothing here to delete in bulk.
+    The doing is the Copy button that was already there. For the same reason
+    the two pickers get nothing: the Statistics/Schemas picker's checkbox is
+    taken (it opens and closes that yuno's tab), and two checkboxes per row
+    meaning two different things is worse than none.
+
 - **fix: "For TreeDB" probes what it needs, app `0.9.1`.** The button copies the
     yunos shown as gui_treedb connections, and only a yuno KNOWN to hold a
     treedb can be one — but that knowledge arrives from a `services` probe armed

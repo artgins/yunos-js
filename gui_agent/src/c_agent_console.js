@@ -35,6 +35,7 @@ import {
     msg_iev_write_key,
     msg_iev_read_key,
     gobj_send_event,
+    gobj_is_destroying,
     gobj_name,
     gobj_short_name,
     gobj_create_pure_child,
@@ -55,6 +56,13 @@ import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 import {yui_copy_text, yui_copy_table_json} from "@yuneta/gobj-ui/src/yui_clipboard.js";
+import {
+    yui_selection_column,
+    yui_selection_settings,
+    yui_selection_bar,
+    yui_wire_selection,
+    yui_clear_selection,
+} from "@yuneta/gobj-ui/src/yui_table_select.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
@@ -142,6 +150,7 @@ function mt_create(gobj)
     priv.$copy_icon = null;
     priv.gobj_timer = gobj_create_pure_child(gobj_name(gobj), "C_TIMER", {}, gobj);
     priv.tabulator = null;    /*  Tabulator instance for table-mode answers  */
+    priv.selection = null;    /*  the selection bar of that table  */
     priv.json_view = null;    /*  C_YUI_JSON instance for object/array answers  */
     priv.json_text = null;    /*  what the viewer shows, for the copy button  */
     priv.commands = {};       /*  name -> {name, params[], desc} from `help`  */
@@ -1606,17 +1615,44 @@ function ac_history_sort(gobj, event, kw, src)
 function render_table(gobj, schema, data)
 {
     let priv = gobj.priv;
+
+    /*  Ticking rows narrows what Copy takes. `yui_copy_table_json()` has
+     *  always copied the SELECTION when there is one and the whole screen
+     *  otherwise — this table simply never had a way to make one, so the
+     *  first half of that sentence was unreachable. `list-yunos` on a busy
+     *  node answers forty rows, and the three you are looking at are the
+     *  point of looking.
+     *
+     *  The bar carries no action: there is nothing to DO to an answer of the
+     *  control center from here (it is a projection of what the agent said,
+     *  not something this app owns). It says how many are ticked and offers
+     *  the way out — the doing is the Copy button that was already there.  */
+    priv.selection = yui_selection_bar(t, {
+        name:     "CONSOLE",
+        actions:  [],
+        on_clear: () => gobj_send_event(gobj, "EV_CLEAR_SELECTION", {}, gobj)
+    });
+    priv.$data.appendChild(priv.selection.$el);
+
     let host = createElement2(["div", {class: "CONSOLE_RESPONSE_TABLE"}]);
     priv.$data.appendChild(host);
 
     priv.tabulator = new Tabulator(host, {
         ...yui_tabulator_lang(t),   /*  Tabulator's OWN chrome, in our language  */
+        ...yui_selection_settings(),
         data:           data,
         layout:         "fitDataFill",
-        columns:        make_columns_from_schema(schema),
+        columns:        [yui_selection_column()].concat(make_columns_from_schema(schema)),
         columnDefaults: {headerHozAlign: "left"},
         maxHeight:      "100%",
         placeholder:    "—"
+    });
+    /*  A tick is an OS notification like any other: it becomes an event. */
+    yui_wire_selection(priv.tabulator, function(count) {
+        if(gobj_is_destroying(gobj)) {
+            return;
+        }
+        gobj_send_event(gobj, "EV_SELECTION_CHANGED", {count: count}, gobj);
     });
 
     /*  A table answer IS copyable — as the rows, in JSON. Without this
@@ -1772,6 +1808,7 @@ function destroy_table(gobj)
         }
         priv.tabulator = null;
     }
+    priv.selection = null;      /*  its DOM goes with the response area  */
 }
 
 /***************************************************************
@@ -2116,6 +2153,9 @@ function ac_language_changed(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     yui_tabulator_relocalize(priv.tabulator, t);
+    if(priv.selection) {
+        priv.selection.refresh();   /*  a count composed at render time  */
+    }
     let $c = gobj_read_attr(gobj, "$container");
     if($c) {
         refresh_language($c, t);
@@ -2123,6 +2163,33 @@ function ac_language_changed(gobj, event, kw, src)
     return 0;
 }
 
+
+
+/***************************************************************
+ *  The selection of the answer table changed: the bar says how many,
+ *  and Copy takes those instead of the screen.
+ ***************************************************************/
+function ac_selection_changed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.selection) {
+        priv.selection.set_count((kw && kw.count) || 0);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  The way out of a selection.
+ ***************************************************************/
+function ac_clear_selection(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    yui_clear_selection(priv.tabulator);
+    if(priv.selection) {
+        priv.selection.set_count(0);
+    }
+    return 0;
+}
 
 
                     /***************************
@@ -2158,6 +2225,8 @@ function create_gclass(gclass_name)
     const states = [
         ["ST_IDLE", [
             ["EV_LANGUAGE_CHANGED",     ac_language_changed,   null],
+            ["EV_SELECTION_CHANGED", ac_selection_changed, null],
+            ["EV_CLEAR_SELECTION",   ac_clear_selection,   null],
             ["EV_ON_OPEN",           ac_on_open,           null],
             ["EV_ON_CLOSE",          ac_on_close,          null],
             ["EV_ON_OPEN_ERROR",     ac_on_open_error,     null],
@@ -2187,6 +2256,8 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const event_types = [
         ["EV_LANGUAGE_CHANGED",     0],
+        ["EV_SELECTION_CHANGED", 0],
+        ["EV_CLEAR_SELECTION",   0],
         ["EV_ON_OPEN",           0],
         ["EV_ON_CLOSE",          0],
         ["EV_ON_OPEN_ERROR",     0],
