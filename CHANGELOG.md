@@ -109,6 +109,21 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
+- **fix: an import ADDS WHAT IS NEW, app `0.13.4`.** Every imported connection
+    was given a fresh id, and a fresh id is a new row by construction — so
+    pasting the document again duplicated the whole set. And it IS pasted
+    again: the agent console rebuilds it whole on every scan, so the paste that
+    brings the one yuno a node has gained brings the twenty it already had with
+    it. The set already configured is now matched first, by what identifies a
+    connection — its url and the service reached through it, not its id and not
+    its label, which is edited here and must not turn a re-paste into a second
+    row of the same thing. A connection already present is left ALONE: it may
+    have been edited since (a host fixed by hand, services unticked), and the
+    document arriving is not more authoritative than that. The view says what
+    happened ("3 added · 20 already here"), because an import that adds nothing
+    is a correct outcome and used to look like a button that did nothing. The
+    decision is a pure function with its own tests (`conn_helpers.js`).
+
 - **fix: coming back from Select lands where the tab was left, app `0.7.5`.**
     A tab replays its position when it is ENTERED AGAIN, and "again" is
     decided by whether the previous route was another tab. The picker returned

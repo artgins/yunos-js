@@ -82,6 +82,8 @@ import {
     treedb_links_is_scanning,
 } from "./c_treedb_links.js";
 
+import {plan_conn_import} from "./conn_helpers.js";
+
 
 /***************************************************************
  *              Constants
@@ -110,6 +112,8 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     $scan_errors: null,   /*  refresh failure report area  */
+    $import_notice: null, /*  what the last import added / skipped  */
+    import_notice: null,  /*  {added, skipped}: kept, so it survives a language change  */
     $help:        null,   /*  the how-to-use paragraph, folded by default  */
     $help_btn:    null,   /*  the (i) that folds/unfolds it  */
     $import_file: null,   /*  hidden <input type=file> of the Import button  */
@@ -378,6 +382,13 @@ function build_ui(gobj)
         ["div", {class: "is-size-7 has-text-danger mb-2 is-hidden CONNECTIONS_SCAN_ERRORS"}, []]);
     priv.$scan_errors = $scan_errors;
 
+    /*  An import that adds nothing because everything was already here is a
+     *  correct outcome, not a failure: it says so in grey, beside the red
+     *  box and not in it. */
+    let $import_notice = createElement2(
+        ["div", {class: "is-size-7 has-text-grey mb-2 is-hidden CONNECTIONS_IMPORT_NOTICE"}, []]);
+    priv.$import_notice = $import_notice;
+
     let $container = createElement2(
         ["div", {class: "C_TREEDB_CONNECTIONS ytreedb-connections p-4"},
             [
@@ -398,6 +409,7 @@ function build_ui(gobj)
                 ]],
                 $help,
                 $scan_errors,
+                $import_notice,
                 ["div", {id: table_id}, []]
             ]
         ]
@@ -734,6 +746,44 @@ function show_scan_errors(gobj, errors)
 }
 
 /***************************************************************
+ *  Say what the last import did. Kept in priv, because a count
+ *  composed at render time cannot re-translate itself: the language
+ *  can change while the line is on screen.
+ ***************************************************************/
+function render_import_notice(gobj)
+{
+    let priv = gobj.priv;
+    let $box = priv.$import_notice;
+    if(!$box) {
+        return;
+    }
+    let n = priv.import_notice;
+    if(!n || (!n.added && !n.skipped)) {
+        $box.textContent = "";
+        $box.classList.add("is-hidden");
+        return;
+    }
+    let parts = [];
+    if(n.added) {
+        parts.push(t("{{n}} connections added", {n: n.added}));
+    }
+    if(n.skipped) {
+        parts.push(t("{{n}} connections already here", {n: n.skipped}));
+    }
+    $box.textContent = parts.join(" \u00b7 ");
+    $box.classList.remove("is-hidden");
+}
+
+/***************************************************************
+ *  Record what an import did and show it.
+ ***************************************************************/
+function set_import_notice(gobj, notice)
+{
+    gobj.priv.import_notice = notice;
+    render_import_notice(gobj);
+}
+
+/***************************************************************
  *  Column definitions. Shared by parent (connection) and child
  *  (service) rows: children only use the tree column, the checkbox
  *  and the gclass tag; parent-only cells are blank on them.
@@ -1017,6 +1067,7 @@ function ac_language_changed(gobj, event, kw, src)
     if($c) {
         refresh_language($c, t);
     }
+    render_import_notice(gobj);
     let table = gobj_read_attr(gobj, "tabulator");
     if(!table) {
         return 0;
@@ -1421,13 +1472,14 @@ function ac_pick_import_file(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Import connections from a picked file: ADD them, never replace the set.
+ *  Import connections from a picked file or from the clipboard: ADD
+ *  WHAT IS NEW, never replace the set and never repeat what is here.
  *
- *  Every imported connection gets a FRESH id and lands DISABLED. Fresh
- *  because the id is what everything else in this browser is keyed by (the
- *  open tabs, the Tranger views): reusing an exported id would silently
- *  adopt whatever local state a previous connection of that id had left
- *  behind. Disabled because importing a file must not open sockets.
+ *  Every connection that IS added gets a FRESH id and lands DISABLED.
+ *  Fresh because the id is what everything else in this browser is keyed
+ *  by (the open tabs, the Tranger views): reusing an exported id would
+ *  silently adopt whatever local state a previous connection of that id
+ *  had left behind. Disabled because importing must not open sockets.
  ***************************************************************/
 /***************************************************************
  *  Import what is on the clipboard.
@@ -1548,27 +1600,45 @@ function ac_import_conns(gobj, event, kw, src)
         return -1;
     }
 
-    let imported = rows
-        .filter((c) => c && c.url)      /*  a connection with no url can never open  */
-        .map((c) => ({
-            id:                  new_id(),
-            label:               String(c.label || ""),
-            url:                 String(c.url),
-            remote_yuno_role:    String(c.remote_yuno_role || ""),
-            remote_yuno_service: String(c.remote_yuno_service || ""),
-            enabled:             false,
-            services:            Array.isArray(c.services) ? c.services : []
-        }));
+    /*  An import ADDS WHAT IS NEW. The same document is pasted again and
+     *  again — the agent console rebuilds it whole every time it scans, and
+     *  a node gained one yuno — and every re-paste used to duplicate the
+     *  whole set, because every imported row was given a fresh id and a
+     *  fresh id is a new row by construction. So the set already here is
+     *  matched first, by what identifies a connection (url + service), and
+     *  a row that is already here is left ALONE: it may have been edited
+     *  since (a host fixed by hand, services unticked) and the document
+     *  arriving is not more authoritative than that.  */
+    let list = treedb_config_get_connections(config);
+    let plan = plan_conn_import(list, rows);
+    let skipped = plan.skipped;
+    let imported = plan.fresh.map((c) => ({
+        id:                  new_id(),
+        label:               String(c.label || ""),
+        url:                 String(c.url),
+        remote_yuno_role:    String(c.remote_yuno_role || ""),
+        remote_yuno_service: String(c.remote_yuno_service || ""),
+        enabled:             false,
+        services:            Array.isArray(c.services) ? c.services : []
+    }));
 
     if(!imported.length) {
+        if(skipped) {
+            /*  Nothing new is not a failure: the operator pasted a document
+             *  they already have. */
+            show_scan_errors(gobj, []);
+            set_import_notice(gobj, {added: 0, skipped: skipped});
+            return 0;
+        }
         log_error(`${gobj_short_name(gobj)}: the file holds no usable connection`);
         show_scan_errors(gobj, [{yuno: "", error: "the file holds no usable connection"}]);
         return -1;
     }
 
-    let list = treedb_config_get_connections(config).concat(imported);
-    gobj_send_event(config, "EV_SET_CONNECTIONS", {connections: list}, gobj);
+    gobj_send_event(config, "EV_SET_CONNECTIONS",
+        {connections: list.concat(imported)}, gobj);
     show_scan_errors(gobj, []);
+    set_import_notice(gobj, {added: imported.length, skipped: skipped});
     reload_table(gobj);
     return 0;
 }
