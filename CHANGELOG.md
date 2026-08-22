@@ -23,7 +23,7 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
-- **chore: `@yuneta/gobj-js` `^7.13.3` -> `^7.13.4`, app `0.9.10`** — the audit
+- **chore: `@yuneta/gobj-js` `^7.13.3` -> `^7.13.5`, app `0.9.11`** — the audit
     of that same trap across the runtime: `mt_publication_pre_filter`, `mt_play`
     and `mt_subscription_added` also read a boolean as if it were the C int.
 
@@ -195,7 +195,7 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
-- **chore: `@yuneta/gobj-js` `^7.13.3` -> `^7.13.4`, app `0.13.12`** (the audit
+- **chore: `@yuneta/gobj-js` `^7.13.3` -> `^7.13.5`, app `0.13.13`** (the audit
     of the same trap across the runtime).
 
 - **fix: one delete no longer arrives once per topic, app `0.13.11`**
