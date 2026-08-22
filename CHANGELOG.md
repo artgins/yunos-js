@@ -23,6 +23,10 @@ on its own, outside the yunetas superproject.
 
 ### gui_agent
 
+- **chore: `@yuneta/gobj-js` `^7.13.3` -> `^7.13.4`, app `0.9.10`** — the audit
+    of that same trap across the runtime: `mt_publication_pre_filter`, `mt_play`
+    and `mt_subscription_added` also read a boolean as if it were the C int.
+
 - **fix: one delete no longer arrives five times, app `0.9.9`**
     (`@yuneta/gobj-js` `^7.13.2` -> `^7.13.3`). A treedb view subscribes to
     `EV_TREEDB_NODE_DELETED` once per topic, each with a
@@ -190,6 +194,9 @@ on its own, outside the yunetas superproject.
     that decides which landing a treedb gets never arrived.
 
 ### gui_treedb
+
+- **chore: `@yuneta/gobj-js` `^7.13.3` -> `^7.13.4`, app `0.13.12`** (the audit
+    of the same trap across the runtime).
 
 - **fix: one delete no longer arrives once per topic, app `0.13.11`**
     (`@yuneta/gobj-js` `^7.13.2` -> `^7.13.3`, the `__filter__` fix).
