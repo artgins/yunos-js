@@ -19,6 +19,22 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.14.3 — 2026-08-22
+
+### gui_agent y gui_treedb
+
+- **fix: en el móvil la toolbar dejaba el plegado fuera de sitio.** Los botones
+    iban sueltos en una fila `is-flex` **sin wrap** (gui_agent) o con wrap pero
+    de uno en uno (gui_treedb): en un teléfono cada botón robaba un poco al
+    buscador hasta dejarlo en "Buscar h", y el último caía por el borde. Ahora
+    los botones viajan **juntos** en su propio grupo — en una línea se quedan a
+    la derecha del buscador; en un teléfono baja el grupo entero a la siguiente
+    línea — y el buscador crece hasta 22rem pero no baja de 12.
+
+    Medido en un viewport de teléfono (390px), que es la única forma de verlo:
+    jsdom no carga Bulma y una regla de anchura no se comprueba leyendo el
+    fuente.
+
 ## 0.14.2 — 2026-08-22
 
 ### gui_agent

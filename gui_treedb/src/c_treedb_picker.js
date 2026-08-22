@@ -224,7 +224,7 @@ function build_ui(gobj)
 
     let $search_control = createElement2(
         ["div", {class: "PICKER_SEARCH_CONTROL control has-icons-left",
-                 style: "flex:0 1 22rem; min-width:0;"}, [
+                 style: "flex:1 1 12rem; max-width:22rem; min-width:0;"}, [
             $search,
             ["span", {class: "icon is-left"}, [["span", {class: "yi-magnifying-glass"}, ""]]]
         ]]
@@ -248,7 +248,6 @@ function build_ui(gobj)
 
     let $manage = createElement2(
         ["button", {class: "button PICKER_MANAGE",
-                    style: "margin-left:auto;",
                     i18n: "manage connections"}, "Manage connections"]);
     $manage.addEventListener("click", () => {
         gobj_send_event(gobj, "EV_MANAGE_CONNECTIONS", {}, gobj);
@@ -266,9 +265,13 @@ function build_ui(gobj)
                          style: "gap:.5rem; flex-wrap:wrap;"}, [
                     ["h2", {class: "title is-5 mb-0", i18n: "treedbs"}, "TreeDBs"],
                     $search_control,
-                    $fold,
                     priv.$count,
-                    $manage
+                    /*  The buttons travel TOGETHER: on a phone the group drops
+                     *  to the next line instead of each one landing on a line
+                     *  of its own.  */
+                    ["div", {class: "PICKER_ACTIONS is-flex is-align-items-center",
+                             style: "gap:.5rem; margin-left:auto;"},
+                        [$fold, $manage]]
                 ]],
                 ["div", {class: "PICKER_TABLEWRAP", style: "flex:1; min-height:0;"},
                     [$body]]

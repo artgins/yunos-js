@@ -411,7 +411,7 @@ function build_dom(gobj)
 
     let $search_control = createElement2(
         ["div", {class: "STATNODES_SEARCH_CONTROL control has-icons-left",
-                 style: "flex:0 1 22rem; min-width:0;"}, [
+                 style: "flex:1 1 12rem; max-width:22rem; min-width:0;"}, [
             $input,
             ["span", {class: "icon is-left"}, [
                 ["span", {class: "yi-magnifying-glass"}, ""]
@@ -440,7 +440,6 @@ function build_dom(gobj)
         ["button", {
             class:        "STATNODES_COPY button",
             type:         "button",
-            style:        "margin-left:auto;",
             title:        t("copy the rows shown as json"),
             "aria-label": t("copy the rows shown as json"),
             "data-i18n-title": "copy the rows shown as json",
@@ -480,16 +479,27 @@ function build_dom(gobj)
     }
     priv.$copy_conns = $copy_conns;
 
-    priv.$toolbar = createElement2(
-        ["div", {class: "STATNODES_TOOLBAR is-flex is-align-items-center mb-2",
-                 style: "gap:0.5rem;"}, [
-            $search_control,
-            $count,
+    /*  The buttons travel TOGETHER. On one line they sit at the right of the
+     *  search box; on a phone the whole group drops to a second line instead
+     *  of each button pushing the search box a bit narrower until it reads
+     *  "Buscar h" and the last button falls off the screen.  */
+    let $actions = createElement2(
+        ["div", {class: "STATNODES_ACTIONS is-flex is-align-items-center",
+                 style: "gap:0.5rem; margin-left:auto;"}, [
             $fold,
             $copy,
             $copy_conns,
             ["button", {class: "STATNODES_REFRESH button", type: "button", i18n: "refresh"},
                 "Refresh", {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
+        ]]
+    );
+
+    priv.$toolbar = createElement2(
+        ["div", {class: "STATNODES_TOOLBAR is-flex is-align-items-center is-flex-wrap-wrap mb-2",
+                 style: "gap:0.5rem;"}, [
+            $search_control,
+            $count,
+            $actions
         ]]
     );
     $c.appendChild(priv.$toolbar);
