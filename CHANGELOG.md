@@ -109,6 +109,22 @@ on its own, outside the yunetas superproject.
 
 ### gui_treedb
 
+- **feat: the connections table selects rows, and removes the lot, app
+    `0.13.5`.** After a scan there are twenty connections in that table, and
+    removing the ones that do not belong there meant twenty trips through the
+    ✕ and its confirmation. Every row now carries a checkbox (the header ticks
+    what the filters leave ON SCREEN), a bar appears while something is ticked
+    — "3 selected", *Remove selected*, and a way out — and the removal asks
+    ONCE, naming the count and listing what is going. Selection is driven only
+    by the checkbox, never by clicking the row: that row holds four editors, an
+    expander and a nested table.
+
+    The facility is **gobj-ui's**, not this app's (`yui_table_select.js`,
+    `@yuneta/gobj-ui` `^7.10.3` -> `^7.11.1`): every table that can remove a row
+    is eventually asked to remove twenty, and this is the second table to want
+    it after the treedb topic table — which is where both of its decisions were
+    learned.
+
 - **fix: an import ADDS WHAT IS NEW, app `0.13.4`.** Every imported connection
     was given a fresh id, and a fresh id is a new row by construction — so
     pasting the document again duplicated the whole set. And it IS pasted

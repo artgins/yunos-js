@@ -66,7 +66,11 @@ import {t} from "i18next";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
-import {yui_shell_confirm_yesno, yui_shell_show_modal} from "@yuneta/gobj-ui/src/shell_modals.js";
+import {
+    yui_shell_confirm_yesno,
+    yui_shell_confirm_danger,
+    yui_shell_show_modal,
+} from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 
@@ -81,6 +85,15 @@ import {
     treedb_links_is_connected,
     treedb_links_is_scanning,
 } from "./c_treedb_links.js";
+
+import {
+    yui_selection_column,
+    yui_selection_settings,
+    yui_selection_bar,
+    yui_wire_selection,
+    yui_selected_rows,
+    yui_clear_selection,
+} from "@yuneta/gobj-ui/src/yui_table_select.js";
 
 import {plan_conn_import} from "./conn_helpers.js";
 
@@ -113,6 +126,7 @@ SDATA_END()
 let PRIVATE_DATA = {
     $scan_errors: null,   /*  refresh failure report area  */
     $import_notice: null, /*  what the last import added / skipped  */
+    selection:    null,   /*  the shared selection bar (gobj-ui)  */
     import_notice: null,  /*  {added, skipped}: kept, so it survives a language change  */
     $help:        null,   /*  the how-to-use paragraph, folded by default  */
     $help_btn:    null,   /*  the (i) that folds/unfolds it  */
@@ -389,6 +403,21 @@ function build_ui(gobj)
         ["div", {class: "is-size-7 has-text-grey mb-2 is-hidden CONNECTIONS_IMPORT_NOTICE"}, []]);
     priv.$import_notice = $import_notice;
 
+    /*  Selecting rows is a shared facility (gobj-ui): the checkbox column,
+     *  the settings behind it, and this bar. Removing twenty connections one
+     *  confirmation at a time is not a workflow — and after a scan there ARE
+     *  twenty. Every button here does one thing: send an event.  */
+    priv.selection = yui_selection_bar(t, {
+        name:    "CONNECTIONS",
+        actions: [{
+            label:    "remove selected",
+            icon:     "yi-trash",
+            class:    "is-danger",
+            on_click: () => gobj_send_event(gobj, "EV_REMOVE_SELECTED_CONNS", {}, gobj)
+        }],
+        on_clear: () => gobj_send_event(gobj, "EV_CLEAR_SELECTION", {}, gobj)
+    });
+
     let $container = createElement2(
         ["div", {class: "C_TREEDB_CONNECTIONS ytreedb-connections p-4"},
             [
@@ -410,6 +439,7 @@ function build_ui(gobj)
                 $help,
                 $scan_errors,
                 $import_notice,
+                priv.selection.$el,
                 ["div", {id: table_id}, []]
             ]
         ]
@@ -899,6 +929,7 @@ function make_columns(gobj)
      *  on desktop the widthGrow weights fill the extra width.
      */
     return [
+        yui_selection_column(),
         {title: "", field: "_expand", width: 40, minWidth: 40, headerSort: false,
             hozAlign: "center", formatter: expand_formatter, cellClick: expand_click},
         {title: t("label"),   field: "label",               editor: "input",
@@ -941,6 +972,7 @@ function create_table(gobj)
 
     let settings = {
         ...yui_tabulator_lang(t),
+        ...yui_selection_settings(),
         index:          "id",
         layout:         "fitColumns",
         maxHeight:      "70vh",
@@ -965,6 +997,14 @@ function create_table(gobj)
     table.on("tableBuilt", function() {
         table.setData(rows_from_config(gobj));
     });
+    /*  A tick is an OS notification like any other: its only job is to make
+     *  an event. What the bar shows is decided in the action.  */
+    yui_wire_selection(table, function(count) {
+        if(gobj_is_destroying(gobj)) {
+            return;
+        }
+        gobj_send_event(gobj, "EV_SELECTION_CHANGED", {count: count}, gobj);
+    });
     /*  Any inline cell edit → persist the whole table.  */
     table.on("cellEdited", function() {
         persist(gobj);
@@ -987,9 +1027,15 @@ function reload_table(gobj)
      *  first; the rowFormatter builds them again for the new rows.  */
     drop_all_subtables(gobj);
     try {
+        /*  The rows the selection named are about to be replaced, and a
+         *  count of rows that are no longer there is worse than no count. */
+        yui_clear_selection(table);
         table.setData(rows_from_config(gobj));
     } catch(e) {
         log_warning(`${GCLASS_NAME}: table mid-rebuild: ${e}`);
+    }
+    if(gobj.priv.selection) {
+        gobj.priv.selection.set_count(0);
     }
 }
 
@@ -1068,6 +1114,9 @@ function ac_language_changed(gobj, event, kw, src)
         refresh_language($c, t);
     }
     render_import_notice(gobj);
+    if(gobj.priv.selection) {
+        gobj.priv.selection.refresh();
+    }
     let table = gobj_read_attr(gobj, "tabulator");
     if(!table) {
         return 0;
@@ -1395,6 +1444,105 @@ function ac_confirm_remove_conn(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The selection changed: that is all the bar shows.
+ ***************************************************************/
+function ac_selection_changed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.selection) {
+        priv.selection.set_count((kw && kw.count) || 0);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  The way out of a selection.
+ ***************************************************************/
+function ac_clear_selection(gobj, event, kw, src)
+{
+    yui_clear_selection(gobj_read_attr(gobj, "tabulator"));
+    if(gobj.priv.selection) {
+        gobj.priv.selection.set_count(0);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  Remove every SELECTED connection: one question for the lot.
+ *
+ *  The question names the count and lists what is going, because this
+ *  is the button that makes a mistake expensive — removing a connection
+ *  drops its open tabs and its saved Tranger views with it, and here it
+ *  does so to twenty at once. The red button is the one that deletes and
+ *  the safe answer is the last one, so Escape and the backdrop cancel.
+ ***************************************************************/
+function ac_remove_selected_conns(gobj, event, kw, src)
+{
+    let rows = yui_selected_rows(gobj_read_attr(gobj, "tabulator"));
+    if(!rows.length) {
+        return 0;   /*  the bar is not even on screen  */
+    }
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot confirm the removal`);
+        return -1;
+    }
+
+    let ids = rows.map((r) => r && r.id).filter(Boolean);
+    let shown = rows.slice(0, 10);
+    let children = [
+        ["p", {class: "CONNECTIONS_REMOVE_COUNT has-text-weight-bold mb-2"},
+            t("remove {{n}} connections", {n: ids.length})],
+        ["ul", {class: "CONNECTIONS_REMOVE_LIST is-size-7"},
+            shown.map((r) => ["li", {}, String((r && (r.label || r.url)) || "")])]
+    ];
+    if(rows.length > shown.length) {
+        children.push(
+            ["p", {class: "CONNECTIONS_REMOVE_MORE is-size-7 has-text-grey"},
+                t("{{n}} more", {n: rows.length - shown.length})]);
+    }
+    let $question = createElement2(["div", {class: "CONNECTIONS_REMOVE_MANY"}, children]);
+
+    yui_shell_confirm_danger(shell, $question, {
+        title:         "remove selected",
+        confirm_label: "remove",
+        cancel_label:  "cancel",
+        t:             t
+    }).then((yes) => {
+        if(gobj_is_destroying(gobj)) {
+            return;     /*  Settings left while the dialog was up  */
+        }
+        gobj_send_event(gobj, "EV_CONFIRM_REMOVE_SELECTED",
+            {conn_ids: ids, yes: !!yes}, gobj);
+    });
+    return 0;
+}
+
+/***************************************************************
+ *  The answer to that one question.
+ ***************************************************************/
+function ac_confirm_remove_selected(gobj, event, kw, src)
+{
+    if(!kw || !kw.yes) {
+        return 0;   /*  the user said no  */
+    }
+    let ids = Array.isArray(kw.conn_ids) ? kw.conn_ids : [];
+    if(!ids.length) {
+        return 0;
+    }
+    let config = gobj_find_service("treedb_config", false);
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service, cannot remove`);
+        return -1;
+    }
+    let going = new Set(ids);
+    let list = treedb_config_get_connections(config).filter((c) => c && !going.has(c.id));
+    gobj_send_event(config, "EV_SET_CONNECTIONS", {connections: list}, gobj);
+    reload_table(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  Clone a connection: same coordinates, a NEW id, and DISABLED.
  *
  *  Disabled because a clone is a starting point for an edit ("the same
@@ -1688,7 +1836,11 @@ function create_gclass(gclass_name)
             ["EV_EXPORT_CONNS",         ac_export_conns,         null],
             ["EV_PICK_IMPORT_FILE",     ac_pick_import_file,     null],
             ["EV_IMPORT_CONNS",         ac_import_conns,         null],
-            ["EV_PASTE_CONNS",          ac_paste_conns,          null]
+            ["EV_PASTE_CONNS",          ac_paste_conns,          null],
+            ["EV_SELECTION_CHANGED",    ac_selection_changed,    null],
+            ["EV_CLEAR_SELECTION",      ac_clear_selection,      null],
+            ["EV_REMOVE_SELECTED_CONNS", ac_remove_selected_conns, null],
+            ["EV_CONFIRM_REMOVE_SELECTED", ac_confirm_remove_selected, null]
         ]]
     ];
 
@@ -1711,7 +1863,11 @@ function create_gclass(gclass_name)
         ["EV_EXPORT_CONNS",         0],
         ["EV_PICK_IMPORT_FILE",     0],
         ["EV_IMPORT_CONNS",         0],
-        ["EV_PASTE_CONNS",          0]
+        ["EV_PASTE_CONNS",          0],
+        ["EV_SELECTION_CHANGED",    0],
+        ["EV_CLEAR_SELECTION",      0],
+        ["EV_REMOVE_SELECTED_CONNS", 0],
+        ["EV_CONFIRM_REMOVE_SELECTED", 0]
     ];
 
     __gclass__ = gclass_create(
