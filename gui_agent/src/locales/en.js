@@ -146,6 +146,7 @@ const en = {
         "expand all": "Expand all",
         "collapse all": "Collapse all",
         "open all of this node": "Open all of this node",
+        "open all shown": "Open every one shown",
         "no matching nodes": "No nodes match the search",
         "select a node":     "Select a node",
         "search nodes":      "Search host, role, version or uuid…",

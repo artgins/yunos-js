@@ -721,6 +721,35 @@ function ac_set_conn_enabled(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  Fold or unfold MANY connections in one write.
+ *
+ *  kw: {conn_ids: [...], expanded}
+ ***************************************************************/
+function ac_set_conns_expanded(gobj, event, kw, src)
+{
+    let ids = (kw && Array.isArray(kw.conn_ids)) ? kw.conn_ids : null;
+    if(!ids) {
+        log_error(`${GCLASS_NAME}: EV_SET_CONNS_EXPANDED without conn_ids`);
+        return -1;
+    }
+    let expanded = !!(kw && kw.expanded);
+    let map = read_expanded_conns(gobj);
+    for(let id of ids) {
+        if(!id) {
+            continue;
+        }
+        if(expanded) {
+            map[id] = true;
+        } else {
+            delete map[id];
+        }
+    }
+    gobj_write_attr(gobj, "expanded_conns", map);
+    persist(gobj, "expanded_conns");
+    return 0;
+}
+
 function ac_set_conn_expanded(gobj, event, kw, src)
 {
     do_set_conn_expanded(gobj, (kw && kw.conn_id) || "", !!(kw && kw.expanded));
@@ -861,6 +890,7 @@ function create_gclass(gclass_name)
             ["EV_STORE_SCANNED_SERVICES", ac_store_scanned_services, null],
             ["EV_SET_CONN_ENABLED",      ac_set_conn_enabled,      null],
             ["EV_SET_CONN_EXPANDED",     ac_set_conn_expanded,     null],
+            ["EV_SET_CONNS_EXPANDED",    ac_set_conns_expanded,    null],
             ["EV_TOGGLE_SELECTED",       ac_toggle_selected,       null],
             ["EV_SET_SERVICES_SELECTED", ac_set_services_selected, null],
             ["EV_REMOVE_SELECTED",       ac_remove_selected,       null],
@@ -881,6 +911,7 @@ function create_gclass(gclass_name)
         ["EV_STORE_SCANNED_SERVICES",   0],
         ["EV_SET_CONN_ENABLED",         0],
         ["EV_SET_CONN_EXPANDED",        0],
+        ["EV_SET_CONNS_EXPANDED",       0],
         ["EV_TOGGLE_SELECTED",          0],
         ["EV_SET_SERVICES_SELECTED",    0],
         ["EV_REMOVE_SELECTED",          0],

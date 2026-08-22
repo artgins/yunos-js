@@ -126,6 +126,7 @@ SDATA_END()
 let PRIVATE_DATA = {
     $scan_errors: null,   /*  refresh failure report area  */
     $import_notice: null, /*  what the last import added / skipped  */
+    $fold:        null,   /*  expand / collapse every services sub-table  */
     selection:    null,   /*  the shared selection bar (gobj-ui)  */
     import_notice: null,  /*  {added, skipped}: kept, so it survives a language change  */
     $help:        null,   /*  the how-to-use paragraph, folded by default  */
@@ -418,6 +419,20 @@ function build_ui(gobj)
         on_clear: () => gobj_send_event(gobj, "EV_CLEAR_SELECTION", {}, gobj)
     });
 
+    /*  One control for every row's services sub-table. Its icon says what
+     *  the CLICK will do: chevron-down while any connection is folded,
+     *  chevron-right once they are all open.  */
+    let $fold = createElement2(
+        ["button", {class: "CONNECTIONS_FOLD button mr-1", type: "button",
+                    title: t("expand all"), "aria-label": t("expand all"),
+                    "data-i18n-title": "expand all", "data-i18n-aria-label": "expand all"},
+            [["span", {class: "icon"}, [["i", {class: "yi-chevron-down"}]]]]
+        ]);
+    $fold.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_TOGGLE_FOLD", {}, gobj);
+    });
+    priv.$fold = $fold;
+
     let $container = createElement2(
         ["div", {class: "C_TREEDB_CONNECTIONS ytreedb-connections p-4"},
             [
@@ -434,7 +449,7 @@ function build_ui(gobj)
                         $help_btn
                     ]],
                     ["div", {class: "CONNECTIONS_ACTIONS is-flex is-align-items-center"},
-                        [$add, $export, $import, $paste, $file]]
+                        [$fold, $add, $export, $import, $paste, $file]]
                 ]],
                 $help,
                 $scan_errors,
@@ -1034,6 +1049,7 @@ function reload_table(gobj)
     } catch(e) {
         log_warning(`${GCLASS_NAME}: table mid-rebuild: ${e}`);
     }
+    render_fold(gobj);
     if(gobj.priv.selection) {
         gobj.priv.selection.set_count(0);
     }
@@ -1357,6 +1373,75 @@ function ac_toggle_conn_enabled(gobj, event, kw, src)
  *  keeps a hole where the sub-table used to be. Unfolding does not — the
  *  sub-table's own `tableBuilt` re-measures once it is really built.
  ***************************************************************/
+/***************************************************************
+ *  Is any connection with services still folded? That is what the
+ *  button offers to do, and what its icon has to say. A connection
+ *  with nothing discovered has no sub-table and does not count.
+ ***************************************************************/
+function some_folded(gobj)
+{
+    let config = gobj_find_service("treedb_config", false);
+    if(!config) {
+        return true;
+    }
+    return treedb_config_get_connections(config).some(function(conn) {
+        return conn &&
+            treedb_config_conn_services(conn).length > 0 &&
+            !treedb_config_is_conn_expanded(config, conn.id);
+    });
+}
+
+/***************************************************************
+ *  The fold button says what the CLICK will do.
+ ***************************************************************/
+function render_fold(gobj)
+{
+    let $fold = gobj.priv.$fold;
+    if(!$fold) {
+        return;
+    }
+    let expand = some_folded(gobj);
+    let key = expand ? "expand all" : "collapse all";
+    let $icon = $fold.querySelector("span.icon > i");
+    if($icon) {
+        $icon.className = expand ? "yi-chevron-down" : "yi-chevron-right";
+    }
+    $fold.title = t(key);
+    $fold.setAttribute("aria-label", t(key));
+    $fold.setAttribute("data-i18n-title", key);
+    $fold.setAttribute("data-i18n-aria-label", key);
+}
+
+/***************************************************************
+ *  Unfold every connection's services, or fold them all.
+ *
+ *  ONE write (`EV_SET_CONNS_EXPANDED`): the expanded set is
+ *  persisted, and saving it once per row would write the config as
+ *  many times as there are connections.
+ ***************************************************************/
+function ac_toggle_fold(gobj, event, kw, src)
+{
+    let config = gobj_find_service("treedb_config", false);
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service, cannot fold`);
+        return -1;
+    }
+    let conns = treedb_config_get_connections(config)
+        .filter((c) => c && treedb_config_conn_services(c).length > 0);
+    if(!conns.length) {
+        return 0;   /*  nothing discovered yet: no sub-table to open  */
+    }
+    let expanded = some_folded(gobj);
+
+    gobj_send_event(config, "EV_SET_CONNS_EXPANDED",
+        {conn_ids: conns.map((c) => c.id), expanded: expanded}, gobj);
+
+    /*  The sub-tables live inside the row elements: a reload is what
+     *  builds (and destroys) them cleanly.  */
+    reload_table(gobj);
+    return 0;
+}
+
 function ac_toggle_conn_expanded(gobj, event, kw, src)
 {
     let conn_id = (kw && kw.conn_id) || "";
@@ -1369,6 +1454,7 @@ function ac_toggle_conn_expanded(gobj, event, kw, src)
     let expanded = !treedb_config_is_conn_expanded(config, conn_id);
     gobj_send_event(config, "EV_SET_CONN_EXPANDED",
         {conn_id: conn_id, expanded: expanded}, gobj);
+    render_fold(gobj);
 
     let table = gobj_read_attr(gobj, "tabulator");
     if(!table) {
@@ -1830,6 +1916,7 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_ALL_SERVICES",  ac_toggle_all_services,  null],
             ["EV_REFRESH_SERVICES",     ac_refresh_services,     null],
             ["EV_TOGGLE_CONN_ENABLED",  ac_toggle_conn_enabled,  null],
+            ["EV_TOGGLE_FOLD",          ac_toggle_fold,          null],
             ["EV_TOGGLE_CONN_EXPANDED", ac_toggle_conn_expanded, null],
             ["EV_REMOVE_CONN",          ac_remove_conn,          null],
             ["EV_CONFIRM_REMOVE_CONN",  ac_confirm_remove_conn,  null],
@@ -1857,6 +1944,7 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_ALL_SERVICES",  0],
         ["EV_REFRESH_SERVICES",     0],
         ["EV_TOGGLE_CONN_ENABLED",  0],
+        ["EV_TOGGLE_FOLD",          0],
         ["EV_TOGGLE_CONN_EXPANDED", 0],
         ["EV_REMOVE_CONN",          0],
         ["EV_CONFIRM_REMOVE_CONN",  0],

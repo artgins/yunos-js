@@ -686,9 +686,33 @@ function make_columns(gobj)
      *  a host name and the yunos it has open. `variableHeight` is what lets
      *  the row grow to fit; the wrapping itself is CSS (Tabulator's own cell
      *  rule is nowrap + ellipsis).  */
+    /*  The header box covers the nodes the filter leaves ON SCREEN — the
+     *  same decision the shared selection facility takes in gobj-ui, and for
+     *  the same reason: "all" over rows nobody can see is not what the eye
+     *  agreed to.  */
+    function selall_formatter()
+    {
+        let counts = shown_selection_counts(gobj);
+        let $cb = document.createElement("input");
+        $cb.type = "checkbox";
+        $cb.className = "STATNODES_SEL_HEADER";
+        $cb.disabled = !counts.total;
+        $cb.checked = counts.total > 0 && counts.open === counts.total;
+        $cb.indeterminate = counts.open > 0 && counts.open < counts.total;
+        $cb.setAttribute("aria-label", t("open all shown"));
+        $cb.title = t("open all shown");
+        return $cb;
+    }
+
+    function selall_click()
+    {
+        gobj_send_event(gobj, "EV_TOGGLE_ALL_SELECTION", {}, gobj);
+    }
+
     return [
         {title: "", field: "_sel", width: 44, headerSort: false, hozAlign: "center",
-            formatter: sel_formatter, cellClick: sel_click},
+            formatter: sel_formatter, cellClick: sel_click,
+            titleFormatter: selall_formatter, headerClick: selall_click},
         {title: t("name"), field: "name", formatter: name_formatter, widthGrow: 2,
             variableHeight: true, cssClass: "STATNODES_CELL_WRAP"},
         {title: t("status"), field: "info", formatter: info_formatter, widthGrow: 1,
@@ -749,6 +773,7 @@ function create_table(gobj)
 function refresh_active(gobj)
 {
     let table = gobj_read_attr(gobj, "tabulator");
+    render_header_check(gobj);
     if(table && table._ready) {
         table.getRows().forEach((row) => {
             row.reformat();
@@ -807,6 +832,8 @@ function apply_filter(gobj)
     } else {
         table.clearFilter();
     }
+    /*  The header box is about what is SHOWN, so it moves with the filter.  */
+    render_header_check(gobj);
 }
 
 
@@ -1147,6 +1174,7 @@ function ac_render_tree(gobj, event, kw, src)
                     }
                 });
                 render_fold(gobj);
+                render_header_check(gobj);
             }).catch(function(err) {
                 log_error(`${gobj_short_name(gobj)}: setData failed: ${err && err.message}`);
             });
@@ -1719,6 +1747,100 @@ function ac_toggle_fold(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The yunos the picker is SHOWING that can be opened, and how
+ *  many of them already are. "Showing" is what the search left on
+ *  screen: with a term typed, the header box is about those.
+ ***************************************************************/
+function render_header_check(gobj)
+{
+    let $c = gobj_read_attr(gobj, "$container");
+    let $cb = $c ? $c.querySelector(".STATNODES_SEL_HEADER") : null;
+
+    if(!$cb) {
+        return;
+    }
+    /*  Written on the live element, not by rebuilding the columns: a
+     *  `titleFormatter` is only run again by `setColumns()`, which
+     *  re-renders every row with it — a whole table redrawn to move one
+     *  checkbox between its three states.  */
+    let counts = shown_selection_counts(gobj);
+    $cb.disabled = !counts.total;
+    $cb.checked = counts.total > 0 && counts.open === counts.total;
+    $cb.indeterminate = counts.open > 0 && counts.open < counts.total;
+}
+
+function shown_selection_counts(gobj)
+{
+    let all = shown_selectable_yunos(gobj);
+    return {
+        total: all.length,
+        open:  all.filter((y) => is_yuno_selected(gobj, y.node, y.yuno_id)).length
+    };
+}
+
+/***************************************************************
+ *  Those yunos, as rows.
+ ***************************************************************/
+function shown_selectable_yunos(gobj)
+{
+    let table = gobj_read_attr(gobj, "tabulator");
+    let out = [];
+    let top = [];
+
+    try {
+        top = (table && table._ready) ? (table.getData("active") || []) : [];
+    } catch(e) {
+        top = [];
+    }
+    for(let node of top) {
+        if(!node || !Array.isArray(node._children)) {
+            continue;
+        }
+        for(let y of node._children) {
+            if(y && y._type === "yuno" && !has_no_treedb(gobj, y)) {
+                out.push(y);
+            }
+        }
+    }
+    return out;
+}
+
+/***************************************************************
+ *  The header box: open every yuno the picker is showing, or
+ *  close them all. One write, like the node's own box.
+ ***************************************************************/
+function ac_toggle_all_selection(gobj, event, kw, src)
+{
+    let config = gobj_read_attr(gobj, "config_svc");
+    let ws = gobj_read_attr(gobj, "workspace");
+    let all = shown_selectable_yunos(gobj);
+
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no config service, cannot open the tabs`);
+        return -1;
+    }
+    if(!all.length) {
+        return 0;   /*  the box is disabled in this case  */
+    }
+
+    let open = all.filter((y) => is_yuno_selected(gobj, y.node, y.yuno_id)).length;
+    let on = open < all.length;
+    let list = agent_config_get_selected_nodes(config, ws).slice();
+
+    for(let y of all) {
+        let id = stats_sel_id(y.node, y.yuno_id);
+        let idx = list.findIndex((n) => n && n.id === id);
+        if(on && idx < 0) {
+            list.push({id: id, host: y.label});
+        } else if(!on && idx >= 0) {
+            list.splice(idx, 1);
+        }
+    }
+    agent_config_set_selected_nodes(config, ws, list);
+    return 0;
+}
+
+/***************************************************************
  *  The node's own checkbox: open the tabs of ALL its yunos, or
  *  close them all.
  *
@@ -1951,6 +2073,7 @@ function create_gclass(gclass_name)
             ["EV_COPY_CONNS",           ac_copy_conns,             null],
             ["EV_TOGGLE_FOLD",          ac_toggle_fold,            null],
             ["EV_TOGGLE_NODE_SELECTION", ac_toggle_node_selection, null],
+            ["EV_TOGGLE_ALL_SELECTION", ac_toggle_all_selection,   null],
             ["EV_TIMEOUT",              ac_timeout,                null]
         ]]
     ];
@@ -1970,6 +2093,7 @@ function create_gclass(gclass_name)
         ["EV_COPY_CONNS",           0],
         ["EV_TOGGLE_FOLD",          0],
         ["EV_TOGGLE_NODE_SELECTION", 0],
+        ["EV_TOGGLE_ALL_SELECTION", 0],
         ["EV_TIMEOUT",              0]
     ];
 

@@ -146,6 +146,7 @@ const es = {
         "expand all": "Desplegar todo",
         "collapse all": "Plegar todo",
         "open all of this node": "Abrir todos los de este nodo",
+        "open all shown": "Abrir todos los mostrados",
         "no matching nodes": "Ningún nodo coincide con la búsqueda",
         "select a node":     "Selecciona un nodo",
         "search nodes":      "Buscar host, rol, versión o uuid…",

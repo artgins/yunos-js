@@ -19,6 +19,31 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.14.4 — 2026-08-23
+
+### gui_agent
+
+- **feat: la cabecera del picker abre o cierra TODO lo mostrado.** Faltaba el
+    tercer nivel: había casilla por yuno y casilla por nodo, y ninguna en la
+    cabecera de la columna. Ahora la lleva, con los mismos tres estados, y
+    cubre **lo que el filtro deja en pantalla** — la misma decisión que toma la
+    facilidad compartida de gobj-ui, y por la misma razón: un "todos" sobre
+    filas que nadie ve no es lo que el ojo aceptó.
+
+    Se escribe sobre el elemento vivo, no rehaciendo las columnas: un
+    `titleFormatter` sólo se vuelve a ejecutar con `setColumns()`, que
+    re-renderiza cada fila — una tabla entera redibujada para mover una casilla
+    entre sus tres estados.
+
+### gui_treedb
+
+- **feat: plegado general en la tabla de Conexiones.** Cada fila abre su
+    sub-tabla de servicios con su chevron y no había forma de abrirlas todas.
+    El mismo botón que en los pickers, con la misma regla de icono, y **una
+    sola escritura** (`EV_SET_CONNS_EXPANDED`): el conjunto plegado se
+    persiste, y guardarlo fila a fila escribiría la configuración tantas veces
+    como conexiones haya.
+
 ## 0.14.3 — 2026-08-22
 
 ### gui_agent y gui_treedb
