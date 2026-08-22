@@ -184,6 +184,7 @@ const en = {
         "manage connections": "Manage connections",
         "no connections yet": "No connections yet",
         "open in this workspace": "Open in this workspace",
+        "expand all": "Expand all",
         "open all of this connection": "Open all of this connection",
         "search a node or a treedb": "Search a node or a treedb…",
         "open": "open",

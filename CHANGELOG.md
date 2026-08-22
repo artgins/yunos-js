@@ -19,7 +19,32 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
-## Unreleased
+## 0.14.2 — 2026-08-22
+
+### gui_agent
+
+- **feat: la casilla del NODO abre o cierra todos sus yunos, y la toolbar
+    pliega el árbol entero.** El picker de Estadísticas y Esquemas tenía
+    casilla por yuno y ninguna en el nodo: abrir los doce yunos de una máquina
+    eran doce clics. Ahora el nodo lleva su casilla de **tres estados**
+    —ninguno, algunos (media marca), todos—, media marca abre el resto, y sólo
+    cierra cuando ya estaban todos. Es **una sola escritura**
+    (`agent_config_set_selected_nodes()` toma la lista entera), no una por
+    yuno.
+
+    Y en la toolbar hay un **plegado general**: un botón cuyo icono dice lo que
+    hará el clic — chevron abajo mientras quede algo plegado, chevron derecha
+    cuando ya está todo abierto. Se mantiene al día también cuando pliegas a
+    mano. Ojo con lo que cuesta en Esquemas: desplegar un nodo es lo que arma
+    la sonda de treedbs de sus yunos, así que "desplegar todo" pregunta a
+    todos — que es justo lo que el operador iba a hacer clic a clic.
+
+### gui_treedb
+
+- **feat: plegado general en la toolbar del picker.** El mismo botón, con la
+    misma regla de icono, sobre la tabla de conexiones.
+
+## 0.14.1 — 2026-08-22
 
 ### gui_treedb
 

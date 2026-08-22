@@ -25,7 +25,7 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t,
-    gclass_create, log_error,
+    gclass_create, log_error, log_warning,
     gobj_parent, gobj_name,
     gobj_read_attr, gobj_read_bool_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_send_event,
@@ -63,6 +63,7 @@ import {
 } from "./agent_helpers.js";
 import {
     agent_config_get_selected_nodes,
+    agent_config_set_selected_nodes,
     agent_config_is_node_selected,
     agent_config_toggle_selected_node,
     stats_sel_id,
@@ -272,6 +273,17 @@ function is_yuno_selected(gobj, node, yuno_id)
 }
 
 /***************************************************************
+ *  The yunos of one node this picker would let you open: the ones
+ *  it lists, minus the ones it has asked about and that hold no
+ *  treedb (Schemas). Empty while the node's list has not arrived.
+ ***************************************************************/
+function selectable_yunos(gobj, node)
+{
+    let rows = gobj.priv.yunos[node] || [];
+    return rows.filter((y) => y && !has_no_treedb(gobj, y));
+}
+
+/***************************************************************
  *  The yunos of one node that have a tab open, by their label.
  *
  *  Read from the SELECTION and not from the loaded children, because
@@ -411,6 +423,19 @@ function build_dom(gobj)
     /*  Copy is icon + label, but the label hides on a phone: the row
      *  already carries a search box and Refresh, and "Copiar JSON" +
      *  "Actualizar" do not both fit at 360px in Spanish.  */
+    /*  One control for the whole tree: with a screen of nodes, opening or
+     *  closing them one expander at a time is the work the button exists to
+     *  save. Its icon says what the CLICK will do — chevron-down while
+     *  something is still folded, chevron-right once everything is open.  */
+    let $fold = createElement2(
+        ["button", {class: "STATNODES_FOLD button", type: "button",
+                    title: t("expand all"), "aria-label": t("expand all"),
+                    "data-i18n-title": "expand all", "data-i18n-aria-label": "expand all"},
+            [["span", {class: "icon"}, [["span", {class: "yi-chevron-down"}, ""]]]],
+            {click: () => gobj_send_event(gobj, "EV_TOGGLE_FOLD", {}, gobj)}
+        ]);
+    priv.$fold = $fold;
+
     let $copy = createElement2(
         ["button", {
             class:        "STATNODES_COPY button",
@@ -429,6 +454,7 @@ function build_dom(gobj)
     );
 
     priv.$copy = $copy;
+
 
     /*  Only in the Schemas picker: it is the one that probes for treedbs, so
      *  it is the only one that knows which yunos gui_treedb could browse.
@@ -459,6 +485,7 @@ function build_dom(gobj)
                  style: "gap:0.5rem;"}, [
             $search_control,
             $count,
+            $fold,
             $copy,
             $copy_conns,
             ["button", {class: "STATNODES_REFRESH button", type: "button", i18n: "refresh"},
@@ -591,10 +618,26 @@ function make_columns(gobj)
         return `<span class="STATNODES_INFO is-size-7 has-text-grey">${v}${role}</span>`;
     }
 
-    /*  Checkbox: only yuno rows are selectable (a node is a container).  */
+    /*  Checkbox. A yuno row opens ITS tab; a node row opens or closes the
+     *  tabs of all the yunos it holds — and says which of the three it is
+     *  in: none, some, all. A DOM node and not an HTML string, because
+     *  `indeterminate` is a property and cannot be written in markup.  */
     function sel_formatter(cell)
     {
         let r = cell.getData();
+        if(r._type === "node") {
+            let all = selectable_yunos(gobj, r._key);
+            let open = all.filter((y) => is_yuno_selected(gobj, y.node, y.yuno_id)).length;
+            let $cb = document.createElement("input");
+            $cb.type = "checkbox";
+            $cb.className = "STATNODES_SEL_ALL node-sel-all";
+            $cb.disabled = !all.length;
+            $cb.checked = all.length > 0 && open === all.length;
+            $cb.indeterminate = open > 0 && open < all.length;
+            $cb.setAttribute("aria-label", t("open all of this node"));
+            $cb.title = t("open all of this node");
+            return $cb;
+        }
         if(r._type !== "yuno") {
             return "";
         }
@@ -609,6 +652,10 @@ function make_columns(gobj)
     function sel_click(e, cell)
     {
         let r = cell.getData();
+        if(r._type === "node") {
+            gobj_send_event(gobj, "EV_TOGGLE_NODE_SELECTION", {node: r._key}, gobj);
+            return;
+        }
         if(r._type !== "yuno") {
             return;
         }
@@ -669,6 +716,10 @@ function create_table(gobj)
         if(r && r._type === "node") {
             probe_node_treedbs(gobj, node_id(r));
         }
+        render_fold(gobj);
+    });
+    table.on("dataTreeRowCollapsed", function() {
+        render_fold(gobj);
     });
     table._ready = false;
     table.on("tableBuilt", function() {
@@ -1085,6 +1136,7 @@ function ac_render_tree(gobj, event, kw, src)
                         row.treeExpand();
                     }
                 });
+                render_fold(gobj);
             }).catch(function(err) {
                 log_error(`${gobj_short_name(gobj)}: setData failed: ${err && err.message}`);
             });
@@ -1580,6 +1632,129 @@ function ac_timeout(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  Is anything still folded? That is what the fold button offers to
+ *  do, and what its icon has to say.
+ ***************************************************************/
+function some_folded(gobj)
+{
+    let table = gobj_read_attr(gobj, "tabulator");
+    if(!table || !table._ready) {
+        return true;
+    }
+    try {
+        return table.getRows().some(function(row) {
+            let kids = row.getTreeChildren ? row.getTreeChildren() : [];
+            return kids.length > 0 && row.isTreeExpanded && !row.isTreeExpanded();
+        });
+    } catch(e) {
+        return true;
+    }
+}
+
+/***************************************************************
+ *  The fold button says what the CLICK will do.
+ ***************************************************************/
+function render_fold(gobj)
+{
+    let $fold = gobj.priv.$fold;
+    if(!$fold) {
+        return;
+    }
+    let expand = some_folded(gobj);
+    let key = expand ? "expand all" : "collapse all";
+    let $icon = $fold.querySelector("span.icon > span");
+    if($icon) {
+        $icon.className = expand ? "yi-chevron-down" : "yi-chevron-right";
+    }
+    $fold.title = t(key);
+    $fold.setAttribute("aria-label", t(key));
+    $fold.setAttribute("data-i18n-title", key);
+    $fold.setAttribute("data-i18n-aria-label", key);
+}
+
+/***************************************************************
+ *  Fold or unfold the WHOLE tree.
+ *
+ *  Expanding a node is what arms its treedb probe (Schemas), so
+ *  expanding everything asks every node at once — which is the
+ *  point of the button, and the same round trips the operator
+ *  would spend clicking one expander at a time.
+ ***************************************************************/
+function ac_toggle_fold(gobj, event, kw, src)
+{
+    let table = gobj_read_attr(gobj, "tabulator");
+    if(!table || !table._ready) {
+        return 0;
+    }
+    let expand = some_folded(gobj);
+    try {
+        table.getRows().forEach(function(row) {
+            let kids = row.getTreeChildren ? row.getTreeChildren() : [];
+            if(!kids.length || !row.treeExpand) {
+                return;
+            }
+            if(expand) {
+                row.treeExpand();
+            } else {
+                row.treeCollapse();
+            }
+        });
+    } catch(e) {
+        log_warning(`${gobj_short_name(gobj)}: cannot fold the tree: ${e}`);
+        return -1;
+    }
+    render_fold(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The node's own checkbox: open the tabs of ALL its yunos, or
+ *  close them all.
+ *
+ *  "All" when some are open too — a half-ticked box reads as "not
+ *  everything yet", and one click finishing the job is what it
+ *  invites. Only when every one is open does it close them.
+ *
+ *  ONE write: `agent_config_set_selected_nodes()` takes the whole
+ *  list, so a node with a dozen yunos is one config save and one
+ *  tab rebuild instead of twelve.
+ ***************************************************************/
+function ac_toggle_node_selection(gobj, event, kw, src)
+{
+    let config = gobj_read_attr(gobj, "config_svc");
+    let ws = gobj_read_attr(gobj, "workspace");
+    let node = (kw && kw.node) || "";
+    let all = selectable_yunos(gobj, node);
+
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no config service, cannot open the tabs`);
+        return -1;
+    }
+    if(!all.length) {
+        /*  The box is disabled in this case; the event can still arrive
+         *  from a keyboard path. */
+        log_warning(`${gobj_short_name(gobj)}: node '${node}' has nothing to open`);
+        return 0;
+    }
+
+    let open = all.filter((y) => is_yuno_selected(gobj, y.node, y.yuno_id)).length;
+    let on = open < all.length;
+    let list = agent_config_get_selected_nodes(config, ws).slice();
+
+    for(let y of all) {
+        let id = stats_sel_id(y.node, y.yuno_id);
+        let idx = list.findIndex((n) => n && n.id === id);
+        if(on && idx < 0) {
+            list.push({id: id, host: y.label});
+        } else if(!on && idx >= 0) {
+            list.splice(idx, 1);
+        }
+    }
+    agent_config_set_selected_nodes(config, ws, list);
+    return 0;
+}
+
 function ac_selected_nodes_changed(gobj, event, kw, src)
 {
     let ws = gobj_read_attr(gobj, "workspace");
@@ -1764,6 +1939,8 @@ function create_gclass(gclass_name)
             ["EV_RENDER_TREE",          ac_render_tree,            null],
             ["EV_COPY_JSON",            ac_copy_json,              null],
             ["EV_COPY_CONNS",           ac_copy_conns,             null],
+            ["EV_TOGGLE_FOLD",          ac_toggle_fold,            null],
+            ["EV_TOGGLE_NODE_SELECTION", ac_toggle_node_selection, null],
             ["EV_TIMEOUT",              ac_timeout,                null]
         ]]
     ];
@@ -1781,6 +1958,8 @@ function create_gclass(gclass_name)
         ["EV_RENDER_TREE",          0],
         ["EV_COPY_JSON",            0],
         ["EV_COPY_CONNS",           0],
+        ["EV_TOGGLE_FOLD",          0],
+        ["EV_TOGGLE_NODE_SELECTION", 0],
         ["EV_TIMEOUT",              0]
     ];
 

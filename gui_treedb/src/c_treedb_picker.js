@@ -83,6 +83,7 @@ SDATA_END()
 let PRIVATE_DATA = {
     $body:      null,   /*  the div Tabulator is attached to  */
     $count:     null,   /*  "N connections · M treedbs · K open"  */
+    $fold:      null,   /*  expand / collapse the whole tree  */
     $search:    null,
     table:      null,
     table_id:   "",
@@ -230,6 +231,18 @@ function build_ui(gobj)
     );
     attach_clear($search_control, $search);
 
+    /*  One control for the whole tree: with a screen of connections, opening
+     *  or closing them one expander at a time is the work this saves. The
+     *  icon says what the CLICK will do.  */
+    let $fold = createElement2(
+        ["button", {class: "PICKER_FOLD button", type: "button",
+                    title: t("expand all"), "aria-label": t("expand all"),
+                    "data-i18n-title": "expand all", "data-i18n-aria-label": "expand all"},
+            [["span", {class: "icon"}, [["span", {class: "yi-chevron-down"}, ""]]]],
+            {click: () => gobj_send_event(gobj, "EV_TOGGLE_FOLD", {}, gobj)}
+        ]);
+    priv.$fold = $fold;
+
     priv.$count = createElement2(
         ["span", {class: "PICKER_COUNT is-size-7 has-text-grey ml-2"}, ""]);
 
@@ -253,6 +266,7 @@ function build_ui(gobj)
                          style: "gap:.5rem; flex-wrap:wrap;"}, [
                     ["h2", {class: "title is-5 mb-0", i18n: "treedbs"}, "TreeDBs"],
                     $search_control,
+                    $fold,
                     priv.$count,
                     $manage
                 ]],
@@ -529,6 +543,13 @@ function create_table(gobj)
         table._ready = true;
         reload_table(gobj);
     });
+    /*  Folded by hand: the button has to say what it would do now.  */
+    table.on("dataTreeRowExpanded", function() {
+        render_fold(gobj);
+    });
+    table.on("dataTreeRowCollapsed", function() {
+        render_fold(gobj);
+    });
     priv.table = table;
 }
 
@@ -591,6 +612,7 @@ function reload_table(gobj)
         if(rows.length) {
             priv.loaded = true;
         }
+        render_fold(gobj);
         update_count(gobj, rows);
     }).catch(function(err) {
         log_warning(`${gobj_short_name(gobj)}: table mid-rebuild: ${err && err.message}`);
@@ -698,6 +720,77 @@ function ac_toggle_service(gobj, event, kw, src)
                 label:   `${svc.service} · ${conn.label}`
             }
         }, gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Is anything still folded? That is what the button offers to do,
+ *  and what its icon has to say.
+ ***************************************************************/
+function some_folded(gobj)
+{
+    let table = gobj.priv.table;
+    if(!table || !table._ready) {
+        return true;
+    }
+    try {
+        return table.getRows().some(function(row) {
+            let kids = row.getTreeChildren ? row.getTreeChildren() : [];
+            return kids.length > 0 && row.isTreeExpanded && !row.isTreeExpanded();
+        });
+    } catch(e) {
+        return true;
+    }
+}
+
+/***************************************************************
+ *  The fold button says what the CLICK will do.
+ ***************************************************************/
+function render_fold(gobj)
+{
+    let $fold = gobj.priv.$fold;
+    if(!$fold) {
+        return;
+    }
+    let expand = some_folded(gobj);
+    let key = expand ? "expand all" : "collapse all";
+    let $icon = $fold.querySelector("span.icon > span");
+    if($icon) {
+        $icon.className = expand ? "yi-chevron-down" : "yi-chevron-right";
+    }
+    $fold.title = t(key);
+    $fold.setAttribute("aria-label", t(key));
+    $fold.setAttribute("data-i18n-title", key);
+    $fold.setAttribute("data-i18n-aria-label", key);
+}
+
+/***************************************************************
+ *  Fold or unfold the WHOLE tree.
+ ***************************************************************/
+function ac_toggle_fold(gobj, event, kw, src)
+{
+    let table = gobj.priv.table;
+    if(!table || !table._ready) {
+        return 0;
+    }
+    let expand = some_folded(gobj);
+    try {
+        table.getRows().forEach(function(row) {
+            let kids = row.getTreeChildren ? row.getTreeChildren() : [];
+            if(!kids.length || !row.treeExpand) {
+                return;
+            }
+            if(expand) {
+                row.treeExpand();
+            } else {
+                row.treeCollapse();
+            }
+        });
+    } catch(e) {
+        log_warning(`${gobj_short_name(gobj)}: cannot fold the tree: ${e}`);
+        return -1;
+    }
+    render_fold(gobj);
     return 0;
 }
 
@@ -811,6 +904,7 @@ function create_gclass(gclass_name)
             ["EV_MANAGE_CONNECTIONS",       ac_manage_connections, null],
             ["EV_TOGGLE_SERVICE",           ac_toggle_service, null],
             ["EV_TOGGLE_CONNECTION",        ac_toggle_connection, null],
+            ["EV_TOGGLE_FOLD",              ac_toggle_fold,    null],
             ["EV_SEARCH",                   ac_search,         null]
         ]]
     ];
@@ -825,6 +919,7 @@ function create_gclass(gclass_name)
         ["EV_MANAGE_CONNECTIONS",       0],
         ["EV_TOGGLE_SERVICE",           0],
         ["EV_TOGGLE_CONNECTION",        0],
+        ["EV_TOGGLE_FOLD",              0],
         ["EV_SEARCH",                   0]
     ];
 
