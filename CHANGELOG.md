@@ -19,6 +19,22 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.17.2 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.14.3` -> `^7.15.0`: the graph's toolbar stops
+    promising what it does not do.** The house that both consoles show over
+    the treedb graph was the button people reached for to get the graph back,
+    and it never gave it to them: the action is `zoomTo(1)`, which sets the
+    scale and leaves the camera where it was. It is **`1:1`** now, the zoom
+    level is shown next to it, the groups are separated by gaps, and both
+    floating toolbars follow the theme instead of being two light islands over
+    a dark canvas.
+
+- **two i18n keys, `actual size` and `zoom level`**, in `es` and `en`. Both
+    are tooltips of the toolbar above; without them the key shows on hover.
+
 ## 0.17.1 — 2026-08-23
 
 ### gui_agent

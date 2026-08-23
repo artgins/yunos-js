@@ -217,6 +217,8 @@ const es = {
         "browse this service": "Explorar este servicio",
         "browse every service": "Explorar todos los servicios",
         "legend": "Leyenda",
+        "actual size": "Tamaño real",
+        "zoom level": "Nivel de zoom",
         "refresh": "Refrescar",
         "load more": "Cargar más",
         "no records": "Sin registros",

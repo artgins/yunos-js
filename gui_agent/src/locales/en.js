@@ -360,6 +360,8 @@ const en = {
         "parents": "parents",
         "columns":           "Columns",
         "legend": "Legend",
+        "actual size": "Actual size",
+        "zoom level": "Zoom level",
         "choose the columns to show": "Choose the columns to show",
         "download the rows loaded in this table as csv": "Download the rows loaded in this table as CSV",
         "column":            "Column",
