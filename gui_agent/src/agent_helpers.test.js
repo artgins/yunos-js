@@ -27,6 +27,7 @@ import {
     split_args,
     apply_shortkey,
     normalize_history,
+    cert_host_of_config,
 } from "./agent_helpers.js";
 
 
@@ -348,5 +349,58 @@ describe("cmd2agent_service", () => {
         expect(is_agent_yuno("1630")).toBe(false);
         expect(is_agent_yuno("")).toBe(false);
         expect(is_agent_yuno(undefined)).toBe(false);
+    });
+});
+
+
+describe("the certificate a scanned yuno serves", () => {
+    /*  The shape hidraulia's db_history really has: no `__ssl_certificate__`
+     *  variable anywhere, the certificate written where it is used.  */
+    const hidraulia = {
+        global: {"__top_side__.__json_config_variables__": {__top_url__: "wss://0.0.0.0:1600"}},
+        services: [{
+            gclass: "C_IOGATE",
+            children: [{
+                name: "secure_top_server",
+                kw: {
+                    crypto: {ssl_certificate: "/yuneta/store/certs/hidrauliaconnect.es.crt"},
+                    url: "wss://0.0.0.0:1600"
+                }
+            }]
+        }]
+    };
+
+    test("is found where it is USED, not only as a config variable", () => {
+        expect(cert_host_of_config(hidraulia, "1600")).toBe("hidrauliaconnect.es");
+    });
+
+    test("the gate wearing the TOP port wins over the other gates", () => {
+        const two = {services: [
+            {kw: {crypto: {ssl_certificate: "/c/mqtt.example.com.pem"},
+                  url: "mqtts://0.0.0.0:4600"}},
+            {kw: {crypto: {ssl_certificate: "/c/top.example.com.crt"},
+                  url: "wss://0.0.0.0:1600"}}
+        ]};
+        expect(cert_host_of_config(two, "1600")).toBe("top.example.com");
+    });
+
+    test("with no url to match, any certificate beats none", () => {
+        const loose = {kw: {crypto: {ssl_certificate: "/c/only.example.com.crt"}}};
+        expect(cert_host_of_config(loose, "1600")).toBe("only.example.com");
+    });
+
+    test("a wildcard certificate names no host", () => {
+        expect(cert_host_of_config(
+            {kw: {crypto: {ssl_certificate: "/c/*.example.com.crt"}}}, "")).toBe("");
+    });
+
+    test("the key alone is not a certificate", () => {
+        expect(cert_host_of_config(
+            {kw: {crypto: {ssl_certificate_key: "/c/private/x.example.com.key"}}}, "")).toBe("");
+    });
+
+    test("a config with no crypto at all answers nothing, and does not throw", () => {
+        expect(cert_host_of_config({a: {b: {c: 1}}}, "1600")).toBe("");
+        expect(cert_host_of_config(null, "")).toBe("");
     });
 });

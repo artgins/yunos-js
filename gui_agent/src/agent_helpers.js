@@ -323,6 +323,85 @@ function cmd2agent_service(yuno_id, service, command)
 }
 
 
+/***************************************************************
+ *  cert_host_of_config(config, port)
+ *
+ *      -> the FQDN of the certificate the yuno's TOP gate serves, ""
+ *      when the config names none.
+ *
+ *      A certificate's filename is the name a client MUST use, which
+ *      makes it the best evidence a scan can find. Some yunos say it as
+ *      the config VARIABLE `__ssl_certificate__`; the rest say it where
+ *      it is actually used -- a plain `ssl_certificate` inside the
+ *      `crypto` of the gate -- and reading only the first form is how a
+ *      backend whose cert says `hidrauliaconnect.es` got proposed as
+ *      `demo.hidrauliaconnect.es`, its realm id, which resolves nowhere.
+ *
+ *      A yuno holds several gates (an mqtt one, a raw one) and they may
+ *      carry different certificates, so the gate whose url wears the TOP
+ *      port wins; any certificate is better than none, so the first one
+ *      found answers when no url matches.
+ *
+ *      A wildcard certificate (`*.example.com.crt`) names no host and is
+ *      skipped: the guess has to be something a browser can dial.
+ ***************************************************************/
+function cert_host_of_config(config, port)
+{
+    let found = [];
+
+    let walk = (node, depth) => {
+        if(!node || typeof node !== "object" || depth > 12 || found.length > 32) {
+            return;
+        }
+        if(Array.isArray(node)) {
+            for(let item of node) {
+                walk(item, depth + 1);
+            }
+            return;
+        }
+        let crypto = node.crypto;
+        if(crypto && typeof crypto === "object" &&
+                typeof crypto.ssl_certificate === "string" && crypto.ssl_certificate) {
+            found.push({
+                cert: crypto.ssl_certificate,
+                url:  (typeof node.url === "string") ? node.url : ""
+            });
+        }
+        for(let key of Object.keys(node)) {
+            walk(node[key], depth + 1);
+        }
+    };
+    walk(config, 0);
+
+    let host_of = (path) => {
+        let base = String(path).split("/").pop() || "";
+        base = base.replace(/\.(crt|pem|cer)$/i, "");
+        if(!base || base.startsWith("*.")) {
+            return "";
+        }
+        return base;
+    };
+
+    if(port) {
+        for(let f of found) {
+            if(f.url && f.url.match(new RegExp(":" + port + "\\s*$"))) {
+                let host = host_of(f.cert);
+                if(host) {
+                    return host;
+                }
+            }
+        }
+    }
+    for(let f of found) {
+        let host = host_of(f.cert);
+        if(host) {
+            return host;
+        }
+    }
+    return "";
+}
+
+
 export {
     AGENT_YUNO_ID,
     SYSTEM_TREEDB,
@@ -338,4 +417,5 @@ export {
     split_args,
     apply_shortkey,
     normalize_history,
+    cert_host_of_config,
 };

@@ -60,6 +60,7 @@ import {
     node_id,
     parse_agent_line,
     esc,
+    cert_host_of_config,
 } from "./agent_helpers.js";
 import {
     agent_config_get_selected_nodes,
@@ -1215,11 +1216,17 @@ function ac_render_tree(gobj, event, kw, src)
  *    1. `__ssl_certificate__` — its filename is the FQDN the certificate
  *       is issued for, which is the name a client MUST use. Present on
  *       some yunos and not others.
- *    2. the realm id from this same config (`environment.realm_id`),
+ *    2. the certificate the TOP gate actually serves, read where it is
+ *       USED (`crypto.ssl_certificate` of the gate) — the same evidence
+ *       written the other way, and the form the yunos that carry no such
+ *       config variable use. Reading only form 1 is how a backend whose
+ *       certificate says `hidrauliaconnect.es` was proposed as
+ *       `demo.hidrauliaconnect.es`: its realm id, which resolves nowhere.
+ *    3. the realm id from this same config (`environment.realm_id`),
  *       which is the public FQDN for realms that publish
  *       (`app.wattyzer.com`) and is not for the ones that do not
  *       (`artgins.utilities.all`).
- *    3. nothing — and the operator fills it in.
+ *    4. nothing — and the operator fills it in.
  ***************************************************************/
 function endpoint_of_config(config)
 {
@@ -1253,6 +1260,9 @@ function endpoint_of_config(config)
     if(typeof cert === "string" && cert) {
         let base = cert.split("/").pop() || "";
         out.host = base.replace(/\.(crt|pem|cer)$/i, "");
+    }
+    if(!out.host) {
+        out.host = cert_host_of_config(config, out.port);
     }
     if(!out.host) {
         let env = config.environment;

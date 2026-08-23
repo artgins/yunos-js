@@ -19,6 +19,31 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.17.1 — 2026-08-23
+
+### gui_agent
+
+- **fix: the url For TreeDB proposes now reads the certificate the gate
+    actually serves.** The scan looked for the FQDN in one place only — the
+    `__ssl_certificate__` config VARIABLE — and fell through to the realm id
+    when it was absent. For a backend whose realm is named
+    `demo.hidrauliaconnect.es` and whose certificate says
+    `hidrauliaconnect.es`, the proposal was a host that resolves nowhere,
+    and the connection pasted into gui_treedb could not open.
+
+    The evidence was in the same config all along, written the other way:
+    a plain `ssl_certificate` inside the `crypto` of the gate, which is how
+    the yunos that carry no such variable say it. It is now read there too
+    (`cert_host_of_config`), after the variable and before the realm id. A
+    yuno holds several gates and they may serve different certificates, so
+    the one whose url wears the TOP port wins; with no url to match, any
+    certificate beats the realm id. A wildcard certificate names no host and
+    is skipped.
+
+    The url stays a PROPOSAL — the row is editable and the connection still
+    arrives disconnected — but it is now a proposal built on the name a
+    client must actually use.
+
 ## 0.17.0 — 2026-08-23
 
 ### gui_treedb
