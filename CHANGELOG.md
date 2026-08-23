@@ -19,6 +19,33 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.18.0 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.18.3` -> `^7.19.0`: the two consoles stop deciding
+    their tab routes twice.** Both have a workspace whose tabs the operator
+    opens, and both answered the same two questions in their own `c_app.js` —
+    which is why one of them could have the first one wrong while the other
+    had it right, and nothing said so. The deciding moves to
+    `yui_tab_routes.js` (`yui_tab_split_subpath`, `yui_tab_position_plan`,
+    `yui_tab_decode_id`), tests and all.
+
+    `gui_treedb` loses `route_helpers.js` — `tab_position_plan` is the library
+    function now, with its tests carried over — and its four subpath parses,
+    plus its local `decode_tail`, go through the shared split. `gui_agent`
+    loses `split_node_subpath` and the copy of the position logic it had
+    inline.
+
+    **The wiring stays where it was.** gui_treedb restores on its transport's
+    `EV_ON_OPEN`, gui_agent normalizes the route as it arrives, and both are
+    right about when their own tabs become real. Nothing about behaviour
+    changes here: it is the same decisions, read from one place.
+
+    Re-verified on both deployed consoles after the move: navigate deep,
+    reload, url identical — `.../treedb_authzs/__graphs__`,
+    `.../treedb_authzs/graph/roles`, `.../users/info`.
+
 ## 0.17.6 — 2026-08-23
 
 ### gui_agent

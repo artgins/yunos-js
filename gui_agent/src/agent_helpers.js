@@ -345,46 +345,6 @@ function cmd2agent_service(yuno_id, service, command)
  *      A wildcard certificate (`*.example.com.crt`) names no host and is
  *      skipped: the guess has to be something a browser can dial.
  ***************************************************************/
-/***************************************************************
- *  Split the tail of a workspace-home route into the node id and
- *  whatever comes after it.
- *
- *  On a cold load a deep node route cannot resolve: the tab's
- *  route is registered when the node is OPENED, so the shell falls
- *  back to the workspace home (`/<ws>/node`) and hands the whole
- *  rest as `subpath` -- `<id>/treedb_authzs/__graphs__`, not
- *  `<id>`. Reading all of it as the id matched no node, so the
- *  restore gave up and landed on the first tab: F5 on a topic
- *  answered with somebody else's default. The id is the FIRST
- *  segment; the rest belongs to the tab and travels with it.
- *
- *  The id is percent-encoded in the route (a qualified pkey
- *  carries a 0x1F), so only that segment is decoded -- decoding
- *  the whole tail first would turn an encoded slash inside the id
- *  into a separator.
- ***************************************************************/
-function split_node_subpath(subpath)
-{
-    let sub = String(subpath || "");
-
-    if(!sub) {
-        return {id: "", tail: ""};
-    }
-
-    let slash = sub.indexOf("/");
-    let raw_id = (slash < 0) ? sub : sub.slice(0, slash);
-    let tail   = (slash < 0) ? ""  : sub.slice(slash + 1);
-
-    let id;
-    try {
-        id = decodeURIComponent(raw_id);
-    } catch(e) {
-        id = raw_id;    /*  malformed % escape: use the raw segment  */
-    }
-
-    return {id: id, tail: tail};
-}
-
 function cert_host_of_config(config, port)
 {
     let found = [];
@@ -443,7 +403,6 @@ function cert_host_of_config(config, port)
 
 
 export {
-    split_node_subpath,
     AGENT_YUNO_ID,
     SYSTEM_TREEDB,
     is_agent_yuno,

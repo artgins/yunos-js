@@ -28,7 +28,6 @@ import {
     apply_shortkey,
     normalize_history,
     cert_host_of_config,
-    split_node_subpath,
 } from "./agent_helpers.js";
 
 
@@ -403,51 +402,5 @@ describe("the certificate a scanned yuno serves", () => {
     test("a config with no crypto at all answers nothing, and does not throw", () => {
         expect(cert_host_of_config({a: {b: {c: 1}}}, "1600")).toBe("");
         expect(cert_host_of_config(null, "")).toBe("");
-    });
-});
-
-/***********************************************************************
- *      split_node_subpath
- *
- *      The tail of a workspace-home route. The case that matters is
- *      the one that was broken: a COLD load of a deep node route,
- *      where the shell cannot resolve the tab (its route is
- *      registered when the node is opened) and hands over
- *      `<id>/<everything the tab was showing>`.
- ***********************************************************************/
-describe("split_node_subpath", () => {
-    test("a bare node tail is all id", () => {
-        expect(split_node_subpath("wattyzer")).toEqual({id: "wattyzer", tail: ""});
-    });
-
-    test("a deep tail keeps the id and hands the rest back", () => {
-        expect(split_node_subpath("wattyzer/treedb_authzs/__graphs__"))
-            .toEqual({id: "wattyzer", tail: "treedb_authzs/__graphs__"});
-    });
-
-    test("only the id segment is decoded, and a qualified pkey survives it", () => {
-        /*  0x1F is the separator of a qualified pkey, and it reaches the
-         *  url percent-encoded.  */
-        expect(split_node_subpath("yunovatios-controlador%1F1630/treedb_authzs/__graphs__"))
-            .toEqual({id: "yunovatios-controlador\u001f1630", tail: "treedb_authzs/__graphs__"});
-    });
-
-    test("an encoded slash inside the id stays inside the id", () => {
-        /*  Which is why the WHOLE tail must not be decoded first: doing
-         *  that would turn this %2F into a separator and cut the id in
-         *  two.  */
-        expect(split_node_subpath("a%2Fb/treedb_x"))
-            .toEqual({id: "a/b", tail: "treedb_x"});
-    });
-
-    test("a malformed escape is taken as it came, not thrown", () => {
-        expect(split_node_subpath("%E0%A4%A/treedb_x"))
-            .toEqual({id: "%E0%A4%A", tail: "treedb_x"});
-    });
-
-    test("nothing in, nothing out", () => {
-        expect(split_node_subpath("")).toEqual({id: "", tail: ""});
-        expect(split_node_subpath(null)).toEqual({id: "", tail: ""});
-        expect(split_node_subpath(undefined)).toEqual({id: "", tail: ""});
     });
 });

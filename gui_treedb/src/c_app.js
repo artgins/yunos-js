@@ -36,7 +36,11 @@ import {
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
 
-import {tab_position_plan} from "./route_helpers.js";
+import {
+    yui_tab_split_subpath,
+    yui_tab_position_plan,
+    yui_tab_decode_id,
+} from "@yuneta/gobj-ui/src/yui_tab_routes.js";
 
 import {t} from "i18next";
 
@@ -543,7 +547,7 @@ function restore_tab_from_url(gobj)
     /*  The tail is <sel>[/<topic-or-mode>]: the tab is keyed by the FIRST
      *  segment (<sel>); a deeper subpath is the view's selected topic / mode,
      *  which the treedb view restores itself once we land on the full route. */
-    let sel_id_ = decode_tail(cur.slice(prefix.length).split("/")[0]);
+    let sel_id_ = yui_tab_split_subpath(cur.slice(prefix.length)).id;
     let base_route = db_tab_route(ws, sel_id_);
     if(priv.mounted_base === base_route) {
         /*  Already resting on this tab (base resolved to it exactly).  */
@@ -1156,7 +1160,7 @@ function ac_selected_treedbs_changed(gobj, event, kw, src)
          *  view's own topic/mode (/topics/db/<sel>/<topic>), not part of the
          *  selection id — without the split, a deep-linked topic never
          *  matched and every selection change navigated the user away.  */
-        let id = decode_tail(cur.slice(prefix.length).split("/")[0]);
+        let id = yui_tab_split_subpath(cur.slice(prefix.length)).id;
         if(!selected.some((s) => s && s.id === id)) {
             let first = selected.length ? db_tab_route(ws, selected[0].id) : picker_route(ws);
             /*  Fix-up after the current tab was deselected — code decided the
@@ -1264,7 +1268,7 @@ function ac_route_changed(gobj, event, kw, src)
         /*  A real, resolved treedb tab (base is /<ws>/db/<sel>) → remember it
          *  as this workspace's active tab, so switching away and back returns
          *  here.  */
-        let sel_id_ = decode_tail(base.slice(prefix.length));
+        let sel_id_ = yui_tab_decode_id(base.slice(prefix.length));
         if(sel_id_) {
             let config = gobj_find_service("treedb_config", false);
             if(config) {
@@ -1287,7 +1291,7 @@ function ac_route_changed(gobj, event, kw, src)
          */
         let key = tab_key(ws, sel_id_);
         let routes = priv_tab_routes(gobj);
-        let plan = tab_position_plan(
+        let plan = yui_tab_position_plan(
             prev_tab_base,
             base,
             (kw && kw.subpath) || "",
@@ -1316,7 +1320,7 @@ function ac_route_changed(gobj, event, kw, src)
          *      hash before restore can read it).
          *    - primary-nav: clicking the workspace's menu item lands on its
          *      default (/<ws>/db) with NO subpath → go to the last-active tab.  */
-        let sub = decode_tail(((kw && kw.subpath) || "").split("/")[0]);
+        let sub = yui_tab_split_subpath((kw && kw.subpath) || "").id;
         if(sub) {
             let config = gobj_find_service("treedb_config", false);
             if(config) {
@@ -1404,15 +1408,6 @@ function prune_tab_routes(gobj, ws, sels)
         if(k.startsWith(ws + "|") && !open[k]) {
             delete routes[k];
         }
-    }
-}
-
-function decode_tail(s)
-{
-    try {
-        return decodeURIComponent(s);
-    } catch(e) {
-        return s;
     }
 }
 

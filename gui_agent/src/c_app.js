@@ -51,7 +51,10 @@ import {yui_shell_show_modal} from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_shell_show_route_map} from "@yuneta/gobj-ui/src/shell_route_map.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
-import {split_node_subpath} from "./agent_helpers.js";
+import {
+    yui_tab_split_subpath,
+    yui_tab_position_plan,
+} from "@yuneta/gobj-ui/src/yui_tab_routes.js";
 import {
     agent_config_get_selected_nodes,
     agent_config_remove_selected_node,
@@ -1166,26 +1169,24 @@ function ac_route_changed(gobj, event, kw, src)
          *  would make that button do nothing. So the previous base has to
          *  be a different tab for the position to be restored.
          */
-        let inner = (kw && kw.subpath) || "";
         let key = tab_key(hit.ws, hit.id);
         let routes = priv_tab_routes(gobj);
-        let prev_base = priv.last_tab_base || "";
+        let plan = yui_tab_position_plan(
+            priv.last_tab_base || "",
+            base,
+            (kw && kw.subpath) || "",
+            routes[key]
+        );
         priv.last_tab_base = base;
 
-        if(inner) {
-            routes[key] = `${base}/${inner}`;
-            return 0;
+        if(plan.record) {
+            routes[key] = plan.record;
         }
-        if(prev_base === base) {
-            routes[key] = base;     /*  moved UP inside the tab: also a position  */
-            return 0;
-        }
-        let back = routes[key];
-        if(back && back !== base) {
+        if(plan.replay) {
             /*  Deferred and `replace`, like every other normalization here:
              *  nobody navigated to the root on purpose, so it must not
              *  become a Back entry of its own.  */
-            gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {route: back}, gobj);
+            gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {route: plan.replay}, gobj);
         }
         return 0;
     }
@@ -1222,7 +1223,7 @@ function ac_route_changed(gobj, event, kw, src)
     let target = workspace_first_route(gobj, ws);
     let sub = (kw && kw.subpath) || "";
     if(sub) {
-        let {id, tail} = split_node_subpath(sub);
+        let {id, tail} = yui_tab_split_subpath(sub);
         let config = gobj_find_service("agent_config", false);
         let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
         if(id && nodes.some((n) => n && n.id === id)) {
