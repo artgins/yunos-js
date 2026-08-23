@@ -51,6 +51,7 @@ import {yui_shell_show_modal} from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_shell_show_route_map} from "@yuneta/gobj-ui/src/shell_route_map.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
+import {split_node_subpath} from "./agent_helpers.js";
 import {
     agent_config_get_selected_nodes,
     agent_config_remove_selected_node,
@@ -1207,20 +1208,28 @@ function ac_route_changed(gobj, event, kw, src)
     /*  Prefer the EXACT node from the restored URL tail (subpath) when it is
      *  still an open tab — so F5 lands back on the very tab you were on, not
      *  just the first. Fall back to the first open node (or the picker)
-     *  otherwise (bare workspace home, or a node that was closed). */
+     *  otherwise (bare workspace home, or a node that was closed).
+     *
+     *  The tail is `<id>` for a bare tab and `<id>/<what the tab was
+     *  showing>` for anything deeper, and a deep one only ever reaches
+     *  here on a COLD load: the tab's own route is registered when the
+     *  node is opened, so before that the shell can only resolve the
+     *  workspace home and hands the whole rest over. Reading all of it
+     *  as the id matched no node, so F5 on a topic gave up and landed
+     *  on the first tab's default — which is the one thing a reload
+     *  must not do. The id is the first segment; the rest is the tab's
+     *  own position and travels with it.  */
     let target = workspace_first_route(gobj, ws);
     let sub = (kw && kw.subpath) || "";
     if(sub) {
-        let id = sub;
-        try {
-            id = decodeURIComponent(sub);
-        } catch(e) {
-            id = sub;   /*  malformed % escape: use the raw tail  */
-        }
+        let {id, tail} = split_node_subpath(sub);
         let config = gobj_find_service("agent_config", false);
         let nodes = config ? agent_config_get_selected_nodes(config, ws) : [];
-        if(nodes.some((n) => n && n.id === id)) {
+        if(id && nodes.some((n) => n && n.id === id)) {
             target = node_tab_route(ws, id);
+            if(tail) {
+                target += "/" + tail;
+            }
         }
     }
     if(target) {

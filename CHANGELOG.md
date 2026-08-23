@@ -19,6 +19,34 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.17.6 — 2026-08-23
+
+### gui_agent
+
+- **fix: F5 on a deep Schemas route landed on somebody else's default.**
+    Standing on
+    `#/schemas/node/<node>%1F<yuno>/treedb_authzs/__graphs__` and reloading
+    answered with `.../treedb_system_schema/edit` — a different treedb, in a
+    different view.
+
+    A node tab's route is registered when the node is OPENED, so on a cold
+    load it does not exist yet: the shell resolves as far as the workspace
+    home (`/schemas/node`) and hands the whole rest over as the subpath —
+    `<id>/treedb_authzs/__graphs__`, not `<id>`. The restore read all of it as
+    the node id, matched no node, gave up and went to the first tab, which
+    then stamped its own default treedb and that treedb its own default view.
+    Every segment past the id was thrown away, which is why a BARE node tab
+    survived a reload and nothing deeper did.
+
+    The id is the FIRST segment now and the rest travels with it
+    (`split_node_subpath`, pure and tested). Only that segment is decoded: the
+    id carries a `0x1F` and reaches the url percent-encoded, but decoding the
+    whole tail first would turn an encoded slash inside an id into a
+    separator.
+
+    Verified on the deployed console, both routes from the report: navigate,
+    reload, and the url comes back identical.
+
 ## 0.17.5 — 2026-08-23
 
 ### gui_agent, gui_treedb
