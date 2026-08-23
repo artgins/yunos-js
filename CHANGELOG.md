@@ -19,6 +19,18 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.17.5 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.17.0` -> `^7.18.3`: zoom to the selection, and the
+    keys work after clicking a node.** The graph toolbar gains a
+    fit-to-selection button next to `fit` — edition only, disabled while
+    nothing is selected. And the keyboard reaches the graph after a card is
+    clicked, which it did not: a card is a DOM element, so pressing one sent
+    the focus to `<body>` and Escape, ctrl+A and Delete went nowhere. New i18n
+    key: `zoom to selection`.
+
 ## 0.17.4 — 2026-08-23
 
 ### gui_agent, gui_treedb

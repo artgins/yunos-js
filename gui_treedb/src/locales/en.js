@@ -218,6 +218,7 @@ const en = {
         "browse every service": "Browse every service",
         "legend": "Legend",
         "actual size": "Actual size",
+        "zoom to selection": "Zoom to selection",
         "zoom level": "Zoom level",
         "refresh": "Refresh",
         "load more": "Load more",

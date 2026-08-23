@@ -361,6 +361,7 @@ const en = {
         "columns":           "Columns",
         "legend": "Legend",
         "actual size": "Actual size",
+        "zoom to selection": "Zoom to selection",
         "zoom level": "Zoom level",
         "choose the columns to show": "Choose the columns to show",
         "download the rows loaded in this table as csv": "Download the rows loaded in this table as CSV",

@@ -365,6 +365,7 @@ const es = {
         "columns":           "Columnas",
         "legend": "Leyenda",
         "actual size": "Tamaño real",
+        "zoom to selection": "Zoom a la selección",
         "zoom level": "Nivel de zoom",
         "choose the columns to show": "Elegir las columnas a mostrar",
         "download the rows loaded in this table as csv": "Descargar como CSV las filas cargadas en esta tabla",

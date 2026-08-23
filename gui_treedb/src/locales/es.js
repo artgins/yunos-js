@@ -218,6 +218,7 @@ const es = {
         "browse every service": "Explorar todos los servicios",
         "legend": "Leyenda",
         "actual size": "Tamaño real",
+        "zoom to selection": "Zoom a la selección",
         "zoom level": "Nivel de zoom",
         "refresh": "Refrescar",
         "load more": "Cargar más",
