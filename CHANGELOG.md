@@ -19,6 +19,21 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.0 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.22.0` -> `^7.23.0`: every non-leaf card in the JSON
+    graph folds on its own.** The toolbar pair is all-or-nothing, and a graph
+    you can only open whole or close whole is not navigable. Each card with a
+    branch now carries its own handle; a leaf gets none.
+
+    It also repairs a defect `7.21.0` shipped into both consoles: clicking a
+    card in the graph view answered *"Event NOT DEFINED in state"*, because the
+    viewer had started republishing the graph child's `EV_JSON_ITEM_CLICKED` and
+    neither `c_agent_console` nor `c_tranger_view` declares it — nor should
+    they, having never asked for node clicks. The event stops at the viewer now.
+
 ## 0.21.0 — 2026-08-23
 
 ### gui_agent, gui_treedb
