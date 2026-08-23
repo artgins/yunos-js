@@ -102,6 +102,11 @@ The Schemas picker copies the yunos it shows as **gui_treedb connections**
 ("For TreeDB"), and that app's Connections page pastes them. Retyping a dozen
 `wss://host:port` rows between two tabs of one browser was the alternative.
 
+The document says what each yuno **exposes**, and nothing in it is ticked:
+which treedbs to browse is decided where it is pasted, because a scanned
+deploy centre pasted with everything ticked is two hundred backends asking to
+be browsed at once. Connections takes the lot with one click on its header.
+
 It works because this picker already asks every yuno what services it runs —
 that is how it knows which ones hold a treedb — and used to throw the answer
 away one line after it arrived. What it did NOT have is the endpoint, so the
@@ -112,11 +117,19 @@ copy makes one `view-config` per yuno and reads:
   never be a treedb backend, so its absence is the filter: a node with 17
   yunos contributes the 2 that are reachable.
 - the **host**, which is NOT in that url — the yuno binds `0.0.0.0` and its
-  realm binds `127.0.0.1`. Best evidence first: the filename of
-  `__ssl_certificate__` (the FQDN the certificate is issued for, which is the
-  name a client must use), else the realm id from the same config. Neither is
-  guaranteed, so the url is a **proposal**: connections arrive **disabled** in
-  gui_treedb and the operator fixes the odd one in the table.
+  realm binds `127.0.0.1`. Best evidence first, and all of it is the
+  certificate: the filename of the config variable `__ssl_certificate__`, else
+  the `crypto.ssl_certificate` of the gate itself — the same evidence written
+  where it is USED, which is how the yunos carrying no such variable say it.
+  A yuno holds several gates and they may serve different certificates, so the
+  one whose url wears the top port wins, and a wildcard certificate names no
+  host. Only then the realm id from the same config, which is the public FQDN
+  for realms that publish and is not for the rest: reading the variable alone
+  proposed `demo.hidrauliaconnect.es` — a realm id that resolves nowhere — for
+  a backend whose certificate says `hidrauliaconnect.es`. Nothing here is
+  guaranteed, so the url stays a **proposal**: connections arrive
+  **disconnected** in gui_treedb and the operator fixes the odd one in the
+  table.
 - the **service**, which is the one NAMED like the yuno's role. Not "the first
   top-service": a yuno flags several (`authz`, `idp`, its gates…) and taking
   the first made all nine backends of a real scan read `authz`, which is a

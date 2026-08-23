@@ -24,6 +24,14 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   only from the row's **connect/disconnect button** (persisted `enabled`
   intent) — editing a row's coordinates disables it until reconnected, so
   typing never auto-connects — and deleting a row asks for confirmation.
+  A pasted deploy centre is two hundred rows, so the bulk jobs have their own
+  dialogs, never the row checkbox (which means *browse* and cannot mean two
+  things): **Connect** opens showing the connect intent of every connection —
+  ticked is connected — with a three-state select-all, so connecting a
+  selection and disconnecting a handful are the same box, and its count says
+  what Apply will CHANGE rather than what is ticked; **Remove** is its
+  destructive twin, opening with nothing ticked. Each applies in ONE write, so
+  the app root reconciles the transports once and not once per connection.
   A row can be **cloned** (same backend, new id, disabled), and the whole set
   **exported / imported** as a JSON file — or **pasted** from the clipboard,
   which is how the agent console hands over the backends it already knows
@@ -33,7 +41,7 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   than failing. Both roads end in the same import — nothing secret travels (the
   access_token is never stored here). An import ADDS: every connection arrives
   with a fresh id (the id is what the open tabs and Tranger views are keyed by)
-  and disabled (importing a file must not open sockets).
+  and disconnected (importing a file must not open sockets).
   The picker — tab 0 of Topics/Graphs, at **`/<ws>/select`** and labelled
   **Select** — chooses which services to open per workspace. It is NOT the
   Connections rail item: that one manages the backends, this one ticks which of
@@ -45,14 +53,17 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   `C_TREEDB_LINKS` discovers the yuno's **`C_NODE` / `C_TRANGER`** services
   automatically (one `services` command to `__yuno__`) and persists the WHOLE
   found list in the connection (`services`); the row's refresh button re-runs
-  it, preserving the selection. The services of a connection are a table of
-  their OWN, nested in its row, with its own header (service / class / browse)
-  and only its own fields — as Tabulator dataTree children they were rows of the
-  CONNECTIONS table and wore ITS columns, so a service's name landed under
-  "Label" and its class and checkbox under two blank, unlabelled ones. Its
-  checkbox edits each service's `selected` flag — only selected services are
-  offered in the pickers (Topics: `C_NODE` + `C_TRANGER`; Graphs: `C_NODE`
-  only). Discovery failures are reported above the table.
+  it, preserving the selection. The services are the connection's **dataTree
+  children**, the same tree the agent console's picker draws — the two tables
+  show the same thing and one is pasted literally into the other, so they are
+  read the same way. Their checkbox edits each service's `selected` flag —
+  only selected services are offered in the pickers (Topics: `C_NODE` +
+  `C_TRANGER`; Graphs: `C_NODE` only) — and it says the same thing at all
+  three levels: on a service, on its connection (three states, taking or
+  dropping the lot) and in the **column header**, which covers what the filter
+  leaves ON SCREEN and is counted over services, so it cannot read "all" while
+  half a connection is unticked. Discovery failures are reported above the
+  table.
 - **Transport:** `C_TREEDB_LINKS` owns one `C_IEVENT_CLI` per connection (and
   runs the discovery — it is a named service, so command answers route back
   to it). Every discovered service lives in the connected yuno and is
