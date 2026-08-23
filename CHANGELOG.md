@@ -19,6 +19,20 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.18.3 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.19.3` -> `^7.19.4`: an action route came back to the
+    MOUNT, not to where you were.** With `redirect: "back"` or `"none"` the
+    shell restored `stages.main.active_route` — the route the view is DECLARED
+    at — so under a node tree everything below it, which is subpath the node
+    owns, was thrown away. Reported on the yunovatios console, where switching
+    the theme from a deep graph landed on the workspace root; here the same
+    held for `/preferences`, `/sitemap` and the dev-tools routes. The agent
+    console's own theme button never showed it because it is a plain event and
+    touches no route.
+
 ## 0.18.2 — 2026-08-23
 
 ### gui_agent, gui_treedb
