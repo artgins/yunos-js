@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.19.1 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.20.0` -> `^7.20.1`: `tree view` was a key no
+    validator could demand.** The view switch set its label with `t(key)` where
+    `key` was a ternary, so `"tree view"` never appeared inside a `t(…)` call
+    and `validate-locales` — which scans for `t("literal")` — was blind to it.
+    Both apps happened to carry the key already, so nothing here rendered
+    wrong; what was broken is the guarantee that it would stay that way.
+
 ## 0.19.0 — 2026-08-23
 
 ### gui_agent, gui_treedb
