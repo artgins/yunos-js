@@ -19,6 +19,15 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.20.1 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.21.0` -> `^7.21.1`: the view switch reads
+    `text · tree · graph`.** The row goes from the flattest reading of the
+    document to the most structured. Both consoles still OPEN on the tree —
+    the order of the row is not the order of arrival.
+
 ## 0.20.0 — 2026-08-23
 
 ### gui_agent, gui_treedb
