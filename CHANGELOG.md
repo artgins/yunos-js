@@ -19,6 +19,20 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.18.1 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.19.0` -> `^7.19.1`: `1:1` was a dead button, and the
+    minimap floated into the middle of the graph in full screen.** The first
+    fired no event at all — the click landed on the text glyph, and G6's
+    toolbar only reacts to the item itself. The second was placed in pixels
+    computed once, so growing the container left it halfway up the left edge,
+    on top of the graph it is there to explain; it is anchored in CSS now and
+    follows the theme, instead of being a white box over a near-black canvas.
+
+    Both reported from the deployed treedb GUI.
+
 ## 0.18.0 — 2026-08-23
 
 ### gui_agent, gui_treedb
