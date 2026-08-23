@@ -19,6 +19,18 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.17.3 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.15.0` -> `^7.16.0`: the treedb graph can be
+    rearranged more than one node at a time.** In edition mode, shift+click
+    adds a node to the selection or takes it out, shift+drag on the canvas is a
+    rubber band, and dragging any selected node moves the whole set as one
+    undo. The ring is painted into the card's own html, because an html node
+    draws no state style — the same trap that kept the amber highlight
+    invisible until `7.3.0`. No new i18n keys: a selection has no words.
+
 ## 0.17.2 — 2026-08-23
 
 ### gui_agent, gui_treedb
