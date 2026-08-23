@@ -201,6 +201,7 @@ const en = {
         "no services selected": "No services selected — pick them in Settings",
         "disconnected - open connections": "Disconnected — connect it in Connections",
         "connect": "Connect",
+        "connect several connections": "Connect several connections",
         "disconnect": "Disconnect",
         "refresh services": "Refresh the yuno services",
         "refreshing services": "Refreshing services…",
@@ -368,6 +369,10 @@ const en = {
         "remove": "Remove",
         "remove several connections": "Remove several connections",
         "select all": "Select all",
+        "to connect": "to connect",
+        "to disconnect": "to disconnect",
+        "each connection opens its own socket":
+                             "Each connection opens its own socket.",
         "selected to remove": "selected to remove",
         "removing drops its tabs": "Removing a connection drops its open tabs and its saved views.",
         "cancel": "Cancel",

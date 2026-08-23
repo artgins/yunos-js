@@ -19,6 +19,32 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.17.0 — 2026-08-23
+
+### gui_treedb
+
+- **feat: connect several connections, or disconnect them.** After pasting a
+    scanned deploy centre there were two hundred rows and one plug icon each:
+    removing many had its dialog, browsing many had the header box, and
+    connecting many had nothing. The browse checkbox could not be borrowed for
+    it — it already means "browse this treedb", and one checkbox cannot mean
+    two things.
+
+    Its own dialog then (`CONNECTIONS_CONNECT_MANY`), and not a *Connect all*
+    button: what is wanted after a paste is usually *these* backends, not all
+    of them. It opens showing the connect INTENT of every connection — ticked
+    is connected — with a three-state select-all, so ticking everything is one
+    click and disconnecting a handful is the same box. That is why it is one
+    button and not two.
+
+    The count says what Apply will CHANGE, not what is ticked (`2 to connect ·
+    1 to disconnect`), and Apply stays dead while it would change nothing: a
+    box opened on a half-connected set must not announce work it is not going
+    to do. It applies in ONE write (`EV_SET_CONNS_ENABLED`, per-connection
+    values) and therefore one reconciliation of the transports — publishing
+    per connection would have the app root reconcile the whole set once per
+    connection.
+
 ## 0.16.1 — 2026-08-23
 
 ### gui_treedb

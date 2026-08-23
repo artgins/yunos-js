@@ -311,6 +311,50 @@ function do_set_conn_enabled(gobj, conn_id, enabled)
 }
 
 /***************************************************************
+ *  Set the connect INTENT of MANY connections in ONE write.
+ *
+ *  Each entry carries its own value ({id, enabled}) because this is how
+ *  a set is edited, not how a switch is thrown: the dialog that sends
+ *  it shows the intent of every connection and applies what the
+ *  operator left ticked — some on, some off, in the same gesture. A
+ *  connection the list does not name is not touched.
+ *
+ *  One write and ONE publication: the app root reconciles transports on
+ *  the change, and publishing per connection would have it reconcile
+ *  the whole set once per connection.
+ ***************************************************************/
+function do_set_conns_enabled(gobj, wanted)
+{
+    let want = new Map();
+    for(let w of (Array.isArray(wanted) ? wanted : [])) {
+        if(w && w.id) {
+            want.set(w.id, !!w.enabled);
+        }
+    }
+
+    let list = treedb_config_get_connections(gobj);
+    let touched = 0;
+    for(let i = 0; i < list.length; i++) {
+        if(!list[i] || !want.has(list[i].id)) {
+            continue;
+        }
+        let enabled = want.get(list[i].id);
+        if(!!list[i].enabled === enabled) {
+            continue;       /*  already there: nothing to write  */
+        }
+        list[i] = Object.assign({}, list[i], {enabled: enabled});
+        touched++;
+    }
+
+    if(!touched) {
+        return;
+    }
+    gobj_write_attr(gobj, "connections", list);
+    persist(gobj, "connections");
+    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list});
+}
+
+/***************************************************************
  *  The configured connections, [] when none. Returns a fresh copy.
  ***************************************************************/
 function treedb_config_get_connections(gobj)
@@ -749,6 +793,17 @@ function ac_set_conn_services(gobj, event, kw, src)
     return 0;
 }
 
+function ac_set_conns_enabled(gobj, event, kw, src)
+{
+    let conns = (kw && Array.isArray(kw.conns)) ? kw.conns : null;
+    if(!conns) {
+        log_error(`${GCLASS_NAME}: EV_SET_CONNS_ENABLED without conns`);
+        return -1;
+    }
+    do_set_conns_enabled(gobj, conns);
+    return 0;
+}
+
 function ac_set_conns_browse(gobj, event, kw, src)
 {
     let ids = (kw && Array.isArray(kw.conn_ids)) ? kw.conn_ids : null;
@@ -941,6 +996,7 @@ function create_gclass(gclass_name)
             ["EV_SET_CONNS_BROWSE",      ac_set_conns_browse,      null],
             ["EV_STORE_SCANNED_SERVICES", ac_store_scanned_services, null],
             ["EV_SET_CONN_ENABLED",      ac_set_conn_enabled,      null],
+            ["EV_SET_CONNS_ENABLED",     ac_set_conns_enabled,     null],
             ["EV_SET_CONN_EXPANDED",     ac_set_conn_expanded,     null],
             ["EV_SET_CONNS_EXPANDED",    ac_set_conns_expanded,    null],
             ["EV_TOGGLE_SELECTED",       ac_toggle_selected,       null],
@@ -963,6 +1019,7 @@ function create_gclass(gclass_name)
         ["EV_SET_CONNS_BROWSE",         0],
         ["EV_STORE_SCANNED_SERVICES",   0],
         ["EV_SET_CONN_ENABLED",         0],
+        ["EV_SET_CONNS_ENABLED",        0],
         ["EV_SET_CONN_EXPANDED",        0],
         ["EV_SET_CONNS_EXPANDED",       0],
         ["EV_TOGGLE_SELECTED",          0],

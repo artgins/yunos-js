@@ -201,6 +201,7 @@ const es = {
         "no services selected": "No hay servicios seleccionados — márcalos en Ajustes",
         "disconnected - open connections": "Desconectada — conéctala en Conexiones",
         "connect": "Conectar",
+        "connect several connections": "Conectar varias conexiones",
         "disconnect": "Desconectar",
         "refresh services": "Refrescar los servicios del yuno",
         "refreshing services": "Refrescando servicios…",
@@ -369,6 +370,10 @@ const es = {
         "remove": "Eliminar",
         "remove several connections": "Borrar varias conexiones",
         "select all": "Seleccionar todas",
+        "to connect": "a conectar",
+        "to disconnect": "a desconectar",
+        "each connection opens its own socket":
+                             "Cada conexión abre su propio socket.",
         "selected to remove": "seleccionadas para borrar",
         "removing drops its tabs": "Borrar una conexión se lleva sus pestañas abiertas y sus vistas guardadas.",
         "cancel": "Cancelar",

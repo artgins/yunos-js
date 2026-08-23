@@ -127,6 +127,7 @@ let PRIVATE_DATA = {
     $fold:        null,   /*  expand / collapse the whole tree  */
     $count:       null,   /*  "N connections · M services · K to browse"  */
     delete_modal: null,   /*  the remove-several box, while it is up  */
+    connect_modal: null,  /*  the connect-several box, while it is up  */
     $search:      null,
     search:       "",     /*  survives a reload (a scan finishing)  */
     loaded:       false,  /*  past the first load WITH rows  */
@@ -461,6 +462,27 @@ function build_ui(gobj)
         gobj_send_event(gobj, "EV_DELETE_MANY", {}, gobj);
     });
 
+    /*  Connecting SEVERAL. The row's plug does one; a pasted deploy centre
+     *  is two hundred rows, and the browse checkbox cannot be borrowed for
+     *  this — it already means "browse this treedb". Its own dialog, like
+     *  the removal, except this one is not destructive: it opens showing
+     *  the connect INTENT of every connection, so the same box that
+     *  connects a selection disconnects one.  */
+    let $connect_many = createElement2(
+        ["button", {class: "button CONNECTIONS_CONNECT_MANY ml-1", type: "button",
+                    title: t("connect several connections"),
+                    "aria-label": t("connect several connections"),
+                    "data-i18n-title": "connect several connections",
+                    "data-i18n-aria-label": "connect several connections"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-plug"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "connect"}, "Connect"]
+            ]
+        ]);
+    $connect_many.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_CONNECT_MANY", {}, gobj);
+    });
+
     let $container = createElement2(
         ["div", {class: "C_TREEDB_CONNECTIONS ytreedb-connections p-4"},
             [
@@ -496,7 +518,8 @@ function build_ui(gobj)
                     priv.$count,
                     ["div", {class: "CONNECTIONS_ACTIONS is-flex is-align-items-center",
                              style: "gap:.5rem; margin-left:auto;"},
-                        [$add, $delete_many, $export, $import, $paste, $file]]
+                        [$add, $connect_many, $delete_many, $export, $import,
+                         $paste, $file]]
                 ]],
                 $help,
                 $scan_errors,
@@ -1610,6 +1633,164 @@ function ac_search(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Connect or disconnect SEVERAL connections.
+ *
+ *  Not a "connect all" button: what the operator wants after pasting a
+ *  scanned deploy centre is *these* backends, not every one of them.
+ *  So the box opens showing the connect INTENT of every connection —
+ *  ticked is connected — and the whole set is edited at once. Ticking
+ *  everything is one click on its select-all; disconnecting a handful is
+ *  the same box, which is why it is not two buttons.
+ *
+ *  Nothing is applied while the box moves: it says what will change, and
+ *  the action does it when Apply names the list.
+ ***************************************************************/
+function ac_connect_many(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let config = gobj_find_service("treedb_config", false);
+    let shell = yui_shell_of(gobj);
+    let conns = config ? treedb_config_get_connections(config) : [];
+
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot open the connect box`);
+        return -1;
+    }
+    if(!conns.length) {
+        return 0;   /*  nothing to connect  */
+    }
+    if(priv.connect_modal) {
+        return 0;   /*  already asking  */
+    }
+
+    let was = {};
+    let $rows = [];
+    for(let conn of conns) {
+        was[conn.id] = !!conn.enabled;
+        let $cb = createElement2(["input", {type: "checkbox",
+            class: "CONNECTIONS_CONNECT_PICK", "data-conn": conn.id}]);
+        $cb.checked = !!conn.enabled;
+        $rows.push(createElement2(
+            ["label", {class: "CONNECTIONS_CONNECT_ROW checkbox is-block mb-1"}, [
+                $cb,
+                ["span", {class: "ml-2 has-text-weight-semibold"},
+                    String(conn.label || conn.url || conn.id)],
+                ["span", {class: "ml-2 is-size-7 has-text-grey"}, String(conn.url || "")]
+            ]]
+        ));
+    }
+
+    let $all = createElement2(["input", {type: "checkbox", class: "CONNECTIONS_CONNECT_ALL"}]);
+    let $count_line = createElement2(
+        ["p", {class: "CONNECTIONS_CONNECT_COUNT is-size-7 has-text-grey mt-2"}, ""]);
+    let $go = createElement2(
+        ["button", {class: "button is-primary CONNECTIONS_CONNECT_GO", type: "button",
+                    disabled: "disabled", i18n: "apply"}, "Apply"]);
+
+    let $box = createElement2(
+        ["div", {class: "CONNECTIONS_CONNECT_BOX"}, [
+            ["label", {class: "checkbox is-block mb-2 has-text-weight-semibold"}, [
+                $all,
+                ["span", {class: "ml-2", i18n: "select all"}, t("select all")]
+            ]],
+            ["div", {class: "CONNECTIONS_CONNECT_LIST", style: "max-height:50vh; overflow:auto;"},
+                $rows],
+            $count_line,
+            ["p", {class: "is-size-7 has-text-grey mb-3",
+                   i18n: "each connection opens its own socket"},
+                t("each connection opens its own socket")],
+            ["div", {class: "is-flex", style: "gap:.5rem; justify-content:flex-end;"}, [
+                ["button", {class: "button CONNECTIONS_CONNECT_CANCEL", type: "button",
+                            i18n: "cancel"}, "Cancel"],
+                $go
+            ]]
+        ]]
+    );
+
+    let picks = () => Array.from($box.querySelectorAll(".CONNECTIONS_CONNECT_PICK"));
+    /*  What Apply would CHANGE, which is not what is ticked: a box that
+     *  opens with half the set connected would otherwise announce work it
+     *  is not going to do.  */
+    let refresh = () => {
+        let on = picks().filter(($x) => $x.checked);
+        let up = on.filter(($x) => !was[$x.getAttribute("data-conn")]).length;
+        let down = picks().filter(($x) => !$x.checked &&
+            was[$x.getAttribute("data-conn")]).length;
+        $go.disabled = (up === 0 && down === 0);
+        let says = [];
+        if(up) {
+            says.push(`${up} ${t("to connect")}`);
+        }
+        if(down) {
+            says.push(`${down} ${t("to disconnect")}`);
+        }
+        $count_line.textContent = says.join(" · ");
+        $all.checked = on.length > 0 && on.length === $rows.length;
+        $all.indeterminate = on.length > 0 && on.length < $rows.length;
+    };
+
+    $box.addEventListener("change", (e) => {
+        if(e.target === $all) {
+            let on = $all.checked;
+            picks().forEach(($x) => {
+                $x.checked = on;
+            });
+        }
+        refresh();
+    });
+    $box.querySelector(".CONNECTIONS_CONNECT_CANCEL").addEventListener("click", () => {
+        if(priv.connect_modal) {
+            priv.connect_modal.close();
+        }
+    });
+    $go.addEventListener("click", () => {
+        /*  The click is an OS notification: the connecting happens in the
+         *  action, with the list it names.  */
+        let conns_kw = picks().map(($x) => ({
+            id:      $x.getAttribute("data-conn"),
+            enabled: $x.checked
+        }));
+        if(priv.connect_modal) {
+            priv.connect_modal.close();
+        }
+        gobj_send_event(gobj, "EV_APPLY_CONNECT_MANY", {conns: conns_kw}, gobj);
+    });
+    refresh();
+
+    priv.connect_modal = yui_shell_show_modal(shell, $box, {
+        dialog: true,
+        logical_class: "CONNECTIONS_CONNECT_DIALOG",
+        title: "connect several connections",
+        t: t,
+        on_close: function() {
+            priv.connect_modal = null;
+        }
+    });
+    return 0;
+}
+
+/***************************************************************
+ *  What that dialog decided: one write, one reconciliation.
+ ***************************************************************/
+function ac_apply_connect_many(gobj, event, kw, src)
+{
+    let conns = (kw && Array.isArray(kw.conns)) ? kw.conns : null;
+    let config = gobj_find_service("treedb_config", false);
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service, cannot connect`);
+        return -1;
+    }
+    if(!conns || !conns.length) {
+        log_error(`${gobj_short_name(gobj)}: EV_APPLY_CONNECT_MANY with no connections`);
+        return -1;
+    }
+
+    gobj_send_event(config, "EV_SET_CONNS_ENABLED", {conns: conns}, gobj);
+    refresh_status(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  The dialog that removes SEVERAL connections.
  *
  *  Its own list with its own checkboxes: the table's checkbox says
@@ -2035,6 +2216,8 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_CONN_ENABLED",  ac_toggle_conn_enabled,  null],
             ["EV_TOGGLE_FOLD",          ac_toggle_fold,          null],
             ["EV_SEARCH",               ac_search,               null],
+            ["EV_CONNECT_MANY",         ac_connect_many,         null],
+            ["EV_APPLY_CONNECT_MANY",   ac_apply_connect_many,   null],
             ["EV_DELETE_MANY",          ac_delete_many,          null],
             ["EV_CONFIRM_DELETE_MANY",  ac_confirm_delete_many,  null],
             ["EV_REMOVE_CONN",          ac_remove_conn,          null],
@@ -2062,6 +2245,8 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_CONN_ENABLED",  0],
         ["EV_TOGGLE_FOLD",          0],
         ["EV_SEARCH",               0],
+        ["EV_CONNECT_MANY",         0],
+        ["EV_APPLY_CONNECT_MANY",   0],
         ["EV_DELETE_MANY",          0],
         ["EV_CONFIRM_DELETE_MANY",  0],
         ["EV_REMOVE_CONN",          0],
