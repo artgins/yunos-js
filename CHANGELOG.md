@@ -19,6 +19,23 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.21.0 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.21.1` -> `^7.22.0`: the JSON graph gets a find box and
+    expand/collapse.** The graph view had five ways to move the camera and none
+    to find anything or to make the picture smaller, which on a real command
+    answer means reading every card. Find highlights the matching rows, outlines
+    their cards and says how many matched, without moving the camera;
+    expand/collapse folds every card but the root and marks each cut with a
+    count.
+
+    It also repairs the viewer's toolbar on a phone: `7.21.0` let the search box
+    shrink until it was a magnifier and nothing else, and in doing so removed
+    the overflow that `yui_toolbar` needs to offer its scroll arrows. Both are
+    back.
+
 ## 0.20.1 — 2026-08-23
 
 ### gui_agent, gui_treedb
