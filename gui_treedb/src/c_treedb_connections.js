@@ -780,14 +780,15 @@ function make_columns(gobj)
         return $cb;
     }
 
-    /*  The box never paints itself: the click is an OS notification, the
-     *  config is what decides, and the header is repainted from what the
-     *  config ends up holding.  */
+    /*  The click is an OS notification: its whole job is to make an event.
+     *
+     *  Do NOT preventDefault() here to stop the browser ticking the box on
+     *  its own. Cancelling a checkbox click makes the browser REVERT the
+     *  tick when the dispatch ends — and the repaint that the event
+     *  triggers runs in a microtask BEFORE that, so the revert lands last
+     *  and the header answers a click by doing nothing at all.  */
     function browse_header_click(e, column)
     {
-        if(e && e.preventDefault) {
-            e.preventDefault();
-        }
         gobj_send_event(gobj, "EV_TOGGLE_ALL_BROWSE", {}, gobj);
     }
 
@@ -1041,7 +1042,14 @@ function create_table(gobj)
 
     let table = new Tabulator($div, settings);
     table.on("tableBuilt", function() {
-        table.setData(rows_from_config(gobj));
+        /*  The header is drawn BEFORE this, with no rows to cover, so the
+         *  box it carries is born dead. Repaint it once the rows are in, or
+         *  a fresh load leaves a checkbox that cannot even be clicked.  */
+        Promise.resolve(table.setData(rows_from_config(gobj))).then(function() {
+            paint_browse_header(gobj);
+        }).catch(function(err) {
+            log_warning(`${GCLASS_NAME}: first load failed: ${err && err.message}`);
+        });
     });
     /*  Any inline cell edit → persist the whole table.  */
     table.on("cellEdited", function() {

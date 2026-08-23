@@ -19,6 +19,30 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.16.1 — 2026-08-23
+
+### gui_treedb
+
+- **fix: the header box of the browse column did nothing at all.** Two
+    defects stacked on the same click, both found by driving the deployed
+    app rather than by reading the source:
+
+    It was born **disabled**. Tabulator draws the header before the rows
+    exist, so the formatter asked "is there anything on screen to browse?",
+    was told no, and painted a dead box — and the first load goes through
+    `tableBuilt`, which was the one data path that did not repaint the
+    header afterwards. A disabled checkbox does not even emit a click, so
+    the whole feature was unreachable after an F5.
+
+    And the click **cancelled itself**. The handler called
+    `preventDefault()` so the box would never show a state the config did
+    not have; cancelling a checkbox click makes the browser revert the tick
+    when the dispatch ends, and the repaint the event triggers runs in a
+    microtask BEFORE that. The state was written, the table repainted, the
+    count updated — and then the revert landed last and put the box back.
+    The lesson is in the code: a header box is repainted by what the config
+    ends up holding, and the browser's own tick is left alone.
+
 ## 0.16.0 — 2026-08-23
 
 What a paste of two hundred backends asks for: a header that takes the
