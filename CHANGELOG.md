@@ -52,176 +52,173 @@ column, and a document that does not decide for you.
 
 ## 0.15.1 — 2026-08-23
 
-Dos detalles de la convergencia de 0.15.0: lo que se perdió al adoptar la forma
-del picker, y lo que la cabecera hacía distinto en un móvil.
+Two details of the 0.15.0 convergence: what was lost in adopting the picker's
+shape, and what the header did differently on a phone.
 
 ### gui_treedb
 
-- **fix: vuelve el borrado de varias conexiones, sin tocar el significado de la
-    casilla.** En 0.15.0 la casilla pasó a significar EXAMINAR en las dos
-    tablas — que era el objetivo — y con ella se fue la única forma de borrar
-    varias conexiones de una vez: quedaba borrar de una en una. El botón
-    *Borrar varias* (`CONNECTIONS_DELETE_MANY`) abre un diálogo con **su
-    propia** lista de casillas, un *seleccionar todas* de tres estados y el
-    botón de borrar deshabilitado hasta que hay algo marcado. Las casillas de
-    la tabla no se tocan: seguir marcando "examinar" no arriesga un borrado.
+- **fix: removing several connections is back, and the checkbox keeps its
+    meaning.** In 0.15.0 the checkbox came to mean BROWSE in both tables —
+    which was the point — and with it went the only way to remove several
+    connections at once: what was left was one at a time. The *Remove several*
+    button (`CONNECTIONS_DELETE_MANY`) opens a dialog with **its own** list of
+    checkboxes, a three-state *select all*, and the remove button dead until
+    something is ticked. The table's own checkboxes are not touched: going on
+    ticking "browse" never risks a deletion.
 
-- **fix: el plegado va pegado al buscador también en un móvil.** La cabecera de
-    Conexiones ponía `[título][plegar]` y dejaba caer el buscador a la línea
-    siguiente, así que el mismo control aparecía junto al buscador en Esquemas
-    y junto al título en Conexiones. Ahora plegado y buscador son **una unidad
-    que envuelve junta** (`CONNECTIONS_FINDER` / `PICKER_FINDER` /
-    `STATNODES_FINDER`): en las tres tablas el plegado está inmediatamente a la
-    izquierda de la caja de búsqueda, a 390px igual que a 1440px. Medido, no
-    supuesto.
+- **fix: the fold sits beside the search box on a phone too.** The Connections
+    header laid out `[title][fold]` and let the search box drop to the next
+    line, so the same control appeared next to the search box in Schemas and
+    next to the title in Connections. Fold and search are now **one unit that
+    wraps together** (`CONNECTIONS_FINDER` / `PICKER_FINDER` /
+    `STATNODES_FINDER`): in all three tables the fold is immediately left of
+    the search box, at 390px as at 1440px. Measured, not assumed.
 
 ### gui_agent
 
-- **fix: la misma unidad plegado + buscador** en el picker de nodos de
-    Esquemas (`STATNODES_FINDER`), por lo mismo de arriba: los tres sitios
-    donde el usuario ve la misma tabla ponen el control en el mismo punto.
+- **fix: the same fold + search unit** in the Schemas node picker
+    (`STATNODES_FINDER`), for the reason above: the three places the user sees
+    the same table put the control in the same spot.
 
 ## 0.15.0 — 2026-08-23
 
 ### gui_treedb
 
-- **feat: Conexiones y el picker de Esquemas de gui_agent se leen igual.** Las
-    dos tablas muestran lo mismo —un backend y los treedbs que expone— y una se
-    **pega literalmente** en la otra (el botón *Para TreeDB*), pero se
-    presentaban distinto en detalles pequeños y caros: una era un árbol y la
-    otra una tabla plana con una **sub-tabla anidada**; la casilla significaba
-    "abrir" en una y "seleccionar para borrar" en la otra; el estado era un
-    punto con palabra frente a tres columnas de iconos.
+- **feat: Connections and gui_agent's Schemas picker read the same.** The two
+    tables show the same thing — a backend and the treedbs it exposes — and
+    one is pasted **literally** into the other (the *For TreeDB* button), yet
+    they were presented differently in small, expensive ways: one was a tree
+    and the other a flat table with a **nested sub-table**; the checkbox meant
+    "open" in one and "select for deletion" in the other; the status was a dot
+    and a word against three columns of icons.
 
-    Conexiones adopta la forma del picker:
+    Connections adopts the picker's shape:
 
-    - **los servicios son filas hijas**, no una tabla dentro de la fila;
-    - la **casilla significa EXAMINAR** en las dos, con los tres estados en la
-      fila de la conexión (ninguno / algunos / todos);
-    - el **estado** es un punto y una palabra en una celda;
-    - **buscador y contador** como en el picker (`N conexiones · M servicios ·
-      K a examinar`), y el plegado general pegado a la izquierda;
-    - lo que sólo existe aquí —editar la url, conectar, clonar, borrar— se
-      queda aquí, como iconos **al final de la fila**, en una sola celda.
+    - **services are child rows**, not a table inside the row;
+    - the **checkbox means BROWSE** in both, with the three states on the
+      connection row (none / some / all);
+    - the **status** is a dot and a word in one cell;
+    - **search box and count** as in the picker (`N connections · M services ·
+      K to browse`), and the general fold hugging the left edge;
+    - what only exists here — edit the url, connect, clone, remove — stays
+      here, as icons **at the end of the row**, in a single cell.
 
-    Con la sub-tabla se va lo que la sostenía: el renderer `basic` (estaba ahí
-    porque una fila era más alta que sus celdas y el editor se salía de
-    pantalla), destruir las sub-tablas antes de cada recarga, y recalcular
-    alturas. Vuelve el render **virtual**, que es lo que hace falta para
-    cientos de backends.
+    With the sub-table goes what was holding it up: the `basic` renderer (it
+    was there because a row was taller than its cells and the editor scrolled
+    off screen), destroying the sub-tables before every reload, and recomputing
+    heights. The **virtual** renderer is back, which is what hundreds of
+    backends need.
 
-    ⚠️ **Se va el borrado múltiple por selección** (0.13.5): esa casilla ahora
-    significa examinar. Borrar sigue fila a fila con su papelera. Si hace falta
-    recuperarlo, el sitio natural es una acción sobre las conexiones marcadas,
-    no la casilla.
+    ⚠️ **Removing many by selection goes** (0.13.5): that checkbox now means
+    browse. Removal stays row by row with its bin. If it is wanted back, its
+    natural place is an action over the ticked connections, not the checkbox.
 
 ## 0.14.5 — 2026-08-23
 
-### gui_agent y gui_treedb
+### gui_agent and gui_treedb
 
-- **fix: el plegado general va pegado al borde izquierdo.** Estaba dentro del
-    grupo de acciones (derecha) o justo detrás del buscador, y en un teléfono
-    acababa flotando al final de una línea: donde no se ve. Ahora es el
-    **primer elemento** de la toolbar, antes del título y del buscador, en las
-    tres tablas — el picker de Estadísticas/Esquemas, el de TreeDBs y la tabla
-    de Conexiones. Pliega lo que estás mirando, así que vive donde empieza la
-    mirada, y una fila que envuelve lo deja donde estaba.
+- **fix: the general fold hugs the left edge.** It sat inside the action group
+    (right) or just behind the search box, and on a phone it ended up floating
+    at the end of a line: where it cannot be seen. It is now the **first
+    element** of the toolbar, before the title and the search box, in all three
+    tables — the Statistics/Schemas picker, the TreeDBs one and the Connections
+    table. It folds what you are looking at, so it lives where the eye starts,
+    and a row that wraps leaves it where it was.
 
-    Medido en 390px: el botón queda a la misma x que la toolbar en las tres.
+    Measured at 390px: the button lands at the same x as the toolbar in all
+    three.
 
 ## 0.14.4 — 2026-08-23
 
 ### gui_agent
 
-- **feat: la cabecera del picker abre o cierra TODO lo mostrado.** Faltaba el
-    tercer nivel: había casilla por yuno y casilla por nodo, y ninguna en la
-    cabecera de la columna. Ahora la lleva, con los mismos tres estados, y
-    cubre **lo que el filtro deja en pantalla** — la misma decisión que toma la
-    facilidad compartida de gobj-ui, y por la misma razón: un "todos" sobre
-    filas que nadie ve no es lo que el ojo aceptó.
+- **feat: the picker header opens or closes EVERYTHING shown.** The third level
+    was missing: there was a checkbox per yuno and one per node, and none in
+    the column header. It has one now, with the same three states, and it
+    covers **what the filter leaves on screen** — the same decision the shared
+    facility of gobj-ui takes, and for the same reason: an "all" over rows
+    nobody can see is not what the eye agreed to.
 
-    Se escribe sobre el elemento vivo, no rehaciendo las columnas: un
-    `titleFormatter` sólo se vuelve a ejecutar con `setColumns()`, que
-    re-renderiza cada fila — una tabla entera redibujada para mover una casilla
-    entre sus tres estados.
+    It is written on the live element, not by rebuilding the columns: a
+    `titleFormatter` runs again only on `setColumns()`, which re-renders every
+    row — a whole table redrawn to move one checkbox between its three states.
 
 ### gui_treedb
 
-- **feat: plegado general en la tabla de Conexiones.** Cada fila abre su
-    sub-tabla de servicios con su chevron y no había forma de abrirlas todas.
-    El mismo botón que en los pickers, con la misma regla de icono, y **una
-    sola escritura** (`EV_SET_CONNS_EXPANDED`): el conjunto plegado se
-    persiste, y guardarlo fila a fila escribiría la configuración tantas veces
-    como conexiones haya.
+- **feat: a general fold in the Connections table.** Every row opens its
+    services sub-table with its chevron and there was no way to open them all.
+    The same button as in the pickers, with the same icon rule, and **one
+    single write** (`EV_SET_CONNS_EXPANDED`): the folded set is persisted, and
+    saving it row by row would write the configuration once per connection.
 
 ## 0.14.3 — 2026-08-22
 
-### gui_agent y gui_treedb
+### gui_agent and gui_treedb
 
-- **fix: en el móvil la toolbar dejaba el plegado fuera de sitio.** Los botones
-    iban sueltos en una fila `is-flex` **sin wrap** (gui_agent) o con wrap pero
-    de uno en uno (gui_treedb): en un teléfono cada botón robaba un poco al
-    buscador hasta dejarlo en "Buscar h", y el último caía por el borde. Ahora
-    los botones viajan **juntos** en su propio grupo — en una línea se quedan a
-    la derecha del buscador; en un teléfono baja el grupo entero a la siguiente
-    línea — y el buscador crece hasta 22rem pero no baja de 12.
+- **fix: on a phone the toolbar left the fold out of reach.** The buttons rode
+    loose in an `is-flex` row **with no wrap** (gui_agent) or wrapping one at a
+    time (gui_treedb): on a phone each button stole a little from the search
+    box until it read "Search h", and the last one fell off the edge. The
+    buttons now travel **together** in their own group — on one line they stay
+    to the right of the search box; on a phone the whole group drops to the
+    next line — and the search box grows to 22rem but never below 12.
 
-    Medido en un viewport de teléfono (390px), que es la única forma de verlo:
-    jsdom no carga Bulma y una regla de anchura no se comprueba leyendo el
-    fuente.
+    Measured on a phone viewport (390px), which is the only way to see it:
+    jsdom does not load Bulma and a width rule is not checked by reading the
+    source.
 
 ## 0.14.2 — 2026-08-22
 
 ### gui_agent
 
-- **feat: la casilla del NODO abre o cierra todos sus yunos, y la toolbar
-    pliega el árbol entero.** El picker de Estadísticas y Esquemas tenía
-    casilla por yuno y ninguna en el nodo: abrir los doce yunos de una máquina
-    eran doce clics. Ahora el nodo lleva su casilla de **tres estados**
-    —ninguno, algunos (media marca), todos—, media marca abre el resto, y sólo
-    cierra cuando ya estaban todos. Es **una sola escritura**
-    (`agent_config_set_selected_nodes()` toma la lista entera), no una por
+- **feat: the NODE checkbox opens or closes all its yunos, and the toolbar
+    folds the whole tree.** The Statistics and Schemas picker had a checkbox
+    per yuno and none on the node: opening the twelve yunos of one machine was
+    twelve clicks. The node now carries its **three-state** checkbox — none,
+    some (half mark), all —, a half mark opens the rest, and it only closes
+    when they were all open. It is **one single write**
+    (`agent_config_set_selected_nodes()` takes the whole list), not one per
     yuno.
 
-    Y en la toolbar hay un **plegado general**: un botón cuyo icono dice lo que
-    hará el clic — chevron abajo mientras quede algo plegado, chevron derecha
-    cuando ya está todo abierto. Se mantiene al día también cuando pliegas a
-    mano. Ojo con lo que cuesta en Esquemas: desplegar un nodo es lo que arma
-    la sonda de treedbs de sus yunos, así que "desplegar todo" pregunta a
-    todos — que es justo lo que el operador iba a hacer clic a clic.
+    And the toolbar has a **general fold**: a button whose icon says what the
+    click will do — chevron down while anything is still folded, chevron right
+    once everything is open. It keeps up when you fold by hand too. Mind what
+    it costs in Schemas: expanding a node is what arms the treedb probe of its
+    yunos, so "expand everything" asks them all — which is exactly what the
+    operator was about to do click by click.
 
 ### gui_treedb
 
-- **feat: plegado general en la toolbar del picker.** El mismo botón, con la
-    misma regla de icono, sobre la tabla de conexiones.
+- **feat: a general fold in the picker toolbar.** The same button, with the
+    same icon rule, over the connections table.
 
 ## 0.14.1 — 2026-08-22
 
 ### gui_treedb
 
-- **feat: la casilla de la conexión abre o cierra TODOS sus treedbs, app
-    `0.14.1`.** Tres estados, que es lo que hay que decir: ninguno, algunos
-    (media marca) y todos. Medio marcada abre el resto — es lo que invita a
-    hacer un clic sobre "todavía no está todo"—, y sólo cierra cuando ya
-    estaban todos abiertos. Va en **un solo evento**
-    (`EV_SET_SERVICES_SELECTED`): mandar una docena de `EV_TOGGLE_SELECTED`
-    guardaría la configuración doce veces y reconstruiría las pestañas doce
-    veces, con la misma lista llegando al shell una y otra vez.
+- **feat: the connection's checkbox opens or closes ALL its treedbs, app
+    `0.14.1`.** Three states, which is what there is to say: none, some (half
+    mark) and all. Half ticked opens the rest — that is what a click on "not
+    all of it yet" invites — and it only closes when they were all open. It
+    travels in **one single event** (`EV_SET_SERVICES_SELECTED`): sending a
+    dozen `EV_TOGGLE_SELECTED` would save the configuration a dozen times and
+    rebuild the tabs a dozen times, with the same list reaching the shell over
+    and over.
 
-- **fix: marcar ya no pliega el árbol.** `setData()` resetea el árbol y esta
-    tabla se recarga en cada tick, así que marcar un treedb plegaba justo la
-    conexión dentro de la que estabas mirando. Ahora se recuerda qué está
-    abierto y se restaura — lo que el operador plegó a mano sigue plegado.
-    Sólo la PRIMERA carga decide sola, y "primera" significa la primera **con
-    filas**: esta vista se monta antes de que lleguen las conexiones, y una
-    recarga vacía contaba como la primera y dejaba plegada la de verdad.
+- **fix: ticking no longer folds the tree.** `setData()` resets the tree and
+    this table reloads on every tick, so ticking a treedb folded the very
+    connection you were looking inside. What is open is now remembered and put
+    back — what the operator folded by hand stays folded. Only the FIRST load
+    decides on its own, and "first" means the first one **with rows**: this
+    view is mounted before the connections arrive, and an empty reload counted
+    as the first and left the real one folded.
 
 ## 0.14.0 — 2026-08-22
 
-Los dos yunos vuelven a **la misma versión**, que es la regla de este repo
-desde `0.3.0` y se había perdido por el camino (`gui_agent` iba por `0.9.x` y
-`gui_treedb` por `0.13.x`; las entradas de abajo conservan el número que cada
-una llevaba al escribirse). `0.14.0` queda por encima de las dos.
+Both yunos are back on **the same version**, which is this repo's rule since
+`0.3.0` and had been lost along the way (`gui_agent` was on `0.9.x` and
+`gui_treedb` on `0.13.x`; the entries below keep the number each one carried
+when it was written). `0.14.0` sits above both.
 
 
 ### gui_agent
@@ -404,27 +401,28 @@ una llevaba al escribirse). `0.14.0` queda por encima de las dos.
 
 ### gui_treedb
 
-- **fix/feat: Seleccionar es una TABLA, y su casilla ya no está prohibida, app
-    `0.13.15`.** Dos cosas que se cruzaban en la misma pantalla:
+- **fix/feat: Select is a TABLE, and its checkbox is no longer forbidden, app
+    `0.13.15`.** Two things crossing on the same screen:
 
-    La casilla venía `disabled` cuando el backend no estaba conectado, y el
-    motivo sólo se escribía en la rama que NO se pintaba cuando había
-    servicios: el operador veía el treedb que quería abrir, no podía marcarlo,
-    y nada le decía por qué. Una selección es una PREFERENCIA ("abre este
-    treedb aquí"), no una acción sobre un socket vivo — así que la casilla ya
-    no espera al transporte, y **la pestaña se crea igual**, en rojo mientras
-    no hay sesión, con la vista diciendo "backend no conectado" justo donde se
-    hace la pregunta. Eso segundo pedía tocar `C_APP`, que emitía la pestaña
-    sólo si la conexión había llegado a sesión alguna vez: entre las dos
-    mitades, marcar no hacía nada visible.
+    The checkbox arrived `disabled` when the backend was not connected, and the
+    reason was written only in the branch that was NOT painted when there were
+    services: the operator saw the treedb they wanted to open, could not tick
+    it, and nothing said why. A selection is a PREFERENCE ("open this treedb
+    here"), not an action on a live socket — so the checkbox no longer waits
+    for the transport, and **the tab is created all the same**, in red while
+    there is no session, with the view saying "backend not connected" right
+    where the question is asked. That second half needed `C_APP`, which emitted
+    the tab only if the connection had ever reached a session: between the two
+    halves, ticking did nothing visible.
 
-    Y la presentación pasa de tarjeta-por-conexión a **tabla** (Tabulator en
-    árbol: la conexión arriba, sus treedbs debajo), con buscador sobre los dos
-    niveles, contador (`N conexiones · M treedbs · K abiertos`) y render
-    virtual. Un centro de despliegue alcanza cientos de nodos: una tarjeta por
-    conexión con una línea por servicio es una página de scroll infinito que
-    además no se puede buscar. Se abre desplegada con cinco conexiones o menos;
-    de ahí en adelante arranca plegada y el buscador es el camino.
+    And the presentation moves from card-per-connection to a **table**
+    (Tabulator as a tree: the connection on top, its treedbs underneath), with
+    a search box over both levels, a count (`N connections · M treedbs · K
+    open`) and the virtual renderer. A deploy centre reaches hundreds of nodes:
+    one card per connection with a line per service is a page of infinite
+    scroll that cannot be searched either. It opens expanded with five
+    connections or fewer; from there on it starts folded and the search box is
+    the way.
 
 - **chore: the framework methods answer the contract, app `0.13.14`**
     (`@yuneta/gobj-ui` `^7.14.2` -> `^7.14.3`). Two bare `return;` in
