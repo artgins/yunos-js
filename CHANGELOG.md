@@ -19,6 +19,26 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.19.0 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.19.4` -> `^7.20.0`: the JSON viewer shows the same
+    document as raw text.** `C_YUI_JSON` had one way to read a document — the
+    lazy tree — and a tree is the wrong shape for some of what people do with
+    JSON here: read a command answer as it is written, take a slab of it into a
+    ticket, find a string with the browser's own Ctrl+F. A toolbar switch now
+    turns it into a `JSON.stringify(…, 4)` dump of the working document.
+
+    It reaches both consoles wherever the viewer already is: the agent
+    console's raw-JSON panels, and the treedb console's Raw JSON feed — where
+    the text is honest about laziness, printing the `__collapsed__` sentinels
+    the backend sent rather than pretending the document ends there.
+
+    Search and expand/collapse hide with the tree; copy stays. New locale
+    entries in both apps: `text view`, `tree view`,
+    `text truncated; collapse some branches`.
+
 ## 0.18.3 — 2026-08-23
 
 ### gui_agent, gui_treedb
