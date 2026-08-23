@@ -19,6 +19,23 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.20.0 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.20.1` -> `^7.21.0`: the JSON viewer shows the same
+    document as a GRAPH.** Third view after the tree and the raw text, hosting
+    the `C_YUI_JSON_GRAPH` child both apps already knew how to draw — what is
+    new is that you no longer leave the viewer to get it. The switch is now one
+    button per view with the current one marked.
+
+    Where it lands: every raw-JSON panel in the agent console, and the treedb
+    console's Raw JSON feed — including its `__collapsed__` sentinels, which
+    the graph draws as the stubs they are rather than pretending the document
+    ends there.
+
+    New locale entry in both apps: `graph view`.
+
 ## 0.19.1 — 2026-08-23
 
 ### gui_agent, gui_treedb

@@ -65,6 +65,7 @@ const en = {
         "text truncated; collapse some branches": "Text truncated; collapse some branches",
         "tree view":         "Tree view",
         "text view":         "Text view",
+        "graph view":        "Graph view",
         "select":            "Select",
         "are you sure":      "Are you sure?",
         "this field is required": "This field is required",

@@ -255,6 +255,7 @@ const es = {
         "text truncated; collapse some branches": "Texto truncado; colapsa algunas ramas",
         "tree view": "Vista de árbol",
         "text view": "Vista de texto",
+        "graph view": "Vista de grafo",
         "no session": "Sin sesión",
         "expand loaded": "Expandir lo cargado",
         "collapse all": "Colapsar todo",

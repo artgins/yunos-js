@@ -65,6 +65,7 @@ const es = {
         "text truncated; collapse some branches": "Texto truncado; pliegue algunas ramas",
         "tree view":         "Vista de árbol",
         "text view":         "Vista de texto",
+        "graph view":        "Vista de grafo",
         "select":            "Seleccionar",
         "are you sure":      "¿Está seguro?",
         "this field is required": "Campo requerido",
