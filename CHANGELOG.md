@@ -19,6 +19,18 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.17.4 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.16.0` -> `^7.17.0`: the graph selection gets its
+    keys.** **Esc** clears it, **ctrl/cmd+A** takes every node, and **Delete**
+    deletes it behind the same confirmation the per-node icon shows — the
+    record's key for one, the count for more, and the children about to be
+    UNLINKED and the parents about to be detached, summed over the set. The
+    keys only reach a graph that has focus, so ctrl+A typed in the find box
+    still selects the text. No new i18n keys.
+
 ## 0.17.3 — 2026-08-23
 
 ### gui_agent, gui_treedb
