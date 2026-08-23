@@ -1301,10 +1301,13 @@ function conn_of_scanned(row, endpoint, services)
                 browsable.push({
                     service:  sv.service,
                     gclass:   sv.gclass,
-                    /*  Everything the yuno browses, ticked: the operator asked
-                     *  for this yuno, not for a subset of it, and Connections
-                     *  now unticks the lot with one click on the header. */
-                    selected: true
+                    /*  Nothing ticked. This document says what the yuno
+                     *  EXPOSES; which of it you want open is a decision of
+                     *  the machine you paste into, and a deploy centre
+                     *  pasted with everything ticked is two hundred
+                     *  backends asking to be browsed at once. Connections
+                     *  takes the lot with one click on its header. */
+                    selected: false
                 });
             }
         }

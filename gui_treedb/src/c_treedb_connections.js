@@ -93,7 +93,7 @@ import {
     treedb_links_is_scanning,
 } from "./c_treedb_links.js";
 
-import {plan_conn_import} from "./conn_helpers.js";
+import {plan_conn_import, conns_browse_state} from "./conn_helpers.js";
 
 
 /***************************************************************
@@ -511,12 +511,11 @@ function build_ui(gobj)
 }
 
 /***************************************************************
- *  Connection rows for the table. ONLY connections: the discovered
- *  services of each one are their own table, nested in the row (see
- *  build_services_subtable) — as dataTree children they were rows of THIS
- *  table and therefore wore ITS columns, so a service showed its name under
- *  "Label", its gclass and its checkbox under two blank, unlabelled columns,
- *  and nothing said what any of it was.
+ *  The rows of the table: a connection on top, its discovered services
+ *  as its dataTree children — the same tree the picker of gui_agent
+ *  draws. A child wears this table's columns, so the formatters of the
+ *  three columns a service has anything to say in (browse, label,
+ *  status) each answer for `_type === "svc"` on its own.
  ***************************************************************/
 function rows_from_config(gobj)
 {
@@ -761,6 +760,37 @@ function make_columns(gobj)
         gobj_send_event(gobj, "EV_TOGGLE_ALL_SERVICES", {conn_id: d.conn_id}, gobj);
     }
 
+    /*  The column's own box, in the header: it takes or drops every service
+     *  of every connection the filter leaves ON SCREEN. A pasted deploy
+     *  centre arrives with nothing ticked and two hundred backends in it,
+     *  and one click per treedb is not a way to say "this node".
+     *
+     *  A `titleFormatter` runs again only on `setColumns()`, which redraws
+     *  every row with it — a whole table repainted to move one checkbox
+     *  between its three states. So the states are written on the LIVE
+     *  element after every change (paint_browse_header), and this runs once.  */
+    function browse_title_formatter(cell)
+    {
+        let $cb = document.createElement("input");
+        $cb.type = "checkbox";
+        $cb.className = "CONNECTIONS_ALL_CHECK";
+        $cb.setAttribute("aria-label", t("browse everything on screen"));
+        $cb.title = t("browse everything on screen");
+        paint_browse_box($cb, browse_header_state(gobj));
+        return $cb;
+    }
+
+    /*  The box never paints itself: the click is an OS notification, the
+     *  config is what decides, and the header is repainted from what the
+     *  config ends up holding.  */
+    function browse_header_click(e, column)
+    {
+        if(e && e.preventDefault) {
+            e.preventDefault();
+        }
+        gobj_send_event(gobj, "EV_TOGGLE_ALL_BROWSE", {}, gobj);
+    }
+
     /*  Name: the tree column. A connection is its label with the live dot in
      *  front; a service is its name and the class it is.  */
     function name_formatter(cell)
@@ -874,8 +904,9 @@ function make_columns(gobj)
      */
     return [
         {title: "", field: "_browse", width: 44, minWidth: 44, headerSort: false,
-            hozAlign: "center", resizable: false,
-            formatter: browse_formatter, cellClick: browse_click},
+            hozAlign: "center", headerHozAlign: "center", resizable: false,
+            formatter: browse_formatter, cellClick: browse_click,
+            titleFormatter: browse_title_formatter, headerClick: browse_header_click},
         {title: t("label"),   field: "label", minWidth: 220, widthGrow: 2,
             formatter: name_formatter, editor: "input", editable: editable_conn},
         {title: t("url"),     field: "url",                 editor: "input",
@@ -899,6 +930,75 @@ function has_services(gobj, conn_id)
     let config = gobj_find_service("treedb_config", false);
     let conn = config ? treedb_config_get_connection(config, conn_id) : null;
     return !!(conn && treedb_config_conn_services(conn).length);
+}
+
+/***************************************************************
+ *  The connections the header box covers: the ones the search leaves
+ *  ON SCREEN. Ticking what a filter hides is how one click takes a
+ *  hundred backends you were not looking at — the same rule the
+ *  library's selection column follows.
+ *
+ *  Read from the CONFIG and narrowed to what the table shows: a header
+ *  drawn before the rows land covers nothing and paints itself dead,
+ *  and reload_table repaints it the moment they do. Only a table that
+ *  cannot be asked at all (not created, or asked mid-build) falls back
+ *  to the whole set.
+ ***************************************************************/
+function visible_conns(gobj)
+{
+    let config = gobj_find_service("treedb_config", false);
+    let all = config ? treedb_config_get_connections(config) : [];
+    let table = gobj_read_attr(gobj, "tabulator");
+    if(!table) {
+        return all;
+    }
+
+    let shown = [];
+    try {
+        shown = table.getData("active") || [];
+    } catch(e) {
+        return all;     /*  asked before the table was built  */
+    }
+    let on_screen = new Set(shown
+        .filter((d) => d && d._type === "conn")
+        .map((d) => d.conn_id));
+    return all.filter((c) => c && on_screen.has(c.id));
+}
+
+/***************************************************************
+ *  What the header box has to say: the three states, and whether
+ *  anything on screen has been discovered at all (nothing to browse
+ *  is a dead box, not an empty one).
+ ***************************************************************/
+function browse_header_state(gobj)
+{
+    let conns = visible_conns(gobj);
+    return {
+        state: conns_browse_state(conns),
+        any:   conns.some((c) => treedb_config_conn_services(c).length)
+    };
+}
+
+function paint_browse_box($cb, info)
+{
+    $cb.disabled = !info.any;
+    $cb.checked = (info.state === "all");
+    $cb.indeterminate = (info.state === "some");
+}
+
+/***************************************************************
+ *  Repaint the live header box (the element the formatter left in the
+ *  header, found where it is and not kept in a field that a redraw
+ *  would leave pointing at a checkbox nobody can see).
+ ***************************************************************/
+function paint_browse_header(gobj)
+{
+    let $c = gobj_read_attr(gobj, "$container");
+    let $cb = $c ? $c.querySelector(".CONNECTIONS_ALL_CHECK") : null;
+    if(!$cb) {
+        return;
+    }
+    paint_browse_box($cb, browse_header_state(gobj));
 }
 
 /***************************************************************
@@ -997,6 +1097,7 @@ function reload_table(gobj)
         }
         render_fold(gobj);
         update_count(gobj, rows);
+        paint_browse_header(gobj);
     }).catch(function(err) {
         log_warning(`${GCLASS_NAME}: table mid-rebuild: ${err && err.message}`);
     });
@@ -1199,6 +1300,41 @@ function ac_toggle_all_services(gobj, event, kw, src)
     }
     gobj_send_event(config, "EV_SET_CONN_SERVICES",
         {conn_id: conn_id, services: list}, gobj);
+
+    reload_table(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Take every service of every connection ON SCREEN, or drop them all.
+ *
+ *  The same rule the connection's own box follows: all-on drops the
+ *  lot, anything else takes it — which is what "some are ticked and I
+ *  pressed it" means.
+ *
+ *  ONE gesture, ONE write: a hundred connections written one at a time
+ *  is a hundred trips to localStorage and a hundred rebuilt pickers.
+ ***************************************************************/
+function ac_toggle_all_browse(gobj, event, kw, src)
+{
+    let config = gobj_find_service("treedb_config", false);
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_config service, ` +
+                  `cannot take the browse column`);
+        return -1;
+    }
+
+    let conns = visible_conns(gobj);
+    let ids = conns
+        .filter((c) => treedb_config_conn_services(c).length)
+        .map((c) => c.id);
+    if(!ids.length) {
+        return 0;       /*  nothing discovered on screen: nothing to take  */
+    }
+
+    let want = (conns_browse_state(conns) !== "all");
+    gobj_send_event(config, "EV_SET_CONNS_BROWSE",
+        {conn_ids: ids, selected: want}, gobj);
 
     reload_table(gobj);
     return 0;
@@ -1460,6 +1596,8 @@ function ac_search(gobj, event, kw, src)
         log_warning(`${GCLASS_NAME}: cannot filter: ${e}`);
     }
     render_fold(gobj);
+    /*  The header covers what is on screen, and that is what just changed. */
+    paint_browse_header(gobj);
     return 0;
 }
 
@@ -1884,6 +2022,7 @@ function create_gclass(gclass_name)
             ["EV_CLONE_CONN",           ac_clone_conn,           null],
             ["EV_TOGGLE_SERVICE",       ac_toggle_service,       null],
             ["EV_TOGGLE_ALL_SERVICES",  ac_toggle_all_services,  null],
+            ["EV_TOGGLE_ALL_BROWSE",    ac_toggle_all_browse,    null],
             ["EV_REFRESH_SERVICES",     ac_refresh_services,     null],
             ["EV_TOGGLE_CONN_ENABLED",  ac_toggle_conn_enabled,  null],
             ["EV_TOGGLE_FOLD",          ac_toggle_fold,          null],
@@ -1910,6 +2049,7 @@ function create_gclass(gclass_name)
         ["EV_CLONE_CONN",           0],
         ["EV_TOGGLE_SERVICE",       0],
         ["EV_TOGGLE_ALL_SERVICES",  0],
+        ["EV_TOGGLE_ALL_BROWSE",    0],
         ["EV_REFRESH_SERVICES",     0],
         ["EV_TOGGLE_CONN_ENABLED",  0],
         ["EV_TOGGLE_FOLD",          0],

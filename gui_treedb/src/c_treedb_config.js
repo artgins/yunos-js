@@ -221,6 +221,46 @@ function do_set_conn_services(gobj, conn_id, services)
 }
 
 /***************************************************************
+ *  Tick or untick the browse flag of EVERY service of MANY
+ *  connections, in ONE write.
+ *
+ *  A pasted deploy centre is two hundred backends and a thousand
+ *  treedbs: one EV_SET_CONN_SERVICES per connection would persist the
+ *  config two hundred times and publish the change two hundred times,
+ *  and every subscriber rebuilds its pickers on each one.
+ *
+ *  A connection with nothing discovered is left alone: there is
+ *  nothing of it to browse, and writing it back would only churn.
+ ***************************************************************/
+function do_set_conns_browse(gobj, conn_ids, selected)
+{
+    let want = new Set(Array.isArray(conn_ids) ? conn_ids : []);
+    let list = treedb_config_get_connections(gobj);
+    let touched = 0;
+
+    for(let i = 0; i < list.length; i++) {
+        if(!list[i] || !want.has(list[i].id)) {
+            continue;
+        }
+        let services = sanitize_services(list[i].services);
+        if(!services.length) {
+            continue;
+        }
+        list[i] = Object.assign({}, list[i], {
+            services: services.map((svc) => Object.assign({}, svc, {selected: selected}))
+        });
+        touched++;
+    }
+
+    if(!touched) {
+        return;
+    }
+    gobj_write_attr(gobj, "connections", list);
+    persist(gobj, "connections");
+    gobj_publish_event(gobj, "EV_CONNECTIONS_CHANGED", {connections: list});
+}
+
+/***************************************************************
  *  Store a service-discovery result (first connect, or a Settings
  *  refresh): the WHOLE found list replaces the connection's services,
  *  keeping the `selected` flag of every service that survived the
@@ -709,6 +749,17 @@ function ac_set_conn_services(gobj, event, kw, src)
     return 0;
 }
 
+function ac_set_conns_browse(gobj, event, kw, src)
+{
+    let ids = (kw && Array.isArray(kw.conn_ids)) ? kw.conn_ids : null;
+    if(!ids) {
+        log_error(`${GCLASS_NAME}: EV_SET_CONNS_BROWSE without conn_ids`);
+        return -1;
+    }
+    do_set_conns_browse(gobj, ids, !!(kw && kw.selected));
+    return 0;
+}
+
 function ac_store_scanned_services(gobj, event, kw, src)
 {
     do_store_scanned_services(gobj, (kw && kw.conn_id) || "", (kw && kw.services) || []);
@@ -887,6 +938,7 @@ function create_gclass(gclass_name)
         ["ST_IDLE", [
             ["EV_SET_CONNECTIONS",       ac_set_connections,       null],
             ["EV_SET_CONN_SERVICES",     ac_set_conn_services,     null],
+            ["EV_SET_CONNS_BROWSE",      ac_set_conns_browse,      null],
             ["EV_STORE_SCANNED_SERVICES", ac_store_scanned_services, null],
             ["EV_SET_CONN_ENABLED",      ac_set_conn_enabled,      null],
             ["EV_SET_CONN_EXPANDED",     ac_set_conn_expanded,     null],
@@ -908,6 +960,7 @@ function create_gclass(gclass_name)
         /*  input: the mutations (see the Actions banner)  */
         ["EV_SET_CONNECTIONS",          0],
         ["EV_SET_CONN_SERVICES",        0],
+        ["EV_SET_CONNS_BROWSE",         0],
         ["EV_STORE_SCANNED_SERVICES",   0],
         ["EV_SET_CONN_ENABLED",         0],
         ["EV_SET_CONN_EXPANDED",        0],

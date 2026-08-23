@@ -75,5 +75,45 @@ function plan_conn_import(existing, rows)
     return {fresh: fresh, skipped: skipped};
 }
 
+/***************************************************************
+ *  conns_browse_state(conns)
+ *
+ *      conns   the connections the header checkbox covers -- the ones
+ *              the filter leaves ON SCREEN, each with its `services`
+ *
+ *      -> "none" | "some" | "all"
+ *
+ *      What the header box of the browse column has to say. Counted
+ *      over SERVICES, not over connections: a header reading "all"
+ *      while half the treedbs of one connection are unticked would
+ *      drop them on the next click and call that a toggle.
+ *
+ *      A connection with nothing discovered yet counts nowhere --
+ *      there is nothing of it to browse.
+ ***************************************************************/
+function conns_browse_state(conns)
+{
+    let total = 0;
+    let on = 0;
 
-export {conn_identity, plan_conn_import};
+    for(let conn of (Array.isArray(conns) ? conns : [])) {
+        let services = (conn && Array.isArray(conn.services)) ? conn.services : [];
+        for(let svc of services) {
+            if(!svc || !svc.service) {
+                continue;
+            }
+            total++;
+            if(svc.selected) {
+                on++;
+            }
+        }
+    }
+
+    if(!total || !on) {
+        return "none";
+    }
+    return (on === total) ? "all" : "some";
+}
+
+
+export {conn_identity, plan_conn_import, conns_browse_state};

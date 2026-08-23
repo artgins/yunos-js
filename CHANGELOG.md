@@ -19,6 +19,37 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.16.0 — 2026-08-23
+
+What a paste of two hundred backends asks for: a header that takes the
+column, and a document that does not decide for you.
+
+### gui_treedb
+
+- **feat: the browse column has a header box.** Connections had a checkbox
+    per service and a tri-state one per connection, and none in the column
+    header — the third level the gui_agent picker gained in 0.14.4. It has
+    it now, with the same three states, covering **what the filter leaves on
+    screen** (`CONNECTIONS_ALL_CHECK`): "all" over rows nobody can see is not
+    what the eye agreed to. The state is counted over SERVICES, so a header
+    reading "all" cannot be hiding half a connection unticked.
+
+    One gesture is ONE write: the toggle sends a single `EV_SET_CONNS_BROWSE`
+    to `C_TREEDB_CONFIG` instead of one `EV_SET_CONN_SERVICES` per
+    connection, which for a pasted deploy centre was two hundred trips to
+    localStorage and two hundred rebuilt pickers.
+
+### gui_agent
+
+- **change: the copy For TreeDB arrives with nothing ticked.** It marked
+    every browsable service `selected: true`, on the grounds that the
+    operator asked for the yuno and not for a subset of it. That reads
+    differently at scale: pasting a scanned deploy centre into Connections
+    opened every treedb of every node at once, and untick-what-I-do-not-want
+    is the wrong way round when there are hundreds. The document now says
+    what each yuno EXPOSES; which of it to open is decided where it is
+    pasted — in one click, on the header box above.
+
 ## 0.15.1 — 2026-08-23
 
 Dos detalles de la convergencia de 0.15.0: lo que se perdió al adoptar la forma

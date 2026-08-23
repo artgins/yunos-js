@@ -8,7 +8,7 @@
  *      paste that carries one new yuno carries every old one with it.
  ***********************************************************************/
 import { describe, test, expect } from "vitest";
-import { conn_identity, plan_conn_import } from "./conn_helpers.js";
+import { conn_identity, plan_conn_import, conns_browse_state } from "./conn_helpers.js";
 
 const A = {url: "wss://a.example.com:1996", remote_yuno_service: "treedb"};
 const B = {url: "wss://b.example.com:1996", remote_yuno_service: "treedb"};
@@ -70,5 +70,38 @@ describe("what the document may carry", () => {
 
     test("nothing at all is not a crash", () => {
         expect(plan_conn_import(null, null)).toEqual({fresh: [], skipped: 0});
+    });
+});
+
+
+describe("what the header box of the browse column says", () => {
+    const conn = (...flags) => ({
+        services: flags.map((on, i) => ({service: `t${i}`, gclass: "C_NODE", selected: on}))
+    });
+
+    test("every service of every connection ticked reads 'all'", () => {
+        expect(conns_browse_state([conn(true, true), conn(true)])).toBe("all");
+    });
+
+    test("one connection short of it reads 'some', not 'all'", () => {
+        expect(conns_browse_state([conn(true, true), conn(false)])).toBe("some");
+    });
+
+    test("counted over services: half of ONE connection is still 'some'", () => {
+        expect(conns_browse_state([conn(true, false)])).toBe("some");
+    });
+
+    test("nothing ticked reads 'none'", () => {
+        expect(conns_browse_state([conn(false), conn(false, false)])).toBe("none");
+    });
+
+    test("a connection with nothing discovered counts nowhere", () => {
+        expect(conns_browse_state([conn(true), {services: []}])).toBe("all");
+        expect(conns_browse_state([{services: []}])).toBe("none");
+    });
+
+    test("nothing at all is not a crash", () => {
+        expect(conns_browse_state(null)).toBe("none");
+        expect(conns_browse_state([null, {}])).toBe("none");
     });
 });

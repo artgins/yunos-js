@@ -33,6 +33,7 @@ const es = {
         "class": "Clase",
         "browse": "Examinar",
         "browse all of this connection": "Examinar todos los de esta conexión",
+        "browse everything on screen": "Examinar todo lo que se ve",
         "cause":                              "Motivo",
         "user":                               "Usuario",
         /*  Tabulator renders its own chrome (paginator, notices): the keys
