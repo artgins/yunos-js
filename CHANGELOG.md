@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.18.2 — 2026-08-23
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.19.1` -> `^7.19.3`: a shift+click on a card no longer
+    smears a text selection across the graph.** Shift+click is the browser's
+    own extend-the-text-selection gesture, so the moment it came to mean
+    something in the graph, marking three nodes also painted their labels blue.
+    The canvas is a canvas. The popovers keep their selectable text — they
+    carry record data an operator copies out.
+
 ## 0.18.1 — 2026-08-23
 
 ### gui_agent, gui_treedb
