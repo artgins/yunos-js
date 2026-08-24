@@ -19,6 +19,15 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.1 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.0` -> `^7.23.1`: the per-node fold handle in the
+    JSON graph was invisible on a phone.** It was a bare `▾`, and at the zoom
+    that fits a document on screen a glyph is a couple of pixels of ink. It is
+    now the same filled chip the gobj tree draws (`+N` folded, `−` open).
+
 ## 0.22.0 — 2026-08-23
 
 ### gui_agent, gui_treedb
