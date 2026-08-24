@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.4 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.3` -> `^7.23.4`: every graph's camera is built in
+    one place.** `7.23.3` unified the JSON graph and stopped there; the gobj
+    tree still drew actual size as a bare magnifier, fit as `arrows-to-eye` and
+    fold as an eye. Both consoles show the two graphs, so the mismatch was
+    visible side by side. Neither owns a camera now — they ask
+    `yui_graph_camera.js` for one, and the gobj tree gains the zoom readout.
+
 ## 0.22.3 — 2026-08-24
 
 ### gui_agent, gui_treedb
