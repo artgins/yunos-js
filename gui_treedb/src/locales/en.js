@@ -220,6 +220,8 @@ const en = {
         "actual size": "Actual size",
         "zoom to selection": "Zoom to selection",
         "zoom level": "Zoom level",
+        "show toolbar": "Show toolbar",
+        "hide toolbar": "Hide toolbar",
         "refresh": "Refresh",
         "load more": "Load more",
         "no records": "No records",

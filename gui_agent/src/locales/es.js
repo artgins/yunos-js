@@ -374,6 +374,8 @@ const es = {
         "actual size": "Tamaño real",
         "zoom to selection": "Zoom a la selección",
         "zoom level": "Nivel de zoom",
+        "show toolbar": "Mostrar la barra",
+        "hide toolbar": "Ocultar la barra",
         "choose the columns to show": "Elegir las columnas a mostrar",
         "download the rows loaded in this table as csv": "Descargar como CSV las filas cargadas en esta tabla",
         "column":            "Columna",

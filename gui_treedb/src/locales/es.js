@@ -220,6 +220,8 @@ const es = {
         "actual size": "Tamaño real",
         "zoom to selection": "Zoom a la selección",
         "zoom level": "Nivel de zoom",
+        "show toolbar": "Mostrar la barra",
+        "hide toolbar": "Ocultar la barra",
         "refresh": "Refrescar",
         "load more": "Cargar más",
         "no records": "Sin registros",
