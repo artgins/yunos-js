@@ -19,6 +19,15 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.7 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.6` -> `^7.23.7`: the two folds are two things, in
+    two places.** The GLOBAL expand/collapse leads the toolbar, ahead of the
+    find box; the PER-NODE one sits on the right of each card's own header,
+    where the gobj tree has always put its `+N` / `−`.
+
 ## 0.22.6 — 2026-08-24
 
 ### gui_agent, gui_treedb
