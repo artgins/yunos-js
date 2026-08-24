@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.8 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.7` -> `^7.23.8`: the global fold leads all three
+    toolbars, and both graph find boxes clear.** Switching a JSON viewer from
+    tree to graph used to move the same two buttons across the row; and neither
+    graph's find box had a ✕, so a term could only be removed by selecting it
+    and deleting — worst on a phone, where there is no keyboard shortcut to
+    fall back on.
+
 ## 0.22.7 — 2026-08-24
 
 ### gui_agent, gui_treedb
