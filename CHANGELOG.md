@@ -19,6 +19,16 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.3 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.2` -> `^7.23.3`: one action, one drawing.** The
+    JSON graph's camera used a different picture from the treedb graph's for
+    the same two buttons — a bare magnifier for actual size, `arrows-to-eye`
+    for fit. Both consoles show the two graphs, so the mismatch was visible
+    side by side. They speak the same vocabulary now, zoom readout included.
+
 ## 0.22.2 — 2026-08-24
 
 ### gui_agent, gui_treedb
