@@ -489,6 +489,7 @@ const en = {
         "exit full screen":     "Exit full screen",
         "enter full screen":    "Enter full screen",
         "create node":          "Create node",
+        "selection mode":       "Selection mode",
         "redo":                 "Redo",
         "link to hook":         "Link to hook",
         "edge properties":      "Edge properties",

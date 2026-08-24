@@ -76,6 +76,7 @@ const es = {
         "auto fit": "Ajustar a la vista",
         "reset zoom": "Restablecer zoom",
         "create node": "Crear nodo",
+        "selection mode": "Modo selección",
         "delete node": "Borrar nodo",
         "node properties": "Propiedades del nodo",
         "edge properties": "Propiedades del enlace",

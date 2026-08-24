@@ -76,6 +76,7 @@ const en = {
         "auto fit": "Auto fit",
         "reset zoom": "Reset zoom",
         "create node": "Create node",
+        "selection mode": "Selection mode",
         "delete node": "Delete node",
         "node properties": "Node properties",
         "edge properties": "Edge properties",

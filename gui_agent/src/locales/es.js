@@ -493,6 +493,7 @@ const es = {
         "exit full screen":     "Salir de pantalla completa",
         "enter full screen":    "Pantalla completa",
         "create node":          "Crear nodo",
+        "selection mode":       "Modo selección",
         "redo":                 "Rehacer",
         "link to hook":         "Enlazar al hook",
         "edge properties":      "Propiedades del enlace",
