@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.13 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.12` -> `^7.23.13`: the graph's two selects speak
+    the app's language.** The layout one and the operation-mode one rendered
+    their raw names in every language, because neither went through `t()` at
+    all — the Spanish console said *"Modo de operación: reading"*. Nine new
+    keys in both locales: `reading`, `operation`, `writing`, `edition`,
+    `manual`, `dagre`, `antv-dagre`, `d3-force`, `force-atlas2`.
+
 ## 0.22.12 — 2026-08-24
 
 ### gui_agent, gui_treedb
