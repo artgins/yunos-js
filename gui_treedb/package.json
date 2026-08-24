@@ -1,7 +1,7 @@
 {
   "name": "gui-treedb",
   "private": true,
-  "version": "0.17.5",
+  "version": "0.17.8",
   "type": "module",
   "scripts": {
     "dev": "vite",

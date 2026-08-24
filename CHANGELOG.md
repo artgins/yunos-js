@@ -19,6 +19,41 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.11 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.10` -> `^7.23.11`: the treedb graph's
+    multi-selection reaches a finger.** Both of its gestures hang off Shift —
+    shift+click adds a card, shift+drag draws the rubber band — and a phone has
+    no Shift. The graph's edit toolbar carries a **selection mode** toggle now:
+    while it is on, a tap picks a card and a drag on the background draws the
+    band, with panning standing aside (G6 binds panning and the band to the
+    same plain drag, so one of the two has to). New host key `selection mode`,
+    defined in both consoles' locales.
+
+## 0.22.10 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.9` -> `^7.23.10`: a group move no longer moves
+    the whole graph.** Dragging a selection in a treedb graph also panned the
+    canvas, so everything moved and the selection appeared to run away — while
+    the saved result was right, because a pan writes nothing. Undo never lit on
+    a graph entered through the mode selector (the history plugin was tied to a
+    moment of the load rather than to the mode), and a click on the background
+    lit Save on a graph nobody had touched.
+
+## 0.22.9 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.8` -> `^7.23.9`: the three G6 graphs are operable
+    on a touch screen.** Pinch to zoom, a long press that opens the context
+    menu, the camera restored to `operation` mode, touch-sized targets behind
+    `(pointer: coarse)`, and the two floating toolbars folded behind one button
+    on a narrow container.
+
 ## 0.22.8 — 2026-08-24
 
 ### gui_agent, gui_treedb
