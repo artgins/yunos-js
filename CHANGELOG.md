@@ -19,6 +19,16 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.5 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.4` -> `^7.23.5`: `C_YUI_TREEDB_GRAPH` auto-registers
+    its engine.** It creates a `C_G6_NODES_TREE` child by name, and without that
+    gclass the failure lands as *"GClass not registered"* from inside a
+    component the host never named. Both apps register it explicitly today and
+    keep working — the register is idempotent.
+
 ## 0.22.4 — 2026-08-24
 
 ### gui_agent, gui_treedb
