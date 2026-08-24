@@ -19,6 +19,23 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.2 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.1` -> `^7.23.2`: the treedb JSON popups are WINDOWS
+    on a laptop, and the JSON graph picks a layout.** A schema or a cell's JSON
+    is read *while* looking at the table it came from, which a modal cannot
+    allow — they are movable, resizable, maximisable windows now, and stay
+    modal sheets on a phone. The graph gains `vertical tree`, `dagre top-down`
+    and `dagre left-right`.
+
+    It also stops two errors both consoles logged when a JSON popup was closed:
+    `Destroying a RUNNING gobj` for the graph child and `gobj NULL or
+    DESTROYED` for the window destroyed twice.
+
+    New locale entries: `vertical tree`, `dagre top-down`, `dagre left-right`.
+
 ## 0.22.1 — 2026-08-24
 
 ### gui_agent, gui_treedb
