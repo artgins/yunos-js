@@ -19,6 +19,16 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.6 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.5` -> `^7.23.6`: the fold pair sits on the right in
+    both graphs.** They had the same drawings since `7.23.4` but in different
+    places — one past the layout picker, the other in the middle of the camera
+    cluster. The middle is the camera; a fold changes the document, not the view
+    of it.
+
 ## 0.22.5 — 2026-08-24
 
 ### gui_agent, gui_treedb
