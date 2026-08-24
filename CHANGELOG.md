@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.12 — 2026-08-24
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.11` -> `^7.23.12`: the graph's selection-mode
+    toggle looks PRESSED.** It was painted with the palette's violet, which
+    that palette assigns to undo/redo — so two neighbouring buttons in the same
+    strip wore the same colour for two different reasons, and the state change
+    rode in the hairline of an outline glyph. It is an inverted neutral chip
+    now, hue-free.
+
 ## 0.22.11 — 2026-08-24
 
 ### gui_agent, gui_treedb
