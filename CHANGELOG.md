@@ -19,6 +19,24 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.18 — 2026-08-25
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.19`.** Brings the camera ANCHOR to the three node
+    viewers: pick one element from the toolbar's crosshairs and every zoom
+    leaves it in the middle. The viewers also open at ACTUAL SIZE rather than
+    fitted -- one topic's schema fits at 37%, where every card is grey texture
+    -- and a JSON card stops listing the containers it already draws as cards.
+
+    Three new i18n keys in both locale files: `anchor view`, `click the element
+    to centre on`, `centred: click to release`.
+
+    Also from 7.23.17-7.23.18: the JSON viewer remembers which of its three
+    views you read in, a container row says WHICH record it is, and every value
+    type now clears 4.5:1 on all five surfaces the viewer paints -- an orange
+    boolean on the graph's match chip used to measure 1.80:1.
+
 ## 0.22.17 — 2026-08-25
 
 ### gui_treedb

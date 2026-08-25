@@ -488,7 +488,10 @@ const es = {
             G6): la libreria traduce con el i18next de ESTA app.  */
         "zoom in":              "Acercar",
         "zoom out":             "Alejar",
+        "anchor view":          "Fijar la vista en un elemento",
         "auto fit":             "Ajustar a la vista",
+        "centred: click to release": "Centrado aqu\u00ed \u2014 pulsa para soltar",
+        "click the element to centre on": "Pulsa el elemento que quieres centrar",
         "reset zoom":           "Restablecer zoom",
         "exit full screen":     "Salir de pantalla completa",
         "enter full screen":    "Pantalla completa",

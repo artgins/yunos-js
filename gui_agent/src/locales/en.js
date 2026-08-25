@@ -484,7 +484,10 @@ const en = {
             the library translates through THIS app's i18next.  */
         "zoom in":              "Zoom in",
         "zoom out":             "Zoom out",
+        "anchor view":          "Anchor the view on an element",
         "auto fit":             "Auto fit",
+        "centred: click to release": "Centred here \u2014 click to release",
+        "click the element to centre on": "Click the element to centre on",
         "reset zoom":           "Reset zoom",
         "exit full screen":     "Exit full screen",
         "enter full screen":    "Enter full screen",
