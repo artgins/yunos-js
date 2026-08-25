@@ -16,7 +16,7 @@
   "dependencies": {
     "@antv/g6": "^5.1.1",
     "@yuneta/gobj-js": "^7.13.5",
-    "@yuneta/gobj-ui": "^7.23.21",
+    "@yuneta/gobj-ui": "^7.23.22",
     "bulma": "^1.0.4",
     "bulma-switch-control": "^1.2.2",
     "i18next": "^26.3.6",

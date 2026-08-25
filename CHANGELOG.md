@@ -19,6 +19,13 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.21 — 2026-08-25
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.22`.** Each port of a JSON card sits on the line
+    of its own row now, so a line leaves from beside the key it belongs to.
+
 ## 0.22.20 — 2026-08-25
 
 ### Both yunos
