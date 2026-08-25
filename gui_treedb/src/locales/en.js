@@ -279,6 +279,7 @@ const en = {
         "rows": "Rows",
         "live": "Live",
         "actions": "Actions",
+        "delete this key and every record it holds": "Delete this key and every record it holds?",
         "views": "views",
         "close": "Close",
         "realtime coming soon": "Realtime — coming soon",

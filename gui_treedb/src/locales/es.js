@@ -279,6 +279,7 @@ const es = {
         "rows": "Filas",
         "live": "En vivo",
         "actions": "Acciones",
+        "delete this key and every record it holds": "¿Borrar esta clave y todos los registros que contiene?",
         "views": "vistas",
         "close": "Cerrar",
         "realtime coming soon": "Tiempo real — próximamente",

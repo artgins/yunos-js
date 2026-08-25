@@ -1,8 +1,10 @@
 /***********************************************************************
  *          c_tranger_view.js
  *
- *      C_TRANGER_VIEW — read-only control panel over a remote C_TRANGER
- *      service: its topics and, per topic, a dashboard of record views.
+ *      C_TRANGER_VIEW — control panel over a remote C_TRANGER service: its
+ *      topics and, per topic, a dashboard of record views. It READS, with
+ *      one exception: a key can be deleted from the Keys picker (see the
+ *      trash button below).
  *
  *      Hosted by C_TREEDB_VIEW exactly like the treedb editors (same
  *      contract: `gobj_remote_yuno` is the live transport and
@@ -21,7 +23,11 @@
  *          row's "Rows"/"Live" button is colored ONLY while that view is
  *          open for the key and toggles it. A key's "Rows" opens an options
  *          form (server-side match conditions) and then a Rows card; "Live"
- *          opens a Live card directly. The options form offers BOTH time
+ *          opens a Live card directly. Its third button is the view's only
+ *          WRITE: it deletes the key and every record it holds (backend
+ *          `delete-key`, irrecoverable and master-only), asking first with
+ *          the record count in the question. A key born of a port scan or a
+ *          typo used to be listed for ever with no way to prune it. The options form offers BOTH time
  *          axes of a tranger record — `t` (persistence: when it was stored)
  *          and `tm` (message origin: when it happened) — as two independent
  *          ranges the iterator ANDs, each bounded to the key's real extent
@@ -98,7 +104,11 @@ import {t} from "i18next";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
-import {yui_shell_show_modal, yui_shell_popup_layer} from "@yuneta/gobj-ui/src/shell_modals.js";
+import {
+    yui_shell_show_modal,
+    yui_shell_popup_layer,
+    yui_shell_confirm_yesno,
+} from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {epoch_to_ms, infer_period} from "@yuneta/gobj-ui/src/yui_time.js";
@@ -1103,7 +1113,7 @@ function picker_columns(gobj, mobile)
         {title: t("records"), field: "records", width: mobile ? 70 : 110,
             hozAlign: "right"},
         {title: t("actions"), field: "_act", headerSort: false,
-            width: mobile ? 96 : 160,
+            width: mobile ? 132 : 224,
             formatter: (cell) => build_key_actions(gobj, cell)}
     ];
 }
@@ -1748,8 +1758,48 @@ function build_key_actions(gobj, cell)
         gobj_send_event(gobj, "EV_OPEN_CARD", {key: key, mode: "live"}, gobj);
     });
 
+    /*  The only WRITE this view has, so it never toggles anything: it asks,
+     *  and the delete happens in the action that receives the answer.  */
+    let $del = createElement2(
+        ["button", {class: "button is-small ml-1 TRANGER_KEY_DELETE",
+                    type: "button", title: t("delete"), "aria-label": t("delete")},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-trash"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "delete"}, t("delete")]
+            ]
+        ]);
+    $del.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        gobj_send_event(gobj, "EV_DELETE_KEY",
+            {key: key, records: Number(cell.getRow().getData().records) || 0}, gobj);
+    });
+
     return createElement2(
-        ["div", {class: "is-flex TRANGER_KEY_ACTIONS"}, [$rows, $live]]);
+        ["div", {class: "is-flex TRANGER_KEY_ACTIONS"}, [$rows, $live, $del]]);
+}
+
+/***************************************************************
+ *  Command to remote service: delete a whole key of the current topic.
+ *  Irrecoverable and master-only in the backend, so `force` is always 1 —
+ *  the question was already asked, and a second refusal from the server
+ *  would only be a dialog the user cannot answer.
+ ***************************************************************/
+function request_delete_key(gobj, topic_name, key)
+{
+    let remote = live_transport(gobj);
+    if(!remote) {
+        log_error(`${gobj_short_name(gobj)}: no session, cannot delete the key ` +
+                  `'${key}' of '${topic_name}'`);
+        return;
+    }
+    gobj_command(remote, "delete-key",
+        {
+            service:    gobj_read_str_attr(gobj, "treedb_name"),
+            topic_name: topic_name,
+            key:        key,
+            force:      1,
+            __md_command__: {topic_name: topic_name, key: key}
+        }, gobj);
 }
 
 /***************************************************************
@@ -3469,6 +3519,29 @@ function ac_mt_command_answer(gobj, event, kw, src)
             break;
         }
 
+        case "delete-key": {
+            /*  The key is gone. Nothing here polls, so this answer is what
+             *  refreshes the two places that still describe the topic as it
+             *  was: the picker's page and the toolbar's key count.  */
+            let topic = kw_get_str(gobj, kw_command, "topic_name", "", 0);
+            if(topic !== priv.cur_topic) {
+                break;      /*  stale answer of a previous topic  */
+            }
+            let key = kw_get_str(gobj, kw_command, "key", "", 0);
+            if(priv.key_spans) {
+                delete priv.key_spans[key];
+            }
+            if(priv.picker_tbl) {
+                try {
+                    priv.picker_tbl.replaceData();
+                } catch(e) {
+                    log_warning(`${GCLASS_NAME}: picker gone: ${e}`);
+                }
+            }
+            request_keys_count(gobj, topic);
+            break;
+        }
+
         case "open-iterator":
         case "close-iterator":
         case "open-rt":
@@ -3850,6 +3923,96 @@ function ac_open_card(gobj, event, kw, src)
  *  Close a card. `forget` (default true) also drops it from the
  *  persisted open-views set — a deliberate user close.
  ************************************************************/
+/************************************************************
+ *  The trash of a key row: ASK first. The delete takes every record the
+ *  key holds and there is no undo on an append-only store, so the count
+ *  travels into the question — it is the only thing that tells the user
+ *  what the button costs.
+ *
+ *  The resolved promise is an OS notification like any other: it becomes
+ *  an event, and the delete happens in ITS action, never in the `.then`.
+ ************************************************************/
+function ac_delete_key(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let key = (kw && kw.key) || "";
+    let records = (kw && Number(kw.records)) || 0;
+    if(!key) {
+        log_error(`${gobj_short_name(gobj)}: EV_DELETE_KEY without a key`);
+        return -1;
+    }
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell, cannot confirm the delete`);
+        return -1;
+    }
+
+    /*  A composed message, so BOTH halves survive a language switch: the
+     *  sentence carries its own key, the key name and the count are data.
+     *  The separator is a CSS margin — createElement2 trims text nodes.  */
+    let $msg = createElement2(
+        ["div", {class: "TRANGER_DELETE_KEY_MSG"},
+            [
+                ["p", {i18n: "delete this key and every record it holds"},
+                    t("delete this key and every record it holds")],
+                ["p", {class: "TRANGER_DELETE_KEY_WHAT mt-2 has-text-weight-bold"},
+                    [
+                        ["span", {}, `${priv.cur_topic} · ${key}`],
+                        ["span", {class: "ml-2"}, String(records)],
+                        ["span", {class: "ml-1", i18n: "records"}, t("records")]
+                    ]
+                ]
+            ]
+        ]);
+
+    yui_shell_confirm_yesno(shell, $msg, {
+        title:     "delete",
+        type:      "danger",
+        yes_label: "yes",
+        no_label:  "no",
+        logical_class: "TRANGER_DELETE_KEY_CONFIRM",
+        t:         t
+    }).then((yes) => {
+        if(gobj_is_destroying(gobj)) {
+            return;     /*  the view went away while the dialog was up  */
+        }
+        gobj_send_event(gobj, "EV_CONFIRM_DELETE_KEY",
+            {key: key, topic_name: priv.cur_topic, yes: !!yes}, gobj);
+    });
+    return 0;
+}
+
+/************************************************************
+ *  The answer to that confirmation.
+ *
+ *  The key's open cards go FIRST: a Rows card holds a server iterator on
+ *  the key and a Live card a realtime feed, and both would be left
+ *  pointing at something that no longer exists. `forget` is true, so the
+ *  saved views of a deleted key do not come back on the next visit.
+ ************************************************************/
+function ac_confirm_delete_key(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(!kw || !kw.yes) {
+        return 0;   /*  the user said no  */
+    }
+    let key = kw.key || "";
+    let topic_name = kw.topic_name || "";
+    if(topic_name !== priv.cur_topic) {
+        /*  The topic changed under the dialog: deleting in the topic the
+         *  user is NOT looking at is never what was confirmed.  */
+        log_warning(`${gobj_short_name(gobj)}: topic changed while confirming the ` +
+                    `delete of '${key}', nothing deleted`);
+        return 0;
+    }
+
+    for(let card of priv.cards.filter((c) => c.key === key)) {
+        close_card(gobj, card, true);
+    }
+    request_delete_key(gobj, topic_name, key);
+    return 0;
+}
+
 function ac_close_card(gobj, event, kw, src)
 {
     let card = card_of_event(gobj, event, kw, src);
@@ -4595,6 +4758,8 @@ function create_gclass(gclass_name)
             ["EV_APPLY_MATCH_COND",     ac_apply_match_cond,      null],
             ["EV_OPEN_CARD",            ac_open_card,             null],
             ["EV_CLOSE_CARD",           ac_close_card,            null],
+            ["EV_DELETE_KEY",           ac_delete_key,            null],
+            ["EV_CONFIRM_DELETE_KEY",   ac_confirm_delete_key,    null],
             ["EV_REFRESH_CARD",         ac_refresh_card,          null],
             ["EV_CLEAR_CARD",           ac_clear_card,            null],
             ["EV_TOGGLE_PAUSE",         ac_toggle_pause,          null],
@@ -4632,6 +4797,8 @@ function create_gclass(gclass_name)
         ["EV_APPLY_MATCH_COND",     0],
         ["EV_OPEN_CARD",            0],
         ["EV_CLOSE_CARD",           0],
+        ["EV_DELETE_KEY",           0],
+        ["EV_CONFIRM_DELETE_KEY",   0],
         ["EV_REFRESH_CARD",         0],
         ["EV_CLEAR_CARD",           0],
         ["EV_TOGGLE_PAUSE",         0],

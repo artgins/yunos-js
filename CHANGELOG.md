@@ -19,6 +19,32 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.17 — 2026-08-25
+
+### gui_treedb
+
+- **A key of a tranger topic can be deleted from the Keys picker.** Each key
+    row gains a third action next to Rows and Live, on the backend's new
+    `delete-key` (`C_TRANGER`, yunetas). The picker could always SHOW a key
+    born of a port scan or a typo, and nothing could remove it — so it stayed
+    in the topic, and in every view derived from the topic's keys, for ever.
+
+    It asks first, with the topic, the key and the record count in the
+    question: the delete is irrecoverable on an append-only store, and the
+    count is the only thing that says what the button costs. Both halves of
+    that question carry their own i18n key, so a language switch while the
+    dialog is up still re-translates it.
+
+    The key's open cards are closed BEFORE the command goes out — a Rows card
+    holds a server iterator on the key and a Live card a realtime feed, and
+    both would be left pointing at something that no longer exists. The answer
+    is what refreshes the picker's page and the toolbar's key count; nothing
+    here polls.
+
+    Note the backend's `delete-key` is **master-only**: against a tranger
+    opened with `master: 0` (a read-only replica) it refuses with "Only master
+    can delete", which the view surfaces as the error it is.
+
 ## 0.22.16 — 2026-08-25
 
 ### gui_agent, gui_treedb

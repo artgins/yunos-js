@@ -69,11 +69,16 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   to it). Every discovered service lives in the connected yuno and is
   addressed directly (`kw.service`).
 - **Tranger browser:** selected `C_TRANGER` services (Topics workspace only)
-  open the read-only `C_TRANGER_VIEW`: topic tabs and a per-topic Keys picker
+  open `C_TRANGER_VIEW`: topic tabs and a per-topic Keys picker
   (responsive — a moveable, non-modal window on desktop, an adaptive modal sheet
   on mobile; each key's Rows/Live button is colored only while that view is open
   and toggles it; the open/closed set is persisted per connection and cleared
-  when the connection is removed). The picker **searches, sorts and pages in the
+  when the connection is removed). The view READS, with one exception: each key
+  row's third button DELETES the key and every record it holds (`delete-key`,
+  irrecoverable and master-only in the backend). It asks first — with the topic,
+  the key and the record count in the question — and closes that key's open
+  cards before the delete, because a Rows card holds a server iterator on the
+  key and a Live card a realtime feed. The picker **searches, sorts and pages in the
   BACKEND** (`list-keys` with `rkey` / `order` / `desc` / `from` / `limit`): a
   topic with a hundred thousand keys is never transferred whole to show 15 rows.
   The search term is a plain substring, escaped into the regex the backend
