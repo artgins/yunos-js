@@ -19,6 +19,15 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.22 — 2026-08-25
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.24`.** A line now carries an arrowhead and arrives
+    at a port above the card's title, and the cards of the JSON graph and the
+    gobj tree can be MOVED -- with a finger too, which needed the mounts to
+    refuse the browser's gestures. The position is not kept across a refresh.
+
 ## 0.22.21 — 2026-08-25
 
 ### Both yunos
