@@ -19,6 +19,22 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.14 — 2026-08-25
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.13` -> `^7.23.14`: on a phone, a finger moves a
+    node.** Two defects in the graph, both in the way of the plainest thing
+    there is to do in edition mode. The browser was taking the gesture: G6 puts
+    `touch-action: none` on its canvas and nothing on its HTML nodes, so a drag
+    that started on a CARD was a page scroll — two `pointermove`s, then
+    `pointercancel`, and the node stopped about 20px in while the page slid.
+    And the long press fired on a TIMER while `drag-element` was already
+    carrying the node, so one press meant both things at once. The press is
+    arbitrated at the RELEASE now: moved -> drag, still and quick -> the
+    element's own action, still and held -> the context menu. No host change,
+    no new keys.
+
 ## 0.22.13 — 2026-08-24
 
 ### gui_agent, gui_treedb
