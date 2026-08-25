@@ -19,6 +19,14 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.19 — 2026-08-25
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.20`.** The JSON graph stops drawing a pure
+    collection as a node of its own: `cols` is one key of the topic dict like
+    `pkey` is, so it is a ROW in the card and its columns hang from the card.
+
 ## 0.22.18 — 2026-08-25
 
 ### Both yunos
