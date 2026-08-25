@@ -19,6 +19,19 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.16 — 2026-08-25
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.15` -> `^7.23.16`: the graph's toolbar gets its
+    scroll arrows back on a phone.** In the treedb graph the toolbar shares its
+    row with the pinned `GRAPH_BACK_TOPICS` link, and that was enough to lose
+    them: a flex item's `min-width: auto` is its CONTENT minimum, and the
+    toolbar's sections are `flex-shrink: 0`, so the toolbar refused to shrink,
+    kept the whole row width, and its right arrow ended up outside the ancestor
+    that clips the view. Standalone — one toolbar alone in its row, as on the
+    library's test page — nothing shrinks and nothing showed.
+
 ## 0.22.15 — 2026-08-25
 
 ### gui_agent, gui_treedb
