@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.15 — 2026-08-25
+
+### gui_agent, gui_treedb
+
+- **`@yuneta/gobj-ui` `^7.23.14` -> `^7.23.15`: the graph's long press says so
+    when it crosses the line.** Deciding the press at the release costs one
+    thing — while the finger is down, nothing says that letting go would now
+    give the menu rather than the node's own action. A 15ms haptic tick at the
+    500ms mark says it. A NOTICE, not the decision: a finger that buzzes and
+    then carries the node away still gets its drag.
+
 ## 0.22.14 — 2026-08-25
 
 ### gui_agent, gui_treedb
