@@ -540,6 +540,34 @@ const en = {
         "operation mode":       "Operation mode",
 
         "apply needs a node restart": "Applying is restarting the yuno, and the agent is not one: restart it on the node",
+        /*  gclass viewer (C_YUI_GCLASS)  */
+        "matrix view":                      "Matrix view",
+        "events":                           "events",
+        "leave":                            "leave",
+        "entry state":                      "Entry state",
+        "event":                            "Event",
+        "attributes":                       "Attributes",
+        "methods":                          "Methods",
+        "internal methods":                 "Internal methods",
+        "trace levels":                     "Trace levels",
+        "machine":                          "Machine",
+        "instances":                        "instances",
+        "description":                      "Description",
+        "publishes":                        "Publishes",
+        "current state":                    "Current state",
+        "state with no declared entry":     "State with no declared entry",
+        "not declared in this state":       "Not declared in this state",
+        "action":                           "Action",
+        "zones view":                       "Zones view",
+        "raw view":                         "Raw view",
+        "no attributes declared":           "This gclass declares no attributes",
+        "no commands declared":             "This gclass declares no commands",
+        "no methods declared":              "This gclass implements no methods",
+        "no trace levels declared":         "This gclass declares no trace levels",
+        "no machine declared":              "This gclass declares no machine",
+        "no matches":                       "No matches",
+        "text truncated":                   "Text truncated",
+
 
         /* keep this last so adding new keys above never hits the comma trap */
         "_xxx":              "last key — insert new ones above"

@@ -544,6 +544,34 @@ const es = {
         "operation mode":       "Modo de operación",
 
         "apply needs a node restart": "Aplicar es reiniciar el yuno, y el agente no lo es: reinicialo en el nodo",
+        /*  visor de gclass (C_YUI_GCLASS)  */
+        "matrix view":                      "Vista en matriz",
+        "events":                           "eventos",
+        "leave":                            "salen",
+        "entry state":                      "Estado inicial",
+        "event":                            "Evento",
+        "attributes":                       "Atributos",
+        "methods":                          "Métodos",
+        "internal methods":                 "Métodos internos",
+        "trace levels":                     "Niveles de traza",
+        "machine":                          "Máquina",
+        "instances":                        "instancias",
+        "description":                      "Descripción",
+        "publishes":                        "Publica",
+        "current state":                    "Estado actual",
+        "state with no declared entry":     "Estado sin entrada declarada",
+        "not declared in this state":       "No declarado en este estado",
+        "action":                           "Acción",
+        "zones view":                       "Vista por zonas",
+        "raw view":                         "Vista en crudo",
+        "no attributes declared":           "Esta gclass no declara atributos",
+        "no commands declared":             "Esta gclass no declara comandos",
+        "no methods declared":              "Esta gclass no implementa métodos",
+        "no trace levels declared":         "Esta gclass no declara niveles de traza",
+        "no machine declared":              "Esta gclass no declara máquina",
+        "no matches":                       "Sin coincidencias",
+        "text truncated":                   "Texto truncado",
+
 
         /* mantener al final — insertar nuevas claves antes */
         "_xxx":              "última clave — insertar nuevas antes"
