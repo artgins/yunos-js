@@ -19,6 +19,20 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.32 — 2026-08-26
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.35`, `@yuneta/gobj-js` `^7.13.8`.** The simpler
+    machine-trace shape now actually arrives. 0.22.31 moved the default and it
+    reached nobody who had used the developer window before (a stored
+    preference beats a default, so the preference moved to a new key), and
+    four of the six trace sites had no simpler shape at all — the state
+    change, the injection, the publish and the subscriber forward still wrote
+    the legacy `mach(…)` line. The trace is the C kernel's now, line for line,
+    and the publish path stopped printing a bare `{}` under every
+    publication.
+
 ## 0.22.31 — 2026-08-26
 
 ### Both yunos
