@@ -19,6 +19,25 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.27 — 2026-08-26
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.30`.** The gobj tree (the Frontend view window)
+    now says on the card what a gobj IS and what it is DOING: a coloured status
+    pill (stopped / running / playing), badges for the role and for `disabled`
+    / `bottom` / `commands`, the FSM state on its own line, and a dashed dimmed
+    border for a disabled gobj. A brighter five-hue palette with it. The
+    popover grew a **`gclass` button** that opens the whole gclass -- attrs,
+    commands, methods, FSM -- in a C_YUI_JSON window; it is drawn only because
+    both yunos register C_YUI_JSON.
+
+    New consumer i18n keys in both locale dirs: `service`, `child`,
+    `pure child`, `volatil child`, `disabled`, `bottom`, `bottom gobj`,
+    `playing`, `running (paused)`, `stopped`, `running`, `traces`,
+    `view gclass`, `expand children`, `collapse children`,
+    `gclass viewer unavailable`, `gclass not registered in this yuno`.
+
 ## 0.22.22 — 2026-08-25
 
 ### Both yunos
