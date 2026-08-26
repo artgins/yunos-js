@@ -28,6 +28,16 @@ on its own, outside the yunetas superproject.
     gobj tree can be MOVED -- with a finger too, which needed the mounts to
     refuse the browser's gestures. The position is not kept across a refresh.
 
+## 0.22.26 — 2026-08-26
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.29`.** Folding a branch no longer re-packs the
+    graph: the card under the finger stays put and so does everything still on
+    screen. The gobj tree remembers its layout, zoom, camera, folds and anchor
+    between visits. The anchor marks its node in all three viewers now, and the
+    gobj-tree popover's close button is finally reachable with a thumb.
+
 ## 0.22.25 — 2026-08-26
 
 ### Both yunos
