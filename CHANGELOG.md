@@ -28,6 +28,15 @@ on its own, outside the yunetas superproject.
     gobj tree can be MOVED -- with a finger too, which needed the mounts to
     refuse the browser's gestures. The position is not kept across a refresh.
 
+## 0.22.23 — 2026-08-26
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.26`.** The camera anchor could not be picked with
+    a real mouse (a click that drifts 2px became a drag) and marked nothing
+    once picked. Both fixed; JSON graph cards are `JSON_CARD` with a
+    `data-json-path` now.
+
 ## 0.22.22 — 2026-08-26
 
 ### Both yunos
