@@ -28,6 +28,14 @@ on its own, outside the yunetas superproject.
     gobj tree can be MOVED -- with a finger too, which needed the mounts to
     refuse the browser's gestures. The position is not kept across a refresh.
 
+## 0.22.25 — 2026-08-26
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.28`.** Fixes a crash on load of the treedb graph
+    (`calculate_hooks_fkeys_counter is not defined`), a regression that had
+    been shipping since 7.23.21.
+
 ## 0.22.24 — 2026-08-26
 
 ### Both yunos
