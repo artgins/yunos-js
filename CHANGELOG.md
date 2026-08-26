@@ -28,6 +28,14 @@ on its own, outside the yunetas superproject.
     gobj tree can be MOVED -- with a finger too, which needed the mounts to
     refuse the browser's gestures. The position is not kept across a refresh.
 
+## 0.22.24 — 2026-08-26
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.27`.** The camera anchor holds its node on the
+    WHEEL as well as on the zoom buttons, the crosshair and the mark on the
+    anchored card are actually painted, and the wheel stopped easing.
+
 ## 0.22.23 — 2026-08-26
 
 ### Both yunos
