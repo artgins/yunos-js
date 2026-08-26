@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.30 — 2026-08-26
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.33`, `@yuneta/gobj-js` `^7.13.6`.** The developer
+    window's `Periodic` chip now silences the timers in the browser CONSOLE
+    too, not only in its own panel: with the Output selector on "Both" the
+    same flood was arriving one pane over. gobj-js writes the console line
+    before it calls the log sink, so it had to hand out a say
+    (`set_console_log_filter`) for the window to be able to use it.
+
 ## 0.22.29 — 2026-08-26
 
 ### Both yunos
