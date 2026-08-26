@@ -19,6 +19,22 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.31 — 2026-08-26
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.34`, `@yuneta/gobj-js` `^7.13.7`.** The machine
+    trace is written in the SIMPLER shape by default now — one line per
+    transition, event first, the C kernel's default — instead of the legacy
+    three (the call, the state change and the return). Both stay; the
+    developer window's `Simple mach` chip swaps them.
+
+    Two defects in that window with it: the trace lost its nesting
+    INDENTATION on the way to the DOM, so it read as a flat column where the
+    console read as a tree; and the empty state claimed there was no activity
+    while the filter was hiding it, instead of saying that nothing matched the
+    filters.
+
 ## 0.22.30 — 2026-08-26
 
 ### Both yunos
