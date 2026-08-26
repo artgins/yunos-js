@@ -19,6 +19,18 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.29 — 2026-08-26
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.32`.** The developer window's `Periodic` chip now
+    reaches the MACHINE trace, which is the only thing it was ever needed for:
+    with Automata on it hid nothing, because every mirrored log line was signed
+    by its level rather than by its event. It is also ON by default -- the
+    first thing anybody saw after enabling Automata was a wall of `EV_TIMEOUT`
+    with their own transitions somewhere inside it. An error or a warning is
+    never hidden by it, whatever event it names.
+
 ## 0.22.28 — 2026-08-26
 
 ### Both yunos
