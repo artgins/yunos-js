@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.28 — 2026-08-26
+
+### Both yunos
+
+- **`@yuneta/gobj-ui` `^7.23.31`.** Fixes the gclass window (and the treedb
+    graph's raw-JSON window) never resizing its graph: the canvas kept the size
+    it was born with while the window grew around it. It needed the reader to
+    have last used the GRAPH view -- the viewer remembers the view mode, so it
+    built the graph while its DOM was still detached, found no mount, and
+    attached no `ResizeObserver`.
+
 ## 0.22.27 — 2026-08-26
 
 ### Both yunos
