@@ -438,6 +438,7 @@ const en = {
         "are you sure": "Are you sure?",
         "please select some row": "Please select some row",
         /*  gclass viewer (C_YUI_GCLASS)  */
+        "accepted with no action":          "Accepted, with no action",
         "matrix view":                      "Matrix view",
         "events":                           "events",
         "leave":                            "leave",

@@ -439,6 +439,7 @@ const es = {
         "are you sure": "¿Está seguro?",
         "please select some row": "Seleccione alguna fila",
         /*  visor de gclass (C_YUI_GCLASS)  */
+        "accepted with no action":          "Aceptado, sin acción",
         "matrix view":                      "Vista en matriz",
         "events":                           "eventos",
         "leave":                            "salen",
