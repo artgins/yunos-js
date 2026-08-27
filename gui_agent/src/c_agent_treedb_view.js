@@ -318,8 +318,12 @@ function build_modes_bar(gobj)
     let $bar = createElement2(
         ["div", {class: "TREEDB_VIEW_MODES p-2 is-flex is-align-items-center",
                  style: "flex:none; gap:.35rem;"}, [
-            mode_button("TREEDB_VIEW_MODE_SCHEMA", "yi-sitemap",
-                "schema view", "EV_SHOW_SCHEMA_VIEW"),
+            /*  "editor" y no "esquema": las TABLAS llevan ya un boton
+             *  suyo rotulado `schema`, que es otra cosa -- su grafo de
+             *  esquema.  Dos botones con el mismo rotulo en la misma
+             *  pantalla haciendo cosas distintas es una trampa.  */
+            mode_button("TREEDB_VIEW_MODE_SCHEMA", "yi-pen",
+                "schema editor", "EV_SHOW_SCHEMA_VIEW"),
             mode_button("TREEDB_VIEW_MODE_TABLES", "yi-table",
                 "storage tables", "EV_SHOW_RAW_VIEW")
         ]]
@@ -335,6 +339,7 @@ function paint_modes(gobj, which)
 {
     let priv = gobj.priv;
 
+    priv.face = which;      /*  lo lee apply_seg: ver la rama de ruta vacia  */
     if(!priv.$modes) {
         return;
     }
@@ -804,7 +809,22 @@ function apply_seg(gobj, seg)
         return;
     }
 
-    if(empty_string(seg) && has_editor(gobj)) {
+    /*
+     *  UNA RUTA VACIA DENTRO DE LAS TABLAS NO ES "VETE AL EDITOR".
+     *
+     *  El aterrizaje de las tablas se reporta a si mismo como ruta vacia,
+     *  asi que salir de su grafo de esquema -- que es un boton SUYO, y
+     *  esta rotulado `schema` -- llegaba aqui con el seg vacio y expulsaba
+     *  al operador al editor, sin que nada dijera por que.
+     *
+     *  La normalizacion sigue en pie para una llegada limpia: es lo que
+     *  hace que entrar en este treedb aterrice en el editor.  Lo que no
+     *  puede hacer es mover a nadie de cara.
+     */
+    if(empty_string(seg) && has_editor(gobj) && priv.face === "tables") {
+        gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {seg: RAW_SEG}, gobj);
+        /*  y sigue de largo, a la rama de las tablas  */
+    } else if(empty_string(seg) && has_editor(gobj)) {
         /*
          *  Normalize: the position is the editor's, so the url says so and
          *  a reload lands back on it.

@@ -19,6 +19,29 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.37 — 2026-08-27
+
+### Fixed
+
+- **Leaving the tables' schema graph ejected the operator into the editor.**
+  The tables' landing reports itself as an EMPTY route, and an empty route on
+  the system treedb means "land on the editor" -- the normalization that makes
+  entering this treedb open the editor in the first place. So pressing the
+  tables' own `schema` button twice (in, then out of its graph) did not come
+  back to the tables: it changed FACE, with nothing on screen saying why.
+
+  The normalization stays for a clean arrival. What it may no longer do is
+  move anybody between faces: inside the tables, an empty route is the tables'
+  landing.
+
+- **Two buttons labelled `schema` on the same screen, doing different things.**
+  The new mode bar's is now **`editor`**, which is what it opens; the tables
+  keep their own `schema`, which is their schema GRAPH. Same label, same
+  screen, different jobs is a trap.
+
+  (And its icon changed to `yi-pen`: `yi-pen-to-square` is not in the set, and
+  an undefined `yi-*` renders as a solid black square.)
+
 ## 0.22.36 — 2026-08-27
 
 ### Added

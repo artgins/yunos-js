@@ -383,7 +383,7 @@ const es = {
         "key":               "Clave",
         "rows":              "Filas",
         "raw json":          "JSON crudo",
-        "schema view": "Esquema",
+        "schema editor": "Editor",
         "storage tables": "Tablas",
         "show json":         "Ver JSON",
         "copy":              "Copiar",
