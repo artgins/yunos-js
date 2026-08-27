@@ -19,6 +19,14 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.38 — 2026-08-27
+
+### Fixed
+
+- **gobj-ui `^7.23.44`**: `fr_t` and `fr_tm` got no date beside them in a Raw
+  JSON while `to_t` did — timeranger2 spells the metadata pair `fr_*` and only
+  the query's `from_*` was listed.
+
 ## 0.22.37 — 2026-08-27
 
 ### Fixed
