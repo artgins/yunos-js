@@ -541,6 +541,7 @@ const en = {
 
         "apply needs a node restart": "Applying is restarting the yuno, and the agent is not one: restart it on the node",
         /*  gclass viewer (C_YUI_GCLASS)  */
+        "fsm state":                      "FSM state",
         "accepted with no action":          "Accepted, with no action",
         "matrix view":                      "Matrix view",
         "events":                           "events",

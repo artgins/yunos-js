@@ -219,7 +219,13 @@ function main()
      *      desktop, an inline taskbar row in the shell's free `bottom-sub`
      *      zone on mobile (above the primary menu, which owns `bottom`).
      *------------------------------------------------*/
-    gobj_create_service(
+    /*  Started here on purpose: c_yuno's mt_play only starts the DEFAULT
+     *  service, so every other service is the creator's to start. Left
+     *  unstarted it still WORKED -- the dock is built in mt_create and
+     *  driven by events, and the gclass has no mt_start -- so nothing
+     *  ever complained; it just showed up as `!!C_YUI_WINDOW_MANAGER`
+     *  in every trace line and as "stopped" in the frontend view.  */
+    gobj_start(gobj_create_service(
         "__window_manager__",
         "C_YUI_WINDOW_MANAGER",
         {
@@ -228,7 +234,7 @@ function main()
             inline_selector: '[data-zone="bottom-sub"]'
         },
         yuno
-    );
+    ));
 
     /*------------------------------------------------*
      *          Play

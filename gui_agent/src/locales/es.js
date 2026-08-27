@@ -545,6 +545,7 @@ const es = {
 
         "apply needs a node restart": "Aplicar es reiniciar el yuno, y el agente no lo es: reinicialo en el nodo",
         /*  visor de gclass (C_YUI_GCLASS)  */
+        "fsm state":                      "Estado FSM",
         "accepted with no action":          "Aceptado, sin acción",
         "matrix view":                      "Vista en matriz",
         "events":                           "eventos",
