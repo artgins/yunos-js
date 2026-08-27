@@ -48,10 +48,14 @@ import {
     gobj_has_event,
     gobj_short_name, gobj_name,
     createElement2,
+    refresh_language,
     empty_string,
 } from "@yuneta/gobj-js";
 
+import i18next from "i18next";
+
 import {yui_mount_service_view} from "@yuneta/gobj-ui/src/c_yui_service_view.js";
+import {set_pressed_state} from "@yuneta/gobj-ui/src/lib_graph.js";
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {agent_link_is_connected} from "./c_agent_link.js";
@@ -250,12 +254,92 @@ function build_ui(gobj)
                  style: "flex:1 1 auto; min-height:0;"}, []]
     );
 
+    /*
+     *  DOS CARAS, Y UNA MANERA DE PASAR DE UNA A OTRA.
+     *
+     *  El treedb de sistema se lee de dos formas: el EDITOR, que enseña
+     *  el esquema como esquema, y las TABLAS, que enseñan lo mismo como
+     *  lo que en realidad es -- filas de `treedbs`, `topics` y `cols`.
+     *  Las dos tenían dirección desde el principio (`edit` y `raw`) y el
+     *  mapa del sitio las listaba, pero NADA en la pantalla llevaba a las
+     *  tablas: había que teclear la ruta o pescarla del mapa.
+     *
+     *  Es un MODO, no una acción, así que la opción activa se ve PULSADA
+     *  en vez de tomar un color de la paleta -- cada uno de esos colores
+     *  nombra una clase de acción.
+     *
+     *  Sólo se construye donde hay dos caras que elegir: en un treedb de
+     *  datos no hay editor, y una barra con una sola opción es ruido.
+     */
+    priv.$modes = null;
+    if(has_editor(gobj)) {
+        priv.$modes = build_modes_bar(gobj);
+    }
+
     let $c = createElement2(
         ["div", {class: `${GCLASS_NAME} TREEDB_VIEW_CARD`,
                  style: "display:flex; flex-direction:column; height:100%;"},
             [priv.$body, priv.$graph_body, priv.$editor_body]]
     );
+    if(priv.$modes) {
+        $c.insertBefore(priv.$modes, priv.$body);
+    }
     gobj_write_attr(gobj, "$container", $c);
+}
+
+/***************************************************************
+ *  Las dos caras del treedb de sistema, como conmutador.
+ *
+ *  Cada botón MANDA UN EVENTO y no navega por su cuenta: la ruta
+ *  la escribe la acción, que es la que sabe dónde estamos.
+ ***************************************************************/
+function build_modes_bar(gobj)
+{
+    const t = i18next.t;
+
+    function mode_button(logical, icon, label, event)
+    {
+        return ["button", {
+            class: `${logical} button is-small`,
+            type: "button",
+            title: t(label), "aria-label": t(label),
+            "data-i18n-title": label, "data-i18n-aria-label": label
+        }, [
+            ["span", {class: "icon"}, [["i", {class: icon}]]],
+            ["span", {i18n: label}, t(label)]
+        ], {
+            click: (evt) => {
+                evt.stopPropagation();
+                gobj_send_event(gobj, event, {}, gobj);
+            }
+        }];
+    }
+
+    let $bar = createElement2(
+        ["div", {class: "TREEDB_VIEW_MODES p-2 is-flex is-align-items-center",
+                 style: "flex:none; gap:.35rem;"}, [
+            mode_button("TREEDB_VIEW_MODE_SCHEMA", "yi-sitemap",
+                "schema view", "EV_SHOW_SCHEMA_VIEW"),
+            mode_button("TREEDB_VIEW_MODE_TABLES", "yi-table",
+                "storage tables", "EV_SHOW_RAW_VIEW")
+        ]]
+    );
+    refresh_language($bar, t);
+    return $bar;
+}
+
+/***************************************************************
+ *  Cual de las dos caras se esta mirando.
+ ***************************************************************/
+function paint_modes(gobj, which)
+{
+    let priv = gobj.priv;
+
+    if(!priv.$modes) {
+        return;
+    }
+    set_pressed_state(priv.$modes, ".TREEDB_VIEW_MODE_SCHEMA", which === "schema");
+    set_pressed_state(priv.$modes, ".TREEDB_VIEW_MODE_TABLES", which === "tables");
 }
 
 /***************************************************************
@@ -647,6 +731,28 @@ function ac_normalize_route(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Los dos modos del treedb de sistema.
+ *
+ *  Escriben la ruta y la aplican, que es lo mismo que hace
+ *  cualquier otra navegacion de esta vista: la URL es la
+ *  posicion, asi que un F5 vuelve a la cara que se estaba
+ *  mirando y el enlace se puede compartir.
+ ***************************************************************/
+function ac_show_schema_view(gobj, event, kw, src)
+{
+    navigate_seg(gobj, EDIT_SEG);
+    apply_seg(gobj, EDIT_SEG);
+    return 0;
+}
+
+function ac_show_raw_view(gobj, event, kw, src)
+{
+    navigate_seg(gobj, RAW_SEG);
+    apply_seg(gobj, RAW_SEG);
+    return 0;
+}
+
+/***************************************************************
  *  Apply the part of the subpath this view owns.
  *
  *      edit[/<treedb>[/<topic>|/diagram]]   the schema editor
@@ -673,6 +779,7 @@ function apply_seg(gobj, seg)
         return;
     }
     if(is_edit_seg(seg)) {
+        paint_modes(gobj, "schema");
         if(show_pane(gobj, "editor") < 0) {
             /*  No editor here (a data treedb, or the gclass is not
              *  registered): the topic grid is what this treedb has.  */
@@ -685,6 +792,7 @@ function apply_seg(gobj, seg)
         return;
     }
     if(is_graph_seg(seg)) {
+        paint_modes(gobj, "");      /*  el grafo no es ninguna de las dos  */
         if(show_pane(gobj, "graph") < 0) {
             return;     /*  Error already logged  */
         }
@@ -725,6 +833,9 @@ function apply_seg(gobj, seg)
         return;
     }
 
+    /*  Todo lo que queda es la cara de TABLAS: `raw`, un topic por su
+     *  nombre, o el aterrizaje de un treedb sin editor.  */
+    paint_modes(gobj, "tables");
     show_pane(gobj, "view");
     if(empty_string(seg) || seg === RAW_SEG) {
         gobj_send_event(priv.view, "EV_SHOW", {href: ""}, gobj);
@@ -926,7 +1037,9 @@ function create_gclass(gclass_name)
             ["EV_RECORD_WRITTEN",       ac_record_written,    null],
             ["EV_POSITION_CHANGED",     ac_position_changed,  null],
             ["EV_SCHEMA_CHECKED",       ac_schema_checked,    null],
-            ["EV_NORMALIZE_ROUTE",      ac_normalize_route,   null]
+            ["EV_NORMALIZE_ROUTE",      ac_normalize_route,   null],
+            ["EV_SHOW_SCHEMA_VIEW",     ac_show_schema_view,  null],
+            ["EV_SHOW_RAW_VIEW",        ac_show_raw_view,     null]
         ]]
     ];
 
@@ -942,7 +1055,9 @@ function create_gclass(gclass_name)
         ["EV_RECORD_WRITTEN",    0],
         ["EV_POSITION_CHANGED",  0],
         ["EV_SCHEMA_CHECKED",    0],
-        ["EV_NORMALIZE_ROUTE",   0]
+        ["EV_NORMALIZE_ROUTE",   0],
+        ["EV_SHOW_SCHEMA_VIEW",  0],
+        ["EV_SHOW_RAW_VIEW",     0]
     ];
 
     __gclass__ = gclass_create(

@@ -379,6 +379,8 @@ const en = {
         "key":               "key",
         "rows":              "Rows",
         "raw json":          "Raw JSON",
+        "schema view": "Schema",
+        "storage tables": "Tables",
         "show json":         "Show JSON",
         "copy":              "Copy",
         "undo":              "Undo",

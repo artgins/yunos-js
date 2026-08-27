@@ -19,6 +19,26 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.36 — 2026-08-27
+
+### Added
+
+- **A way INTO the storage tables of the system schema.** The system treedb
+  reads two ways — the schema editor, and the same thing as what it actually
+  is: rows of `treedbs`, `topics` and `cols`. Both had an address from the
+  start (`edit` and `raw`), and the site map listed them, but **nothing on
+  screen led to the tables**: you had to type the route or fish it out of the
+  map.
+
+  A two-button bar at the top of the treedb view, built only where there are
+  two faces to choose between — a data treedb has no editor, and a bar with
+  one option is noise. It is a MODE, so the active one looks PRESSED rather
+  than taking a colour from the palette: each of those names a KIND of action.
+
+  Each button sends an event and does not navigate on its own; the action
+  writes the route, so a reload comes back to the face you were looking at and
+  the link can be shared.
+
 ## 0.22.35 — 2026-08-27
 
 ### Fixed
