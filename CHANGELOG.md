@@ -19,6 +19,14 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.34 — 2026-08-27
+
+### Fixed
+
+- **gobj-ui `^7.23.42`**: a topic's table had two scrolls and its row count
+  fell between them. The toolbar and the footer could never be seen at the
+  same time.
+
 ## 0.22.33 — 2026-08-27
 
 ### Fixed
