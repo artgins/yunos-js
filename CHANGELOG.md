@@ -19,6 +19,14 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.35 — 2026-08-27
+
+### Fixed
+
+- **gobj-ui `^7.23.43`**: the schema editor's "raise the version" banner could
+  not be dismissed, and every press raised the schema version for nothing —
+  thirty-three presses for one column delete on a real node.
+
 ## 0.22.34 — 2026-08-27
 
 ### Fixed
