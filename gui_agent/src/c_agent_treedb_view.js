@@ -43,7 +43,7 @@ import {
     gobj_create_pure_child,
     gobj_find_service,
     gobj_subscribe_event, gobj_unsubscribe_event,
-    gobj_send_event,
+    gobj_send_event, gobj_post_event,
     gobj_start, gobj_stop, gobj_destroy, gobj_is_running,
     gobj_has_event,
     gobj_short_name, gobj_name,
@@ -635,6 +635,18 @@ function navigate_seg(gobj, seg)
 }
 
 /***************************************************************
+ *  The url catches up with the position, one cycle later.
+ *
+ *  See the branch of apply_seg() that posts it: navigating from
+ *  inside the mount re-enters it.
+ ***************************************************************/
+function ac_normalize_route(gobj, event, kw, src)
+{
+    navigate_seg(gobj, kw && kw.seg ? String(kw.seg) : "");
+    return 0;
+}
+
+/***************************************************************
  *  Apply the part of the subpath this view owns.
  *
  *      edit[/<treedb>[/<topic>|/diagram]]   the schema editor
@@ -685,9 +697,30 @@ function apply_seg(gobj, seg)
     }
 
     if(empty_string(seg) && has_editor(gobj)) {
-        /*  Normalize: the position is the editor's, so the url says so
-         *  and a reload lands back on it.  */
-        navigate_seg(gobj, EDIT_SEG);
+        /*
+         *  Normalize: the position is the editor's, so the url says so and
+         *  a reload lands back on it.
+         *
+         *  THE NAVIGATION IS POSTED, NOT CALLED. apply_seg() runs at the
+         *  END of mount_view(), and yui_shell_navigate() re-routes
+         *  SYNCHRONOUSLY -- so navigating here re-entered the node's mount
+         *  from inside the mount that was still running, and the second
+         *  one asked for a service name the first still held:
+         *
+         *      service ALREADY registered:
+         *          C_YUI_TREEDB_TOPICS^treedb_view_<node>_<yuno>_<treedb>
+         *      cannot create 'C_YUI_TREEDB_TOPICS' as ...
+         *
+         *  and what followed was a half-built view somebody then
+         *  dereferenced. Reproducible by pressing Apply twice.
+         *
+         *  A deferral is not a time, so it is an event to ourselves and
+         *  never a timer: gobj_post_event delivers it on the next cycle,
+         *  with the mount finished and the node free to re-route
+         *  normally. The PANE is still shown synchronously -- the screen
+         *  must not wait for the url.
+         */
+        gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {seg: EDIT_SEG}, gobj);
         apply_seg(gobj, EDIT_SEG);
         return;
     }
@@ -892,7 +925,8 @@ function create_gclass(gclass_name)
             ["EV_OPERATION_MODE_CHANGED", ac_topic_selected,  null],
             ["EV_RECORD_WRITTEN",       ac_record_written,    null],
             ["EV_POSITION_CHANGED",     ac_position_changed,  null],
-            ["EV_SCHEMA_CHECKED",       ac_schema_checked,    null]
+            ["EV_SCHEMA_CHECKED",       ac_schema_checked,    null],
+            ["EV_NORMALIZE_ROUTE",      ac_normalize_route,   null]
         ]]
     ];
 
@@ -907,7 +941,8 @@ function create_gclass(gclass_name)
         ["EV_OPERATION_MODE_CHANGED", 0],
         ["EV_RECORD_WRITTEN",    0],
         ["EV_POSITION_CHANGED",  0],
-        ["EV_SCHEMA_CHECKED",    0]
+        ["EV_SCHEMA_CHECKED",    0],
+        ["EV_NORMALIZE_ROUTE",   0]
     ];
 
     __gclass__ = gclass_create(

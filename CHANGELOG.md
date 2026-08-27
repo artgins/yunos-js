@@ -19,6 +19,40 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## 0.22.33 — 2026-08-27
+
+### Fixed
+
+- **The treedb view re-entered its own mount, and the second one collided
+  with the first.** Opening the system-schema treedb — or pressing `Apply`
+  twice, which re-renders — produced:
+
+  ```
+  service ALREADY registered:
+      C_YUI_TREEDB_TOPICS^treedb_view_<node>_<yuno>_treedb_system_schema
+  cannot create 'C_YUI_TREEDB_TOPICS' as ...
+  Destroying a RUNNING gobj: C_YUI_NODE^treedb_system_schema`...`__content__
+  Error: can't access property "get", F is undefined
+  ```
+
+  `mount_view()` ends by calling `apply_seg()`, and one branch of `apply_seg()`
+  normalizes a bare route to the editor's — by calling `yui_shell_navigate()`,
+  which re-routes **synchronously**. So the node re-mounted its content from
+  inside the mount that was still running, and the second mount asked for a
+  service name the first still held. The stack said so line by line:
+  `apply_seg` (from mount) → the normalize branch → `navigate_seg` → the shell
+  → mount again.
+
+  The navigation is **posted** now, not called: `gobj_post_event` delivers it
+  on the next cycle, with the mount finished and the node free to re-route
+  normally. A deferral is not a time, so it is an event to ourselves and never
+  a timer. The pane is still shown synchronously — the screen must not wait
+  for the url.
+
+- **gobj-ui `^7.23.41`**: `is-light` on its own erases a chip's label, which
+  cost the schema editor its topic count, its schema version and every column
+  flag with no colour of its own.
+
 ## 0.22.32 — 2026-08-26
 
 ### Both yunos
