@@ -16,6 +16,8 @@
  ***********************************************************************/
 import {t} from "i18next";
 
+import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
+
 import {current_theme, toggle_theme} from "./theme.js";
 import {switch_locale, current_locale} from "./locales/locales.js";
 import {deploy_info} from "./conf/deploy.js";
@@ -122,7 +124,9 @@ function render_html(dep, plane)
 
                     <label class="yfield">
                         <span class="yfield-label" data-i18n="username" data-default="Username">Username</span>
-                        <input type="text" name="username" autocomplete="username" required>
+                        <div class="yfield-control">
+                            <input type="text" name="username" autocomplete="username" required>
+                        </div>
                     </label>
 
                     <label class="yfield">
@@ -162,6 +166,20 @@ function wire_form(root, on_submit)
     let cta   = form.querySelector(".ylogin-cta");
     let user  = form.querySelector("input[name=username]");
     let pwd   = form.querySelector("input[name=password]");
+
+    /*
+     *  The ✕ that empties a field. It is a NORM of the library
+     *  (`yui_inputs.js`): every editable text input gets one, shown only
+     *  while the field has content AND is focused. This form had none --
+     *  a mistyped user had to be erased key by key.
+     *
+     *  It is given the POSITION of this card, which does not use Bulma's
+     *  `.control` but its own language (44px, --yl-* variables), and on
+     *  the password it goes to the LEFT of the eye: two different
+     *  controls over the same field cannot sit on top of each other.
+     */
+    attach_clear(form.querySelector(".yfield-control"), user);
+    attach_clear(form.querySelector(".yfield-password"), pwd);
 
     /*  `msg` may be a COMPOSER (a function returning the text): a composed
      *  error ("cannot connect (url) — reconnecting") has no single i18n key,

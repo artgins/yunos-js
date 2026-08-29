@@ -19,6 +19,34 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.41 / gui_treedb 0.17.17 — 2026-08-29
+
+### Fixed
+
+- **The login fields had no ✕ to empty them.** A mistyped username had to be
+  erased key by key, on the one form every session starts with.
+
+  It is a **norm of the library**, not an invention: `attach_clear()`
+  (`gobj-ui`, `yui_inputs.js`) says every editable text input gets a clear
+  button, shown only while the field has content AND is focused — so a form
+  arriving with a remembered username does not show a ✕ on every filled field
+  at once. Both logins simply never called it. yunovatios' login already did,
+  and is where the wiring was copied from.
+
+  Two details that are the whole of the work. The username input had **no
+  wrapper** to position an absolute button against, so it got one
+  (`.yfield-control`). And on the password the ✕ goes to the **LEFT of the
+  eye**: two different controls over the same field cannot sit on top of each
+  other — measured, the ✕ ends at 1067 and the eye starts at 1071.
+
+  Where the button SITS is the card's business: this login does not speak
+  Bulma's `.control`, it has its own language (44px fields, `--yl-*`), so the
+  positioning rules live in each `login.css`.
+
+  Checked on both, against a local preview before deploying: hidden when empty,
+  hidden while focused-and-empty, 24×24 when focused with content, and the
+  field ends empty after the click.
+
 ## gui_agent 0.22.40 / gui_treedb 0.17.16 — 2026-08-29
 
 ### Fixed

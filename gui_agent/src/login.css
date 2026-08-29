@@ -342,7 +342,6 @@
     position: relative;
     display: block;
 }
-.yfield-password input { padding-right: 44px; }
 .ypassword-toggle {
     position: absolute;
     top: 50%;
@@ -461,4 +460,48 @@
     .ylogin-form { padding: 1.5rem 1.25rem 1.25rem; }
     .ylogin-title { font-size: 1.35rem; }
     .ylogin-orb { opacity: 0.3; }
+}
+
+/*
+ *  THE ✕ THAT EMPTIES A FIELD.
+ *
+ *  `attach_clear()` (gobj-ui, `yui_inputs.js`) appends Bulma's own
+ *  `.delete` button to the control that wraps the input; where it SITS is
+ *  the card's business, and this card does not speak Bulma's `.control`
+ *  -- it has its own language: 44px fields and --yl-* variables. Without
+ *  these rules the button lands in the flow, under the field.
+ *
+ *  It shows only with `:focus-within`, which is the library's norm: a
+ *  form arriving with a remembered username must not show a ✕ on every
+ *  filled field at once, only on the one being edited.
+ */
+.yfield-control {
+    position: relative;
+    display: block;
+}
+.yfield-control input {
+    padding-right: 44px;
+}
+
+.yfield-control .yui-input-clear,
+.yfield-password .yui-input-clear {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    display: none;
+    z-index: 2;
+}
+
+/*  On the password the eye already owns the right edge: the ✕ steps aside. */
+.yfield-password .yui-input-clear {
+    right: 46px;
+}
+.yfield-password input {
+    padding-right: 78px;
+}
+
+.yfield-control:focus-within .yui-input-clear.is-visible,
+.yfield-password:focus-within .yui-input-clear.is-visible {
+    display: inline-block;
 }
