@@ -170,6 +170,7 @@ const en = {
         "value":             "Value",
         "no statistics":     "No statistics",
         "reset stats":       "Reset statistics",
+        "remove from selection": "Remove from selection",
         "settings":          "Settings",
         "agents":            "Agents",
         "authentication":    "Authentication",

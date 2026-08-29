@@ -40,6 +40,7 @@ import {
     set_timeout_periodic,
     clear_timeout,
     gobj_find_service,
+    gobj_short_name,
     createElement2,
     refresh_language,
     msg_iev_write_key,
@@ -55,6 +56,7 @@ import {esc, fmt_value} from "./agent_helpers.js";
 import {
     agent_config_get_selected_nodes,
     agent_config_get_stats_refresh,
+    agent_config_remove_selected_node,
     stats_sel_id,
     stats_sel_parse,
 } from "./c_agent_config.js";
@@ -368,6 +370,28 @@ function render_cards(gobj)
                 {click: () => gobj_send_event(gobj, "EV_RESET_STATS",
                     {node: tgt.node, yuno_id: tgt.yuno_id}, gobj)}]
         );
+        /*
+         *  And take THIS card away. What it removes is the yuno from the
+         *  workspace's selection -- the same thing closing its tab does
+         *  (`agent_config_remove_selected_node`, and the deselection comes
+         *  back as EV_SELECTED_NODES_CHANGED, which rebuilds the cards).
+         *  Nothing is destroyed and nothing is asked: the way back is to
+         *  pick it again in Nodes, so a confirmation would cost more than
+         *  the mistake.
+         *
+         *  Icon-only with the title carrying the meaning, like the reset
+         *  beside it -- two labelled buttons do not fit a 20rem card.
+         */
+        let $remove = createElement2(
+            ["button", {class: "STATS_REMOVE button is-white", type: "button",
+                        title: t("remove from selection"),
+                        "aria-label": t("remove from selection"),
+                        "data-i18n-title": "remove from selection",
+                        "data-i18n-aria-label": "remove from selection"},
+                [["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]]],
+                {click: () => gobj_send_event(gobj, "EV_REMOVE_CARD",
+                    {node: tgt.node, yuno_id: tgt.yuno_id}, gobj)}]
+        );
         let $card = createElement2(
             ["div", {class: "card STATS_CARD", style: "width:20rem; max-width:100%;"},
                 [
@@ -380,7 +404,8 @@ function render_cards(gobj)
                                                   "is-family-monospace",
                                            style: "flex:1 1 auto; min-width:0; overflow:hidden; " +
                                                   "text-overflow:ellipsis; white-space:nowrap;"}, tgt.label],
-                                    $reset
+                                    $reset,
+                                    $remove
                                 ]
                             ],
                             ["p", {class: "STATS_CARD_NODE is-size-7 has-text-grey mb-2"}, tgt.node],
@@ -589,6 +614,33 @@ function ac_reset_stats(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Take a card away: deselect its yuno for this workspace.
+ *
+ *  The card set is the SELECTION, so this is where a card goes --
+ *  there is nothing else to delete. The write comes back as
+ *  EV_SELECTED_NODES_CHANGED and that is what redraws; this action
+ *  does not touch the DOM, or the panel and the selection could
+ *  disagree.
+ ***************************************************************/
+function ac_remove_card(gobj, event, kw, src)
+{
+    let config = gobj_read_attr(gobj, "config_svc");
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no config service, cannot remove the card`);
+        return -1;
+    }
+    let node = (kw && kw.node) || "";
+    let yuno_id = (kw && kw.yuno_id) || "";
+    if(!node || !yuno_id) {
+        log_error(`${gobj_short_name(gobj)}: EV_REMOVE_CARD without a yuno`);
+        return -1;
+    }
+    let ws = gobj_read_attr(gobj, "workspace") || "statistics";
+    agent_config_remove_selected_node(config, ws, stats_sel_id(node, yuno_id));
+    return 0;
+}
+
+/***************************************************************
  *  This tab was revealed or hidden (the shell toggles `is-hidden` on
  *  the container). Poll only what someone is looking at: on show,
  *  re-arm and fetch fresh numbers at once; on hide, disarm.
@@ -716,6 +768,7 @@ function create_gclass(gclass_name)
             /*  from the card  */
             ["EV_REFRESH",           ac_refresh,           null],
             ["EV_RESET_STATS",       ac_reset_stats,       null],
+            ["EV_REMOVE_CARD",       ac_remove_card,       null],
             ["EV_VISIBILITY",        ac_visibility,        null],
             ["EV_TIMEOUT_PERIODIC",  ac_timeout_periodic,  null]
         ]]
@@ -734,6 +787,7 @@ function create_gclass(gclass_name)
         ["EV_LANGUAGE_CHANGED",       0],
         ["EV_REFRESH",           0],
         ["EV_RESET_STATS",       0],
+        ["EV_REMOVE_CARD",       0],
         ["EV_VISIBILITY",        0],
         ["EV_TIMEOUT_PERIODIC",  0]
     ];

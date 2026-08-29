@@ -19,6 +19,27 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.42 — 2026-08-29
+
+### Added
+
+- **A card in Statistics can be taken away from the card.** The panel's card set
+  IS the workspace's selection, and the only way to drop one was to go back to
+  Nodes and untick it — so a card you no longer wanted stayed, refreshing, in
+  the way.
+
+  The ✕ deselects that yuno for the workspace
+  (`agent_config_remove_selected_node`), which is exactly what closing its tab
+  does. **The action does not touch the DOM**: the write comes back as
+  `EV_SELECTED_NODES_CHANGED` and that is what redraws, so the panel and the
+  selection cannot disagree.
+
+  Nothing is destroyed and nothing is asked: the way back is to pick it again in
+  Nodes, so a confirmation would cost more than the mistake. Icon-only with the
+  title carrying the meaning, like the reset beside it — two labelled buttons do
+  not fit a 20rem card — and the tooltip says what it really does, *remove from
+  selection*, not *delete*.
+
 ## gui_agent 0.22.41 / gui_treedb 0.17.17 — 2026-08-29
 
 ### Fixed
