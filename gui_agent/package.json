@@ -1,7 +1,7 @@
 {
   "name": "gui-agent",
   "private": true,
-  "version": "0.22.43",
+  "version": "0.22.44",
   "type": "module",
   "description": "Yuneta Agent Console — web SPA (gobj-ui v2 declarative shell) to operate yuneta agents: control-plane CLI, treedb, stats. Connection and auth URLs are configured by the user and stored locally in the browser (no private data committed).",
   "scripts": {
@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
-    "prebuild": "npm run validate-locales"
+    "prebuild": "npm run validate-locales",
+    "overflow": "node scripts/overflow.mjs"
   },
   "dependencies": {
     "@antv/g6": "^5.1.1",

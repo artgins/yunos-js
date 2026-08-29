@@ -19,6 +19,25 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.44 — 2026-08-29
+
+### Added
+
+- **`npm run overflow` — the probe that would have caught the counters bug.**
+  It hunts one defect in any of these SPAs: a box whose content is wider than
+  the box, on a phone viewport. Per offender it says how much it overflows,
+  whether the box can SCROLL (an affordance) or only CLIPS (a defect), and how
+  many children end up outside its right edge — which is what turns an overflow
+  into *"the data is not there"*. Tabulator's own horizontal scroll shows up as
+  `scrollable`, by design.
+
+  **It runs Chromium by default**, and that is the point: Firefox breaks a long
+  slash-separated path at its slashes, so the broken card measured clean there
+  twice, at two widths. `PROBE_BROWSER=firefox` to compare the two.
+
+  It takes any URL, so it serves gui_treedb as well —
+  `node scripts/overflow.mjs https://artgins.ytreedb.com`.
+
 ## gui_agent 0.22.43 — 2026-08-29
 
 ### Fixed
