@@ -19,6 +19,19 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.40 / gui_treedb 0.17.16 — 2026-08-29
+
+### Fixed
+
+- **`@yuneta/gobj-ui ^7.23.45`: the wheel over a graph popover, and a node
+  detail that can be read and closed.** Both yunos show the same graph, so both
+  had the same three: a popover that overflowed could only be scrolled by
+  dragging its scrollbar — G6's zoom behavior cancels every wheel on the
+  container whatever the target is, and then declines to zoom — a detail box at
+  caption size, and a ✕ measuring 13×16, which is a mouse target on a good day
+  and a finger target on none. Nothing to change here; the fix is in the
+  library.
+
 ## gui_agent 0.22.39 / gui_treedb 0.17.15 — 2026-08-29
 
 ### Fixed
