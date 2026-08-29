@@ -19,6 +19,28 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.39 / gui_treedb 0.17.15 — 2026-08-29
+
+### Fixed
+
+- **`@yuneta/gobj-js ^7.16.1`: a frame for a view that is gone no longer lands
+  on everybody.** `C_IEVENT_CLI` looked the destination service up and, finding
+  none, fell through to the SERVICE subscription model — publish the message to
+  every local subscriber of the transport. That is the right home for a message
+  naming NO destination and the wrong one for a message that names a service.
+
+  Both these yunos have the shape that hits it: views mounted under a service
+  name (`C_YUI_SERVICE_VIEW`) that subscribe to a backend event and are
+  destroyed on navigation, while the frames already on the wire keep arriving
+  addressed to a name nobody answers to. Those frames were handed to every
+  subscriber, including the application gobj, whose FSM does not declare them —
+  *"Event NOT DEFINED in state"*, once per frame. It was measured on a
+  yunovatios node at **38 errors in a 26 ms burst** with 38 devices emitting;
+  here it is the same mechanism against whatever the console is subscribed to.
+
+  Nothing to change in either yuno: the fix is in the runtime, and the range
+  moves from `^7.13.8` to `^7.16.1`.
+
 ## 0.22.38 — 2026-08-27
 
 ### Fixed
