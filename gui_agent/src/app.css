@@ -63,6 +63,41 @@
 }
 
 /* ====================================================================
+ *  THE COUNTERS TABLE NEVER GETS WIDER THAN ITS CARD.
+ *
+ *  A stat value can be a PATH -- `devices_database`,
+ *  `commands_database` -- and a path has no spaces: it is one
+ *  unbreakable word, so it sets the table's minimum width. The table
+ *  then grew past the 20rem card, `.STATS_TABLE`'s `overflow:auto`
+ *  clipped what stuck out, and the value column ended up mostly beyond
+ *  the right edge.
+ *
+ *  On a phone that reads as "the counters have no values", and it is
+ *  worse than it looks: a value cell is `has-text-right`, so a short
+ *  NUMBER sits at the far right of that column -- the part that is
+ *  clipped -- while a long path fills the cell from its left and shows
+ *  its first characters. Names and paths visible, every number gone.
+ *
+ *  `table-layout: fixed` makes the columns obey the container instead of
+ *  the content, and `overflow-wrap: anywhere` lets a path wrap rather
+ *  than push. Wrapping over three lines is the honest way to show a
+ *  value that does not fit; hiding it is not.
+ * ==================================================================== */
+.STATS_CARD .STATS_COUNTERS {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.STATS_CARD .STATS_NAME {
+    width: 50%;
+    overflow-wrap: anywhere;
+}
+
+.STATS_CARD .STATS_VALUE {
+    overflow-wrap: anywhere;
+}
+
+/* ====================================================================
  *  Tabulator theme fixes (active-row highlight, dark tree control) now
  *  live in the library: `@yuneta/gobj-ui/src/tabulator.css`. Tabulator is
  *  a first-class element across the yunos, so its styling is global, not

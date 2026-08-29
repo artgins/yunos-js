@@ -19,6 +19,35 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.43 — 2026-08-29
+
+### Fixed
+
+- **On a phone the Statistics counters showed their names and no values.**
+  Reported with a screenshot: `txMsgs`, `rxMsgs`, `txMsgsec`… all blank, and the
+  only two rows with anything visible were `devices_database` and
+  `commands_database`, showing the START of a path, cut off at the card's right
+  edge.
+
+  **A stat value can be a PATH, and a path is one unbreakable word.** It set the
+  table's minimum width, the table grew past the 20rem card, `.STATS_TABLE`'s
+  `overflow:auto` clipped what stuck out — and a value cell is `has-text-right`,
+  so every short NUMBER sat at the far right of that column, in the clipped
+  part. The long path filled its cell from the left and showed its first
+  characters. Hence: names and paths, no numbers.
+
+  `table-layout: fixed` makes the columns obey the container instead of the
+  content, and `overflow-wrap: anywhere` lets a path wrap rather than push.
+  Wrapping over three lines is the honest way to show a value that does not fit.
+
+  ⚠️ **It only happens in Chrome, and that is why it took so long to see.**
+  Firefox breaks a long path at its slashes, so the same card measured clean
+  there at 412px and at 320px — values present, no overflow — while Chromium, on
+  the very same card, gave `scrollWidth 499` against `clientWidth 291` with
+  **8 of 8 value cells clipped**. A layout bug reproduced in one engine only is
+  not a layout bug you can rule out from the other. The probe now takes
+  `PROBE_BROWSER=chromium`.
+
 ## gui_agent 0.22.42 — 2026-08-29
 
 ### Added
