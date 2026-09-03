@@ -41,6 +41,8 @@ import {
     gobj_create_pure_child,
     gobj_create_service,
     gobj_start,
+    gobj_is_running,
+    gobj_stop_tree,
     gobj_destroy,
     set_timeout,
     clear_timeout,
@@ -1717,11 +1719,21 @@ function render_json_view(gobj, data)
  *  Drop the JSON viewer, if any. Paired with destroy_table() at
  *  every teardown point: a new answer, a pending command, mt_stop
  *  and mt_destroy.
+ *
+ *  STOPPED BEFORE DESTROYED. `render_json_view()` starts it, so
+ *  destroying it straight away destroys a RUNNING gobj: the
+ *  framework rescues it -- it stops it itself -- but it logs an
+ *  error first, and that error is right. It said so on every
+ *  second command of a console session, which is the shape of
+ *  noise that makes a real error stop being read.
  ***************************************************************/
 function destroy_json_view(gobj)
 {
     let priv = gobj.priv;
     if(priv.json_view) {
+        if(gobj_is_running(priv.json_view)) {
+            gobj_stop_tree(priv.json_view);
+        }
         gobj_destroy(priv.json_view);
         priv.json_view = null;
     }
