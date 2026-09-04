@@ -19,6 +19,25 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.49 / gui_treedb 0.17.21 — 2026-09-04
+
+### Changed
+
+#### `gobj-ui` 7.23.55: a row click opens the record, and the form shows all of it
+
+Ranges only; no code of either app changes.
+
+- **7.23.54** — outside edition mode a click on a row opens the record to be
+  READ. It was the biggest target on screen and the only thing that answered
+  nothing: selection is driven by the checkbox column and editing by the
+  pencil. And the form shows EVERY field, the non-writable ones read-only --
+  a record used to be shown as the handful of its fields somebody may type.
+  What is shown is not what is sent: only writable cols, fkeys and the pkey
+  travel back, because `treedb_update_node()` does not check `writable`.
+- **7.23.55** — `readonly` is an attribute of a text control and of nothing
+  else, so a non-writable col rendered an EDITABLE select. What cannot be
+  read-only is disabled now.
+
 ## gui_agent 0.22.48 / gui_treedb 0.17.20 — 2026-09-04
 
 ### Changed
