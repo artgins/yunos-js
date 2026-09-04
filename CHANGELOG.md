@@ -19,7 +19,7 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
-## gui_agent 0.22.49 / gui_treedb 0.17.21 — 2026-09-04
+## gui_agent 0.22.50 / gui_treedb 0.17.22 — 2026-09-04
 
 ### Changed
 
@@ -37,6 +37,9 @@ Ranges only; no code of either app changes.
 - **7.23.55** — `readonly` is an attribute of a text control and of nothing
   else, so a non-writable col rendered an EDITABLE select. What cannot be
   read-only is disabled now.
+- **7.23.56** — and two controls still LOOKED editable: a colour (`readonly`
+  does not apply to `<input type="color">` either) and a json editor wearing
+  its menu bar.
 
 ## gui_agent 0.22.48 / gui_treedb 0.17.20 — 2026-09-04
 
