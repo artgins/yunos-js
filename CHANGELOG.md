@@ -19,7 +19,7 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
-## gui_agent 0.22.50 / gui_treedb 0.17.22 — 2026-09-04
+## gui_agent 0.22.51 / gui_treedb 0.17.23 — 2026-09-04
 
 ### Changed
 
@@ -40,6 +40,14 @@ Ranges only; no code of either app changes.
 - **7.23.56** — and two controls still LOOKED editable: a colour (`readonly`
   does not apply to `<input type="color">` either) and a json editor wearing
   its menu bar.
+- **7.23.57-59** — `save` moves to the RIGHT end of the form toolbar: the
+  form opens as a modal dialog and a dialog's primary action goes
+  bottom-right. Clipboard left, record actions right, save last. ⚠️ The first
+  attempt moved nothing -- the `toolbar` attr carried the five names written
+  out again, so `plan_toolbar()` never saw the `undefined` that would have
+  used `DEFAULT_TOOLBAR`; the attr's default IS the list now. A colour field
+  also shows its value beside the swatch, and `clear`/`copy`/`paste` get a
+  logical class.
 
 ## gui_agent 0.22.48 / gui_treedb 0.17.20 — 2026-09-04
 
