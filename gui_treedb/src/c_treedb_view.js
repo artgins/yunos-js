@@ -281,13 +281,23 @@ function build_hosted_view(gobj, remote)
         /*  Land on a grid of topic cards (list->detail) instead of opening a
          *  topic table straight away. Only this view declares the attrs. */
         kw.with_cards_landing = true;
-        /*  Pull each topic a page at a time. Safe whatever the backend is:
-         *  one that cannot page answers the whole list, and the table reads
-         *  that as one page. And the page is big enough (200) that every
-         *  treedb seen so far arrives whole anyway, paginator hidden — so
-         *  this costs nothing until a topic is genuinely large, which is
-         *  exactly when loading it whole stops being an option. */
-        kw.with_remote_paging = true;
+        /*  ⚠️ NO remote paging, and it is not an oversight: a partial topic
+         *  BREAKS LINKING. A record's link picker is built from the rows the
+         *  PARENT topic's table holds (`get_topic_data` ->
+         *  `tabulator.getData()`), which under paging is ONE page: it offered
+         *  200 of the 5891 possible parents -- the right one usually not
+         *  among them -- and a record whose parent was not on the loaded page
+         *  opened with an fkey the form could not match, which saving then
+         *  dropped. A treedb is a MEMORY database: the backend holds the
+         *  topic in RAM either way, so paging the fetch bought little and
+         *  cost the links. It comes back the day linking asks the BACKEND for
+         *  a parent instead of the sibling table.
+         *
+         *  Local pagination stays: `getData()` answers the whole dataset
+         *  whatever page is on screen, so paginating what is SEEN is safe and
+         *  only paginating what is FETCHED was not. The 200 rows a page are
+         *  kept so nothing changes for the reader. */
+        kw.page_size = 200;
         /*  ...which is exactly why the selection bar is worth the two i18n
          *  keys it asks of us: with a page of 200 rows, the checkboxes that
          *  say how many are ticked are not all on screen.  */

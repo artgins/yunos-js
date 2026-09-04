@@ -19,6 +19,45 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.47 / gui_treedb 0.17.19 — 2026-09-04
+
+### Changed
+
+#### `gui_treedb` stops paging the FETCH: a partial topic breaks linking
+
+A record's link picker is built from the rows the PARENT topic's table holds
+-- `build_fkey_options()` asks it with `get_topic_data`, which answers
+`tabulator.getData()` -- and with `with_remote_paging` that is ONE page. So the
+picker offered 200 of the 5891 possible parents, the right one usually not
+among them, and a record whose parent was not on the loaded page opened with an
+fkey the form could not match, which saving then dropped.
+
+A treedb is a **memory database**: the backend holds the topic in RAM either
+way, so paging the fetch bought little and cost the links. `with_remote_paging`
+stays in the library, working and tested and now saying in its own description
+what it breaks; it comes back the day linking asks the BACKEND for a parent
+instead of the sibling table.
+
+**Local pagination stays on.** `getData()` answers the whole dataset whatever
+page is on screen, so paginating what is SEEN is safe and only paginating what
+is FETCHED was not. The view keeps 200 rows a page (`page_size`, new in
+`gobj-ui` 7.23.52), so nothing changes for the reader.
+
+#### Both SPAs move to `gobj-ui` 7.23.52
+
+Ranges only for `gui_agent`: `^7.23.49` → `^7.23.52`. What the three patches
+bring:
+
+- **7.23.52** — the paging retreat above, and `page_size` for the display page
+  of both paths.
+- **7.23.51** — the page size a reader picks is remembered, per topic; and
+  "Rows per page" is legible in dark (`tabulator_bulma.css` paints its
+  near-black on `.tabulator-paginator` itself, so the dark footer's colour
+  never reached the label inside it).
+- **7.23.50** — picking "All" no longer takes the size selector away with it:
+  the selector lives inside the paginator, which was hidden whole whenever the
+  table fitted in one page.
+
 ## gui_agent 0.22.46 / gui_treedb 0.17.18 — 2026-09-04
 
 ### Changed
