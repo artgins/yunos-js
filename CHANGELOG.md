@@ -19,6 +19,26 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.45 — 2026-09-04
+
+### Fixed
+
+#### The console destroyed its JSON viewer while it was running
+
+Every command whose answer is an object or an array mounts a `C_YUI_JSON` and
+starts it, and `destroy_json_view()` went straight to `gobj_destroy()`. The
+framework rescues that — it stops the gobj itself — but it logs
+`Destroying a RUNNING gobj` first, and that error is right: the comment beside
+the rescue says so out loud, *"destroying a live gobj remains the CALLER's
+bug, and the fix there is `gobj_stop_tree()` before `gobj_destroy()`"*.
+
+It fired on every command after the first of a console session, which is the
+shape of noise that makes a real error stop being read.
+
+The six other `gobj_destroy()` in this app all guard with `gobj_is_running()`
+and stop first; this one was the only one that did not, so it now reads like
+its siblings.
+
 ## gui_agent 0.22.44 — 2026-08-29
 
 ### Added

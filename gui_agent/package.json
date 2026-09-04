@@ -1,9 +1,9 @@
 {
   "name": "gui-agent",
   "private": true,
-  "version": "0.22.44",
+  "version": "0.22.45",
   "type": "module",
-  "description": "Yuneta Agent Console — web SPA (gobj-ui v2 declarative shell) to operate yuneta agents: control-plane CLI, treedb, stats. Connection and auth URLs are configured by the user and stored locally in the browser (no private data committed).",
+  "description": "Yuneta Agent Console \u2014 web SPA (gobj-ui v2 declarative shell) to operate yuneta agents: control-plane CLI, treedb, stats. Connection and auth URLs are configured by the user and stored locally in the browser (no private data committed).",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
