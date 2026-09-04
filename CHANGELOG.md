@@ -19,6 +19,34 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.46 / gui_treedb 0.17.18 — 2026-09-04
+
+### Changed
+
+#### Both SPAs move to `gobj-ui` 7.23.49 and `gobj-js` 7.16.2
+
+Ranges only: `@yuneta/gobj-ui` `^7.23.45` → `^7.23.49` and `@yuneta/gobj-js`
+`^7.16.1` → `^7.16.2`. No code of either app changes.
+
+What the library round brings to them, and it is mostly `gui_treedb`'s table:
+
+- **7.23.49 — a search that could not see inside an fkey.** A treedb row is
+  not flat: an fkey arrives as a list of objects, and the search box put every
+  value through `String()`, which of that gives `"[object Object]"`. So
+  looking up an equipment by the workshop it sits in — the thing an operator
+  actually has in mind — never found anything, and the box gave no hint it had
+  looked somewhere else. With it, a size selector that offers **all** rows
+  (`nodes` takes `limit: 0`), because filters work on the page that is loaded,
+  and a ✕ on each column filter.
+- **7.23.48 — a failure only a user can see is a failure nobody measures.**
+- **7.23.47 — a link is not always `topic^id^hook`**, and reading only that
+  shape saw nothing in the other ones.
+- **7.23.46 — the bytes a node owns but cannot hold**, and a missing one said
+  out loud instead of rendering as a gap.
+- **`gobj-js` 7.16.2 — `empty_json()`**, the question to ask over a json,
+  named the same on both runtimes. Here `if(!x)` happens to work and in C it
+  is dead code, which is exactly what a port across the two gets wrong.
+
 ## gui_agent 0.22.45 — 2026-09-04
 
 ### Fixed
