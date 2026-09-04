@@ -19,6 +19,28 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.48 / gui_treedb 0.17.20 — 2026-09-04
+
+### Changed
+
+#### Both SPAs move to `gobj-ui` 7.23.53 and `gobj-js` 7.16.3
+
+Ranges only; no code of either app changes. What it brings:
+
+- **A col flagged `icon` draws the icon.** `icon` is a treedb field type of
+  its own now -- the NAME of an icon of the app's set (`yi-bolt`), which is
+  not a file -- so a schema that used `image` for it, and got an
+  `<img src="yi-bolt">` and a broken-image glyph, can say what it means. A
+  name the set does not carry falls back to the TEXT of it, because
+  `yui_icons.css` paints a `currentColor` box for ANY `yi-` name and drawing
+  an undefined one renders a solid black square.
+
+  ⚠️ The flag has to reach the BACKEND schema too, and the list that
+  enforces it is not the one in `tr_treedb.h` (a comment) but the `enum` of
+  the `cols` topic in `treedb_system_schema.c`. A schema using a flag the
+  SDK does not know is rejected at `treedb_open_db` and the yuno exits at
+  `mt_play`. SDK-side since the 7.16.2+ Unreleased line.
+
 ## gui_agent 0.22.47 / gui_treedb 0.17.19 — 2026-09-04
 
 ### Changed
