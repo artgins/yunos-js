@@ -19,6 +19,25 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.54 / gui_treedb 0.17.26 — 2026-09-05
+
+### Changed
+
+#### `gobj-ui` 7.23.65: a toolbar item can be a link
+
+Ranges only; no code of either app changes.
+
+- `action.type: "link"` (`{url, target?}`) is the one toolbar action that
+  LEAVES the application, so on a toolbar item and on the brand it renders as
+  a real `<a href>` rather than a `<button>`: middle-click, open-in-new-tab
+  and the url in the status bar are what make a link recognisable as one. It
+  is also the one action that does not become an FSM event — there is no
+  state of the application to transition, the page is being left. Inside a
+  dropdown it stays a button (`role="menuitemradio"`: a link is not a choice
+  among options) and the dispatcher navigates.
+- Neither app uses it yet. It was added for the demo on `demo.yuneta.io` /
+  `niyamaka.com`, which the landing links INTO and which led nowhere back.
+
 ## gui_agent 0.22.53 / gui_treedb 0.17.25 — 2026-09-05
 
 ### Fixed
