@@ -19,6 +19,21 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.52 / gui_treedb 0.17.24 — 2026-09-05
+
+### Fixed
+
+#### `gobj-ui` 7.23.63: saving a record unlinked its read-only `file` column
+
+Ranges only; no code of either app changes.
+
+- The topic view sends back only the writable cols, the fkeys and the pkey,
+  and the write goes out with `autolink`, which rebuilds the links from what
+  the record carries. A `file` column IS an fkey but answers `type: "file"`
+  since gobj-js 7.16.5, so a `file` column without `writable` -- the one only
+  a load fills -- fell out of the record, and every save of any other field
+  of its record cut its link, in silence. The exemption asks `is_file` now.
+
 ## gui_agent 0.22.51 / gui_treedb 0.17.23 — 2026-09-04
 
 ### Changed
