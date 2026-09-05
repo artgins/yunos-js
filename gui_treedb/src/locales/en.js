@@ -57,6 +57,11 @@ const en = {
             C_YUI_FORM): the library translates through the APP's i18next,
             so an app that does not define them renders the raw key.  */
         "add": "Add",
+        "choose a file": "Choose a file",
+        "remove the file": "Remove the file",
+        "not saved yet": "Not saved yet",
+        "no file": "No file",
+        "cannot read the picked file": "Cannot read the picked file",
         "back": "Back",
         "delete": "Delete",
         "edit": "Edit",
