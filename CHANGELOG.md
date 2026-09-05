@@ -19,6 +19,21 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.53 / gui_treedb 0.17.25 — 2026-09-05
+
+### Fixed
+
+#### `gobj-ui` 7.23.64: the form is busy while it reads the picked files
+
+Ranges only; no code of either app changes.
+
+- Saving a record with a `file` column reads the file first, and the dialog
+  stayed open AND live: a second Save during the read sent a second write,
+  and a Cancel threw the save away without a word. The toolbar is disabled
+  and the save button spins until the read lands; a second Save is refused
+  and says so; a read whose form was closed meanwhile is dropped with a
+  warning instead of landing on a destroyed gobj.
+
 ## gui_agent 0.22.52 / gui_treedb 0.17.24 — 2026-09-05
 
 ### Fixed
