@@ -164,6 +164,8 @@ const es = {
         "search nodes":      "Buscar host, rol, versión o uuid…",
         "role":              "Rol",
         "uuid":              "UUID",
+        "open by host":      "Abrir este nodo dirigiéndose a él por su hostname",
+        "open by uuid":      "Abrir este nodo dirigiéndose a él por su UUID",
         "name":              "Nombre",
         "status":            "Estado",
         "stopped":           "Parado",

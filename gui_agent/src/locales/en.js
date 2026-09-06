@@ -164,6 +164,8 @@ const en = {
         "search nodes":      "Search host, role, version or uuid…",
         "role":              "Role",
         "uuid":              "UUID",
+        "open by host":      "Open this node addressing it by its hostname",
+        "open by uuid":      "Open this node addressing it by its UUID",
         "name":              "Name",
         "status":            "Status",
         "stopped":           "Stopped",

@@ -406,10 +406,6 @@ function build_dom(gobj)
     }]);
     priv.$input = $input;
 
-    let $count = createElement2(
-        ["span", {class: "STATNODES_COUNT is-size-7 has-text-grey"}, ""]);
-    priv.$count = $count;
-
     let $search_control = createElement2(
         ["div", {class: "STATNODES_SEARCH_CONTROL control has-icons-left",
                  style: "flex:1 1 12rem; max-width:22rem; min-width:0;"}, [
@@ -505,7 +501,6 @@ function build_dom(gobj)
             ["div", {class: "STATNODES_FINDER is-flex is-align-items-center",
                      style: "gap:0.5rem; flex:1 1 14rem; max-width:24rem; min-width:0;"},
                 [$fold, $search_control]],
-            $count,
             $actions
         ]]
     );
@@ -517,6 +512,22 @@ function build_dom(gobj)
         ]]
     );
     $c.appendChild(priv.$tablewrap);
+
+    /*
+     *  La linea de estado: cuantos nodos hay.  Misma decision y mismo
+     *  sitio que en la tabla plana (`NODES_STATUS`): debajo de lo que
+     *  cuenta, con la cifra y la palabra en nodos distintos porque solo
+     *  la palabra se traduce.
+     */
+    priv.$count = createElement2(
+        ["span", {class: "STATNODES_STATUS_COUNT has-text-weight-medium"}, ""]);
+    priv.$status = createElement2(
+        ["div", {class: "STATNODES_STATUS is-size-7 has-text-grey"}, [
+            priv.$count,
+            ["span", {class: "STATNODES_STATUS_LABEL", i18n: "nodes"}, "Nodes"]
+        ]]
+    );
+    $c.appendChild(priv.$status);
 
     priv.$notif = createElement2(
         ["div", {class: "STATNODES_NOTICE notification is-light", style: "display:none;",
@@ -740,7 +751,10 @@ function create_table(gobj)
         layout:                "fitColumns",
         maxHeight:             "100%",
         placeholder:           t("no nodes"),
-        columnDefaults:        {headerHozAlign: "left", resizable: false},
+        /*  Column widths are the operator's: a node name and the status
+         *  of its yunos want very different room on a phone and on a
+         *  screen, and only the person reading knows which.  */
+        columnDefaults:        {headerHozAlign: "left", resizable: true},
         columns:               make_columns(gobj),
         dataTree:              true,
         dataTreeStartExpanded: false,
@@ -802,6 +816,9 @@ function render_state(gobj)
     priv.$toolbar.style.display = connected ? "" : "none";
     priv.$tablewrap.style.display = connected ? "" : "none";
     priv.$notif.style.display = connected ? "none" : "";
+    if(priv.$status) {
+        priv.$status.style.display = connected ? "" : "none";
+    }
 }
 
 /***************************************************************

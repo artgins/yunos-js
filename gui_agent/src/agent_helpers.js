@@ -102,6 +102,26 @@ function node_id(n)
 }
 
 /***************************************************************
+ *  What makes ONE ROW one row, which is not what addresses it.
+ *
+ *  Neither key is unique on a control center that has old nodes on it:
+ *  a fleet upgraded from an image shares one uuid across every machine,
+ *  and four raspberries answer to the hostname `raspz-slave`.  So a
+ *  table indexed by either collapses rows that are different nodes --
+ *  and a table cannot show what it has merged.  The three fields
+ *  together do separate them, and that is all this is for: it is the
+ *  ROW's identity, never an `agent_id` (the operator picks that by
+ *  clicking the column that disambiguates their case).
+ ***************************************************************/
+function node_row_key(n)
+{
+    if(!n) {
+        return "";
+    }
+    return [n.uuid || "", n.role || "", n.host || ""].join("\u001f");
+}
+
+/***************************************************************
  *  One `list-agents` line into a node record. The agent answers
  *  free text, e.g.
  *
@@ -411,6 +431,7 @@ export {
     version_gte,
     version_cmp,
     node_id,
+    node_row_key,
     parse_agent_line,
     esc,
     fmt_value,

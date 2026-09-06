@@ -482,7 +482,14 @@ function parse_node_route(route)
     return {ws: m[1], id: id};
 }
 
-/*  Parse a list-agents result into a set of live node ids (host||uuid). */
+/*  Parse a list-agents result into the set of live node ids.
+ *
+ *  BOTH keys of every node, not `host||uuid`: a tab can be opened
+ *  addressing a node by its hostname OR by its uuid (the node picker
+ *  lets the operator pick, because on a control center with old nodes
+ *  neither key is unique), and the tab's connection dot asks this set
+ *  by the key the tab was opened with.  Registering only one of them
+ *  painted every uuid-addressed tab as offline. */
 function parse_live_hosts(data)
 {
     let live = {};
@@ -491,9 +498,10 @@ function parse_live_hosts(data)
             let s = String(line || "");
             let uuid = (/UUID:(\S+)/.exec(s) || [])[1] || "";
             let host = (/HOSTNAME:'([^']*)'/.exec(s) || [])[1] || "";
-            let id = host || uuid;
-            if(id) {
-                live[id] = true;
+            for(let id of [host, uuid]) {
+                if(id) {
+                    live[id] = true;
+                }
             }
         }
     }

@@ -19,6 +19,55 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.55 / gui_treedb 0.17.26 — 2026-09-06
+
+### Changed
+
+#### The node picker says how many nodes it has, lets its columns be resized, and lets the operator choose WHICH key addresses a node
+
+Three things asked for on the Nodes table, and one they share a cause with.
+
+- **A status line under the table**, saying how many records there are
+  (`<shown> / <total>` while the search is filtering). The count used to be a
+  bare number wedged between the search box and the buttons of the toolbar: a
+  `31` next to a search box does not say what it counts, and with a filter on,
+  which of the two numbers is being read is exactly the question. The figure and
+  the word are separate nodes, because only the word is translated —
+  `refresh_language()` reaches what CARRIES its key. Both pickers get it: the
+  flat table (Commands / Terminal) and the tree (Statistics / Schemas).
+
+- **Resizable columns** in both pickers. A uuid column and a host column want
+  very different room, and which of the two is being read changes with the
+  fleet in front of the operator.
+
+- **Host and UUID open the node, each addressing it by its own key.** Clicking
+  the HOST cell opens the node as `agent_id=<hostname>`; clicking the UUID cell
+  opens it as `agent_id=<uuid>`. This is not a convenience: on a control center
+  with old nodes on it **neither key is unique**. A fleet cloned from one image
+  shares a single uuid across six machines, and four raspberries all answer to
+  the hostname `raspz-slave` — so whichever of the two tells THIS node from its
+  twins is a thing only the person reading the table knows. The tab is labelled
+  with the key that opened it, for the same reason: labelling it with the other
+  one would not name the node either. The checkbox keeps the default (hostname,
+  else uuid) and, when a tab is already open, closes THE ONE THAT EXISTS rather
+  than opening a second one beside it.
+
+- And the cause the three of them met: the flat table was **indexed by
+  `uuid`**, which those six cloned machines share. A Tabulator index is a row's
+  identity; handing it a repeated value tells the table that different nodes are
+  the same row. The index is now `node_row_key()` — uuid + role + host, the
+  three together — which is the ROW's identity and never an `agent_id`.
+
+`C_APP`'s live-node set now registers **both** keys of every node
+(`parse_live_hosts`), or a uuid-addressed tab would have shown its connection
+dot as offline for ever.
+
+Verified against the deployed plane with a probe that makes the gestures: the
+status line matches the rows (30 in Terminal, where the old nodes are not
+version-filtered), the duplicated uuid appears as six rows and `raspz-slave` as
+four, a Host click and a UUID click open two tabs onto the same node, both
+close, and the console stays clean.
+
 ## gui_agent 0.22.54 / gui_treedb 0.17.26 — 2026-09-05
 
 ### Changed

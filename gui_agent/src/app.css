@@ -155,3 +155,43 @@
     margin-left: 0.35rem;
     word-break: break-word;
 }
+
+/*
+ *  La linea de estado del selector de nodos: cuantos registros hay.
+ *  Va debajo de la tabla, pegada a ella, porque habla de lo que hay
+ *  encima.  La cifra primero, la palabra despues -- y la palabra lleva
+ *  su clave i18n, asi que cambia de idioma sola.
+ */
+.NODES_STATUS {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.35rem 0.25rem 0;
+    flex: 0 0 auto;
+}
+
+/*
+ *  Host y UUID ABREN el nodo, cada uno dirigiendose a el por lo suyo, asi
+ *  que tienen que verse pinchables: en un control center con nodos viejos
+ *  ninguna de las dos claves es unica, y cual de las dos distingue a este
+ *  nodo de sus gemelos solo lo sabe quien mira la tabla.
+ */
+.NODES_TABLE .NODES_OPENER {
+    cursor: pointer;
+}
+
+.NODES_TABLE .NODES_OPENER:hover {
+    text-decoration: underline;
+}
+
+/*
+ *  La linea de estado del selector en arbol (Statistics / Schemas).
+ *  Misma forma que la de la tabla plana: habla de lo que tiene encima.
+ */
+.STATNODES_STATUS {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.35rem 0.25rem 0;
+    flex: 0 0 auto;
+}

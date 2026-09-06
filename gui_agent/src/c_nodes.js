@@ -11,6 +11,18 @@
  *      supplied by src/app.css (the v2 shell does not ship gobj-ui v1's
  *      c_yui_main.css override).
  *
+ *      WHICH KEY ADDRESSES A NODE IS THE OPERATOR'S CHOICE, and it has
+ *      to be: on a control center with old nodes on it neither key is
+ *      unique.  A fleet cloned from one image shares a single uuid
+ *      across every machine, and four raspberries all answer to the
+ *      hostname `raspz-slave`.  So clicking the HOST cell opens the node
+ *      as `agent_id=<hostname>` and clicking the UUID cell opens it as
+ *      `agent_id=<uuid>` -- whichever of the two tells this node from
+ *      its twins.  The checkbox keeps the default (hostname, else uuid).
+ *      The ROW's own identity is a third thing (`node_row_key`): the
+ *      three fields together, so a table indexed by one of the repeated
+ *      keys stops merging rows that are different nodes.
+ *
  *      The control-center link re-publishes EV_MT_COMMAND_ANSWER to all
  *      panels, so this view filters by the command in the command_stack
  *      and only handles `list-agents` answers (the Console handles
@@ -49,6 +61,7 @@ import {
     version_cmp,
     version_gte,
     node_id,
+    node_row_key,
     parse_agent_line,
     esc,
 } from "./agent_helpers.js";
@@ -238,14 +251,52 @@ function node_meets_min_version(gobj, n)
 }
 
 /***************************************************************
+ *  By WHICH key is this node open in this workspace, "" when it is
+ *  not open at all.
+ *
+ *  Two answers and not one, because there are two ways in: the row was
+ *  opened by its hostname or by its uuid, and the checkbox has to show
+ *  the tab that exists rather than the tab the default would have made.
+ ***************************************************************/
+function selected_key(gobj, n)
+{
+    let config = gobj_read_attr(gobj, "config_svc");
+    let ws = gobj_read_attr(gobj, "workspace");
+    if(!config || !n) {
+        return "";
+    }
+    for(let key of [n.host, n.uuid]) {
+        if(key && agent_config_is_node_selected(config, ws, key)) {
+            return key;
+        }
+    }
+    return "";
+}
+
+/***************************************************************
  *  Is this node currently selected in THIS workspace (has an open
  *  tab here)?
  ***************************************************************/
 function is_selected_node(gobj, n)
 {
+    return !!selected_key(gobj, n);
+}
+
+/***************************************************************
+ *  Open (or close) a node ADDRESSED BY `key` -- its hostname or its
+ *  uuid, whichever cell was clicked.  The label is the key itself:
+ *  the whole point of choosing is that the other one does not tell
+ *  this node from its twins, so a tab labelled with it would not
+ *  either.
+ ***************************************************************/
+function toggle_node_by(gobj, n, key)
+{
     let config = gobj_read_attr(gobj, "config_svc");
     let ws = gobj_read_attr(gobj, "workspace");
-    return !!(config && agent_config_is_node_selected(config, ws, node_id(n)));
+    if(!config || !key) {
+        return;
+    }
+    agent_config_toggle_selected_node(config, ws, {id: key, host: key});
 }
 
 /***************************************************************
@@ -261,7 +312,8 @@ function build_dom(gobj)
     }
     clear_node($c);
 
-    /*  Single-line toolbar: search (grows) · count · refresh.
+    /*  Single-line toolbar: search (grows) · copy · refresh.  The count
+     *  is not here any more — it is the status line under the table.
      *  No title/subtitle block — the nav already labels the view, and
      *  on mobile every extra header line steals the table's space.  */
     let $input = createElement2(["input", {
@@ -274,10 +326,6 @@ function build_dom(gobj)
         input: () => apply_filter(gobj)
     }]);
     priv.$input = $input;
-
-    let $count = createElement2(
-        ["span", {class: "NODES_COUNT is-size-7 has-text-grey"}, ""]);
-    priv.$count = $count;
 
     let $search_control = createElement2(
         ["div", {class: "NODES_SEARCH_CONTROL control has-icons-left",
@@ -315,7 +363,6 @@ function build_dom(gobj)
     priv.$toolbar = createElement2(
         ["div", {class: "NODES_TOOLBAR is-flex is-align-items-center mb-2", style: "gap:0.5rem;"}, [
             $search_control,
-            $count,
             $copy,
             ["button", {class: "NODES_REFRESH button", type: "button", i18n: "refresh"},
                 "Refresh", {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
@@ -330,6 +377,26 @@ function build_dom(gobj)
         ]]
     );
     $c.appendChild(priv.$tablewrap);
+
+    /*
+     *  La linea de estado: cuantos registros hay.
+     *
+     *  Va DEBAJO de la tabla y no como un numero suelto en la toolbar,
+     *  que es donde estaba: un `31` junto a un buscador no dice de que
+     *  habla, y con el filtro puesto la pregunta es justo cual de los dos
+     *  numeros se esta mirando.  La cifra y la palabra van en nodos
+     *  distintos porque solo la palabra se traduce -- `refresh_language()`
+     *  alcanza al que LLEVA su clave.
+     */
+    priv.$count = createElement2(
+        ["span", {class: "NODES_STATUS_COUNT has-text-weight-medium"}, ""]);
+    priv.$status = createElement2(
+        ["div", {class: "NODES_STATUS is-size-7 has-text-grey"}, [
+            priv.$count,
+            ["span", {class: "NODES_STATUS_LABEL", i18n: "nodes"}, "Nodes"]
+        ]]
+    );
+    $c.appendChild(priv.$status);
 
     /*  Not-connected notice (Tabulator's own placeholder covers no-nodes)  */
     priv.$notif = createElement2(
@@ -351,22 +418,42 @@ function build_dom(gobj)
 function make_columns(gobj)
 {
 
-    /*  host: bold when the node has an open Console tab  */
+    /*  host: bold when the node is open, and it OPENS -- by hostname.  */
     function host_formatter(cell)
     {
         let n = cell.getData();
-        let host = n.host || n.uuid || "";
-        if(is_selected_node(gobj, n)) {
-            return `<span class="NODES_HOST has-text-weight-bold">${esc(host)}</span>`;
+        let host = n.host || "";
+        if(!host) {
+            return "";      /*  nothing to address it by: no link to offer  */
         }
-        return esc(host);
+        let bold = (selected_key(gobj, n) === host)? " has-text-weight-bold": "";
+        return `<span class="NODES_HOST NODES_OPENER${bold}" ` +
+               `title="${esc(t("open by host"))}">${esc(host)}</span>`;
     }
 
-    /*  uuid: muted monospace  */
+    /*  uuid: muted monospace, and it OPENS too -- by uuid.  */
     function uuid_formatter(cell)
     {
-        return `<span class="NODES_UUID is-family-monospace is-size-7" ` +
-               `style="color:#9AA7B4;">${esc(cell.getValue() || "")}</span>`;
+        let n = cell.getData();
+        let uuid = n.uuid || "";
+        if(!uuid) {
+            return "";
+        }
+        let bold = (selected_key(gobj, n) === uuid)? " has-text-weight-bold": "";
+        return `<span class="NODES_UUID NODES_OPENER is-family-monospace is-size-7${bold}" ` +
+               `title="${esc(t("open by uuid"))}">${esc(uuid)}</span>`;
+    }
+
+    function host_click(e, cell)
+    {
+        let n = cell.getData();
+        toggle_node_by(gobj, n, n.host || "");
+    }
+
+    function uuid_click(e, cell)
+    {
+        let n = cell.getData();
+        toggle_node_by(gobj, n, n.uuid || "");
     }
 
     /*  Per-row checkbox: checked when the node has an open Console tab.
@@ -382,11 +469,13 @@ function make_columns(gobj)
     function sel_click(e, cell)
     {
         let n = cell.getData();
-        let config = gobj_read_attr(gobj, "config_svc");
-        let ws = gobj_read_attr(gobj, "workspace");
-        if(config) {
-            agent_config_toggle_selected_node(config, ws, {id: node_id(n), host: n.host || node_id(n)});
-        }
+        /*
+         *  Unchecking closes the tab that IS open, whichever key opened
+         *  it; checking opens the default one (hostname, else uuid).
+         *  Toggling by the default alone would answer a uuid-opened tab
+         *  by opening a SECOND one next to it.
+         */
+        toggle_node_by(gobj, n, selected_key(gobj, n) || node_id(n));
     }
 
     /*  Header "select all": checked when every node is selected;
@@ -427,10 +516,12 @@ function make_columns(gobj)
         {title: "", field: "_sel", width: 44, headerSort: false, hozAlign: "center",
             formatter: sel_formatter, cellClick: sel_click,
             titleFormatter: selall_formatter, headerClick: selall_click},
-        {title: t("host"),    field: "host",    formatter: host_formatter},
+        {title: t("host"),    field: "host",    formatter: host_formatter,
+            cellClick: host_click},
         {title: t("role"),    field: "role"},
         {title: t("version"), field: "version", sorter: version_cmp},
-        {title: t("uuid"),    field: "uuid",    formatter: uuid_formatter}
+        {title: t("uuid"),    field: "uuid",    formatter: uuid_formatter,
+            cellClick: uuid_click}
     ];
 }
 
@@ -452,11 +543,19 @@ function create_table(gobj)
 
     let settings = {
         ...yui_tabulator_lang(t),   /*  Tabulator's OWN chrome, in our language  */
-        index:       "uuid",
+        /*
+         *  The row's own identity, not one of the two addressing keys:
+         *  `uuid` was the index and six machines of one cloned fleet
+         *  share theirs, so the table was told they were the same row.
+         */
+        index:       "_key",
         layout:      "fitDataFill",
         maxHeight:   "100%",
         placeholder: t("no nodes"),
-        columnDefaults: {headerHozAlign: "left", resizable: false},
+        /*  Column widths are the operator's: a uuid column and a host
+         *  column want very different room, and which of the two is
+         *  being read changes with the fleet in front of them.  */
+        columnDefaults: {headerHozAlign: "left", resizable: true},
         columns:     make_columns(gobj),
         /*  Default order: highest agent version on top (numeric, not string).  */
         initialSort: [{column: "version", dir: "desc"}],
@@ -524,6 +623,9 @@ function render_state(gobj)
     priv.$toolbar.style.display = connected ? "" : "none";
     priv.$tablewrap.style.display = connected ? "" : "none";
     priv.$notif.style.display = connected ? "none" : "";
+    if(priv.$status) {
+        priv.$status.style.display = connected ? "" : "none";
+    }
 }
 
 /***************************************************************
@@ -674,6 +776,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
              *  below 7.7.0 for Commands/Statistics): they wouldn't answer,
              *  so they must not appear as selectable here.  */
             if(node_meets_min_version(gobj, n)) {
+                n._key = node_row_key(n);
                 nodes.push(n);
             }
         }
