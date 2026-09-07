@@ -228,6 +228,7 @@ const en = {
         "no connections yet": "No connections yet",
         "open in this workspace": "Open in this workspace",
         "expand all": "Expand all",
+        "show more": "Show more",
         "open all of this connection": "Open all of this connection",
         "search a node or a treedb": "Search a node or a treedb…",
         "open": "open",
