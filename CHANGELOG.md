@@ -19,6 +19,27 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.56 / gui_treedb 0.17.27 — 2026-09-08
+
+### Fixed
+
+#### A user could not be given a role (`@yuneta/gobj-ui` `^7.23.71`)
+
+Reported against the deployed treedb GUI: the **Role** of a user opened as
+a dead grey box with its four roles inside it. `users.roles` in
+`treedb_authzs` is declared `['fkey']` and nothing else — as almost every
+fkey in the tree is — and since gobj-ui `7.23.55` the form disabled every
+control of a column without `writable`. An fkey is the one column
+`writable` does not govern: a link is not written, it is **linked**, and
+the topic view has always sent fkeys back for exactly that reason. Fixed
+in the library; both GUIs take it.
+
+`gui_agent` jumps `^7.23.65` → `^7.23.71` and so also takes the folded
+treedb graph, its legend-as-layer-control and the three treedb layouts:
+ten consumer i18n keys added to its two locales (`show more`,
+`treedb-tree`, `treedb-outline`, `radial`, `main topic`, `show topic`,
+`hide topic`, `highlight topic`, `loose records`, `hidden topics`).
+
 ## gui_agent 0.22.55 / gui_treedb 0.17.26 — 2026-09-06
 
 ### Changed
