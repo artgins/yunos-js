@@ -538,6 +538,8 @@ const es = {
         "node labels": "Etiquetas de los nodos",
         "open node": "Abrir nodo",
         "close node": "Cerrar nodo",
+        "reset sizes": "Restablecer tamaños",
+        "reset topic sizes": "Restablecer tamaños del topic",
         "show more":            "Mostrar más",
         "main topic":           "Topic principal: el árbol cuelga de él",
         "show topic":           "Mostrar topic",

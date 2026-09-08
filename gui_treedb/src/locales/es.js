@@ -99,6 +99,8 @@ const es = {
         "node labels": "Etiquetas de los nodos",
         "open node": "Abrir nodo",
         "close node": "Cerrar nodo",
+        "reset sizes": "Restablecer tamaños",
+        "reset topic sizes": "Restablecer tamaños del topic",
         "selection mode": "Modo selección",
         "delete node": "Borrar nodo",
         "node properties": "Propiedades del nodo",

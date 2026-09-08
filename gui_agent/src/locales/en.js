@@ -534,6 +534,8 @@ const en = {
         "node labels": "Node labels",
         "open node": "Open node",
         "close node": "Close node",
+        "reset sizes": "Reset sizes",
+        "reset topic sizes": "Reset topic sizes",
         "show more":            "Show more",
         "main topic":           "Main topic: the tree hangs from it",
         "show topic":           "Show topic",

@@ -99,6 +99,8 @@ const en = {
         "node labels": "Node labels",
         "open node": "Open node",
         "close node": "Close node",
+        "reset sizes": "Reset sizes",
+        "reset topic sizes": "Reset topic sizes",
         "selection mode": "Selection mode",
         "delete node": "Delete node",
         "node properties": "Node properties",
