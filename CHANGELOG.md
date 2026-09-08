@@ -19,6 +19,20 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.57 / gui_treedb 0.17.28 — 2026-09-08
+
+### Fixed
+
+#### No record could be SAVED from a treedb form (`@yuneta/gobj-ui` `^7.23.72`)
+
+The other half of the same report, and the worse one: with the Role
+control enabled, saving threw `ReferenceError: priv is not defined` on the
+FIRST line of the action. `ac_form_save_record()` had read
+`priv.reading_files` without declaring `priv` since gobj-ui `7.23.64`, so
+for three releases a treedb form dialog could not write anything at all —
+the dialog just stayed open. Fixed in the library, with a test for the
+whole class of it.
+
 ## gui_agent 0.22.56 / gui_treedb 0.17.27 — 2026-09-08
 
 ### Fixed
