@@ -18,6 +18,8 @@ const en = {
     name: "English",
 
     translation: {
+        "hook topic": "Hook topic",
+        "hook column": "Hook column",
         "shortkey": "shortkey",
         /*  The terminal's key bar (c_agent_tty.js). These keys live in a
          *  DATA TABLE and reach `t()` as a variable, so validate-locales

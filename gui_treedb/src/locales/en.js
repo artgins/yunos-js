@@ -26,6 +26,8 @@ const en = {
     name: "English",
 
     translation: {
+        "hook topic": "Hook topic",
+        "hook column": "Hook column",
         "mute this message": "Mute this message",
         "muted": "Muted",
         "unmute": "Unmute",
