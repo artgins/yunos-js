@@ -320,6 +320,7 @@ function build_dom(gobj)
         class:        "NODES_SEARCH input",
         type:         "text",
         placeholder:  t("search nodes"),
+        "data-i18n-placeholder": "search nodes",
         "aria-label": t("search nodes"),
         "data-i18n-aria-label": "search nodes"
     }, null, {

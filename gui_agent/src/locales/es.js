@@ -18,6 +18,7 @@ const es = {
     name: "Español",
 
     translation: {
+        "shortkey": "atajo",
         /*  The terminal's key bar (c_agent_tty.js). These keys live in a
          *  DATA TABLE and reach `t()` as a variable, so validate-locales
          *  cannot see them: they are added by hand on purpose.  */

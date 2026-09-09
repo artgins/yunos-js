@@ -476,10 +476,16 @@ function build_shortkeys(gobj)
     /*  Add form: key + command inputs. Enter in either, or the Add button,
      *  saves and re-renders (which clears the inputs).  */
     let $key = ce(["input", {class: "SK_ADD_KEY input is-family-monospace", type: "text",
-                             placeholder: "key", "aria-label": "key",
+                             placeholder: t("shortkey"),
+                             "data-i18n-placeholder": "shortkey",
+                             "aria-label": t("shortkey"),
+                             "data-i18n-aria-label": "shortkey",
                              style: "max-width:7rem;"}]);
     let $cmd = ce(["input", {class: "SK_ADD_CMD input is-family-monospace", type: "text",
-                             placeholder: t("command template"), "aria-label": "command"}]);
+                             placeholder: t("command template"),
+                             "data-i18n-placeholder": "command template",
+                             "aria-label": t("command template"),
+                             "data-i18n-aria-label": "command template"}]);
 
     /*  The action reads the two inputs back from priv, so nothing but the
      *  intention travels in the kw.  */
