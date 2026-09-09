@@ -106,10 +106,18 @@ function render_html(dep)
                 <header class="ylogin-form-header">
                     <img class="ylogin-mobile-mark" src="/treedb-mark.svg" alt="TreeDB GUI">
                     <div class="ylogin-quick">
-                        <button type="button" class="yquick-btn" data-quick="theme">
+                        <button type="button" class="yquick-btn" data-quick="theme"
+                                title="${t("toggle theme", {defaultValue: "Toggle theme"})}"
+                                data-i18n-title="toggle theme"
+                                aria-label="${t("toggle theme", {defaultValue: "Toggle theme"})}"
+                                data-i18n-aria-label="toggle theme">
                             <span class="yquick-icon" data-quick-icon="theme"></span>
                         </button>
-                        <button type="button" class="yquick-btn" data-quick="lang">
+                        <button type="button" class="yquick-btn" data-quick="lang"
+                                title="${t("change language", {defaultValue: "Change language"})}"
+                                data-i18n-title="change language"
+                                aria-label="${t("change language", {defaultValue: "Change language"})}"
+                                data-i18n-aria-label="change language">
                             <span class="yquick-icon">${svg_globe()}</span>
                             <span class="yquick-label" data-quick-label="lang"></span>
                         </button>
@@ -134,7 +142,9 @@ function render_html(dep)
                         <div class="yfield-password">
                             <input type="password" name="password" autocomplete="current-password" required>
                             <button type="button" class="ypassword-toggle" data-action="toggle-password"
-                                    aria-pressed="false" aria-label="${t("show password", {defaultValue: "Show password"})}">
+                                    aria-pressed="false"
+                                    aria-label="${t("show password", {defaultValue: "Show password"})}"
+                                    data-i18n-aria-label="show password">
                                 <span data-password-icon>${svg_eye()}</span>
                             </button>
                         </div>
@@ -217,9 +227,13 @@ function wire_form(root, on_submit)
         pwd.type = revealed ? "password" : "text";
         pwd_icon.innerHTML = revealed ? svg_eye() : svg_eye_off();
         toggle.setAttribute("aria-pressed", revealed ? "false" : "true");
+        /*  The KEY as well as the text: a language switch repaints from
+         *  `data-i18n-aria-label`, and a stale key there would put the
+         *  label back to "show" on a field that is showing.  */
+        let pwd_key = revealed ? "show password" : "hide password";
+        toggle.setAttribute("data-i18n-aria-label", pwd_key);
         toggle.setAttribute("aria-label",
-            t(revealed ? "show password" : "hide password",
-                {defaultValue: revealed ? "Show password" : "Hide password"}));
+            t(pwd_key, {defaultValue: revealed ? "Show password" : "Hide password"}));
     });
 
     return {set_error, clear_error, set_busy};
@@ -275,6 +289,18 @@ function paint_i18n(root)
         let key = el.dataset.i18n;
         let def = el.dataset.default || el.textContent;
         el.textContent = t(key, {defaultValue: def});
+    });
+    /*  The attributes too. This screen has its own language switch and
+     *  its own repaint -- `refresh_language()` of the library is not in
+     *  play here -- so a `title` or an `aria-label` written once at
+     *  render stayed in the language it was born in.  */
+    root.querySelectorAll("[data-i18n-title]").forEach(function(el) {
+        el.setAttribute("title", t(el.dataset.i18nTitle,
+            {defaultValue: el.getAttribute("title") || ""}));
+    });
+    root.querySelectorAll("[data-i18n-aria-label]").forEach(function(el) {
+        el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel,
+            {defaultValue: el.getAttribute("aria-label") || ""}));
     });
     let footer = root.querySelector("[data-role=footer-line]");
     if(footer) {

@@ -18,6 +18,7 @@ const en = {
     name: "English",
 
     translation: {
+        "change language": "Change language",
         "scroll left": "Scroll left",
         "scroll right": "Scroll right",
         "hook topic": "Hook topic",
