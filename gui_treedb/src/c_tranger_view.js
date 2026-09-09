@@ -435,6 +435,7 @@ let PRIVATE_DATA = {
     $meta:       null,
     $error:      null,
     $dashboard:  null,   /*  cards column  */
+    record_json_gobj: null, /*  the C_YUI_JSON showing one record (or null)  */
     $copy_btn:   null,   /*  button awaiting clipboard feedback (or null)  */
     copy_fb:     null,   /*  feedback being shown: {$btn, label} to restore  */
     copy_timer:  null,   /*  its reset timer (cleared if another copy lands)  */
@@ -558,6 +559,7 @@ function mt_stop(gobj)
     close_all_cards(gobj);
     close_picker(gobj);
     close_json_viewer(gobj);
+    close_record_viewer(gobj);
     close_view_modals(gobj);
     close_rows_options(gobj);   /*  belt: idempotent if the sweep ran it  */
 
@@ -3257,7 +3259,35 @@ function request_page(gobj, card, page, size)
 }
 
 /***************************************************************
- *  Full record as JSON in the shell's adaptive dialog.
+ *  Drop the record viewer, if there is one.
+ ***************************************************************/
+function close_record_viewer(gobj)
+{
+    let priv = gobj.priv;
+    let jv = priv.record_json_gobj;
+
+    priv.record_json_gobj = null;
+    if(jv && !gobj_is_destroying(jv)) {
+        gobj_destroy(jv);
+    }
+}
+
+/***************************************************************
+ *  Full record in the shell's adaptive dialog, read with the
+ *  library's JSON VIEWER and not as a block of text.
+ *
+ *  A record of a tranger is a DOCUMENT -- a jwt payload with its
+ *  roles, its allowed origins and its nested claims -- and it was
+ *  being shown as a `<pre>` with a Copy button under it: no tree,
+ *  no search, no raw/graph views, and a long record read by
+ *  scrolling text. `C_YUI_JSON` is one gclass away and this view
+ *  already hosts one for the raw tranger.
+ *
+ *  It is given the WHOLE record, so nothing in it is collapsed and
+ *  it never asks for a subtree: no subscriber, and its
+ *  `EV_EXPAND_PATH` (which carries EVF_NO_WARN_SUBS) goes nowhere
+ *  -- which is what we want, since a path inside a record is not a
+ *  path the tranger could serve.
  ***************************************************************/
 function show_record_dialog(gobj, record, key)
 {
@@ -3267,32 +3297,51 @@ function show_record_dialog(gobj, record, key)
         log_error(`${gobj_short_name(gobj)}: no shell, cannot show the record`);
         return;
     }
-    let json = JSON.stringify(record, null, 4);
 
-    let $pre = createElement2(
-        ["pre", {class: "is-size-7 TRANGER_RECORD_JSON",
-                 style: "max-width:80vw; max-height:70vh; overflow:auto;"}, ""]);
-    $pre.textContent = json;
+    /*  One at a time, and destroyed when the dialog closes: a viewer
+     *  left alive holds its SERVICE NAME, and the next record would
+     *  find the name taken and open nothing.  */
+    close_record_viewer(gobj);
 
-    /*  Reading a record in a browser and then having to retype it into a
-     *  ticket is the most common thing this dialog is used for.  */
-    let $copy = createElement2(
-        ["button", {class: "button is-small mt-2 TRANGER_RECORD_COPY",
-                    title: t("copy"), "aria-label": t("copy")},
-            [
-                ["span", {class: "icon"}, [["i", {class: "yi-copy"}]]],
-                ["span", {i18n: "copy"}, t("copy")]
-            ]
-        ]);
-    $copy.addEventListener("click", () => {
-        gobj_send_event(gobj, "EV_COPY_RECORD", {text: json}, gobj);
-    });
-    priv.$copy_btn = $copy;
+    let jv = gobj_create_service(
+        `tranger-record-${priv.tok}`,
+        "C_YUI_JSON",
+        {json_data: record},
+        gobj
+    );
+    if(!jv) {
+        log_error(`${gobj_short_name(gobj)}: cannot create the record viewer`);
+        return;
+    }
+    priv.record_json_gobj = jv;
+    gobj_start(jv);
 
+    let $view = gobj_read_pointer_attr(jv, "$container");
+
+    /*  The viewer fills a sized box: its tree scrolls and its graph is
+     *  a canvas, and a canvas pushes no height -- so the HOST is what
+     *  says how tall the thing is.  */
+    if($view) {
+        $view.style.flex = "1 1 auto";
+        $view.style.minHeight = "0";
+    }
     let $box = createElement2(
-        ["div", {class: "TRANGER_RECORD_BOX"}, [$pre, $copy]]);
+        ["div", {class: "TRANGER_RECORD_BOX",
+                 style: "width:min(86vw, 900px); height:min(70vh, 640px); " +
+                        "display:flex; flex-direction:column;"},
+         $view? [$view] : []]);
 
     show_view_modal(gobj, shell, $box, {
+        /*  A DOCUMENT, so the dialog gets the wide cap (gobj-ui
+         *  7.23.108): at 640px the viewer wraps every long value and
+         *  its view switch ends up behind the toolbar's arrow.  */
+        wide: true,
+        on_close: () => {
+            if(gobj_is_destroying(gobj)) {
+                return;
+            }
+            close_record_viewer(gobj);
+        },
         dialog: true,
         logical_class: "TRANGER_RECORD_DIALOG",
         /*  Only the ALL_KEYS form has a translatable half. A real key is
@@ -4167,15 +4216,6 @@ function ac_export_card(gobj, event, kw, src)
 }
 
 /************************************************************
- *  Copy the record shown in the dialog to the clipboard, as the JSON the
- *  dialog is showing.
- ************************************************************/
-function ac_copy_record(gobj, event, kw, src)
-{
-    return copy_to_clipboard(gobj, (kw && kw.text) || "");
-}
-
-/************************************************************
  *  The column chooser of a card: one checkbox per column, checked when the
  *  column is shown. It is the only way back from the mobile hiding — and it
  *  hands the choice of what matters to the person reading the record, which
@@ -4765,7 +4805,6 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_PAUSE",         ac_toggle_pause,          null],
             ["EV_EXPORT_CARD",          ac_export_card,           null],
             ["EV_SHOW_RECORD",          ac_show_record,           null],
-            ["EV_COPY_RECORD",          ac_copy_record,           null],
             ["EV_SHARE_CARD",           ac_share_card,            null],
             ["EV_OPEN_COLUMNS",         ac_open_columns,          null],
             ["EV_TOGGLE_COLUMN",        ac_toggle_column,         null],
@@ -4804,7 +4843,6 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_PAUSE",         0],
         ["EV_EXPORT_CARD",          0],
         ["EV_SHOW_RECORD",          0],
-        ["EV_COPY_RECORD",          0],
         ["EV_SHARE_CARD",           0],
         ["EV_OPEN_COLUMNS",         0],
         ["EV_TOGGLE_COLUMN",        0],
