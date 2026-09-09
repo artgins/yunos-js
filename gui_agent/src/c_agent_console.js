@@ -380,9 +380,11 @@ function build_ui(gobj)
     let $input = createElement2(["input", {
         class:        "CONSOLE_INPUT input is-family-monospace",
         type:         "text",
+        /*  `help` is not prose: it is the COMMAND to type, so it is not
+         *  translated -- the same as a code sample.  */
         placeholder:  "help",
         autocomplete: "off",
-        "aria-label": "command"
+        "aria-label": t("command"), "data-i18n-aria-label": "command"
     }, null, {
         /*  Each key that MEANS something is an event; the handler only
          *  translates and, where the browser needs a synchronous answer,
@@ -420,7 +422,12 @@ function build_ui(gobj)
     /*  Icon + label; the label is hidden on mobile (is-hidden-mobile) so the
      *  input keeps its width — the icon alone carries the action there. */
     let $exec = createElement2(
-        ["button", {class: "CONSOLE_EXEC button is-primary", type: "button"}, [
+        /*  A name even when the label is gone: `is-hidden-mobile` leaves
+         *  this button as a bare icon on a phone, and it had no `title`
+         *  and no `aria-label` -- so there it announced nothing at all.  */
+        ["button", {class: "CONSOLE_EXEC button is-primary", type: "button",
+                    title: t("execute"), "data-i18n-title": "execute",
+                    "aria-label": t("execute"), "data-i18n-aria-label": "execute"}, [
             ["span", {class: "icon"}, [["i", {class: "yi-terminal"}]]],
             ["span", {class: "is-hidden-mobile", i18n: "execute"}, "Execute"]
         ]]
@@ -432,8 +439,9 @@ function build_ui(gobj)
      *  on mobile the in-input ✕ sits under the typing thumb and gets tapped
      *  by accident. Wipes the command AND the response panel. */
     let $clear = createElement2(
-        ["button", {class: "CONSOLE_CLEAR button", type: "button", title: t("clear"),
-                    "data-i18n-title": "clear"},
+        ["button", {class: "CONSOLE_CLEAR button", type: "button",
+                    title: t("clear"), "data-i18n-title": "clear",
+                    "aria-label": t("clear"), "data-i18n-aria-label": "clear"},
             [["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]]]]
     );
     $clear.addEventListener("click",
@@ -444,8 +452,10 @@ function build_ui(gobj)
     /*  "?" (available commands) + history popovers. Clicking an item inserts
      *  it into the input to edit — it does NOT auto-run. Shortkeys are managed
      *  from Preferences (kept off the input row so it stays wide on mobile). */
-    let help_pop = build_popover(gobj, "HELP", "yi-question", t("help"));
-    let hist_pop = build_popover(gobj, "HIST", "yi-arrow-rotate-left", t("command history"));
+    /*  The KEY and not `t(key)`: `build_popover` needs it to write the
+     *  `data-i18n-title`, or the tooltip is translated once and frozen.  */
+    let help_pop = build_popover(gobj, "HELP", "yi-question", "help");
+    let hist_pop = build_popover(gobj, "HIST", "yi-arrow-rotate-left", "command history");
     priv.popovers = {
         HELP: {dd: help_pop.dd, content: help_pop.content},
         HIST: {dd: hist_pop.dd, content: hist_pop.content},
@@ -488,7 +498,9 @@ function build_ui(gobj)
 
     let $copy = createElement2(
         ["button", {class: "CONSOLE_COPY button is-ghost", type: "button",
-                    title: t("copy response"), "data-i18n-title": "copy response"},
+                    title: t("copy response"), "data-i18n-title": "copy response",
+                    "aria-label": t("copy response"),
+                    "data-i18n-aria-label": "copy response"},
             [["span", {class: "icon"}, [["i", {class: "yi-copy"}]]]]]
     );
     $copy.disabled = true;
@@ -771,7 +783,7 @@ function clear_console(gobj)
  *  icon trigger. kind is "HELP" | "HIST"; content is filled on open.
  *  Returns {control, dd, content} for wiring into the input row.
  ***************************************************************/
-function build_popover(gobj, kind, icon, title)
+function build_popover(gobj, kind, icon, title_key)
 {
     let $content = createElement2(
         ["div", {class: `CONSOLE_${kind}_CONTENT dropdown-content`,
@@ -779,7 +791,9 @@ function build_popover(gobj, kind, icon, title)
     );
     let $btn = createElement2(
         ["button", {class: `CONSOLE_${kind}_BTN button`, type: "button",
-                    "aria-haspopup": "true", title: title},
+                    "aria-haspopup": "true",
+                    title: t(title_key), "data-i18n-title": title_key,
+                    "aria-label": t(title_key), "data-i18n-aria-label": title_key},
             [["span", {class: "icon"}, [["i", {class: icon}]]]]]
     );
     let $dd = createElement2(
