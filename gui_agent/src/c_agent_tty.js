@@ -383,27 +383,35 @@ function restore_screen(gobj)
  *  paste_clipboard) — the native long-press menu is suppressed, this
  *  key is the mobile paste path.
  ***************************************************************/
+/*  Three columns: the KEY CAP, the sequence it sends, and its NAME as
+ *  an i18n key.
+ *
+ *  The cap is not translated -- `Esc`, `Tab` and `Ctrl` are what is
+ *  printed on the key of any keyboard, and `^C` is what a terminal
+ *  calls it. The NAME is: it is the tooltip and, more to the point, the
+ *  `aria-label`, which used to be the cap itself -- so a screen reader
+ *  announced "↵", "^C" and "Kbd", which name nothing.  */
 const KEYBAR_ROWS = [
     [
-        ["^C",      "\x03"],
-        ["|",       "|"],
-        ["/",       "/"],
-        ["-",       "-"],
-        ["_",       "_"],
-        ["Home",    "\x1b[H"],
-        ["End",     "\x1b[F"],
-        ["Paste",   "__paste__"]
+        ["^C",      "\x03",     "interrupt (ctrl+c)"],
+        ["|",       "|",        "pipe"],
+        ["/",       "/",        "slash"],
+        ["-",       "-",        "hyphen"],
+        ["_",       "_",        "underscore"],
+        ["Home",    "\x1b[H",   "home key"],
+        ["End",     "\x1b[F",   "end key"],
+        ["Paste",   "__paste__", "paste"]
     ],
     [
-        ["Kbd",     "__kb__"],
-        ["Esc",     "\x1b"],
-        ["Tab",     "\t"],
-        ["Ctrl",    "__ctrl__"],
-        ["←",  "\x1b[D"],
-        ["↑",  "\x1b[A"],
-        ["↓",  "\x1b[B"],
-        ["→",  "\x1b[C"],
-        ["↵",  "\r"]
+        ["Kbd",     "__kb__",   "show the keyboard"],
+        ["Esc",     "\x1b",     "escape key"],
+        ["Tab",     "\t",       "tab key"],
+        ["Ctrl",    "__ctrl__", "control key"],
+        ["←",  "\x1b[D",   "left arrow"],
+        ["↑",  "\x1b[A",   "up arrow"],
+        ["↓",  "\x1b[B",   "down arrow"],
+        ["→",  "\x1b[C",   "right arrow"],
+        ["↵",  "\r",       "enter key"]
     ]
 ];
 
@@ -505,6 +513,7 @@ function build_keybar(gobj)
         let btns = row.map(function(pair) {
             let label = pair[0];
             let seq = pair[1];
+            let name = pair[2] || pair[0];
             if(seq === "__paste__") {
                 label = t("paste");
             }
@@ -528,7 +537,10 @@ function build_keybar(gobj)
                     type: "button", tabindex: "-1",
                     style: `flex:${grow} 1 0; min-width:2.1rem; padding-left:0.3rem; ` +
                            "padding-right:0.3rem; " + glyph,
-                    "aria-label": label
+                    /*  The NAME and not the cap: the cap is a glyph or an
+                     *  abbreviation, and it is what a reader HEARS.  */
+                    "aria-label": t(name), "data-i18n-aria-label": name,
+                    title: t(name), "data-i18n-title": name
                 }, content]
             );
             /*  The handler's only job is to keep the xterm focused and turn

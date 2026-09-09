@@ -18,6 +18,25 @@ const es = {
     name: "Español",
 
     translation: {
+        /*  The terminal's key bar (c_agent_tty.js). These keys live in a
+         *  DATA TABLE and reach `t()` as a variable, so validate-locales
+         *  cannot see them: they are added by hand on purpose.  */
+        "interrupt (ctrl+c)": "Interrumpir (ctrl+c)",
+        "pipe": "Barra vertical",
+        "slash": "Barra",
+        "hyphen": "Guion",
+        "underscore": "Guion bajo",
+        "home key": "Tecla Inicio",
+        "end key": "Tecla Fin",
+        "show the keyboard": "Mostrar el teclado",
+        "escape key": "Tecla Escape",
+        "tab key": "Tecla Tabulador",
+        "control key": "Tecla Control",
+        "left arrow": "Flecha izquierda",
+        "up arrow": "Flecha arriba",
+        "down arrow": "Flecha abajo",
+        "right arrow": "Flecha derecha",
+        "enter key": "Tecla Intro",
         "mute this message": "Silenciar este mensaje",
         "muted": "Silenciados",
         "unmute": "Dejar de silenciar",
