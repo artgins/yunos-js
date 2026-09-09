@@ -126,6 +126,8 @@ const en = {
         "node properties": "Node properties",
         "edge properties": "Edge properties",
         "link to hook": "Link to hook",
+        "operations": "Operations",
+        "slide bar to choose option": "Slide the bar to choose",
         "unlink": "Unlink",
         "operation mode": "Operation mode",
         "no fields": "No fields",

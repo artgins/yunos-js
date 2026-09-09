@@ -126,6 +126,8 @@ const es = {
         "node properties": "Propiedades del nodo",
         "edge properties": "Propiedades del enlace",
         "link to hook": "Enlazar al hook",
+        "operations": "Operaciones",
+        "slide bar to choose option": "Desliza la barra para elegir",
         "unlink": "Desenlazar",
         "operation mode": "Modo de operación",
         "no fields": "Sin campos",

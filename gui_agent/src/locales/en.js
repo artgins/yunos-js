@@ -565,6 +565,8 @@ const en = {
         "redo":                 "Redo",
         "link to hook":         "Link to hook",
         "edge properties":      "Edge properties",
+        "operations": "Operations",
+        "slide bar to choose option": "Slide the bar to choose",
         "unlink":               "Unlink",
         "this edge":            "This edge",
         "same type edges":      "Same type edges",

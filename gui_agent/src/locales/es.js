@@ -569,6 +569,8 @@ const es = {
         "redo":                 "Rehacer",
         "link to hook":         "Enlazar al hook",
         "edge properties":      "Propiedades del enlace",
+        "operations": "Operaciones",
+        "slide bar to choose option": "Desliza la barra para elegir",
         "unlink":               "Desenlazar",
         "this edge":            "Este enlace",
         "same type edges":      "Enlaces del mismo tipo",
