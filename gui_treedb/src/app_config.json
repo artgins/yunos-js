@@ -47,7 +47,7 @@
 
     "toolbar": {
         "zone": "top",
-        "aria_label": "TreeDB GUI toolbar",
+        "aria_label": "treedb gui toolbar",
         "items": [
             {
                 "id": "brand",
@@ -55,7 +55,7 @@
                 "logo": "/treedb-mark.svg",
                 "wordmark": "TreeDB GUI",
                 "alt": "TreeDB GUI",
-                "aria_label": "TreeDB GUI home",
+                "aria_label": "treedb gui home",
                 "action": { "type": "navigate", "route": "/topics/select" }
             },
             {
@@ -63,7 +63,7 @@
                 "icon": "yi-language",
                 "name": "ES/EN",
                 "align": "end",
-                "aria_label": "Toggle language",
+                "aria_label": "toggle language",
                 "action": { "type": "event", "event": "EV_TOGGLE_LANGUAGE" }
             },
             {
@@ -71,14 +71,14 @@
                 "icon": "yi-moon",
                 "name": "",
                 "align": "end",
-                "aria_label": "Toggle dark theme",
+                "aria_label": "toggle dark theme",
                 "action": { "type": "event", "event": "EV_TOGGLE_THEME" }
             },
             {
                 "id": "user",
                 "type": "avatar",
                 "align": "end",
-                "aria_label": "Account menu",
+                "aria_label": "account menu",
                 "action": {
                     "type": "dropdown",
                     "_items_comment": "Account menu: the operator's own preferences first, then the developer tools and the informative entries. The BACKENDS are not here: they are a rail item (/connections), because both workspaces depend on them and a picker sends you there.",
@@ -138,7 +138,7 @@
                     "id": "topics",
                     "name": "topics",
                     "icon": "yi-table",
-                    "tooltip": "Browse a treedb's topics as tables",
+                    "tooltip": "browse the topics as tables",
                     "route": "/topics",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
@@ -164,7 +164,7 @@
                     "id": "graphs",
                     "name": "graphs",
                     "icon": "yi-hexagon-nodes",
-                    "tooltip": "Browse a treedb as a node graph",
+                    "tooltip": "browse the treedb as a graph",
                     "route": "/graphs",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
@@ -191,7 +191,7 @@
                     "id": "connections",
                     "name": "connections",
                     "icon": "yi-cloudversify",
-                    "tooltip": "Manage the backends this app browses",
+                    "tooltip": "manage the backends",
                     "route": "/connections"
                 }
             ]

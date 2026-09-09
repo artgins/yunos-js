@@ -26,6 +26,15 @@ const en = {
     name: "English",
 
     translation: {
+        "select row":                                       "Select row",
+        "treedb gui toolbar":                               "TreeDB GUI toolbar",
+        "treedb gui home":                                  "TreeDB GUI, go home",
+        "toggle language":                                  "Toggle language",
+        "toggle dark theme":                                "Toggle dark theme",
+        "account menu":                                     "Account menu",
+        "browse the topics as tables":                      "Browse a treedb's topics as tables",
+        "browse the treedb as a graph":                     "Browse a treedb as a node graph",
+        "manage the backends":                              "Manage the backends this app browses",
         "filter by column": "Filter by {{column}}",
         "change language": "Change language",
         "scroll left": "Scroll left",

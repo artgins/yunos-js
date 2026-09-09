@@ -18,6 +18,16 @@ const es = {
     name: "Español",
 
     translation: {
+        "select row":                                       "Seleccionar la fila",
+        "agent console toolbar":                            "Barra de la consola del agente",
+        "agent console home":                               "Consola del agente, ir al inicio",
+        "toggle language":                                  "Cambiar de idioma",
+        "toggle dark theme":                                "Cambiar el tema oscuro",
+        "account menu":                                     "Menú de la cuenta",
+        "run control-plane commands on a node's yunos":     "Ejecutar comandos del plano de control en los yunos de un nodo",
+        "live stats from a node's yunos":                   "Estadísticas en vivo de los yunos de un nodo",
+        "interactive console to a node":                    "Consola interactiva contra un nodo",
+        "edit the schemas a yuno keeps":                    "Editar los esquemas que guarda un yuno",
         "filter by column": "Filtrar por {{column}}",
         "open console tab": "Abrir una pestaña de consola",
         "select all nodes": "Seleccionar todos los nodos",

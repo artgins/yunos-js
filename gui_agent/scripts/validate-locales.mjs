@@ -187,7 +187,61 @@ function collect_used_keys() {
         }
         pending.push(...lib_imports(src));
     }
+
+    keys_from_shell_config(keys);
+
     return keys;
+}
+
+/***************************************************************
+ *  The shell declaration (`app_config.json`) holds i18n keys in
+ *  DATA: every `name`, `aria_label` and `tooltip` of an item is a
+ *  key the shell asks i18next for. No `t()` names them, so the
+ *  scan above never saw them -- and a missing one renders in raw
+ *  English for ever, which is how four toolbar buttons announced
+ *  themselves as "Toggle language" / "Account menu" in Spanish.
+ *
+ *  `wordmark` and `alt` are DELIBERATELY out: a brand name is not
+ *  translated, and demanding a key for it would only invite one.
+ ***************************************************************/
+const CONFIG_I18N_FIELDS = ["name", "aria_label", "tooltip"];
+
+function keys_from_shell_config(keys)
+{
+    let cfg;
+    try {
+        cfg = JSON.parse(
+            readFileSync(new URL("../src/app_config.json", import.meta.url), "utf8"));
+    } catch(e) {
+        console.warn(`validate-locales: app_config.json not read (${e.message}) -- `
+            + `its keys will NOT be validated`);
+        return;
+    }
+    const walk = (n) => {
+        if(Array.isArray(n)) {
+            for(const v of n) {
+                walk(v);
+            }
+            return;
+        }
+        if(n && typeof n === "object") {
+            for(const [k, v] of Object.entries(n)) {
+                if(CONFIG_I18N_FIELDS.includes(k) && typeof v === "string" && v
+                        && v === v.toLowerCase()) {
+                    /*  A value that is not a lower-case key is not a KEY:
+                     *  it is a literal the config carries on purpose --
+                     *  "ES/EN" on the language button, the way "19 px" is
+                     *  a readout and not prose. i18next answers an unknown
+                     *  key with the key itself, which is exactly right for
+                     *  those, and demanding a translation would only
+                     *  invent one.  */
+                    keys.add(v);
+                }
+                walk(v);
+            }
+        }
+    };
+    walk(cfg);
 }
 
 /***************************************************************

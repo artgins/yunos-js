@@ -53,7 +53,7 @@
 
     "toolbar": {
         "zone": "top",
-        "aria_label": "Agent Console toolbar",
+        "aria_label": "agent console toolbar",
         "items": [
             {
                 "id": "brand",
@@ -61,7 +61,7 @@
                 "logo": "/agent-mark.svg",
                 "wordmark": "Agent Console",
                 "alt": "Agent Console",
-                "aria_label": "Agent Console home",
+                "aria_label": "agent console home",
                 "action": { "type": "navigate", "route": "/commands/nodes" }
             },
             {
@@ -69,7 +69,7 @@
                 "icon": "yi-language",
                 "name": "ES/EN",
                 "align": "end",
-                "aria_label": "Toggle language",
+                "aria_label": "toggle language",
                 "action": { "type": "event", "event": "EV_TOGGLE_LANGUAGE" }
             },
             {
@@ -77,7 +77,7 @@
                 "icon": "yi-moon",
                 "name": "",
                 "align": "end",
-                "aria_label": "Toggle dark theme",
+                "aria_label": "toggle dark theme",
                 "action": { "type": "event", "event": "EV_TOGGLE_THEME" }
             },
             {
@@ -91,7 +91,7 @@
                 "id": "user",
                 "type": "avatar",
                 "align": "end",
-                "aria_label": "Account menu",
+                "aria_label": "account menu",
                 "action": {
                     "type": "dropdown",
                     "_items_comment": "Account menu: Preferences first — it is the user's own settings and no longer a primary rail item — then the developer tools, the informative entries and Sign out.",
@@ -152,7 +152,7 @@
                     "id": "commands",
                     "name": "commands",
                     "icon": "yi-terminal",
-                    "tooltip": "Run control-plane commands on a node's yunos (agent >= 7.7.0)",
+                    "tooltip": "run control-plane commands on a node's yunos",
                     "route": "/commands",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
@@ -177,7 +177,7 @@
                     "id": "statistics",
                     "name": "statistics",
                     "icon": "yi-eye",
-                    "tooltip": "Live stats from a node's yunos (agent >= 7.7.0)",
+                    "tooltip": "live stats from a node's yunos",
                     "route": "/statistics",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
@@ -202,7 +202,7 @@
                     "id": "terminal",
                     "name": "terminal",
                     "icon": "yi-lock",
-                    "tooltip": "Interactive SSH-style console to a node (PTY backdoor, any version)",
+                    "tooltip": "interactive console to a node",
                     "route": "/terminal",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
@@ -227,7 +227,7 @@
                     "id": "schemas",
                     "name": "schemas",
                     "icon": "yi-hexagon-nodes",
-                    "tooltip": "Edit the schemas a yuno keeps in its treedb_system_schema (agent >= 7.7.0)",
+                    "tooltip": "edit the schemas a yuno keeps",
                     "route": "/schemas",
                     "submenu": {
                         "render": { "top-sub": "tabs" },

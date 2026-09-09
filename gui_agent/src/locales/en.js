@@ -18,6 +18,16 @@ const en = {
     name: "English",
 
     translation: {
+        "select row":                                       "Select row",
+        "agent console toolbar":                            "Agent Console toolbar",
+        "agent console home":                               "Agent Console, go home",
+        "toggle language":                                  "Toggle language",
+        "toggle dark theme":                                "Toggle dark theme",
+        "account menu":                                     "Account menu",
+        "run control-plane commands on a node's yunos":     "Run control-plane commands on a node's yunos",
+        "live stats from a node's yunos":                   "Live stats from a node's yunos",
+        "interactive console to a node":                    "Interactive SSH-style console to a node",
+        "edit the schemas a yuno keeps":                    "Edit the schemas a yuno keeps in its treedb_system_schema",
         "filter by column": "Filter by {{column}}",
         "open console tab": "Open a console tab",
         "select all nodes": "Select all nodes",
