@@ -3260,6 +3260,12 @@ function request_page(gobj, card, page, size)
 
 /***************************************************************
  *  Drop the record viewer, if there is one.
+ *
+ *  STOP, then destroy -- the same as `close_json_viewer()` above,
+ *  and for the same reason: it was STARTED on open, and
+ *  `gobj_destroy()` raises the `destroying` flag before it can stop
+ *  a running gobj, so destroying it straight logs *"Destroying a
+ *  RUNNING gobj"* and skips its `mt_stop`.
  ***************************************************************/
 function close_record_viewer(gobj)
 {
@@ -3267,8 +3273,15 @@ function close_record_viewer(gobj)
     let jv = priv.record_json_gobj;
 
     priv.record_json_gobj = null;
-    if(jv && !gobj_is_destroying(jv)) {
-        gobj_destroy(jv);
+    if(jv && is_gobj(jv) && !gobj_is_destroying(jv)) {
+        try {
+            if(gobj_is_running(jv)) {
+                gobj_stop(jv);
+            }
+            gobj_destroy(jv);
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
+        }
     }
 }
 
