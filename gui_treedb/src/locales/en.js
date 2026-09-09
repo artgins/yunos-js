@@ -26,6 +26,7 @@ const en = {
     name: "English",
 
     translation: {
+        "filter by column": "Filter by {{column}}",
         "change language": "Change language",
         "scroll left": "Scroll left",
         "scroll right": "Scroll right",

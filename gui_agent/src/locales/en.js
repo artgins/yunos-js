@@ -18,6 +18,7 @@ const en = {
     name: "English",
 
     translation: {
+        "filter by column": "Filter by {{column}}",
         "open console tab": "Open a console tab",
         "select all nodes": "Select all nodes",
         "open stats tab": "Open a statistics tab",

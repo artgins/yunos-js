@@ -26,6 +26,7 @@ const es = {
     name: "Español",
 
     translation: {
+        "filter by column": "Filtrar por {{column}}",
         "change language": "Cambiar de idioma",
         "scroll left": "Desplazar a la izquierda",
         "scroll right": "Desplazar a la derecha",
