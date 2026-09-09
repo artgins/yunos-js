@@ -18,6 +18,9 @@ const en = {
     name: "English",
 
     translation: {
+        "open console tab": "Open a console tab",
+        "select all nodes": "Select all nodes",
+        "open stats tab": "Open a statistics tab",
         "change language": "Change language",
         "scroll left": "Scroll left",
         "scroll right": "Scroll right",

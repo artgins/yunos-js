@@ -32,6 +32,7 @@
  *          All Rights Reserved.
  ***********************************************************************/
 import {
+    escapeHtml,
     SDATA, SDATA_END, data_type_t,
     gclass_create, log_error,
     gobj_parent, gobj_name,
@@ -460,11 +461,16 @@ function make_columns(gobj)
     /*  Per-row checkbox: checked when the node has an open Console tab.
      *  State is config-driven — the formatter always reflects
      *  selected_nodes, so no separate selection bookkeeping. */
+    /*  A Tabulator formatter returns an HTML STRING, so there is no
+     *  attribute to hang `data-i18n-aria-label` on -- and none is needed:
+     *  the language action re-runs `setColumns(make_columns(gobj))`, which
+     *  re-runs this formatter. `escapeHtml` because a translation is text
+     *  going into an attribute.  */
     function sel_formatter(cell)
     {
         let checked = is_selected_node(gobj, cell.getData()) ? " checked" : "";
         return `<input type="checkbox" class="NODES_SEL node-sel"${checked} ` +
-            `aria-label="open console tab">`;
+            `aria-label="${escapeHtml(t("open console tab"))}">`;
     }
 
     function sel_click(e, cell)
@@ -489,7 +495,7 @@ function make_columns(gobj)
         let sel = config ? agent_config_get_selected_nodes(config, ws).length : 0;
         let checked = (nodes.length > 0 && sel >= nodes.length) ? " checked" : "";
         return `<input type="checkbox" class="NODES_SEL_ALL node-sel-all"${checked} ` +
-            `aria-label="select all nodes">`;
+            `aria-label="${escapeHtml(t("select all nodes"))}">`;
     }
 
     function selall_click(e, column)

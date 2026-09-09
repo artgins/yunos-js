@@ -24,6 +24,7 @@
  *          All Rights Reserved.
  ***********************************************************************/
 import {
+    escapeHtml,
     SDATA, SDATA_END, data_type_t,
     gclass_create, log_error, log_warning,
     gobj_parent, gobj_name,
@@ -651,6 +652,11 @@ function make_columns(gobj)
      *  tabs of all the yunos it holds — and says which of the three it is
      *  in: none, some, all. A DOM node and not an HTML string, because
      *  `indeterminate` is a property and cannot be written in markup.  */
+    /*  A Tabulator formatter returns an HTML STRING, so there is no
+     *  attribute to hang `data-i18n-aria-label` on -- and none is needed:
+     *  the language action re-runs `setColumns(make_columns(gobj))`, which
+     *  re-runs this formatter. `escapeHtml` because a translation is text
+     *  going into an attribute.  */
     function sel_formatter(cell)
     {
         let r = cell.getData();
@@ -675,7 +681,7 @@ function make_columns(gobj)
          *  (it IS a yuno of the node) but with the checkbox off.  */
         let disabled = (has_no_treedb(gobj, r) && !checked) ? " disabled" : "";
         return `<input type="checkbox" class="STATNODES_SEL node-sel"` +
-            `${checked}${disabled} aria-label="open stats tab">`;
+            `${checked}${disabled} aria-label="${escapeHtml(t("open stats tab"))}">`;
     }
 
     function sel_click(e, cell)

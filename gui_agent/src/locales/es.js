@@ -18,6 +18,9 @@ const es = {
     name: "Español",
 
     translation: {
+        "open console tab": "Abrir una pestaña de consola",
+        "select all nodes": "Seleccionar todos los nodos",
+        "open stats tab": "Abrir una pestaña de estadísticas",
         "change language": "Cambiar de idioma",
         "scroll left": "Desplazar a la izquierda",
         "scroll right": "Desplazar a la derecha",
