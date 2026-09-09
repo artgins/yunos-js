@@ -26,6 +26,19 @@ const es = {
     name: "Español",
 
     translation: {
+        "mute this message": "Silenciar este mensaje",
+        "muted": "Silenciados",
+        "unmute": "Dejar de silenciar",
+        "machine trace shape": "Forma de la traza de la maquina. Activado (por defecto): una linea por transicion, el evento primero, como el kernel en C. Desactivado: la forma antigua de tres lineas",
+        "simple mach": "Maquina simple",
+        "show this section in the expanded view": "Mostrar esta seccion en la vista expandida",
+        "expand": "Expandir",
+        "hide the timers and the recurring traffic": "Ocultar los temporizadores (EV_TIMEOUT / PERIODIC / HEARTBEAT / PING) y el trafico repetido",
+        "periodic": "Periodico",
+        "filter events / payload": "filtrar eventos / contenido",
+        "copy visible traffic to clipboard": "Copiar el trafico visible al portapapeles",
+        "clear captured traffic": "Borrar el trafico capturado",
+        "yuno monitor": "monitor de yunos - trafico y trazas",
         /* etiquetas de UI (llamadas vía t() en c_yuneta_gui.js) */
         "install this app": "¿Instalar esta aplicación?",
         "install": "Instalar",

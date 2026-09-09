@@ -18,6 +18,19 @@ const en = {
     name: "English",
 
     translation: {
+        "mute this message": "Mute this message",
+        "muted": "Muted",
+        "unmute": "Unmute",
+        "machine trace shape": "Machine trace shape. On (default): one line per transition, event first, like the C kernel. Off: the legacy three-line shape",
+        "simple mach": "Simple mach",
+        "show this section in the expanded view": "Show this section in the expanded view",
+        "expand": "Expand",
+        "hide the timers and the recurring traffic": "Hide the timers (EV_TIMEOUT / PERIODIC / HEARTBEAT / PING) and the recurring traffic",
+        "periodic": "Periodic",
+        "filter events / payload": "filter events / payload",
+        "copy visible traffic to clipboard": "Copy the visible traffic to the clipboard",
+        "clear captured traffic": "Clear the captured traffic",
+        "yuno monitor": "yuno monitor - traffic & traces",
         /* dialogs */
         /*  Tabulator's own chrome (paginator, notices): the keys of
             gobj-ui's yui_tabulator_i18n.js.  */
