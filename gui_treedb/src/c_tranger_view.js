@@ -1924,10 +1924,14 @@ function build_time_block(gobj, match_cond, span, units)
      *  thing it reports happened, and they can be hours apart.  */
     let axis = mc.from_tm || mc.to_tm ? "tm" : "t";
 
+    /*  Their `<label>` above is a sibling too (see the `field` helper
+     *  below): the name has to be on the input.  */
     let $from = createElement2(
-        ["input", {class: "input TRANGER_OPT_FROM", type: "datetime-local", step: "1"}]);
+        ["input", {class: "input TRANGER_OPT_FROM", type: "datetime-local", step: "1",
+                   "aria-label": t("from"), "data-i18n-aria-label": "from"}]);
     let $to = createElement2(
-        ["input", {class: "input TRANGER_OPT_TO", type: "datetime-local", step: "1"}]);
+        ["input", {class: "input TRANGER_OPT_TO", type: "datetime-local", step: "1",
+                   "aria-label": t("to"), "data-i18n-aria-label": "to"}]);
 
     /*  Typing in them is an answer too: the hint must follow what the inputs
      *  now say, not what the granularity last resolved to.  */
@@ -2222,11 +2226,20 @@ function build_rows_options_form(gobj, match_cond, editing, span, units)
     $backward.checked = !!mc.backward;
     inputs.backward = $backward;
 
-    let field = (label, input) => ["div", {class: "field TRANGER_OPT_FIELD"},
-        [
-            ["label", {class: "label mb-1", i18n: label}, t(label)],
-            ["div", {class: "control"}, [input]]
-        ]];
+    /*  The `<label>` is a SIBLING of the control -- no `for`, no
+     *  wrapping -- so it names the box for the eye and for nothing else.
+     *  The name goes on the control too, from the label's own key.  */
+    let field = (label, input) => {
+        if(input && input.setAttribute && !input.getAttribute("aria-label")) {
+            input.setAttribute("aria-label", t(label));
+            input.setAttribute("data-i18n-aria-label", label);
+        }
+        return ["div", {class: "field TRANGER_OPT_FIELD"},
+            [
+                ["label", {class: "label mb-1", i18n: label}, t(label)],
+                ["div", {class: "control"}, [input]]
+            ]];
+    };
 
     let $open = createElement2(
         ["button", {class: "button is-link TRANGER_OPT_OPEN", type: "button"},

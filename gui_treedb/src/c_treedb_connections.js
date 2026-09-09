@@ -424,7 +424,12 @@ function build_ui(gobj)
         class:        "CONNECTIONS_SEARCH input",
         type:         "text",
         placeholder:  t("search a node or a treedb"),
-        "data-i18n-placeholder": "search a node or a treedb"
+        "data-i18n-placeholder": "search a node or a treedb",
+        /*  A placeholder is not a NAME: it goes away as soon as anything
+         *  is typed, and a reader is not required to announce it. The
+         *  other searches of this family carry both.  */
+        "aria-label": t("search a node or a treedb"),
+        "data-i18n-aria-label": "search a node or a treedb"
     }]);
     $search.addEventListener("input", () => {
         gobj_send_event(gobj, "EV_SEARCH", {text: $search.value || ""}, gobj);
