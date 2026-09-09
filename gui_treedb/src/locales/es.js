@@ -26,6 +26,8 @@ const es = {
     name: "Español",
 
     translation: {
+        "scroll left": "Desplazar a la izquierda",
+        "scroll right": "Desplazar a la derecha",
         "hook topic": "Topic del hook",
         "hook column": "Columna del hook",
         "mute this message": "Silenciar este mensaje",

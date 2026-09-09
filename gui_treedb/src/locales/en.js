@@ -26,6 +26,8 @@ const en = {
     name: "English",
 
     translation: {
+        "scroll left": "Scroll left",
+        "scroll right": "Scroll right",
         "hook topic": "Hook topic",
         "hook column": "Hook column",
         "mute this message": "Mute this message",
