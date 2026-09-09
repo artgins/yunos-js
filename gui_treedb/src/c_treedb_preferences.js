@@ -134,10 +134,14 @@ function build_live_max_field(gobj)
     let config = gobj_find_service("treedb_config", false);
     let cur = config ? treedb_config_get_live_max(config) : LIVE_MAX_MIN;
 
+    /*  Its `<label>` below is a SIBLING -- no `for`, no wrapping -- so it
+     *  names the box for the eye and for nothing else.  */
     let $input = createElement2(
         ["input", {class: "input is-small PREFERENCES_LIVE_MAX", type: "number",
                    min: String(LIVE_MAX_MIN), max: String(LIVE_MAX_MAX),
                    step: "50", value: String(cur),
+                   "aria-label": t("rows per live card"),
+                   "data-i18n-aria-label": "rows per live card",
                    style: "max-width:9rem;"}]);
     $input.addEventListener("change", () => {
         let cfg = gobj_find_service("treedb_config", false);

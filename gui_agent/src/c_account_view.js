@@ -462,7 +462,9 @@ function build_shortkeys(gobj)
                     ["span", {class: "SK_CMD has-text-grey is-family-monospace is-size-7",
                               style: "flex:1; min-width:0; word-break:break-all;"}, shortkeys[this_key]],
                     ["button", {class: "SK_DEL button is-ghost", type: "button",
-                                title: t("remove shortkey"), "data-i18n-title": "remove shortkey"},
+                                title: t("remove shortkey"), "data-i18n-title": "remove shortkey",
+                                "aria-label": t("remove shortkey"),
+                                "data-i18n-aria-label": "remove shortkey"},
                         [["span", {class: "icon"}, [["span", {class: "yi-trash"}, ""]]]],
                         {click: function() {
                             gobj_send_event(gobj, "EV_REMOVE_SHORTKEY",
