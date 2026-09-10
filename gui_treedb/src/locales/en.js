@@ -356,6 +356,8 @@ const en = {
         "none": "None",
         "expand one level": "Expand one level",
         "collapse one level": "Collapse one level",
+        "previous layout":    "Previous layout",
+        "next layout":        "Next layout",
         "fold level": "Main tree: its topic and the level shown",
         "level": "level",
         "hidden topics": "in hidden topics",

@@ -360,6 +360,8 @@ const es = {
         "none": "Ninguno",
         "expand one level": "Desplegar un nivel",
         "collapse one level": "Plegar un nivel",
+        "previous layout":    "Layout anterior",
+        "next layout":        "Layout siguiente",
         "fold level": "Árbol principal: su topic y el nivel mostrado",
         "level": "nivel",
         "hidden topics": "en topics ocultos",

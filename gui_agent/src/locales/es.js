@@ -668,6 +668,8 @@ const es = {
         "json not kept":        "No guardado: el navegador no ha dejado almacenarlo",
         "expand one level":     "Desplegar un nivel",
         "collapse one level":   "Plegar un nivel",
+        "previous layout":      "Layout anterior",
+        "next layout":          "Layout siguiente",
         "fold level":           "Árbol principal: su topic y el nivel mostrado",
         "level":                "nivel",
         "main topic":           "Topic jerárquico principal: el árbol cuelga de él",

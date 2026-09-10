@@ -660,6 +660,8 @@ const en = {
         "json not kept":        "Not kept: this browser refused to store it",
         "expand one level":     "Expand one level",
         "collapse one level":   "Collapse one level",
+        "previous layout":      "Previous layout",
+        "next layout":          "Next layout",
         "fold level":           "Main tree: its topic and the level shown",
         "level":                "level",
         "main topic":           "Main hierarchical topic: the tree hangs from it",
