@@ -339,7 +339,7 @@ const en = {
         "hidden topics": "in hidden topics",
         "loose records": "Loose records: nothing hangs them; click to show or hide",
         "highlight topic": "Highlight topic",
-        "main topic": "Main topic: the tree hangs from it",
+        "main topic": "Main hierarchical topic: the tree hangs from it",
         "hide topic": "Hide topic",
         "show topic": "Show topic",
         "open all of this connection": "Open all of this connection",
