@@ -19,6 +19,26 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## Unreleased
+
+### Changed
+
+#### The treedb graph and topics round (`@yuneta/gobj-ui` `^7.23.140`)
+
+Both yunos move from `^7.23.132` to `^7.23.140`, and pick up with no code of
+their own: the `shape` view in outline 1 and a circle; the browser's menu never
+over the graph; an edge menu; reset-to-default in the node, port and edge
+menus; an edge Save that no longer freezes the default style; the legend and
+the topic palette in alphabetical order; never a blank viewport; the toolbar
+in three parts; and in the topics view, a `graph` button that returns to the
+graph as it was left, while the cards drop their graph icon and show the
+topic's version, columns, parents and children.
+
+New locale keys, in both yunos: `reset port`, `reset topic ports`,
+`reset all ports`, `reset node`, `reset topic nodes`, `reset all nodes`,
+`reset edge`, `reset same type edges`, `reset all edges`. (`reset sizes` and
+`reset topic sizes` are no longer used by the library.)
+
 ## gui_agent 0.22.57 / gui_treedb 0.17.28 — 2026-09-08
 
 ### Fixed
