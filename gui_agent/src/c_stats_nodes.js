@@ -1376,6 +1376,32 @@ function conn_of_scanned(row, endpoint, services)
 }
 
 /***************************************************************
+ *  How much a node's name says about a url's host: the words they
+ *  share (`yunovatios-central` and `central.yunovatios.es` share
+ *  two, `gines-nitroan51753` none).
+ *
+ *  It settles which row a url belongs to when two rows give the
+ *  same one. A local copy of a yuno carries the production names in
+ *  its config -- that is how it reaches its production peers -- so
+ *  its endpoint is the production one too, and the node it runs on
+ *  is the only thing that tells it from the real one.
+ ***************************************************************/
+function node_names_host(node, host)
+{
+    const words = (s) => {
+        return String(s || "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+    };
+    let host_words = new Set(words(host));
+    let shared = 0;
+    for(const w of new Set(words(node))) {
+        if(host_words.has(w)) {
+            shared++;
+        }
+    }
+    return shared;
+}
+
+/***************************************************************
  *  Finish the scan: build the document, put it on the clipboard.
  ***************************************************************/
 function finish_conns_scan(gobj)
@@ -1396,20 +1422,30 @@ function finish_conns_scan(gobj)
 
     let connections = [];
     /*  Two rows can resolve to ONE endpoint: the same yuno reached through
-     *  two nodes, or a local copy carrying the production realm in its
-     *  config. Same url, same backend — one connection. */
-    let seen = new Set();
+     *  two nodes, or a local copy carrying the production names in its
+     *  config. Same url, same backend — one connection, and it keeps the
+     *  row whose NODE the url names (node_names_host). Keeping the first
+     *  one kept the local copy, which sorts first by host, and the export
+     *  went out with the development machine's name on production. */
+    let by_url = new Map();
     for(let key of Object.keys(scan.rows)) {
         let entry = scan.rows[key];
         if(!entry.endpoint || !entry.endpoint.port) {
             continue;       /*  no top gate, or never answered  */
         }
         let conn = conn_of_scanned(entry.row, entry.endpoint, priv.services[key]);
-        if(seen.has(conn.url)) {
+        let score = node_names_host(entry.row.node, entry.endpoint.host || entry.row.realm);
+        let kept = by_url.get(conn.url);
+        if(kept && kept.score >= score) {
             continue;
         }
-        seen.add(conn.url);
-        connections.push(conn);
+        if(kept) {
+            connections[kept.index] = conn;
+            by_url.set(conn.url, {score: score, index: kept.index});
+        } else {
+            by_url.set(conn.url, {score: score, index: connections.length});
+            connections.push(conn);
+        }
     }
 
     if(!connections.length) {

@@ -23,6 +23,16 @@ on its own, outside the yunetas superproject.
 
 ### Changed
 
+#### "For TreeDB" names a production yuno after its production node (gui_agent 0.22.62)
+
+A local copy of a yuno carries the production names in its config (that is how
+it reaches its production peers), so its endpoint is the production url too.
+The export keeps one connection per url, and it kept the FIRST row: the
+development machine sorts first by host, so `central.yunovatios.es:1620` went
+out as `gines-nitroan51753^1620`. Now the row whose node the url names wins --
+the node sharing the most words with the url's host (`yunovatios-central` and
+`central.yunovatios.es` share two) -- and a tie still keeps the first.
+
 #### gui_treedb's About does not list the connections (gui_treedb 0.17.32)
 
 The Diagnostics table of the About keeps the deployment identity and the
