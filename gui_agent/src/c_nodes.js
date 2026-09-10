@@ -564,8 +564,10 @@ function create_table(gobj)
          *  being read changes with the fleet in front of them.  */
         columnDefaults: {headerHozAlign: "left", resizable: true},
         columns:     make_columns(gobj),
-        /*  Default order: highest agent version on top (numeric, not string).  */
-        initialSort: [{column: "version", dir: "desc"}],
+        /*  Default order: by host, alphabetically -- a list of nodes is
+         *  looked through by NAME. The version still sorts from its
+         *  header, numerically (version_cmp).  */
+        initialSort: [{column: "host", dir: "asc"}],
         rowFormatter: row_formatter
     };
 

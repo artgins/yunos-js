@@ -79,6 +79,7 @@ import {
 
 import {setup_dev, dev_window_was_open} from "@yuneta/gobj-ui/src/yui_dev.js";
 import {setup_frontend_view} from "@yuneta/gobj-ui/src/yui_frontend_view.js";
+import {setup_json_pad} from "@yuneta/gobj-ui/src/yui_json_pad.js";
 
 import {switch_locale, current_locale} from "./locales/locales.js";
 import {current_theme, toggle_theme} from "./theme.js";
@@ -220,6 +221,83 @@ function compute_initials(gobj)
 }
 
 /***************************************************************
+ *  Diagnostics of the About dialog -- the read-only table gui_agent
+ *  shows (deployment identity, session), with the treedb BACKENDS in
+ *  place of its control-center link: one row per configured
+ *  connection, its url, and whether it is in session now -- which is
+ *  what someone opening About over a view that says nothing wants to
+ *  know first.
+ ***************************************************************/
+function build_about_diagnostics(gobj)
+{
+    let dep = deploy_info();
+    let config = gobj_find_service("treedb_config", false);
+    let links = gobj_find_service("treedb_links", false);
+    let conns = config? treedb_config_get_connections(config) : [];
+    let username = gobj_read_attr(gobj, "username") || "";
+
+    let label_style = "white-space:nowrap; color:#5B6B7E; font-weight:600; width:14rem;";
+    let row = (key, text, value, value_attrs) => {
+        return ["tr", {class: "DIAG_ROW"},
+            [
+                ["th", {class: "DIAG_LABEL", style: label_style, i18n: key}, text],
+                ["td", Object.assign({class: "DIAG_VALUE"}, value_attrs || {}), String(value)]
+            ]
+        ];
+    };
+
+    let rows = [
+        row("application", "Application", "gui_treedb"),
+        row("version", "Version", pkg.version || "—"),
+        row("tenant", "Tenant", dep.tenant),
+        row("host", "Host", dep.host),
+        row("auth bff", "Auth BFF", dep.bff_url || "—", {style: "font-family:monospace;"}),
+        row("logged in as", "Logged in as", username, username? {} : {i18n: "logged out"}),
+    ];
+
+    if(conns.length === 0) {
+        rows.push(row("connections", "Connections", "", {i18n: "none"}));
+    } else {
+        rows.push(["tr", {class: "DIAG_ROW DIAG_CONNECTIONS_HEAD"},
+            [
+                ["th", {class: "DIAG_LABEL", colspan: "2", style: label_style,
+                        i18n: "connections"}, "Connections"]
+            ]
+        ]);
+    }
+    for(let c of conns) {
+        let connected = links? treedb_links_is_connected(links, c.id) : false;
+        /*  The connection's name is the operator's: DATA, no i18n key.  */
+        rows.push(["tr", {class: "DIAG_ROW DIAG_CONNECTION_ROW"},
+            [
+                ["th", {class: "DIAG_LABEL DIAG_CONNECTION_NAME",
+                        style: label_style + " padding-left:1.25rem;"}, c.label || c.id],
+                ["td", {class: "DIAG_VALUE"},
+                    [
+                        ["span", {class: "DIAG_URL", style: "font-family:monospace;"}, c.url || ""],
+                        ["span", {class: "DIAG_CONNECTION",
+                                  style: "margin-left:.75rem; font-weight:600; color:" +
+                                         (connected? "#1FAE6F" : "#D64545") + ";",
+                                  i18n: connected? "connected" : "disconnected"},
+                         connected? "connected" : "disconnected"]
+                    ]
+                ]
+            ]
+        ]);
+    }
+
+    return ["div", {class: "DIAG_BOX box"},
+        [
+            ["h2", {class: "DIAG_TITLE title is-5", style: "margin-bottom:0.75rem;",
+                    i18n: "diagnostics"}, "Diagnostics"],
+            ["table", {class: "DIAG_TABLE table is-fullwidth is-narrow", style: "margin-bottom:0;"},
+                [["tbody", {}, rows]]
+            ]
+        ]
+    ];
+}
+
+/***************************************************************
  *  Pre-shell login screen.
  ***************************************************************/
 function show_login_screen(gobj)
@@ -267,6 +345,7 @@ function build_shell(gobj)
     gobj_subscribe_event(shell, "EV_LOGOUT",          {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_DEVTOOLS",   {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_FRONTEND_VIEW", {}, gobj);
+    gobj_subscribe_event(shell, "EV_OPEN_JSON_VIEWER",   {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_ABOUT",      {}, gobj);
     gobj_subscribe_event(shell, "EV_OPEN_SITEMAP",    {}, gobj);
     gobj_subscribe_event(shell, "EV_NAV_ITEM_CLOSE",  {}, gobj);
@@ -275,7 +354,7 @@ function build_shell(gobj)
     /*  Declare who handles each toolbar/account action, so the site map
      *  shows where it is implemented (ROUTING.md). */
     ["EV_TOGGLE_THEME", "EV_TOGGLE_LANGUAGE", "EV_LOGOUT", "EV_OPEN_DEVTOOLS",
-     "EV_OPEN_FRONTEND_VIEW", "EV_OPEN_ABOUT", "EV_OPEN_SITEMAP"].forEach(function(ev) {
+     "EV_OPEN_FRONTEND_VIEW", "EV_OPEN_JSON_VIEWER", "EV_OPEN_ABOUT", "EV_OPEN_SITEMAP"].forEach(function(ev) {
         yui_shell_register_event_handler(shell, ev, GCLASS_NAME);
     });
     gobj_start_tree(shell);
@@ -1039,6 +1118,27 @@ function ac_open_frontend_view(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  EV_OPEN_JSON_VIEWER -- the "JSON viewer" entry in the account
+ *  menu: a blank pad to paste JSON from outside and read it with
+ *  the library's own viewer (setup_json_pad, gobj-ui). A toggle,
+ *  like the frontend view: destroying the window takes the pad
+ *  down with it.
+ ***************************************************************/
+function ac_open_json_viewer(gobj, event, kw, src)
+{
+    let win = gobj_find_service("Json-Viewer-Window", false);
+    if(win) {
+        if(gobj_is_running(win)) {
+            gobj_stop_tree(win);
+        }
+        gobj_destroy(win);
+        return 0;
+    }
+    setup_json_pad(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  EV_OPEN_ABOUT — the "About" entry in the account menu. Opens a
  *  product card (mark + version + deployment + doc link) as the
  *  standardized adaptive dialog (desktop X top-right / mobile back
@@ -1073,7 +1173,7 @@ function ac_open_about(gobj, event, kw, src)
     let dep = deploy_info();
 
     let $content = createElement2(
-        ["div", {class: "treedb-about", gclass: "C_TREEDB_APP", style: "max-width:560px;"},
+        ["div", {class: "ABOUT_PAGE treedb-about", gclass: "C_TREEDB_APP", style: "max-width:640px;"},
             [
                 ["div", {class: "box"},
                     [
@@ -1114,6 +1214,8 @@ function ac_open_about(gobj, event, kw, src)
                         ]
                     ]
                 ],
+                build_about_diagnostics(gobj),
+
                 ["p", {class: "is-size-7", style: "color:#9AA7B4; margin-top:0.5rem; text-align:right;"},
                     "© 2026 ArtGins"]
             ]
@@ -1471,6 +1573,7 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_LANGUAGE",  ac_toggle_language, null],
             ["EV_OPEN_DEVTOOLS",    ac_open_devtools,   null],
             ["EV_OPEN_FRONTEND_VIEW", ac_open_frontend_view, null],
+            ["EV_OPEN_JSON_VIEWER",   ac_open_json_viewer,   null],
             ["EV_OPEN_ABOUT",       ac_open_about,      null],
             ["EV_OPEN_SITEMAP",     ac_open_sitemap,    null],
             /*  workspace tabs  */
@@ -1497,6 +1600,7 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_LANGUAGE",  0],
         ["EV_OPEN_DEVTOOLS",    0],
         ["EV_OPEN_FRONTEND_VIEW", 0],
+        ["EV_OPEN_JSON_VIEWER",   0],
         ["EV_OPEN_ABOUT",       0],
         ["EV_OPEN_SITEMAP",     0],
         ["EV_SELECTED_TREEDBS_CHANGED", 0],

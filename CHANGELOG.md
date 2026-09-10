@@ -23,6 +23,22 @@ on its own, outside the yunetas superproject.
 
 ### Changed
 
+#### A JSON viewer, the nodes by name, and a complete About (`@yuneta/gobj-ui` `^7.23.143`)
+
+- Both yunos: a **JSON viewer** entry in the account menu
+  (`EV_OPEN_JSON_VIEWER`, gobj-ui's `setup_json_pad`) -- paste JSON from
+  outside and read it with the library's viewer. The treedb topic tables open
+  sorted by `id` (gobj-ui).
+- gui_agent 0.22.58: **the node lists are alphabetical.** The Commands /
+  Terminal picker opens sorted by host (it was highest version first); the
+  Statistics / Schemas tree by name, its yunos too, with a sorter that compares
+  what the cell SHOWS -- a node row carries `host` and a yuno row `label`, so a
+  sort on the `name` field alone sorted nothing.
+- gui_treedb 0.17.29: **the About is as complete as gui_agent's.** A
+  Diagnostics table under the product card: application, version, tenant,
+  host, Auth BFF, the user logged in, and every configured connection with its
+  url and whether it is in session now.
+
 #### The treedb graph and topics round (`@yuneta/gobj-ui` `^7.23.140`)
 
 Both yunos move from `^7.23.132` to `^7.23.140`, and pick up with no code of

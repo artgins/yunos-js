@@ -56,7 +56,6 @@ import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
     AGENT_YUNO_ID,
     cmd2agent_service,
-    version_cmp,
     version_gte,
     node_id,
     parse_agent_line,
@@ -311,6 +310,29 @@ function selected_yunos_of_node(gobj, node)
         }
     }
     return open;
+}
+
+/***************************************************************
+ *  Tabulator sorter of the name column: the text a row SHOWS
+ *  (see build_tree), case-insensitive and natural, so `node2`
+ *  comes before `node10`.
+ ***************************************************************/
+function row_name(r)
+{
+    if(r._type === "node") {
+        return String(r.host || "");
+    }
+    if(r._type === "yuno") {
+        return String(r.label || "");
+    }
+    return "";
+}
+
+function name_sorter(a, b, a_row, b_row)
+{
+    return row_name(a_row.getData()).localeCompare(
+        row_name(b_row.getData()), undefined, {sensitivity: "base", numeric: true}
+    );
 }
 
 /***************************************************************
@@ -738,7 +760,11 @@ function make_columns(gobj)
         {title: "", field: "_sel", width: 44, headerSort: false, hozAlign: "center",
             formatter: sel_formatter, cellClick: sel_click,
             titleFormatter: selall_formatter, headerClick: selall_click},
+        /*  Sorted by what the cell SHOWS: a node row carries `host` and a
+         *  yuno row `label`, and neither is called `name`, so the field
+         *  alone sorts nothing.  */
         {title: t("name"), field: "name", formatter: name_formatter, widthGrow: 2,
+            sorter: name_sorter,
             variableHeight: true, cssClass: "STATNODES_CELL_WRAP"},
         {title: t("status"), field: "info", formatter: info_formatter, widthGrow: 1,
             minWidth: 96, variableHeight: true, cssClass: "STATNODES_CELL_WRAP"}
@@ -766,7 +792,11 @@ function create_table(gobj)
         dataTree:              true,
         dataTreeStartExpanded: false,
         dataTreeElementColumn: "name",
-        dataTreeChildField:    "_children"
+        dataTreeChildField:    "_children",
+        /*  A list of nodes is looked through by NAME: alphabetical by
+         *  default, and the yunos under each node too (a dataTree sorts
+         *  its children with the same sorter).  */
+        initialSort:           [{column: "name", dir: "asc"}]
     };
 
     let table = new Tabulator(`#${priv.table_id}`, settings);
@@ -2022,7 +2052,6 @@ function ac_mt_command_answer(gobj, event, kw, src)
             }
         }
     }
-    nodes.sort((a, b) => version_cmp(b.version, a.version));   /*  highest version first  */
     priv.nodes = nodes;
     /*  Keep already-loaded yunos for nodes that are still present.  */
     let present = {};
