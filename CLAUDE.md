@@ -13,6 +13,27 @@ errors, gobj-js gotchas, JS GUI conventions (logical DOM class names, no
 transitions, icon-only mobile buttons, Bulma `!important`, `yui_icons`), and
 the submodule flow. This file only adds the yunos-js-specific layer on top.
 
+## A control without a name is a bug: `title` + `aria-label`, always
+
+Every `input`, `select`, `textarea`, `button` — or anything that behaves as
+one — carries BOTH attributes, each through `t()` and each with its key
+(`data-i18n-title`, `data-i18n-aria-label`), written where the control is
+built. A floor, not a preference.
+
+What does NOT name a control: a `<label>` **beside** it (Bulma's `field`
+shape), a `<label for=x>` over a control carrying only `name=x`, a
+`placeholder`, and the visible text when it hides on mobile or says the STATE.
+A `<label>` that **wraps** its control does. A LITERAL `aria-label` next to a
+visible `i18n` label OVERRIDES it for a reader — worse than none.
+
+⚠️ Both these yunos mount gobj-ui's **Developer window**, whose 46 keys arrive
+as VARIABLES and are therefore invisible to `validate-locales`: the list to
+copy sits above `TRACE_DEFS` in `yui_dev.js`.
+
+The check is not a grep: **dump `title`/`aria-label` from the DEPLOYED DOM and
+switch language**. Full rule in yunetas' `CLAUDE.md` and in gobj-ui's README
+("Conventions").
+
 ## This repo in the yunetas ecosystem
 
 - The JS **yunos** (browser SPAs): `gui_agent`, `gui_treedb`. The most
