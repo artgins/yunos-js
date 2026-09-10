@@ -670,6 +670,9 @@ const en = {
         "resize topic nodes":   "Resize topic nodes",
         "resize all ports":     "Resize all ports",
         "resize topic ports":   "Resize topic ports",
+        "reset port": "Reset port",
+        "reset topic ports": "Reset topic ports",
+        "reset all ports": "Reset all ports",
         "operation mode":       "Operation mode",
 
         "apply needs a node restart": "Applying is restarting the yuno, and the agent is not one: restart it on the node",

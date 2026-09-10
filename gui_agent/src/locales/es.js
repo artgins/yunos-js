@@ -678,6 +678,9 @@ const es = {
         "resize topic nodes":   "Redimensionar los nodos del topic",
         "resize all ports":     "Redimensionar todos los puertos",
         "resize topic ports":   "Redimensionar los puertos del topic",
+        "reset port": "Restablecer el puerto",
+        "reset topic ports": "Restablecer los puertos del topic",
+        "reset all ports": "Restablecer todos los puertos",
         "operation mode":       "Modo de operación",
 
         "apply needs a node restart": "Aplicar es reiniciar el yuno, y el agente no lo es: reinicialo en el nodo",
