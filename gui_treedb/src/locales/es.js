@@ -162,6 +162,7 @@ const es = {
         "force-atlas2":  "force-atlas2",
         "radial": "radial",
         "treedb-tree": "árbol",
+        "compact-tree": "árbol compacto",
         "node labels": "Etiquetas de los nodos",
         "nodes": "Nodos",
         "full": "Completo",

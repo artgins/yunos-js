@@ -619,6 +619,7 @@ const en = {
         "force-atlas2":         "force-atlas2",
         "radial":               "radial",
         "treedb-tree":          "tree",
+        "compact-tree":         "compact tree",
         "node labels": "Node labels",
         "full": "Full",
         "compact": "Compact",
