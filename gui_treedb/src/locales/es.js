@@ -163,6 +163,7 @@ const es = {
         "radial": "radial",
         "treedb-tree": "árbol",
         "compact-tree": "árbol compacto",
+        "elbow edges":  "Enlaces en codo",
         "node labels": "Etiquetas de los nodos",
         "nodes": "Nodos",
         "full": "Completo",

@@ -159,6 +159,7 @@ const en = {
         "radial": "radial",
         "treedb-tree": "tree",
         "compact-tree": "compact tree",
+        "elbow edges":  "Elbow edges",
         "node labels": "Node labels",
         "nodes": "Nodes",
         "full": "Full",
