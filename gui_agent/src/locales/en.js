@@ -673,6 +673,12 @@ const en = {
         "reset port": "Reset port",
         "reset topic ports": "Reset topic ports",
         "reset all ports": "Reset all ports",
+        "reset node": "Reset node",
+        "reset topic nodes": "Reset topic nodes",
+        "reset all nodes": "Reset all nodes",
+        "reset edge": "Reset edge",
+        "reset same type edges": "Reset same type edges",
+        "reset all edges": "Reset all edges",
         "operation mode":       "Operation mode",
 
         "apply needs a node restart": "Applying is restarting the yuno, and the agent is not one: restart it on the node",

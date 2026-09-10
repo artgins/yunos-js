@@ -681,6 +681,12 @@ const es = {
         "reset port": "Restablecer el puerto",
         "reset topic ports": "Restablecer los puertos del topic",
         "reset all ports": "Restablecer todos los puertos",
+        "reset node": "Restablecer el nodo",
+        "reset topic nodes": "Restablecer los nodos del topic",
+        "reset all nodes": "Restablecer todos los nodos",
+        "reset edge": "Restablecer el enlace",
+        "reset same type edges": "Restablecer los enlaces del mismo tipo",
+        "reset all edges": "Restablecer todos los enlaces",
         "operation mode":       "Modo de operación",
 
         "apply needs a node restart": "Aplicar es reiniciar el yuno, y el agente no lo es: reinicialo en el nodo",
