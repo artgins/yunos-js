@@ -555,7 +555,7 @@ function create_table(gobj)
          *  `uuid` was the index and six machines of one cloned fleet
          *  share theirs, so the table was told they were the same row.
          */
-        index:       "_key",
+        index:       "id",
         layout:      "fitDataFill",
         maxHeight:   "100%",
         placeholder: t("no nodes"),
@@ -785,7 +785,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
              *  below 7.7.0 for Commands/Statistics): they wouldn't answer,
              *  so they must not appear as selectable here.  */
             if(node_meets_min_version(gobj, n)) {
-                n._key = node_row_key(n);
+                n.id = node_row_key(n);
                 nodes.push(n);
             }
         }

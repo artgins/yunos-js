@@ -313,32 +313,9 @@ function selected_yunos_of_node(gobj, node)
 }
 
 /***************************************************************
- *  Tabulator sorter of the name column: the text a row SHOWS
- *  (see build_tree), case-insensitive and natural, so `node2`
- *  comes before `node10`.
- ***************************************************************/
-function row_name(r)
-{
-    if(r._type === "node") {
-        return String(r.host || "");
-    }
-    if(r._type === "yuno") {
-        return String(r.label || "");
-    }
-    return "";
-}
-
-function name_sorter(a, b, a_row, b_row)
-{
-    return row_name(a_row.getData()).localeCompare(
-        row_name(b_row.getData()), undefined, {sensitivity: "base", numeric: true}
-    );
-}
-
-/***************************************************************
  *  Build the tree rows from priv.nodes + priv.yunos.
- *  Node row  : {_key, _type:"node", host, role, version, uuid, _children}
- *  Yuno row  : {_key, _type:"yuno", node, yuno_id, label, running}
+ *  Node row  : {id, _type:"node", host, role, version, uuid, _children}
+ *  Yuno row  : {id, _type:"yuno", node, yuno_id, label, running}
  ***************************************************************/
 function build_tree(gobj)
 {
@@ -372,14 +349,14 @@ function build_tree(gobj)
                  *  opens into nothing reads as a bug; one grey line reads as
                  *  an answer.  */
                 children.push({
-                    _key:  id + "\u001Fnone",
+                    id:  id + "\u001Fnone",
                     _type: "empty",
                     node:  id
                 });
             }
         }
         tree.push({
-            _key:     id,
+            id:     id,
             _type:    "node",
             host:     n.host || id,
             role:     n.role || "",
@@ -602,7 +579,7 @@ function make_columns(gobj)
          *  a node is read most of the time. So the node row carries it: the
          *  labels of its open yunos, the same text the tabs are named
          *  after.  */
-        let open = selected_yunos_of_node(gobj, r._key);
+        let open = selected_yunos_of_node(gobj, r.id);
         let mark = "";
         if(open.length > 0) {
             let shown = open.slice(0, 2).join(", ");
@@ -683,7 +660,7 @@ function make_columns(gobj)
     {
         let r = cell.getData();
         if(r._type === "node") {
-            let all = selectable_yunos(gobj, r._key);
+            let all = selectable_yunos(gobj, r.id);
             let open = all.filter((y) => is_yuno_selected(gobj, y.node, y.yuno_id)).length;
             let $cb = document.createElement("input");
             $cb.type = "checkbox";
@@ -710,7 +687,7 @@ function make_columns(gobj)
     {
         let r = cell.getData();
         if(r._type === "node") {
-            gobj_send_event(gobj, "EV_TOGGLE_NODE_SELECTION", {node: r._key}, gobj);
+            gobj_send_event(gobj, "EV_TOGGLE_NODE_SELECTION", {node: r.id}, gobj);
             return;
         }
         if(r._type !== "yuno") {
@@ -760,11 +737,11 @@ function make_columns(gobj)
         {title: "", field: "_sel", width: 44, headerSort: false, hozAlign: "center",
             formatter: sel_formatter, cellClick: sel_click,
             titleFormatter: selall_formatter, headerClick: selall_click},
-        /*  Sorted by what the cell SHOWS: a node row carries `host` and a
-         *  yuno row `label`, and neither is called `name`, so the field
-         *  alone sorts nothing.  */
-        {title: t("name"), field: "name", formatter: name_formatter, widthGrow: 2,
-            sorter: name_sorter,
+        /*  The column of the row's KEY: a record is `id` + value, and a
+         *  list is read by its key. The formatter paints the name (`host`
+         *  of a node, `label` of a yuno); the sort is the id's, natural.  */
+        {title: t("name"), field: "id", formatter: name_formatter, widthGrow: 2,
+            sorter: "alphanum",
             variableHeight: true, cssClass: "STATNODES_CELL_WRAP"},
         {title: t("status"), field: "info", formatter: info_formatter, widthGrow: 1,
             minWidth: 96, variableHeight: true, cssClass: "STATNODES_CELL_WRAP"}
@@ -780,7 +757,7 @@ function create_table(gobj)
 
     let settings = {
         ...yui_tabulator_lang(t),   /*  Tabulator's OWN chrome, in our language  */
-        index:                 "_key",
+        index:                 "id",
         layout:                "fitColumns",
         maxHeight:             "100%",
         placeholder:           t("no nodes"),
@@ -791,12 +768,11 @@ function create_table(gobj)
         columns:               make_columns(gobj),
         dataTree:              true,
         dataTreeStartExpanded: false,
-        dataTreeElementColumn: "name",
+        dataTreeElementColumn: "id",
         dataTreeChildField:    "_children",
-        /*  A list of nodes is looked through by NAME: alphabetical by
-         *  default, and the yunos under each node too (a dataTree sorts
-         *  its children with the same sorter).  */
-        initialSort:           [{column: "name", dir: "asc"}]
+        /*  By the key, ascending: the nodes by host, the yunos of each
+         *  node by their id (a dataTree sorts its children too).  */
+        initialSort:           [{column: "id", dir: "asc"}]
     };
 
     let table = new Tabulator(`#${priv.table_id}`, settings);
@@ -1076,7 +1052,7 @@ function set_node_yunos(gobj, node, data)
             let name = y.yuno_name || "";
             let label = (role && name) ? `${role}^${name}` : (role || name || id);
             rows.push({
-                _key:     stats_sel_id(node, id),
+                id:     stats_sel_id(node, id),
                 _type:    "yuno",
                 node:     node,
                 yuno_id:  id,
@@ -1104,7 +1080,7 @@ function set_node_yunos(gobj, node, data)
      */
     if(gobj_read_bool_attr(gobj, "with_treedb_check")) {
         rows.unshift({
-            _key:     stats_sel_id(node, AGENT_YUNO_ID),
+            id:     stats_sel_id(node, AGENT_YUNO_ID),
             _type:    "yuno",
             node:     node,
             yuno_id:  AGENT_YUNO_ID,
@@ -1223,14 +1199,14 @@ function ac_render_tree(gobj, event, kw, src)
             let open = {};
             table.getRows().forEach(function(row) {
                 let d = row.getData();
-                if(d && d._key && row.isTreeExpanded && row.isTreeExpanded()) {
-                    open[d._key] = true;
+                if(d && d.id && row.isTreeExpanded && row.isTreeExpanded()) {
+                    open[d.id] = true;
                 }
             });
             Promise.resolve(table.setData(tree)).then(function() {
                 table.getRows().forEach(function(row) {
                     let d = row.getData();
-                    if(d && open[d._key] && row.treeExpand) {
+                    if(d && open[d.id] && row.treeExpand) {
                         row.treeExpand();
                     }
                 });

@@ -23,6 +23,16 @@ on its own, outside the yunetas superproject.
 
 ### Changed
 
+#### The key of a row is `id` (gui_agent 0.22.59)
+
+The node views follow the key:value rule -- the key of a record is `id`, the
+rest is value. The rows of the Statistics / Schemas tree carry their key in
+`id` (it was `_key`), the name column is that field with a formatter that
+paints the name, and the tree sorts by it (`alphanum`): the nodes by host, the
+yunos of each node by their id. The sorter of 0.22.58, which compared what the
+cell showed, is gone. The Commands / Terminal picker indexes its rows by `id`
+too; it keeps sorting by host, which is what that table shows.
+
 #### A JSON viewer, the nodes by name, and a complete About (`@yuneta/gobj-ui` `^7.23.143`)
 
 - Both yunos: a **JSON viewer** entry in the account menu
