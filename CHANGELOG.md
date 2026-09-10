@@ -23,6 +23,17 @@ on its own, outside the yunetas superproject.
 
 ### Changed
 
+#### The JSON viewer compares two documents, and keeps them (gui_agent 0.22.61, gui_treedb 0.17.31)
+
+gobj-ui ^7.23.144. The account menu's JSON viewer gets a second pane on demand
+("second json") and "compare", which shows the differences of the two
+documents -- one row per id, added / removed / changed -- in place of the two
+viewers. What was pasted, and the layout, is kept in the browser: the viewer
+opens as it was left. New keys in both yunos: `first json`, `second json`,
+`compare`, `added`, `removed`, `path`, `no differences`, `compare needs two
+json`, `cannot compare`, `json not kept` (and `changed` in gui_treedb;
+gui_agent already had it).
+
 #### A connection carries its `id` (gui_agent 0.22.60, gui_treedb 0.17.30)
 
 "For TreeDB" (the `yuneta.treedb.connections` document) wrote its records
