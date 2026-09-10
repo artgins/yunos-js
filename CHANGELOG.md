@@ -23,6 +23,13 @@ on its own, outside the yunetas superproject.
 
 ### Changed
 
+#### gui_treedb's About does not list the connections (gui_treedb 0.17.32)
+
+The Diagnostics table of the About keeps the deployment identity and the
+session (application, version, tenant, host, Auth BFF, the user logged in) and
+no longer lists every connection with its url and state: the backends have
+their own page.
+
 #### The JSON viewer compares two documents, and keeps them (gui_agent 0.22.61, gui_treedb 0.17.31)
 
 gobj-ui ^7.23.144. The account menu's JSON viewer gets a second pane on demand

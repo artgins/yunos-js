@@ -222,18 +222,12 @@ function compute_initials(gobj)
 
 /***************************************************************
  *  Diagnostics of the About dialog -- the read-only table gui_agent
- *  shows (deployment identity, session), with the treedb BACKENDS in
- *  place of its control-center link: one row per configured
- *  connection, its url, and whether it is in session now -- which is
- *  what someone opening About over a view that says nothing wants to
- *  know first.
+ *  shows: deployment identity and session.  The treedb BACKENDS are
+ *  not listed here: they have their own page.
  ***************************************************************/
 function build_about_diagnostics(gobj)
 {
     let dep = deploy_info();
-    let config = gobj_find_service("treedb_config", false);
-    let links = gobj_find_service("treedb_links", false);
-    let conns = config? treedb_config_get_connections(config) : [];
     let username = gobj_read_attr(gobj, "username") || "";
 
     let label_style = "white-space:nowrap; color:#5B6B7E; font-weight:600; width:14rem;";
@@ -254,37 +248,6 @@ function build_about_diagnostics(gobj)
         row("auth bff", "Auth BFF", dep.bff_url || "—", {style: "font-family:monospace;"}),
         row("logged in as", "Logged in as", username, username? {} : {i18n: "logged out"}),
     ];
-
-    if(conns.length === 0) {
-        rows.push(row("connections", "Connections", "", {i18n: "none"}));
-    } else {
-        rows.push(["tr", {class: "DIAG_ROW DIAG_CONNECTIONS_HEAD"},
-            [
-                ["th", {class: "DIAG_LABEL", colspan: "2", style: label_style,
-                        i18n: "connections"}, "Connections"]
-            ]
-        ]);
-    }
-    for(let c of conns) {
-        let connected = links? treedb_links_is_connected(links, c.id) : false;
-        /*  The connection's name is the operator's: DATA, no i18n key.  */
-        rows.push(["tr", {class: "DIAG_ROW DIAG_CONNECTION_ROW"},
-            [
-                ["th", {class: "DIAG_LABEL DIAG_CONNECTION_NAME",
-                        style: label_style + " padding-left:1.25rem;"}, c.label || c.id],
-                ["td", {class: "DIAG_VALUE"},
-                    [
-                        ["span", {class: "DIAG_URL", style: "font-family:monospace;"}, c.url || ""],
-                        ["span", {class: "DIAG_CONNECTION",
-                                  style: "margin-left:.75rem; font-weight:600; color:" +
-                                         (connected? "#1FAE6F" : "#D64545") + ";",
-                                  i18n: connected? "connected" : "disconnected"},
-                         connected? "connected" : "disconnected"]
-                    ]
-                ]
-            ]
-        ]);
-    }
 
     return ["div", {class: "DIAG_BOX box"},
         [
