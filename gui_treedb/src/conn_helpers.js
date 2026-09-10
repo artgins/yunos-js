@@ -96,20 +96,39 @@ function conn_id_of(conn)
 }
 
 /***************************************************************
+ *  conn_is_marked(conn)
+ *
+ *      -> is the connection MARKED to browse: listed in the pickers of
+ *      Topics / Graphs even while it is not connected.
+ *
+ *      `browse` says it. A connection saved before `browse` existed has
+ *      none, and counts as marked when any of its services carries the
+ *      old per-service `selected` flag -- what it was browsed by then.
+ ***************************************************************/
+function conn_is_marked(conn)
+{
+    if(!conn) {
+        return false;
+    }
+    if(typeof conn.browse === "boolean") {
+        return conn.browse;
+    }
+    let services = Array.isArray(conn.services) ? conn.services : [];
+    return services.some((svc) => svc && svc.selected);
+}
+
+/***************************************************************
  *  conns_browse_state(conns)
  *
  *      conns   the connections the header checkbox covers -- the ones
- *              the filter leaves ON SCREEN, each with its `services`
+ *              the filter leaves ON SCREEN
  *
  *      -> "none" | "some" | "all"
  *
- *      What the header box of the browse column has to say. Counted
- *      over SERVICES, not over connections: a header reading "all"
- *      while half the treedbs of one connection are unticked would
- *      drop them on the next click and call that a toggle.
- *
- *      A connection with nothing discovered yet counts nowhere --
- *      there is nothing of it to browse.
+ *      What the header box of the browse column has to say: how many
+ *      of them are marked (conn_is_marked). A connection with nothing
+ *      discovered counts like any other -- marking it is what lists it
+ *      in the pickers before it ever connects.
  ***************************************************************/
 function conns_browse_state(conns)
 {
@@ -117,15 +136,12 @@ function conns_browse_state(conns)
     let on = 0;
 
     for(let conn of (Array.isArray(conns) ? conns : [])) {
-        let services = (conn && Array.isArray(conn.services)) ? conn.services : [];
-        for(let svc of services) {
-            if(!svc || !svc.service) {
-                continue;
-            }
-            total++;
-            if(svc.selected) {
-                on++;
-            }
+        if(!conn) {
+            continue;
+        }
+        total++;
+        if(conn_is_marked(conn)) {
+            on++;
         }
     }
 
@@ -136,4 +152,4 @@ function conns_browse_state(conns)
 }
 
 
-export {conn_identity, plan_conn_import, conns_browse_state};
+export {conn_identity, plan_conn_import, conn_is_marked, conns_browse_state};

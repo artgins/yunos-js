@@ -23,31 +23,24 @@
  *      WHOLE found list in the connection's `services`; the refresh
  *      button of a row re-runs the discovery.
  *
- *      THE SERVICES ARE CHILD ROWS of their connection — the same tree the
- *      Schemas picker of gui_agent draws. The two tables show the same
- *      thing (a backend and the treedbs it exposes) and one is literally
- *      pasted into the other ("For TreeDB"), so they are read the same way:
- *      connection on top, services underneath, a BROWSE checkbox with three
- *      states on the parent, the live state as a dot and a word in one
- *      cell. What only exists here — editing the url, connect, clone,
- *      delete — stays here, as icons at the end of the row.
- *
- *      They used to be a table of their own nested in the row, which is
- *      what forced the basic renderer, the destroy-before-reload dance and
- *      the row-height recalculations; all of that is gone with it. The
- *      service checkbox edits the service's `selected` flag — selected
- *      services are the ones offered in the workspace pickers
- *      ("connections" tab of Topics / Graphs).
+ *      ONE ROW PER CONNECTION, with no services under it. The services a
+ *      connection discovers are handed WHOLE to the pickers of Topics /
+ *      Graphs, and those decide which treedb to open; this page says which
+ *      BACKENDS there are. Its checkbox MARKS a connection (`browse`): the
+ *      pickers list the connections that are connected or marked. The live
+ *      state is a dot and a word in one cell; what only exists here —
+ *      editing the url, connect, clone, delete — stays here, as icons at
+ *      the end of the row.
  *      Deleting a row asks for confirmation (shell yes/no dialog).
  *
  *      A view: builds its own `$container` for the shell to mount.
  *
  *      Every click of the table is an EVENT (the SPA's contract: a DOM
  *      handler's only job is to make one). A Tabulator `cellClick` — the
- *      service checkbox, the chevron, the refresh, the connect/disconnect,
- *      the ✕ — sends EV_TOGGLE_SERVICE /
+ *      browse checkbox, the refresh, the connect/disconnect, the ✕ — sends
+ *      EV_TOGGLE_CONN_BROWSE /
  *      EV_REFRESH_SERVICES / EV_TOGGLE_CONN_ENABLED /
- *      EV_REMOVE_CONN carrying IDENTITIES (conn_id, svc_key: a kw must stay
+ *      EV_REMOVE_CONN carrying IDENTITIES (conn_id: a kw must stay
  *      plain JSON), and the work happens in the action. Even the removal's
  *      confirmation comes back as one (EV_CONFIRM_REMOVE_CONN), so no state
  *      is mutated inside a promise's `.then`. Widget plumbing that is not an
@@ -93,7 +86,7 @@ import {
     treedb_links_is_scanning,
 } from "./c_treedb_links.js";
 
-import {plan_conn_import, conns_browse_state} from "./conn_helpers.js";
+import {plan_conn_import, conn_is_marked, conns_browse_state} from "./conn_helpers.js";
 
 
 /***************************************************************
@@ -124,13 +117,11 @@ SDATA_END()
 let PRIVATE_DATA = {
     $scan_errors: null,   /*  refresh failure report area  */
     $import_notice: null, /*  what the last import added / skipped  */
-    $fold:        null,   /*  expand / collapse the whole tree  */
-    $count:       null,   /*  "N connections · M services · K to browse"  */
+    $count:       null,   /*  "N connections · K to browse"  */
     delete_modal: null,   /*  the remove-several box, while it is up  */
     connect_modal: null,  /*  the connect-several box, while it is up  */
     $search:      null,
     search:       "",     /*  survives a reload (a scan finishing)  */
-    loaded:       false,  /*  past the first load WITH rows  */
     import_notice: null,  /*  {added, skipped}: kept, so it survives a language change  */
     $help:        null,   /*  the how-to-use paragraph, folded by default  */
     $help_btn:    null,   /*  the (i) that folds/unfolds it  */
@@ -389,8 +380,9 @@ function build_ui(gobj)
                i18n: "connections help"},
             "Edit cells inline. Each URL is a yuno's public wss endpoint " +
             "(plus its role and service). Connect with the plug button — " +
-            "services are discovered on the first connect; check the ones " +
-            "to browse."]);
+            "its services are discovered on the first connect and offered " +
+            "whole in Topics and Graphs. Mark a connection to list it there " +
+            "while it is not connected."]);
     priv.$help = $help;
 
     let $scan_errors = createElement2(
@@ -403,20 +395,6 @@ function build_ui(gobj)
     let $import_notice = createElement2(
         ["div", {class: "is-size-7 has-text-grey mb-2 is-hidden CONNECTIONS_IMPORT_NOTICE"}, []]);
     priv.$import_notice = $import_notice;
-
-    /*  One control for every row's services sub-table. Its icon says what
-     *  the CLICK will do: chevron-down while any connection is folded,
-     *  chevron-right once they are all open.  */
-    let $fold = createElement2(
-        ["button", {class: "CONNECTIONS_FOLD button mr-1", type: "button",
-                    title: t("expand all"), "aria-label": t("expand all"),
-                    "data-i18n-title": "expand all", "data-i18n-aria-label": "expand all"},
-            [["span", {class: "icon"}, [["i", {class: "yi-chevron-down"}]]]]
-        ]);
-    $fold.addEventListener("click", () => {
-        gobj_send_event(gobj, "EV_TOGGLE_FOLD", {}, gobj);
-    });
-    priv.$fold = $fold;
 
     /*  A search box and a count, the same two the pickers carry: this table
      *  holds one row per backend of a deploy centre.  */
@@ -449,7 +427,7 @@ function build_ui(gobj)
         ["span", {class: "CONNECTIONS_COUNT is-size-7 has-text-grey ml-2"}, ""]);
 
     /*  Deleting SEVERAL connections without touching the row checkbox — which
-     *  means "browse this treedb" and cannot also mean "kill this backend".
+     *  means "browse this backend" and cannot also mean "kill this backend".
      *  A deliberate, rare, destructive job gets its own dialog: tick what
      *  goes, read the list, press once.  */
     let $delete_many = createElement2(
@@ -469,7 +447,7 @@ function build_ui(gobj)
 
     /*  Connecting SEVERAL. The row's plug does one; a pasted deploy centre
      *  is two hundred rows, and the browse checkbox cannot be borrowed for
-     *  this — it already means "browse this treedb". Its own dialog, like
+     *  this — it already means "browse this backend". Its own dialog, like
      *  the removal, except this one is not destructive: it opens showing
      *  the connect INTENT of every connection, so the same box that
      *  connects a selection disconnects one.  */
@@ -497,29 +475,18 @@ function build_ui(gobj)
                  *  table needed (`.level.is-mobile` does not fix it either —
                  *  it only restores `display: flex`, leaving the halves in
                  *  column). A plain flex row that wraps only if it must.  */
-                /*  NOT `space-between`: with the fold and the search as
-                 *  children of this row it pushed them apart — the fold ended
-                 *  up at the right of the title line and the search on the
-                 *  next one. The actions take the right with `margin-left`,
-                 *  the same way the two pickers do it.  */
+                /*  NOT `space-between`: it pushed the search away from the
+                 *  title. The actions take the right with `margin-left`, the
+                 *  same way the two pickers do it.  */
                 ["div", {class: "CONNECTIONS_HEADER is-flex is-align-items-center "
                               + "is-flex-wrap-wrap mb-3", style: "gap:.5rem;"}, [
-                    /*  The fold belongs with what you are LOOKING at, not
-                     *  with what you do to it: left with the title, where it
-                     *  stays when the row wraps on a phone.  */
                     ["div", {class: "CONNECTIONS_TITLE is-flex is-align-items-center"}, [
                         ["h2", {class: "title is-5 mb-0", i18n: "connections"}, "Connections"],
                         $help_btn
                     ]],
-                    /*  The fold and the search are ONE wrapping unit: the
-                     *  fold sits immediately to the left of the box, and a
-                     *  phone that pushes the pair to the next line takes them
-                     *  together instead of leaving the fold behind, stuck to
-                     *  the title. Same place in the three tables of these
-                     *  apps — same thing, same spot.  */
                     ["div", {class: "CONNECTIONS_FINDER is-flex is-align-items-center",
                              style: "gap:.5rem; flex:1 1 14rem; max-width:24rem; min-width:0;"},
-                        [$fold, $search_control]],
+                        [$search_control]],
                     priv.$count,
                     ["div", {class: "CONNECTIONS_ACTIONS is-flex is-align-items-center",
                              style: "gap:.5rem; margin-left:auto;"},
@@ -539,11 +506,10 @@ function build_ui(gobj)
 }
 
 /***************************************************************
- *  The rows of the table: a connection on top, its discovered services
- *  as its dataTree children — the same tree the picker of gui_agent
- *  draws. A child wears this table's columns, so the formatters of the
- *  three columns a service has anything to say in (browse, label,
- *  status) each answer for `_type === "svc"` on its own.
+ *  The rows of the table: one per connection. Its discovered
+ *  services are not rows here — they are handed whole to the pickers
+ *  of Topics / Graphs; only their count, and their names for the
+ *  search, travel with the row.
  ***************************************************************/
 function rows_from_config(gobj)
 {
@@ -553,7 +519,6 @@ function rows_from_config(gobj)
 
     return conns.map(function(c) {
         let services = treedb_config_conn_services(c);
-        let connected = links ? treedb_links_is_connected(links, c.id) : false;
         return {
             id:                  c.id,
             _type:               "conn",
@@ -562,31 +527,19 @@ function rows_from_config(gobj)
             url:                 c.url || "",
             remote_yuno_role:    c.remote_yuno_role || "",
             remote_yuno_service: c.remote_yuno_service || "",
-            connected:           connected,
-            _children: services.map(function(svc) {
-                return {
-                    id:        `${c.id}\u001F${svc.service}`,
-                    _type:     "svc",
-                    conn_id:   c.id,
-                    svc_key:   svc.service,
-                    label:     svc.service,
-                    gclass:    svc.gclass || "",
-                    selected:  !!svc.selected,
-                    connected: connected,
-                    url:                 "",
-                    remote_yuno_role:    "",
-                    remote_yuno_service: ""
-                };
-            })
+            connected:           links ? treedb_links_is_connected(links, c.id) : false,
+            browse:              conn_is_marked(c),
+            n_services:          services.length,
+            _services:           services.map((svc) => svc.service).join(" ")
         };
     });
 }
 
 /***************************************************************
  *  Write the whole table back to C_TREEDB_CONFIG (persist +
- *  reconcile links). Only parent rows are connections; each keeps its
- *  persisted discovered `services` (the checkbox column edits those
- *  separately).
+ *  reconcile links). Each connection keeps its discovered `services`
+ *  and its `browse` mark (the checkbox column edits that one through
+ *  EV_SET_CONNS_BROWSE).
  ***************************************************************/
 function persist(gobj)
 {
@@ -618,6 +571,7 @@ function persist(gobj)
             remote_yuno_role:    role,
             remote_yuno_service: service,
             enabled:             enabled,
+            browse:              prev ? conn_is_marked(prev) : false,
             services:            (prev && Array.isArray(prev.services)) ? prev.services : []
         };
     });
@@ -711,11 +665,6 @@ function set_import_notice(gobj, notice)
 }
 
 /***************************************************************
- *  Column definitions. Shared by parent (connection) and child
- *  (service) rows: children only use the tree column, the checkbox
- *  and the gclass tag; parent-only cells are blank on them.
- ***************************************************************/
-/***************************************************************
  *  A formatter returns HTML, so what comes from the data is escaped:
  *  a connection label is typed by the operator.
  ***************************************************************/
@@ -741,57 +690,34 @@ function status_dot(connected)
 
 function make_columns(gobj)
 {
-    /*  The SAME shape as the picker of gui_agent (`C_STATS_NODES`): the two
-     *  tables show the same thing — a backend and the treedbs it exposes,
-     *  and one is literally pasted into the other — so they are read the same
-     *  way. A tree: the connection on top, its services underneath; the
-     *  checkbox means BROWSE in both; the status is a dot and a word in one
-     *  cell. What only lives here (edit the url, connect, clone, delete)
-     *  stays here, at the end of the row.
+    /*  One row per connection: the checkbox MARKS it to browse (the pickers
+     *  of Topics / Graphs list the connections connected or marked), the
+     *  status is a dot and a word in one cell, and what only lives here
+     *  (edit the url, connect, clone, delete) sits at the end of the row.
      *
      *  A cellClick is an OS notification: its only job is to make an event,
-     *  and the kw carries IDENTITIES (conn_id, svc_key) — never the row or
-     *  the cell: a kw must stay plain JSON (the machine trace serializes it).  */
+     *  and the kw carries an IDENTITY (conn_id) — never the row or the
+     *  cell: a kw must stay plain JSON (the machine trace serializes it).  */
     function browse_formatter(cell)
     {
         let d = cell.getData();
         let $cb = document.createElement("input");
         $cb.type = "checkbox";
-
-        if(d._type === "svc") {
-            $cb.className = "CONNECTIONS_SERVICE_CHECK";
-            $cb.checked = !!d.selected;
-            $cb.setAttribute("aria-label", t("browse"));
-            $cb.title = t("browse");
-            return $cb;
-        }
-        /*  The connection's own box takes or drops ALL its services, and says
-         *  which of the three it is in: none, some, all.  */
-        let state = services_check_state(gobj, d.conn_id);
         $cb.className = "CONNECTIONS_CONN_CHECK";
-        $cb.disabled = (state === "none") && !has_services(gobj, d.conn_id);
-        $cb.checked = (state === "all");
-        $cb.indeterminate = (state === "some");
-        $cb.setAttribute("aria-label", t("browse all of this connection"));
-        $cb.title = t("browse all of this connection");
+        $cb.checked = !!d.browse;
+        $cb.setAttribute("aria-label", t("browse"));
+        $cb.title = t("browse");
         return $cb;
     }
 
     function browse_click(e, cell)
     {
-        let d = cell.getData();
-        if(d._type === "svc") {
-            gobj_send_event(gobj, "EV_TOGGLE_SERVICE",
-                {conn_id: d.conn_id, svc_key: d.svc_key}, gobj);
-            return;
-        }
-        gobj_send_event(gobj, "EV_TOGGLE_ALL_SERVICES", {conn_id: d.conn_id}, gobj);
+        gobj_send_event(gobj, "EV_TOGGLE_CONN_BROWSE", {conn_id: cell.getData().conn_id}, gobj);
     }
 
-    /*  The column's own box, in the header: it takes or drops every service
-     *  of every connection the filter leaves ON SCREEN. A pasted deploy
-     *  centre arrives with nothing ticked and two hundred backends in it,
-     *  and one click per treedb is not a way to say "this node".
+    /*  The column's own box, in the header: it marks or unmarks every
+     *  connection the filter leaves ON SCREEN. A pasted deploy centre
+     *  arrives with nothing marked and two hundred backends in it.
      *
      *  A `titleFormatter` runs again only on `setColumns()`, which redraws
      *  every row with it — a whole table repainted to move one checkbox
@@ -820,20 +746,17 @@ function make_columns(gobj)
         gobj_send_event(gobj, "EV_TOGGLE_ALL_BROWSE", {}, gobj);
     }
 
-    /*  Name: the tree column. A connection is its label with the live dot in
-     *  front; a service is its name and the class it is.  */
+    /*  Name: the label with the live dot in front, and how many services
+     *  the connection discovered — the ones it hands to the pickers.  */
     function name_formatter(cell)
     {
         let d = cell.getData();
-        if(d._type === "svc") {
-            let tag = d.gclass
-                ? ` <span class="tag is-light is-size-7 CONNECTIONS_SERVICE_GCLASS ` +
-                  `${d.gclass === "C_TRANGER" ? "is-warning" : "is-info"}">${esc(d.gclass)}</span>`
-                : "";
-            return `<span class="CONNECTIONS_SERVICE">${esc(d.label)}</span>${tag}`;
-        }
+        let count = d.n_services
+            ? ` <span class="CONNECTIONS_SERVICES_COUNT is-size-7 has-text-grey">` +
+              `· ${d.n_services} ${esc(t("services"))}</span>`
+            : "";
         return status_dot(d.connected) +
-            `<span class="CONNECTIONS_CONN has-text-weight-semibold">${esc(d.label)}</span>`;
+            `<span class="CONNECTIONS_CONN has-text-weight-semibold">${esc(d.label)}</span>${count}`;
     }
 
     /*  Status: a dot and the word, in ONE cell — the picker's shape. The
@@ -917,14 +840,6 @@ function make_columns(gobj)
         gobj_send_event(gobj, event, {conn_id: d.conn_id}, gobj);
     }
 
-    /*  A service row has nothing to edit: those fields belong to its
-     *  connection, and an editor on an empty cell invites typing into
-     *  nothing.  */
-    function editable_conn(cell)
-    {
-        return cell.getData()._type === "conn";
-    }
-
     /*
      *  minWidth per column so `fitColumns` never shrinks them below a
      *  legible size: on a narrow (mobile) viewport Tabulator then scrolls
@@ -937,28 +852,18 @@ function make_columns(gobj)
             formatter: browse_formatter, cellClick: browse_click,
             titleFormatter: browse_title_formatter, headerClick: browse_header_click},
         {title: t("label"),   field: "label", minWidth: 220, widthGrow: 2,
-            formatter: name_formatter, editor: "input", editable: editable_conn},
+            formatter: name_formatter, editor: "input"},
         {title: t("url"),     field: "url",                 editor: "input",
-            editable: editable_conn, minWidth: 200, widthGrow: 2},
+            minWidth: 200, widthGrow: 2},
         {title: t("role"),    field: "remote_yuno_role",    editor: "input",
-            editable: editable_conn, minWidth: 120, widthGrow: 1},
+            minWidth: 120, widthGrow: 1},
         {title: t("service"), field: "remote_yuno_service", editor: "input",
-            editable: editable_conn, minWidth: 120, widthGrow: 1},
+            minWidth: 120, widthGrow: 1},
         {title: t("status"), field: "_status", minWidth: 110, widthGrow: 1,
             headerSort: false, formatter: status_formatter},
         {title: "", field: "_actions", width: 152, minWidth: 152, headerSort: false,
             hozAlign: "right", formatter: action_formatter, cellClick: action_click}
     ];
-}
-
-/***************************************************************
- *  Has this connection anything discovered to browse?
- ***************************************************************/
-function has_services(gobj, conn_id)
-{
-    let config = gobj_find_service("treedb_config", false);
-    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
-    return !!(conn && treedb_config_conn_services(conn).length);
 }
 
 /***************************************************************
@@ -996,15 +901,15 @@ function visible_conns(gobj)
 
 /***************************************************************
  *  What the header box has to say: the three states, and whether
- *  anything on screen has been discovered at all (nothing to browse
- *  is a dead box, not an empty one).
+ *  there is anything on screen at all (an empty table is a dead box,
+ *  not an unmarked one).
  ***************************************************************/
 function browse_header_state(gobj)
 {
     let conns = visible_conns(gobj);
     return {
         state: conns_browse_state(conns),
-        any:   conns.some((c) => treedb_config_conn_services(c).length)
+        any:   conns.length > 0
     };
 }
 
@@ -1052,20 +957,11 @@ function create_table(gobj)
         index:          "id",
         layout:         "fitColumns",
         maxHeight:      "70vh",
-        /*  The VIRTUAL renderer is back: a row used to be taller than its
-         *  cells (it carried a whole sub-table), which made Tabulator scroll
-         *  the cell being edited off the top. With the services as child rows
-         *  there is nothing taller than a row, and virtual is what a deploy
-         *  centre with hundreds of backends needs.  */
+        /*  The VIRTUAL renderer: every row is one line high, and virtual is
+         *  what a deploy centre with hundreds of backends needs.  */
         placeholder:    t("no connections - click add connection"),
         columnDefaults: {headerHozAlign: "left", resizable: true},
-        columns:        make_columns(gobj),
-        /*  The services are CHILD ROWS now, not a table inside the row: the
-         *  same tree the picker of gui_agent draws.  */
-        dataTree:              true,
-        dataTreeStartExpanded: false,
-        dataTreeElementColumn: "label",
-        dataTreeChildField:    "_children"
+        columns:        make_columns(gobj)
     };
 
     let table = new Tabulator($div, settings);
@@ -1087,7 +983,8 @@ function create_table(gobj)
 }
 
 /***************************************************************
- *  Reload the whole tree (scan finished: children changed).
+ *  Reload the table from the config (a scan finished, a row was
+ *  added, marked or removed).
  ***************************************************************/
 function reload_table(gobj)
 {
@@ -1095,43 +992,9 @@ function reload_table(gobj)
     if(!table) {
         return;
     }
-    /*  `setData()` RESETS the tree, and this table reloads on every tick and
-     *  every scan: remember what is open and put it back, or ticking a
-     *  service would fold the connection you are ticking inside. Only the
-     *  FIRST load with rows decides on its own.  */
-    let priv = gobj.priv;
     let rows = rows_from_config(gobj);
-    let first = !priv.loaded;
-    let open = {};
-
-    if(!first) {
-        try {
-            table.getRows().forEach(function(row) {
-                let d = row.getData();
-                if(d && d.id && row.isTreeExpanded && row.isTreeExpanded()) {
-                    open[d.id] = true;
-                }
-            });
-        } catch(e) {
-            /*  mid-build: nothing was open yet  */
-        }
-    } else if(rows.length <= 5) {
-        for(let r of rows) {
-            open[r.id] = true;
-        }
-    }
 
     Promise.resolve(table.setData(rows)).then(function() {
-        table.getRows().forEach(function(row) {
-            let d = row.getData();
-            if(d && open[d.id] && row.treeExpand) {
-                row.treeExpand();
-            }
-        });
-        if(rows.length) {
-            priv.loaded = true;
-        }
-        render_fold(gobj);
         update_count(gobj, rows);
         paint_browse_header(gobj);
     }).catch(function(err) {
@@ -1274,6 +1137,7 @@ function ac_add_conn(gobj, event, kw, src)
         remote_yuno_role:    "",
         remote_yuno_service: "",
         enabled:             false,   /*  nothing this SPA creates auto-connects  */
+        browse:              false,
         services:            []
     };
     gobj_send_event(config, "EV_SET_CONNECTIONS",
@@ -1283,70 +1147,30 @@ function ac_add_conn(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Flip a service's `selected` flag (its sub-row checkbox): the
- *  connection's whole service list is rewritten with that one toggled.
+ *  The checkbox of a row: mark the connection to browse, or unmark
+ *  it. A marked connection is listed in the pickers of Topics /
+ *  Graphs even while it is not connected.
  ***************************************************************/
-/***************************************************************
- *  Is the whole "browse" column of a connection on, off, or mixed?
- *  Read from the CONFIG and not from the sub-table, so the header is
- *  right the moment it is drawn — before the table has any rows.
- ***************************************************************/
-function services_check_state(gobj, conn_id)
-{
-    let config = gobj_find_service("treedb_config", false);
-    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
-    let list = conn ? treedb_config_conn_services(conn) : [];
-    if(!list.length) {
-        return "none";
-    }
-    let on = list.filter((s) => s.selected).length;
-    if(on === 0) {
-        return "none";
-    }
-    if(on === list.length) {
-        return "all";
-    }
-    return "some";
-}
-
-/***************************************************************
- *  Take every service of a connection, or drop every one.
- *
- *  All-on drops them; anything else takes them all — which is what
- *  "some are ticked and I pressed it" means. A yuno routinely exposes
- *  a dozen services, and one click each was the only way there was.
- ***************************************************************/
-function ac_toggle_all_services(gobj, event, kw, src)
+function ac_toggle_conn_browse(gobj, event, kw, src)
 {
     let conn_id = (kw && kw.conn_id) || "";
     let config = gobj_find_service("treedb_config", false);
     let conn = config ? treedb_config_get_connection(config, conn_id) : null;
     if(!conn) {
-        log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' ` +
-                  `whose services to take`);
+        log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' to mark`);
         return -1;
     }
-
-    let want = (services_check_state(gobj, conn_id) !== "all");
-    let list = treedb_config_conn_services(conn).map((s) => ({
-        service: s.service, gclass: s.gclass, selected: want
-    }));
-    if(!list.length) {
-        return 0;       /*  nothing discovered yet: nothing to take  */
-    }
-    gobj_send_event(config, "EV_SET_CONN_SERVICES",
-        {conn_id: conn_id, services: list}, gobj);
-
+    gobj_send_event(config, "EV_SET_CONNS_BROWSE",
+        {conn_ids: [conn_id], browse: !conn_is_marked(conn)}, gobj);
     reload_table(gobj);
     return 0;
 }
 
 /***************************************************************
- *  Take every service of every connection ON SCREEN, or drop them all.
+ *  Mark every connection ON SCREEN, or unmark them all.
  *
- *  The same rule the connection's own box follows: all-on drops the
- *  lot, anything else takes it — which is what "some are ticked and I
- *  pressed it" means.
+ *  All-marked unmarks the lot, anything else marks it — which is what
+ *  "some are ticked and I pressed it" means.
  *
  *  ONE gesture, ONE write: a hundred connections written one at a time
  *  is a hundred trips to localStorage and a hundred rebuilt pickers.
@@ -1361,46 +1185,15 @@ function ac_toggle_all_browse(gobj, event, kw, src)
     }
 
     let conns = visible_conns(gobj);
-    let ids = conns
-        .filter((c) => treedb_config_conn_services(c).length)
-        .map((c) => c.id);
+    let ids = conns.map((c) => c.id);
     if(!ids.length) {
-        return 0;       /*  nothing discovered on screen: nothing to take  */
+        return 0;       /*  nothing on screen: nothing to mark  */
     }
 
     let want = (conns_browse_state(conns) !== "all");
     gobj_send_event(config, "EV_SET_CONNS_BROWSE",
-        {conn_ids: ids, selected: want}, gobj);
+        {conn_ids: ids, browse: want}, gobj);
 
-    reload_table(gobj);
-    return 0;
-}
-
-function ac_toggle_service(gobj, event, kw, src)
-{
-    let conn_id = (kw && kw.conn_id) || "";
-    let svc_key = (kw && kw.svc_key) || "";
-    let config = gobj_find_service("treedb_config", false);
-    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
-    if(!conn || !svc_key) {
-        log_error(`${gobj_short_name(gobj)}: no service '${svc_key}' of ` +
-                  `connection '${conn_id}' to toggle`);
-        return -1;
-    }
-
-    let now_checked = false;
-    let list = treedb_config_conn_services(conn).map((s) => {
-        let selected = s.selected;
-        if(s.key === svc_key) {
-            selected = !selected;
-            now_checked = selected;
-        }
-        return {service: s.service, gclass: s.gclass, selected: selected};
-    });
-    gobj_send_event(config, "EV_SET_CONN_SERVICES",
-        {conn_id: conn_id, services: list}, gobj);
-
-    /*  The service lives in the connection's own sub-table now.  */
     reload_table(gobj);
     return 0;
 }
@@ -1446,90 +1239,6 @@ function ac_toggle_conn_enabled(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  The chevron of a connection row: fold / unfold its services
- *  sub-table. The flag is persisted (C_TREEDB_CONFIG), so the page comes
- *  back the way it was left.
- *
- *  Only THIS row is repainted: `reformat()` re-runs the rowFormatter,
- *  which builds the sub-table or drops it. Folding also needs an explicit
- *  normalizeHeight(): the row is still pinned to the inline height it was
- *  given when the sub-table was under its cells, so without it the row
- *  keeps a hole where the sub-table used to be. Unfolding does not — the
- *  sub-table's own `tableBuilt` re-measures once it is really built.
- ***************************************************************/
-/***************************************************************
- *  Is any connection with services still folded? That is what the
- *  button offers to do, and what its icon has to say. A connection
- *  with nothing discovered has no sub-table and does not count.
- ***************************************************************/
-function some_folded(gobj)
-{
-    let table = gobj_read_attr(gobj, "tabulator");
-    if(!table) {
-        return true;
-    }
-    try {
-        return table.getRows().some(function(row) {
-            let kids = row.getTreeChildren ? row.getTreeChildren() : [];
-            return kids.length > 0 && row.isTreeExpanded && !row.isTreeExpanded();
-        });
-    } catch(e) {
-        return true;
-    }
-}
-
-/***************************************************************
- *  The fold button says what the CLICK will do.
- ***************************************************************/
-function render_fold(gobj)
-{
-    let $fold = gobj.priv.$fold;
-    if(!$fold) {
-        return;
-    }
-    let expand = some_folded(gobj);
-    let key = expand ? "expand all" : "collapse all";
-    let $icon = $fold.querySelector("span.icon > i");
-    if($icon) {
-        $icon.className = expand ? "yi-chevron-down" : "yi-chevron-right";
-    }
-    $fold.title = t(key);
-    $fold.setAttribute("aria-label", t(key));
-    $fold.setAttribute("data-i18n-title", key);
-    $fold.setAttribute("data-i18n-aria-label", key);
-}
-
-/***************************************************************
- *  Fold or unfold the WHOLE tree.
- ***************************************************************/
-function ac_toggle_fold(gobj, event, kw, src)
-{
-    let table = gobj_read_attr(gobj, "tabulator");
-    if(!table) {
-        return 0;
-    }
-    let expand = some_folded(gobj);
-    try {
-        table.getRows().forEach(function(row) {
-            let kids = row.getTreeChildren ? row.getTreeChildren() : [];
-            if(!kids.length || !row.treeExpand) {
-                return;
-            }
-            if(expand) {
-                row.treeExpand();
-            } else {
-                row.treeCollapse();
-            }
-        });
-    } catch(e) {
-        log_warning(`${GCLASS_NAME}: cannot fold the tree: ${e}`);
-        return -1;
-    }
-    render_fold(gobj);
-    return 0;
-}
-
-/***************************************************************
  *  The ✕ of a connection row: ask first (removing a connection drops its
  *  open tabs and its saved Tranger views with it). The confirm's resolved
  *  promise is an OS notification like any other — it becomes an event, and
@@ -1563,8 +1272,8 @@ function ac_remove_conn(gobj, event, kw, src)
  *  The answer to that confirmation.
  *
  *  Remove in config + reload via setData — NOT Tabulator's row.delete():
- *  a row carries a sub-table of its own, and reloading is what rebuilds
- *  (and destroys) them cleanly.
+ *  the config is the source of the rows, so the table is rebuilt from it
+ *  rather than edited apart from it.
  ***************************************************************/
 function ac_confirm_remove_conn(gobj, event, kw, src)
 {
@@ -1584,7 +1293,7 @@ function ac_confirm_remove_conn(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  "N connections · M services · K to browse"
+ *  "N connections · K to browse"
  ***************************************************************/
 function update_count(gobj, rows)
 {
@@ -1592,21 +1301,14 @@ function update_count(gobj, rows)
     if(!priv.$count) {
         return;
     }
-    let services = 0;
-    let browse = 0;
-    for(let r of rows) {
-        let kids = r._children || [];
-        services += kids.length;
-        browse += kids.filter((k) => k && k.selected).length;
-    }
+    let browse = rows.filter((r) => r && r.browse).length;
     priv.$count.textContent =
-        `${rows.length} ${t("connections")} · ${services} ${t("services")} · ` +
-        `${browse} ${t("to browse")}`;
+        `${rows.length} ${t("connections")} · ${browse} ${t("to browse")}`;
 }
 
 /***************************************************************
- *  The search box typed into: it matches a connection or one of
- *  its services, and a connection that matches keeps them all.
+ *  The search box typed into: it matches a connection by its label,
+ *  its url or the name of one of its services.
  ***************************************************************/
 function ac_search(gobj, event, kw, src)
 {
@@ -1623,15 +1325,13 @@ function ac_search(gobj, event, kw, src)
             table.clearFilter();
         } else {
             table.setFilter(function(data) {
-                let hay = `${data.label || ""} ${data.url || ""} ` +
-                    `${(data._children || []).map((k) => k.label).join(" ")}`;
+                let hay = `${data.label || ""} ${data.url || ""} ${data._services || ""}`;
                 return hay.toLowerCase().includes(term);
             });
         }
     } catch(e) {
         log_warning(`${GCLASS_NAME}: cannot filter: ${e}`);
     }
-    render_fold(gobj);
     /*  The header covers what is on screen, and that is what just changed. */
     paint_browse_header(gobj);
     return 0;
@@ -1799,7 +1499,7 @@ function ac_apply_connect_many(gobj, event, kw, src)
  *  The dialog that removes SEVERAL connections.
  *
  *  Its own list with its own checkboxes: the table's checkbox says
- *  which treedbs to browse, and one checkbox cannot mean two things.
+ *  which connections to browse, and one checkbox cannot mean two things.
  *  Everything starts unticked — this dialog opens with nothing
  *  selected to delete, and the operator says what goes.
  ***************************************************************/
@@ -2158,6 +1858,7 @@ function ac_import_conns(gobj, event, kw, src)
         remote_yuno_role:    String(c.remote_yuno_role || ""),
         remote_yuno_service: String(c.remote_yuno_service || ""),
         enabled:             false,
+        browse:              c.browse === true,
         services:            Array.isArray(c.services) ? c.services : []
     }));
 
@@ -2217,12 +1918,10 @@ function create_gclass(gclass_name)
             ["EV_TOGGLE_HELP",          ac_toggle_help,          null],
             ["EV_ADD_CONN",             ac_add_conn,             null],
             ["EV_CLONE_CONN",           ac_clone_conn,           null],
-            ["EV_TOGGLE_SERVICE",       ac_toggle_service,       null],
-            ["EV_TOGGLE_ALL_SERVICES",  ac_toggle_all_services,  null],
+            ["EV_TOGGLE_CONN_BROWSE",   ac_toggle_conn_browse,   null],
             ["EV_TOGGLE_ALL_BROWSE",    ac_toggle_all_browse,    null],
             ["EV_REFRESH_SERVICES",     ac_refresh_services,     null],
             ["EV_TOGGLE_CONN_ENABLED",  ac_toggle_conn_enabled,  null],
-            ["EV_TOGGLE_FOLD",          ac_toggle_fold,          null],
             ["EV_SEARCH",               ac_search,               null],
             ["EV_CONNECT_MANY",         ac_connect_many,         null],
             ["EV_APPLY_CONNECT_MANY",   ac_apply_connect_many,   null],
@@ -2246,12 +1945,10 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_HELP",          0],
         ["EV_ADD_CONN",             0],
         ["EV_CLONE_CONN",           0],
-        ["EV_TOGGLE_SERVICE",       0],
-        ["EV_TOGGLE_ALL_SERVICES",  0],
+        ["EV_TOGGLE_CONN_BROWSE",   0],
         ["EV_TOGGLE_ALL_BROWSE",    0],
         ["EV_REFRESH_SERVICES",     0],
         ["EV_TOGGLE_CONN_ENABLED",  0],
-        ["EV_TOGGLE_FOLD",          0],
         ["EV_SEARCH",               0],
         ["EV_CONNECT_MANY",         0],
         ["EV_APPLY_CONNECT_MANY",   0],

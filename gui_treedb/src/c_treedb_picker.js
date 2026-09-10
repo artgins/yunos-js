@@ -4,10 +4,12 @@
  *      C_TREEDB_PICKER — the fixed tab-0 of each workspace (Topics /
  *      Graphs). It SELECTS which treedbs to open in this workspace:
  *
- *        - lists the configured backend connections (read-only here —
- *          connections are added / edited / removed in Settings);
- *        - shows each connection's live status and the services SELECTED
- *          in Settings (discovered on connect, `selected` flag);
+ *        - lists the backend connections that are CONNECTED or MARKED in
+ *          Connections (read-only here — connections are added, edited,
+ *          removed and marked there);
+ *        - shows each one's live status and EVERY service it discovered on
+ *          connect: Connections hands them over whole, and this picker is
+ *          where the operator decides what to open;
  *        - a checkbox per treedb opens/closes it as a tab in THIS
  *          workspace (per-workspace selection in C_TREEDB_CONFIG); the app
  *          root rebuilds the workspace tabs on the change.
@@ -56,6 +58,8 @@ import {
     treedb_links_get_open_error,
 } from "./c_treedb_links.js";
 
+import {conn_is_marked} from "./conn_helpers.js";
+
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
@@ -85,6 +89,7 @@ let PRIVATE_DATA = {
     $count:     null,   /*  "N connections · M treedbs · K open"  */
     $fold:      null,   /*  expand / collapse the whole tree  */
     $search:    null,
+    $placeholder: null, /*  what the empty table says, and why it is empty  */
     table:      null,
     table_id:   "",
     search:     "",     /*  survives a re-render (a connection opening)  */
@@ -246,6 +251,12 @@ function build_ui(gobj)
     priv.$count = createElement2(
         ["span", {class: "PICKER_COUNT is-size-7 has-text-grey ml-2"}, ""]);
 
+    /*  An ELEMENT, not a string: what it says depends on why the table is
+     *  empty (nothing configured, or nothing connected or marked), and that
+     *  is known only at each reload.  */
+    priv.$placeholder = createElement2(
+        ["div", {class: "PICKER_PLACEHOLDER"}, ""]);
+
     let $manage = createElement2(
         ["button", {class: "button PICKER_MANAGE",
                     i18n: "manage connections"}, "Manage connections"]);
@@ -269,9 +280,8 @@ function build_ui(gobj)
                      *  starts instead of leaving it floating at the end of a
                      *  line. Same place in the three tables of these apps.  */
                     ["h2", {class: "title is-5 mb-0", i18n: "treedbs"}, "TreeDBs"],
-                    /*  The fold and the search are ONE wrapping unit (see
-                     *  C_TREEDB_CONNECTIONS): they never end up on different
-                     *  lines.  */
+                    /*  The fold and the search are ONE wrapping unit: they
+                     *  never end up on different lines.  */
                     ["div", {class: "PICKER_FINDER is-flex is-align-items-center",
                              style: "gap:.5rem; flex:1 1 14rem; max-width:24rem; min-width:0;"},
                         [$fold, $search_control]],
@@ -314,14 +324,15 @@ function status_dot(connected)
 }
 
 /***************************************************************
- *  The services to browse for a connection: the ones SELECTED in
- *  Settings among the discovered list (treedb_config_conn_services).
+ *  The services to browse for a connection: EVERY one discovered
+ *  (treedb_config_conn_services). Connections hands them over whole;
+ *  what to open is decided here, one tab at a time.
  *
- *  This is the contract — like wattyzer's static route table. We do NOT
- *  fall back to enumerating every `services_roles` key: that offered
- *  NON-treedb services, and sending a treedb `descs` to a ranger fails
- *  with "command not available". When none are selected, the connection
- *  row says so.
+ *  The discovered list is the contract — like wattyzer's static route
+ *  table. We do NOT fall back to enumerating every `services_roles`
+ *  key: that offered NON-treedb services, and sending a treedb `descs`
+ *  to a ranger fails with "command not available". When nothing has
+ *  been discovered yet, the connection row says so.
  *
  *  C_TRANGER services (raw record stores) only make sense in the Topics
  *  workspace; Graphs keeps to C_NODE (a raw tranger has no hooks/fkeys
@@ -329,7 +340,7 @@ function status_dot(connected)
  ***************************************************************/
 function connection_services(conn, workspace)
 {
-    let list = treedb_config_conn_services(conn).filter((s) => s.selected);
+    let list = treedb_config_conn_services(conn);
     if(workspace !== "topics") {
         list = list.filter((s) => s.gclass !== "C_TRANGER");
     }
@@ -361,14 +372,14 @@ function connection_note(gobj, conn, connected, services)
             : t("cannot connect - retrying");
         return {text: msg + (detail ? ` (${detail})` : ""), danger: true};
     }
-    if(!services.length) {
-        return {text: t("no services selected"), danger: false};
-    }
     if(!connected) {
         return {
             text: conn.enabled ? t("connecting") : t("disconnected - open connections"),
             danger: false
         };
+    }
+    if(!services.length) {
+        return {text: t("no services discovered"), danger: false};
     }
     return {text: "", danger: false};
 }
@@ -386,6 +397,13 @@ function build_rows(gobj)
 
     for(let conn of conns) {
         let connected = links ? treedb_links_is_connected(links, conn.id) : false;
+        /*  Only what the operator is working with: a connection in session,
+         *  or one marked in Connections. A deploy centre pasted whole is two
+         *  hundred backends, and a picker listing all of them buries the
+         *  handful that are up.  */
+        if(!connected && !conn_is_marked(conn)) {
+            continue;
+        }
         let services = connection_services(conn, workspace);
         let note = connection_note(gobj, conn, connected, services);
         let children = [];
@@ -540,7 +558,7 @@ function create_table(gobj)
         index:                 "_key",
         layout:                "fitColumns",
         maxHeight:             "100%",
-        placeholder:           t("no connections yet"),
+        placeholder:           priv.$placeholder,
         columnDefaults:        {headerHozAlign: "left", resizable: false},
         columns:               make_columns(gobj),
         dataTree:              true,
@@ -564,6 +582,23 @@ function create_table(gobj)
 }
 
 /***************************************************************
+ *  Why the table is empty, when it is: nothing configured at all,
+ *  or nothing connected or marked in Connections.
+ ***************************************************************/
+function paint_placeholder(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.$placeholder) {
+        return;
+    }
+    let config = gobj_find_service("treedb_config", false);
+    let any = config ? treedb_config_get_connections(config).length > 0 : false;
+    priv.$placeholder.textContent = any
+        ? t("nothing connected or marked - open connections")
+        : t("no connections yet");
+}
+
+/***************************************************************
  *  Push the rows in, apply the search, say the count.
  *
  *  A handful of connections opens expanded — that is the whole screen
@@ -579,6 +614,7 @@ function reload_table(gobj)
     }
 
     let rows = build_rows(gobj);
+    paint_placeholder(gobj);
 
     /*  `setData()` RESETS the tree, and this table reloads on every tick:
      *  ticking a treedb would fold the connection you are ticking inside,

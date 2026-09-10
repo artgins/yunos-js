@@ -23,6 +23,26 @@ on its own, outside the yunetas superproject.
 
 ### Changed
 
+#### Connections says which backends; the pickers say which treedbs (gui_treedb 0.17.33)
+
+- **Connections has one row per connection, no service rows.** The services a
+  connection discovers are handed WHOLE to the pickers of Topics / Graphs, and
+  the picker is where the treedb to open is chosen. The row shows how many were
+  discovered; the search still matches their names; the fold button is gone.
+- **Its checkbox MARKS a connection** (`browse`, a new field of the
+  connection). The pickers list only the connections that are **connected or
+  marked** -- a deploy centre pasted whole no longer buries the handful that
+  are up -- and say so when that leaves them empty. A connection saved before
+  `browse` existed counts as marked when any service carries the old
+  per-service `selected` flag. An import keeps a `browse` the document
+  carries; the agent console's export carries none, so it arrives unmarked.
+- **The transport asks for EVERY discovered service** in its identity card
+  (`required_services`), not only the ticked ones: which treedb opens is
+  decided later, per tab, and `C_AUTHZ` grants roles per service named and
+  refuses nothing for a name it has no role for. A discovery that changes the
+  list reopens the transport, so a first connect reopens once, when its
+  services arrive.
+
 #### "For TreeDB" names a production yuno after its production node (gui_agent 0.22.62)
 
 A local copy of a yuno carries the production names in its config (that is how

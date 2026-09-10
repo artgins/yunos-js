@@ -8,7 +8,7 @@
  *      paste that carries one new yuno carries every old one with it.
  ***********************************************************************/
 import { describe, test, expect } from "vitest";
-import { conn_identity, plan_conn_import, conns_browse_state } from "./conn_helpers.js";
+import { conn_identity, plan_conn_import, conn_is_marked, conns_browse_state } from "./conn_helpers.js";
 
 const A = {url: "wss://a.example.com:1996", remote_yuno_service: "treedb"};
 const B = {url: "wss://b.example.com:1996", remote_yuno_service: "treedb"};
@@ -94,30 +94,46 @@ describe("what the document may carry", () => {
 });
 
 
-describe("what the header box of the browse column says", () => {
-    const conn = (...flags) => ({
+describe("a connection marked to browse", () => {
+    const legacy = (...flags) => ({
         services: flags.map((on, i) => ({service: `t${i}`, gclass: "C_NODE", selected: on}))
     });
 
-    test("every service of every connection ticked reads 'all'", () => {
-        expect(conns_browse_state([conn(true, true), conn(true)])).toBe("all");
+    test("`browse` says it", () => {
+        expect(conn_is_marked({browse: true})).toBe(true);
+        expect(conn_is_marked({browse: false})).toBe(false);
+    });
+
+    test("with no `browse`, an old per-service selection marks it", () => {
+        expect(conn_is_marked(legacy(false, true))).toBe(true);
+        expect(conn_is_marked(legacy(false, false))).toBe(false);
+    });
+
+    test("`browse` wins over the old flags", () => {
+        expect(conn_is_marked({...legacy(true), browse: false})).toBe(false);
+    });
+
+    test("nothing is not marked", () => {
+        expect(conn_is_marked(null)).toBe(false);
+        expect(conn_is_marked({})).toBe(false);
+    });
+});
+
+describe("what the header box of the browse column says", () => {
+    test("every connection marked reads 'all'", () => {
+        expect(conns_browse_state([{browse: true}, {browse: true}])).toBe("all");
     });
 
     test("one connection short of it reads 'some', not 'all'", () => {
-        expect(conns_browse_state([conn(true, true), conn(false)])).toBe("some");
+        expect(conns_browse_state([{browse: true}, {browse: false}])).toBe("some");
     });
 
-    test("counted over services: half of ONE connection is still 'some'", () => {
-        expect(conns_browse_state([conn(true, false)])).toBe("some");
+    test("nothing marked reads 'none'", () => {
+        expect(conns_browse_state([{browse: false}, {}])).toBe("none");
     });
 
-    test("nothing ticked reads 'none'", () => {
-        expect(conns_browse_state([conn(false), conn(false, false)])).toBe("none");
-    });
-
-    test("a connection with nothing discovered counts nowhere", () => {
-        expect(conns_browse_state([conn(true), {services: []}])).toBe("all");
-        expect(conns_browse_state([{services: []}])).toBe("none");
+    test("a connection with nothing discovered counts like any other", () => {
+        expect(conns_browse_state([{browse: true, services: []}])).toBe("all");
     });
 
     test("nothing at all is not a crash", () => {

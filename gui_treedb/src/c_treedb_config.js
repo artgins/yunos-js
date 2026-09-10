@@ -10,16 +10,20 @@
  *
  *        - connections: the list of backend endpoints the user added
  *            [{id, label, url, remote_yuno_role, remote_yuno_service,
- *              enabled, services}, ...]
+ *              enabled, browse, services}, ...]
  *          url/role/service are the C_IEVENT_CLI entry coordinates of ONE
  *          yuno (its public wss endpoint). `enabled` is the user's connect
  *          INTENT: transports open only for enabled connections (the
  *          connect/disconnect button in Settings toggles it — editing a
- *          row never auto-connects). `services` is the FULL list of
- *          C_NODE / C_TRANGER services discovered in that yuno on the first
- *          connect (refreshed on demand from Settings), each flagged
- *          `selected` when the user picked it for browsing — only selected
- *          services are offered in the workspace pickers.
+ *          row never auto-connects). `browse` MARKS the connection: the
+ *          pickers of Topics / Graphs list the connections that are
+ *          connected or marked. `services` is the FULL list of C_NODE /
+ *          C_TRANGER services discovered in that yuno on the first connect
+ *          (refreshed on demand from Settings); all of them are offered in
+ *          the pickers, which decide what to open. A connection saved
+ *          before `browse` existed counts as marked when any of its
+ *          services carries the old per-service `selected` flag
+ *          (conn_is_marked in conn_helpers.js).
  *          The access_token forwarded in each C_IEVENT_CLI identity_card is
  *          NOT stored here (it is fetched from the BFF per session — see
  *          c_login.js); only the non-secret connection coordinates are.
@@ -65,7 +69,7 @@ const SEL_SEP = "\x1f";
  ***************************************************************/
 const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",       0,                        null, "Subscriber of output events"),
-SDATA(data_type_t.DTP_JSON,     "connections",      sdata_flag_t.SDF_PERSIST, "[]", "Configured backends: [{id,label,url,remote_yuno_role,remote_yuno_service,enabled,services}]"),
+SDATA(data_type_t.DTP_JSON,     "connections",      sdata_flag_t.SDF_PERSIST, "[]", "Configured backends: [{id,label,url,remote_yuno_role,remote_yuno_service,enabled,browse,services}]"),
 SDATA(data_type_t.DTP_JSON,     "selected_treedbs", sdata_flag_t.SDF_PERSIST, "{}", "Open (conn,treedb) tabs per workspace: {workspace: [{id,conn_id,treedb_name,label}]}"),
 SDATA(data_type_t.DTP_JSON,     "active_tabs",      sdata_flag_t.SDF_PERSIST, "{}", "Last-active tab per workspace: {workspace: sel_id}"),
 SDATA(data_type_t.DTP_JSON,     "tranger_views",    sdata_flag_t.SDF_PERSIST, "{}", "Open Tranger key-views per connection: {conn_id: [{treedb_name,topic,key,mode,match_cond}]}"),
@@ -169,7 +173,9 @@ function treedb_config_service_key(svc)
  *  The discovered services of a connection, normalized:
  *  [{key, service, gclass, selected}]. All of them live in the yuno
  *  the transport is connected to (addressed with a plain `service`
- *  kw); only `selected` ones are offered in the workspace pickers.
+ *  kw), and all of them are offered in the workspace pickers.
+ *  `selected` is the legacy per-service flag, read only by
+ *  conn_is_marked() for a connection saved before `browse`.
  ***************************************************************/
 function treedb_config_conn_services(conn)
 {
@@ -221,18 +227,19 @@ function do_set_conn_services(gobj, conn_id, services)
 }
 
 /***************************************************************
- *  Tick or untick the browse flag of EVERY service of MANY
- *  connections, in ONE write.
+ *  Mark or unmark MANY connections to browse (`browse`), in ONE
+ *  write. The pickers of Topics / Graphs list the connections that
+ *  are connected or marked.
  *
- *  A pasted deploy centre is two hundred backends and a thousand
- *  treedbs: one EV_SET_CONN_SERVICES per connection would persist the
- *  config two hundred times and publish the change two hundred times,
- *  and every subscriber rebuilds its pickers on each one.
+ *  A pasted deploy centre is two hundred backends: one write per
+ *  connection would persist the config two hundred times and publish
+ *  the change two hundred times, and every subscriber rebuilds its
+ *  pickers on each one.
  *
- *  A connection with nothing discovered is left alone: there is
- *  nothing of it to browse, and writing it back would only churn.
+ *  The flag is written even on a connection with nothing discovered:
+ *  marking is what lists it in the pickers before it ever connects.
  ***************************************************************/
-function do_set_conns_browse(gobj, conn_ids, selected)
+function do_set_conns_browse(gobj, conn_ids, browse)
 {
     let want = new Set(Array.isArray(conn_ids) ? conn_ids : []);
     let list = treedb_config_get_connections(gobj);
@@ -242,13 +249,10 @@ function do_set_conns_browse(gobj, conn_ids, selected)
         if(!list[i] || !want.has(list[i].id)) {
             continue;
         }
-        let services = sanitize_services(list[i].services);
-        if(!services.length) {
+        if(list[i].browse === browse) {
             continue;
         }
-        list[i] = Object.assign({}, list[i], {
-            services: services.map((svc) => Object.assign({}, svc, {selected: selected}))
-        });
+        list[i] = Object.assign({}, list[i], {browse: browse});
         touched++;
     }
 
@@ -811,7 +815,7 @@ function ac_set_conns_browse(gobj, event, kw, src)
         log_error(`${GCLASS_NAME}: EV_SET_CONNS_BROWSE without conn_ids`);
         return -1;
     }
-    do_set_conns_browse(gobj, ids, !!(kw && kw.selected));
+    do_set_conns_browse(gobj, ids, !!(kw && kw.browse));
     return 0;
 }
 

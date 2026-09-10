@@ -96,7 +96,6 @@ const en = {
         "not now": "Not now",
         "class": "Class",
         "browse": "Browse",
-        "browse all of this connection": "Browse all of this connection",
         "browse everything on screen": "Browse everything on screen",
         "cause":                              "Cause",
         "user":                               "User",
@@ -370,11 +369,12 @@ const en = {
         "open": "open",
         "treedb": "TreeDB",
         "no connections - click add connection": "No connections — click Add connection",
-        "connections help": "Edit cells inline. Each URL is a yuno's public wss endpoint (plus its role and service). Connect with the plug button — services are discovered on the first connect; check the ones to browse.",
+        "connections help": "Edit cells inline. Each URL is a yuno's public wss endpoint (plus its role and service). Connect with the plug button — its services are discovered on the first connect and offered whole in Topics and Graphs. Mark a connection to list it there while it is not connected.",
         "backend not connected": "Backend not connected",
 
         /* service discovery + tranger records browser (added 2026-07-11) */
-        "no services selected": "No services selected — pick them in Settings",
+        "no services discovered": "No services discovered yet",
+        "nothing connected or marked - open connections": "No connection is connected or marked — open Connections",
         "disconnected - open connections": "Disconnected — connect it in Connections",
         "connect": "Connect",
         "connect several connections": "Connect several connections",

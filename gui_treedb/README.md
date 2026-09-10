@@ -45,7 +45,9 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   The picker — tab 0 of Topics/Graphs, at **`/<ws>/select`** and labelled
   **Select** — chooses which services to open per workspace. It is NOT the
   Connections rail item: that one manages the backends, this one ticks which of
-  a backend's treedbs to open. Both the label and the path used to say
+  a backend's treedbs to open. It lists only the connections that are
+  **connected or marked** in Connections, each with EVERY service it
+  discovered. Both the label and the path used to say
   *connections*, which was only survivable while one of the two hid under the
   avatar. A connection whose backend is down is retried with a **backoff**
   (5s → 60s, jittered), not every 5s for ever.
@@ -53,22 +55,21 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   `C_TREEDB_LINKS` discovers the yuno's **`C_NODE` / `C_TRANGER`** services
   automatically (one `services` command to `__yuno__`) and persists the WHOLE
   found list in the connection (`services`); the row's refresh button re-runs
-  it, preserving the selection. The services are the connection's **dataTree
-  children**, the same tree the agent console's picker draws — the two tables
-  show the same thing and one is pasted literally into the other, so they are
-  read the same way. Their checkbox edits each service's `selected` flag —
-  only selected services are offered in the pickers (Topics: `C_NODE` +
-  `C_TRANGER`; Graphs: `C_NODE` only) — and it says the same thing at all
-  three levels: on a service, on its connection (three states, taking or
-  dropping the lot) and in the **column header**, which covers what the filter
-  leaves ON SCREEN and is counted over services, so it cannot read "all" while
-  half a connection is unticked. Discovery failures are reported above the
-  table.
+  it. Connections has **one row per connection and no service rows**: the
+  services are handed WHOLE to the pickers (Topics: `C_NODE` + `C_TRANGER`;
+  Graphs: `C_NODE` only), and the picker is where the operator decides which
+  treedb to open. The row shows how many were discovered, and the search
+  matches their names. The row checkbox **marks** the connection (`browse`):
+  a marked connection is listed in the pickers even while it is not
+  connected. The **column header** box marks or unmarks what the filter
+  leaves ON SCREEN. A connection saved before `browse` existed counts as
+  marked when any of its services carries the old per-service `selected`
+  flag. Discovery failures are reported above the table.
 - **Transport:** `C_TREEDB_LINKS` owns one `C_IEVENT_CLI` per connection (and
   runs the discovery — it is a named service, so command answers route back
   to it). Every discovered service lives in the connected yuno and is
   addressed directly (`kw.service`).
-- **Tranger browser:** selected `C_TRANGER` services (Topics workspace only)
+- **Tranger browser:** `C_TRANGER` services (Topics workspace only)
   open `C_TRANGER_VIEW`: topic tabs and a per-topic Keys picker
   (responsive — a moveable, non-modal window on desktop, an adaptive modal sheet
   on mobile; each key's Rows/Live button is colored only while that view is open
@@ -121,15 +122,18 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   (BFF httpOnly cookie, same origin). Because that cookie cannot travel to a
   backend on another host, the SPA fetches the access_token from the BFF
   (`POST /auth/token`, opt-in — see yunetas `c_auth_bff.c` + `YUNO_AUTH.md §2.2`)
-  and **forwards it in each `C_IEVENT_CLI` identity_card**. The connection's
-  SELECTED services are advertised in **that transport's own**
+  and **forwards it in each `C_IEVENT_CLI` identity_card**. EVERY service the
+  connection discovered is advertised in **that transport's own**
   `required_services` (a per-link `C_IEVENT_CLI` attr), which the backend's
   `C_AUTHZ` needs to authorize the treedb commands (else the `descs` is silently
-  dropped); a selection change recreates the connection to re-send the card.
-  It is per link, not the yuno-wide attr, because that one can only be the
-  UNION of every configured backend's selection — each backend would be told the
-  service names of all the others. Each remote backend must have the issuer JWKS
-  provisioned.
+  dropped) — every one, because which treedb opens is decided later, per tab,
+  in the pickers; `C_AUTHZ` grants roles per service named and refuses nothing
+  for a name the user has no role for. A discovery that changes the list
+  recreates the connection to re-send the card (so a first connect reopens once,
+  when its services arrive). It is per link, not the yuno-wide attr, because
+  that one can only be the UNION of every configured backend's services — each
+  backend would be told the service names of all the others. Each remote
+  backend must have the issuer JWKS provisioned.
 
 - **A session that survives the real world.** The access_token is refreshed
   before it expires, and a refresh that could not be MADE (network down, BFF

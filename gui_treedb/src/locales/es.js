@@ -100,7 +100,6 @@ const es = {
         "not now": "Ahora no",
         "class": "Clase",
         "browse": "Examinar",
-        "browse all of this connection": "Examinar todos los de esta conexión",
         "browse everything on screen": "Examinar todo lo que se ve",
         "cause":                              "Motivo",
         "user":                               "Usuario",
@@ -374,11 +373,12 @@ const es = {
         "open": "abiertos",
         "treedb": "TreeDB",
         "no connections - click add connection": "Sin conexiones — pulsa Añadir conexión",
-        "connections help": "Edita las celdas en línea. Cada URL es el endpoint público wss de un yuno (más su rol y servicio). Conecta con el botón del enchufe — los servicios se descubren en la primera conexión; marca los que quieras explorar.",
+        "connections help": "Edita las celdas en línea. Cada URL es el endpoint público wss de un yuno (más su rol y servicio). Conecta con el botón del enchufe — sus servicios se descubren en la primera conexión y se ofrecen todos en Topics y Graphs. Marca una conexión para que salga allí aunque no esté conectada.",
         "backend not connected": "Backend no conectado",
 
         /* service discovery + tranger records browser (added 2026-07-11) */
-        "no services selected": "No hay servicios seleccionados — márcalos en Ajustes",
+        "no services discovered": "Aún no se han descubierto servicios",
+        "nothing connected or marked - open connections": "Ninguna conexión está conectada ni marcada — abre Conexiones",
         "disconnected - open connections": "Desconectada — conéctala en Conexiones",
         "connect": "Conectar",
         "connect several connections": "Conectar varias conexiones",

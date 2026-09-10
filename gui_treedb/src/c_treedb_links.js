@@ -35,8 +35,8 @@
  *          (`services` command): automatically on the first EV_ON_OPEN of a
  *          connection with no stored services, on demand from the Settings
  *          refresh button. The WHOLE found list is persisted in the
- *          connection's `services` (C_TREEDB_CONFIG), preserving the
- *          user's `selected` flags;
+ *          connection's `services` (C_TREEDB_CONFIG), and the pickers of
+ *          Topics / Graphs offer all of it;
  *        - keep every live transport's `jwt` fresh so a reconnect after a
  *          token refresh re-sends a valid identity_card.
  *
@@ -206,11 +206,15 @@ function do_ensure(gobj, conn)
          *  identity_card falls back to the yuno's `required_services` when this
          *  is empty — and that list is necessarily the union, so each backend
          *  was told the service names of all the others and got a card naming
-         *  services it does not host. conn_coords includes the selection, so
-         *  changing it recreates the transport and the card is re-sent.
+         *  services it does not host. EVERY discovered service, not a chosen
+         *  few: which treedb is opened is decided in the pickers of Topics /
+         *  Graphs, per tab, and a card naming only some of them left the
+         *  others without their roles (c_authz grants roles per service named
+         *  here, and refuses nothing for a name it has no role for).
+         *  conn_coords includes the list, so a discovery that changes it
+         *  recreates the transport and the card is re-sent.
          */
         required_services:   treedb_config_conn_services(conn)
-                                 .filter((s) => s.selected)
                                  .map((s) => s.service),
         /*
          *  The `subscriber` attr makes the iev deliver its LOCAL published
@@ -243,20 +247,18 @@ function do_ensure(gobj, conn)
  ***************************************************************/
 function conn_coords(conn)
 {
-    /*  The SELECTED services are included so (de)selecting one reopens
-     *  the connection: they feed the yuno's required_services, which is
-     *  baked into the identity_card the backend uses to authorize
-     *  per-service command access. The rest of the discovered list is
-     *  informative only — a refresh that preserves the selection must
-     *  NOT bounce the transport.  */
-    let selected = treedb_config_conn_services(conn)
-        .filter((s) => s.selected)
+    /*  The discovered services are included: they feed the yuno's
+     *  required_services, which is baked into the identity_card the
+     *  backend uses to authorize per-service command access. A refresh
+     *  that finds the same list does NOT bounce the transport; one that
+     *  finds another does, so the new services get their roles.  */
+    let services = treedb_config_conn_services(conn)
         .map((s) => s.service)
         .sort()
         .join(",");
     return (conn.url || "") + "|" + (conn.remote_yuno_role || "")
         + "|" + (conn.remote_yuno_service || "")
-        + "|" + selected;
+        + "|" + services;
 }
 
 /***************************************************************
