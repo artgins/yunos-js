@@ -18,6 +18,11 @@ const en = {
     name: "English",
 
     translation: {
+        "breadcrumbs":                                  "Breadcrumbs",
+        "minimize":                                     "Minimize",
+        "maximize":                                     "Maximize",
+        "coordinates...":                               "Coordinates...",
+        "discard":                                      "Discard",
         "select row":                                       "Select row",
         "agent console toolbar":                            "Agent Console toolbar",
         "agent console home":                               "Agent Console, go home",

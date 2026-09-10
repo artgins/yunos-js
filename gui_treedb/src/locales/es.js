@@ -26,6 +26,10 @@ const es = {
     name: "Español",
 
     translation: {
+        "breadcrumbs":                                  "Miga de pan",
+        "minimize":                                     "Minimizar",
+        "maximize":                                     "Maximizar",
+        "coordinates...":                               "Coordenadas...",
         "select row":                                       "Seleccionar la fila",
         "treedb gui toolbar":                               "Barra de TreeDB GUI",
         "treedb gui home":                                  "TreeDB GUI, ir al inicio",

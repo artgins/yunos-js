@@ -18,6 +18,11 @@ const es = {
     name: "Español",
 
     translation: {
+        "breadcrumbs":                                  "Miga de pan",
+        "minimize":                                     "Minimizar",
+        "maximize":                                     "Maximizar",
+        "coordinates...":                               "Coordenadas...",
+        "discard":                                      "Descartar",
         "select row":                                       "Seleccionar la fila",
         "agent console toolbar":                            "Barra de la consola del agente",
         "agent console home":                               "Consola del agente, ir al inicio",

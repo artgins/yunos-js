@@ -137,6 +137,10 @@ function collect_used_keys() {
     /*  Both quote styles: this app quotes with ", the library with '.  */
     const patterns = [
         /\bt\(\s*['"]([^'"]+)['"]/g,
+        /*  A local ALIAS of `t` is a blind spot: `yui_tabulator_i18n.js`
+         *  asks for its whole chrome through `tr(key, default)`, so a scan
+         *  of `t(` saw none of it.  */
+        /\btr\(\s*['"]([^'"]+)['"]/g,
         /\bi18n:\s*['"]([^'"]+)['"]/g,
         /["']data-i18n(?:-title|-aria-label|-placeholder)?["']:\s*['"]([^'"]+)['"]/g,
         /data-i18n(?:-title|-aria-label|-placeholder)?=["']([^"']+)["']/g
