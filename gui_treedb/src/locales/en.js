@@ -26,6 +26,11 @@ const en = {
     name: "English",
 
     translation: {
+        "vertical tree compact":                        "Vertical tree compact",
+        "horizontal tree":                              "Horizontal tree",
+        "horizontal tree compact":                      "Horizontal tree compact",
+        "lanes vertical":                               "Lanes vertical",
+        "lanes horizontal":                             "Lanes horizontal",
         "browser console only":                         "Browser console only (nothing is shown in this window)",
         "detailed":                                     "Detailed",
         "dev window and browser console":               "Dev window and browser console",

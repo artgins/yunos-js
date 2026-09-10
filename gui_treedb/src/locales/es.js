@@ -26,6 +26,13 @@ const es = {
     name: "Español",
 
     translation: {
+        "vertical tree compact":                        "Árbol vertical compacto",
+        "horizontal tree":                              "Árbol horizontal",
+        "horizontal tree compact":                      "Árbol horizontal compacto",
+        "lanes vertical":                               "Carriles vertical",
+        "lanes horizontal":                             "Carriles horizontal",
+        /*  Layouts of the frontend view (C_YUI_GOBJ_TREE_JS): the KEY is
+         *  the layout id, the same choice its sibling treedb graph makes.  */
         "browser console only":                         "Sólo la consola del navegador (nada se muestra en esta ventana)",
         "detailed":                                     "Detallada",
         "dev window and browser console":               "La ventana de desarrollo y la consola del navegador",
