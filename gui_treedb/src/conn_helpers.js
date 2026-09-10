@@ -45,6 +45,14 @@ function conn_identity(conn)
  *
  *      `fresh` are the rows to add, in the order the document gives
  *      them, each identity once -- a document repeats itself too.
+ *
+ *      The key of a record is its `id` (the rule of every data record:
+ *      the key is `id`, the rest is value), and gui_agent's export
+ *      carries one -- the endpoint, `host:port`. A row whose `id` is
+ *      already here IS that connection, whatever its url says now. A
+ *      row with no `id` (an older export, a hand-written list) falls
+ *      back to url + service, which is also checked for every row: two
+ *      records that reach the same backend are one connection.
  *      `skipped` counts what was already here. A row already here is
  *      NOT updated: it may have been edited since (a host fixed by
  *      hand, services unticked), and the document arriving is not more
@@ -55,7 +63,9 @@ function conn_identity(conn)
  ***************************************************************/
 function plan_conn_import(existing, rows)
 {
-    let seen = new Set((Array.isArray(existing) ? existing : []).map(conn_identity));
+    let list = Array.isArray(existing) ? existing : [];
+    let seen = new Set(list.map(conn_identity));
+    let seen_ids = new Set(list.map(conn_id_of).filter(Boolean));
     let fresh = [];
     let skipped = 0;
 
@@ -64,15 +74,25 @@ function plan_conn_import(existing, rows)
             continue;
         }
         let identity = conn_identity(conn);
-        if(seen.has(identity)) {
+        let id = conn_id_of(conn);
+        if(seen.has(identity) || (id && seen_ids.has(id))) {
             skipped++;
             continue;
         }
         seen.add(identity);
+        if(id) {
+            seen_ids.add(id);
+        }
         fresh.push(conn);
     }
 
     return {fresh: fresh, skipped: skipped};
+}
+
+/*  The key a record carries, "" when it carries none.  */
+function conn_id_of(conn)
+{
+    return String((conn && conn.id) || "").trim();
 }
 
 /***************************************************************

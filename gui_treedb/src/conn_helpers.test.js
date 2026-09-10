@@ -58,6 +58,26 @@ describe("what makes two connections the same one", () => {
     });
 });
 
+describe("the id is the key of a record", () => {
+    test("the same id is the same connection, even if its url changed", () => {
+        let here = {...A, id: "artgins.yunetacontrol.com:1996"};
+        let moved = {...A, id: "artgins.yunetacontrol.com:1996", url: "wss://elsewhere:1996"};
+        expect(plan_conn_import([here], [moved])).toEqual({fresh: [], skipped: 1});
+    });
+
+    test("an id the document repeats lands once", () => {
+        let one = {...A, id: "k"};
+        let two = {...B, id: "k"};
+        expect(plan_conn_import([], [one, two])).toEqual({fresh: [one], skipped: 1});
+    });
+
+    test("two ids are two connections when their endpoints differ", () => {
+        let com = {...A, id: "artgins.yunetacontrol.com:1996"};
+        let ovh = {...B, id: "artgins.yunetacontrol.ovh:1997"};
+        expect(plan_conn_import([], [com, ovh])).toEqual({fresh: [com, ovh], skipped: 0});
+    });
+});
+
 describe("what the document may carry", () => {
     test("a document that repeats itself lands once", () => {
         expect(plan_conn_import([], [A, A, B])).toEqual({fresh: [A, B], skipped: 1});

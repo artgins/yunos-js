@@ -23,6 +23,24 @@ on its own, outside the yunetas superproject.
 
 ### Changed
 
+#### A connection carries its `id` (gui_agent 0.22.60, gui_treedb 0.17.30)
+
+"For TreeDB" (the `yuneta.treedb.connections` document) wrote its records
+without a key, while "Copy JSON" of the same tree carries one -- so a document
+of 7 connections from 6 nodes could not be checked for a duplicate, and the two
+controlcenters of artgins (`:1996` and `:1997`, one per plane) were both
+labelled `artgins · controlcenter`. Now:
+
+- gui_agent: every connection record carries `id` = `<node>^<yuno_id>`, the
+  yuno's own key in the tree with `^` for the row's `\x1f` (gui_treedb
+  reserves that one for its selection keys), and a label of `role^name`:
+  `artgins · controlcenter^1996`.
+- gui_treedb: an import KEEPS the record's `id` (it made up a UUID for every
+  row, so the same document imported twice could not be recognised by key),
+  and a row whose `id` is already configured is that connection whatever its
+  url says now. A row with no `id` -- an older export, a hand-written list --
+  still falls back to url + service, which is also checked for every row.
+
 #### The key of a row is `id` (gui_agent 0.22.59)
 
 The node views follow the key:value rule -- the key of a record is `id`, the

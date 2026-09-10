@@ -2148,8 +2148,11 @@ function ac_import_conns(gobj, event, kw, src)
     let list = treedb_config_get_connections(config);
     let plan = plan_conn_import(list, rows);
     let skipped = plan.skipped;
+    /*  The record's own key is kept: it is what tells the next import
+     *  this connection is already here. Only a record that carries none
+     *  gets one made up.  */
     let imported = plan.fresh.map((c) => ({
-        id:                  new_id(),
+        id:                  (c.id && String(c.id).trim()) || new_id(),
         label:               String(c.label || ""),
         url:                 String(c.url),
         remote_yuno_role:    String(c.remote_yuno_role || ""),

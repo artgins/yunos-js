@@ -1354,7 +1354,17 @@ function conn_of_scanned(row, endpoint, services)
     }
 
     return {
-        label:               `${row.node} · ${row.role || row.label}`,
+        /*  The record's key (a data record is `id` + value): the yuno's
+         *  own key in this tree -- its node and its yuno id -- so the same
+         *  yuno is the same id in "Copy JSON" and here. `^` joins them,
+         *  not the row's \x1f: gui_treedb reserves that one to compose its
+         *  selection keys (sel_id), and a connection id carrying it would
+         *  split them. gui_treedb keeps this id on import, which is what
+         *  tells a second import the connection is already there.  */
+        id:                  `${row.node}^${row.yuno_id}`,
+        /*  `role^name`, not the role alone: two yunos of one role on one
+         *  node (the controlcenters of the two planes) read as one.  */
+        label:               `${row.node} · ${row.label || row.role}`,
         url:                 `wss://${host}:${port}`,
         remote_yuno_role:    row.role || "",
         /*  The yuno's own top service, from the same answer that listed
