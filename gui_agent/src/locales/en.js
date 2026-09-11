@@ -671,6 +671,8 @@ const en = {
         "highlight topic":      "Highlight topic",
         "loose records":        "Loose records: nothing hangs them; click to show or hide",
         "hidden topics":        "in hidden topics",
+        "not shown":            "not shown",
+        "find on screen":       "Find on screen (Enter: next, Shift+Enter: previous)",
         "selection mode":       "Selection mode",
         "redo":                 "Redo",
         "link to hook":         "Link to hook",

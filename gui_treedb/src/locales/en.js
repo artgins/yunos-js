@@ -362,6 +362,8 @@ const en = {
         "fold level": "Main tree: its topic and the level shown",
         "level": "level",
         "hidden topics": "in hidden topics",
+        "not shown": "not shown",
+        "find on screen": "Find on screen (Enter: next, Shift+Enter: previous)",
         "loose records": "Loose records: nothing hangs them; click to show or hide",
         "highlight topic": "Highlight topic",
         "main topic": "Main hierarchical topic: the tree hangs from it",

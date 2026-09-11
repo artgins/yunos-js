@@ -366,6 +366,8 @@ const es = {
         "fold level": "Árbol principal: su topic y el nivel mostrado",
         "level": "nivel",
         "hidden topics": "en topics ocultos",
+        "not shown": "sin mostrar",
+        "find on screen": "Buscar en pantalla (Intro: siguiente, Mayús+Intro: anterior)",
         "loose records": "Registros sueltos: no cuelgan de nada; pulsa para verlos u ocultarlos",
         "highlight topic": "Resaltar topic",
         "main topic": "Topic jerárquico principal: el árbol cuelga de él",

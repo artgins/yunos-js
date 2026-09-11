@@ -679,6 +679,8 @@ const es = {
         "highlight topic":      "Resaltar topic",
         "loose records":        "Registros sueltos: no cuelgan de nada; pulsa para verlos u ocultarlos",
         "hidden topics":        "en topics ocultos",
+        "not shown":            "sin mostrar",
+        "find on screen":       "Buscar en pantalla (Intro: siguiente, Mayús+Intro: anterior)",
         "selection mode":       "Modo selección",
         "redo":                 "Rehacer",
         "link to hook":         "Enlazar al hook",
