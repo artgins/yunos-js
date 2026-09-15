@@ -23,7 +23,7 @@ on its own, outside the yunetas superproject.
 
 ### Fixed
 
-#### A drill of the Tranger view's JSON viewer opens its branch (gui_treedb)
+#### A drill of the Tranger view's JSON viewer opens its branch (gui_treedb 0.17.34)
 
 `request_print_tranger()` sent `path` at the top of the kw, and C_IEVENT_CLI
 hands back only the `__md_command__` frame, so the answer of a drill came back
