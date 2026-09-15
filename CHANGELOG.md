@@ -21,6 +21,16 @@ on its own, outside the yunetas superproject.
 
 ## Unreleased
 
+### Fixed
+
+#### A drill of the Tranger view's JSON viewer opens its branch (gui_treedb)
+
+`request_print_tranger()` sent `path` at the top of the kw, and C_IEVENT_CLI
+hands back only the `__md_command__` frame, so the answer of a drill came back
+without its path. The subtree replaced the whole document, and a failed drill
+painted its error over the whole view. It now sends `__md_command__: {path}`.
+gobj-ui 7.23.168 does the same for the treedb views of both yunos.
+
 ### Changed
 
 #### Connections says which backends; the pickers say which treedbs (gui_treedb 0.17.33)

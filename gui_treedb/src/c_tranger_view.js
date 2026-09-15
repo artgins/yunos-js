@@ -1518,7 +1518,11 @@ function request_print_tranger(gobj, path)
             expanded:    1,
             lists_limit: 100,
             dicts_limit: 100,
-            path:        path || ""
+            path:        path || "",
+            /*  What comes BACK: C_IEVENT_CLI extracts __md_command__ and the
+             *  answer carries only this frame. Without the path a drill
+             *  replaced the whole document.  */
+            __md_command__: {path: path || ""}
         }, gobj);
 }
 
