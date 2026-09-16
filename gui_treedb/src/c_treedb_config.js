@@ -156,7 +156,15 @@ function sanitize_services(list)
     return list.filter((s) => s && s.service && s.gclass).map((s) => ({
         service:  s.service,
         gclass:   s.gclass,
-        selected: !!s.selected
+        selected: !!s.selected,
+        /*  Whether the yuno is the MASTER of this treedb's tranger, as the
+         *  discovery's `treedb-info` answered it. A boolean or ABSENT, and
+         *  absent means UNKNOWN -- a node older than the command cannot
+         *  answer, and a connection stored before this existed carries
+         *  nothing. Unknown is treated as writable everywhere that reads
+         *  it: locking an editor that works today, on a guess, is worse
+         *  than offering a button the backend refuses.  */
+        ...(typeof s.master === "boolean" ? {master: s.master} : {})
     }));
 }
 
@@ -171,11 +179,13 @@ function treedb_config_service_key(svc)
 
 /***************************************************************
  *  The discovered services of a connection, normalized:
- *  [{key, service, gclass, selected}]. All of them live in the yuno
+ *  [{key, service, gclass, selected, master}]. All of them live in the yuno
  *  the transport is connected to (addressed with a plain `service`
  *  kw), and all of them are offered in the workspace pickers.
  *  `selected` is the legacy per-service flag, read only by
  *  conn_is_marked() for a connection saved before `browse`.
+ *  `master` is true / false / NULL, and null is unknown -- see
+ *  sanitize_services().
  ***************************************************************/
 function treedb_config_conn_services(conn)
 {
@@ -186,7 +196,8 @@ function treedb_config_conn_services(conn)
         key:      treedb_config_service_key(svc),
         service:  svc.service,
         gclass:   svc.gclass,
-        selected: svc.selected
+        selected: svc.selected,
+        master:   (typeof svc.master === "boolean") ? svc.master : null
     }));
 }
 

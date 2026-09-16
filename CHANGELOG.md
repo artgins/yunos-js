@@ -23,6 +23,34 @@ on its own, outside the yunetas superproject.
 
 ### Fixed
 
+#### A replica opens without its write buttons (gui_treedb 0.17.36)
+
+Only the MASTER of a treedb's tranger can write: on a replica the yuno answers
+*"READ-ONLY"* to every write (SDK 7.13.0). gui_treedb never asked, so it mounted
+the editor with its full toolbar and let the backend refuse the writes one at a
+time — the reader found out by trying. Both library views have carried a
+`readonly` attr for this since gobj-ui 5.16.0, and both descriptions say *"(ask
+`treedb-info`)"* in so many words.
+
+**The question belongs to the DISCOVERY, not to the mount.** The library reads
+`readonly` once, when it draws a topic's toolbar, so an answer that arrives
+after the view is built is an answer that arrives too late. A connection's scan
+already asks the yuno for its services; it now asks `treedb-info` per `C_NODE`
+service found and stores the answer beside the service, so
+`C_TREEDB_VIEW` reads it with no round trip at all when it builds either view.
+
+The flag is THREE-VALUED and that is the point: true, false, and **unknown** —
+a node older than the command cannot answer, and a connection stored before any
+of this carries nothing. Unknown is treated as writable, because locking an
+editing session that works today, on a guess, is worse than a button the
+backend refuses. Same choice the agent console made for the same question.
+
+It also fixes a correlation bug that was waiting for exactly this: `C_TREEDB_LINKS`
+took EVERY command answer on a connection as its scan's, because `services` was
+the only command it ever sent. A second command would have had its answer eaten
+by the first one's reader. Answers are routed by the command they answer now,
+read off the command stack.
+
 #### Every deferral is a posted event, and the scan watchdog is a C_TIMER child (gui_treedb 0.17.35)
 
 The leftovers of the 2026-07-13 audit that were still using raw `setTimeout`,

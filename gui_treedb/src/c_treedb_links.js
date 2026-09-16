@@ -62,6 +62,7 @@ import {
     gobj_is_running,
     gobj_current_state,
     gobj_command,
+    msg_iev_get_stack,
     set_timeout,
     clear_timeout,
 } from "@yuneta/gobj-js";
@@ -408,9 +409,10 @@ function do_scan(gobj, conn_id)
     set_timeout(timer, SCAN_TIMEOUT_MS);
 
     priv.scans[conn_id] = {
-        services: null,   /*  found list; null = no successful answer yet  */
-        errors:   [],
-        timer:    timer
+        services:    null, /*  found list; null = no successful answer yet  */
+        errors:      [],
+        master_left: 0,    /*  `treedb-info` answers still owed  */
+        timer:       timer
     };
 
     gobj_command(iev, "services", {service: "__yuno__"}, gobj);
@@ -672,12 +674,33 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return 0;
     }
 
+    /*
+     *  WHICH command this answers, and not "the only one we ever send".
+     *  A scan issues `services` and then one `treedb-info` per C_NODE
+     *  service found, so correlating by connection alone would feed one
+     *  command's answer to the other's reader. The command stack is what
+     *  C_IEVENT_CLI puts back for exactly this.
+     */
+    let __command__ = msg_iev_get_stack(gobj, kw, "command_stack", true);
+    let command = __command__ ? (__command__.command || "") : "";
+    let kw_command = (__command__ && __command__.kw) || {};
+
     let result = (kw && kw.result !== undefined) ? kw.result : -1;
     let comment = (kw && kw.comment) || "";
     let data = kw ? kw.data : null;
 
     let e = priv.conns[conn_id];
     let yuno = (e && e.role) || "";
+
+    if(command === "treedb-info") {
+        master_answered(
+            gobj, conn_id, kw_command.service || "",
+            (result >= 0 && data && typeof data.master === "boolean")?
+                data.master : null,
+            (result < 0)? String(comment || "treedb-info failed") : ""
+        );
+        return 0;
+    }
 
     if(result < 0) {
         scan.errors.push({
@@ -701,8 +724,88 @@ function ac_mt_command_answer(gobj, event, kw, src)
             .filter((r) => r && (r.gclass === "C_NODE" || r.gclass === "C_TRANGER"))
             .map((r) => ({service: r.service, gclass: r.gclass}));
     }
+
+    /*
+     *  Discovery is not over: WHICH of them can be WRITTEN is part of what
+     *  a connection discovers, and it has to be known before a view is
+     *  built -- the library reads `readonly` once, when it draws a topic's
+     *  toolbar. Only the master of a treedb's tranger can write; the yuno
+     *  answers "READ-ONLY" to every write on a replica (SDK 7.13.0), and
+     *  until now the SPA mounted the editor with its write buttons and let
+     *  the backend refuse them one by one.
+     *
+     *  A C_TRANGER has no treedb and no such question.
+     */
+    if(ask_masters(gobj, conn_id) > 0) {
+        return 0;   /*  finish_scan when the last one answers  */
+    }
+
     finish_scan(gobj, conn_id, null);
     return 0;
+}
+
+/***************************************************************
+ *  Ask every C_NODE service found whether this yuno is the MASTER
+ *  of its treedb. Returns how many answers are owed.
+ ***************************************************************/
+function ask_masters(gobj, conn_id)
+{
+    let priv = gobj.priv;
+    let scan = priv.scans[conn_id];
+    let e = priv.conns[conn_id];
+    let iev = (e && e.iev) ? e.iev : null;
+
+    if(!scan || !Array.isArray(scan.services) || !iev) {
+        return 0;
+    }
+
+    let nodes = scan.services.filter((s) => s.gclass === "C_NODE");
+    scan.master_left = nodes.length;
+    for(let svc of nodes) {
+        gobj_command(iev, "treedb-info", {service: svc.service}, gobj);
+    }
+    return scan.master_left;
+}
+
+/***************************************************************
+ *  One `treedb-info` answer, or its failure.
+ *
+ *  A service whose answer failed keeps NO `master` field, i.e.
+ *  unknown, and unknown is writable: a node older than the command
+ *  cannot answer, and locking an editing session that works today
+ *  on a guess is worse than a button the backend refuses. Same
+ *  choice the agent console made.
+ ***************************************************************/
+function master_answered(gobj, conn_id, service, master, error)
+{
+    let priv = gobj.priv;
+    let scan = priv.scans[conn_id];
+
+    if(!scan || !scan.master_left) {
+        return;     /*  late or duplicated: the scan is settled  */
+    }
+
+    if(service && typeof master === "boolean" && Array.isArray(scan.services)) {
+        for(let svc of scan.services) {
+            if(svc.service === service) {
+                svc.master = master;
+                break;
+            }
+        }
+    }
+    if(error) {
+        let e = priv.conns[conn_id];
+        scan.errors.push({
+            yuno:  (e && e.role) || "",
+            error: `${service}: ${error}`
+        });
+    }
+
+    scan.master_left--;
+    if(scan.master_left > 0) {
+        return;
+    }
+    finish_scan(gobj, conn_id, null);
 }
 
 function ac_on_id_nak(gobj, event, kw, src)

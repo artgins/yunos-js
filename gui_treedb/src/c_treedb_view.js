@@ -39,6 +39,10 @@ import {
 import {yui_shell_navigate, yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 
 import {treedb_links_get_iev} from "./c_treedb_links.js";
+import {
+    treedb_config_get_connection,
+    treedb_config_conn_services,
+} from "./c_treedb_config.js";
 /*  From the source file, not the barrel: this pair drags nothing in, and
     the barrel re-exports the whole library (maps included).  */
 import {
@@ -253,6 +257,39 @@ function service_name(gobj)
  *  the hosted view's $container as ours so the shell mounts/toggles the
  *  same DOM. Returns the view (or null — error already logged).
  ***************************************************************/
+/***************************************************************
+ *  Can this treedb be WRITTEN from here?
+ *
+ *  Only the MASTER of a treedb's tranger can write: on a replica the
+ *  yuno answers "READ-ONLY" to every write (SDK 7.13.0). The answer
+ *  comes from the connection's discovery, which asks `treedb-info`
+ *  per C_NODE service and stores it — so it is known HERE, with no
+ *  round trip, which is what matters: the library reads `readonly`
+ *  once, when it draws a topic's toolbar.
+ *
+ *  UNKNOWN (an older node, or a connection stored before the
+ *  discovery asked) is writable. Locking an editing session that
+ *  works today, on a guess, is worse than a button the backend
+ *  refuses.
+ ***************************************************************/
+function treedb_is_readonly(gobj)
+{
+    let conn_id = gobj_read_attr(gobj, "conn_id");
+    let treedb_name = gobj_read_attr(gobj, "treedb_name");
+    let config = gobj_find_service("treedb_config", false);
+    let conn = config ? treedb_config_get_connection(config, conn_id) : null;
+
+    if(!conn || !treedb_name) {
+        return false;
+    }
+    for(let svc of treedb_config_conn_services(conn)) {
+        if(svc.service === treedb_name) {
+            return (svc.master === false);
+        }
+    }
+    return false;
+}
+
 function build_hosted_view(gobj, remote)
 {
     let priv = gobj.priv;
@@ -276,6 +313,9 @@ function build_hosted_view(gobj, remote)
         kw.conn_id = gobj_read_attr(gobj, "conn_id");
     }
     if(view_gclass === "C_YUI_TREEDB_TOPICS") {
+        /*  A replica opens without its write affordances instead of
+         *  offering buttons the backend refuses one by one.  */
+        kw.readonly = treedb_is_readonly(gobj);
         /*  Land on a grid of topic cards (list->detail) instead of opening a
          *  topic table straight away. Only this view declares the attrs. */
         kw.with_cards_landing = true;
@@ -312,6 +352,9 @@ function build_hosted_view(gobj, remote)
         kw.source_url = gobj_read_attr(gobj, "source_url");
     }
     if(view_gclass === "C_YUI_TREEDB_GRAPH") {
+        /*  On a replica the graph drops its `edition` mode, which is the
+         *  only one that draws write affordances.  */
+        kw.readonly = treedb_is_readonly(gobj);
         /*  '← topics' button back to the topics grid (only this view declares it). */
         kw.back_route = gobj_read_attr(gobj, "back_route");
         /*  Its own base route, so it can declare its per-topic focus
