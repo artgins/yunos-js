@@ -553,6 +553,8 @@ const en = {
         "this field is required": "This field is required",
         "all changes will be lost": "All changes will be lost. Are you sure?",
         "columns": "Columns",
+        "pkey2s": "Secondary keys",
+        "append time": "append time",
         "choose the columns to show": "Choose the columns to show",
         "no topics": "No topics",
         "live topic": "Live topic",

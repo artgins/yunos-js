@@ -558,6 +558,8 @@ const es = {
         "this field is required": "Este campo es obligatorio",
         "all changes will be lost": "Se perderán todos los cambios. ¿Seguro?",
         "columns": "Columnas",
+        "pkey2s": "Claves secundarias",
+        "append time": "hora de inserción",
         "choose the columns to show": "Elegir las columnas a mostrar",
         "no topics": "Sin topics",
         "live topic": "Live del topic",
