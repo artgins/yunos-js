@@ -688,6 +688,30 @@ function status_dot(connected)
         `vertical-align:middle; background:${connected ? "#48c78e" : "#b5b5b5"};"></span>`;
 }
 
+/***************************************************************
+ *  Which of the four row actions a control IS. One table, read
+ *  by the pointer path and by the keyboard path alike.
+ ***************************************************************/
+function action_of($el)
+{
+    if(!$el || !$el.classList) {
+        return null;
+    }
+    if($el.classList.contains("CONNECTIONS_REFRESH")) {
+        return "EV_REFRESH_SERVICES";
+    }
+    if($el.classList.contains("CONNECTIONS_CONNECT")) {
+        return "EV_TOGGLE_CONN_ENABLED";
+    }
+    if($el.classList.contains("CONNECTIONS_CLONE")) {
+        return "EV_CLONE_CONN";
+    }
+    if($el.classList.contains("CONNECTIONS_DELETE")) {
+        return "EV_REMOVE_CONN";
+    }
+    return null;
+}
+
 function make_columns(gobj)
 {
     /*  One row per connection: the checkbox MARKS it to browse (the pickers
@@ -799,17 +823,32 @@ function make_columns(gobj)
         let plug_cls = enabled ? " has-text-danger" : " has-text-success";
         let plug_title = enabled ? t("disconnect") : t("connect");
 
-        return `<span class="icon CONNECTIONS_REFRESH${refresh_cls}" ` +
-               `title="${esc(refresh_title)}" aria-label="${esc(refresh_title)}">` +
-               `<i class="yi-arrows-rotate"></i></span>` +
-               `<span class="icon CONNECTIONS_CONNECT${plug_cls}" ` +
-               `title="${esc(plug_title)}" aria-label="${esc(plug_title)}">` +
-               `<i class="${plug_icon}"></i></span>` +
-               `<span class="icon CONNECTIONS_CLONE" title="${esc(t("clone this connection"))}" ` +
-               `aria-label="${esc(t("clone"))}"><i class="yi-copy"></i></span>` +
-               `<span class="icon CONNECTIONS_DELETE has-text-danger" ` +
-               `title="${esc(t("remove"))}" aria-label="${esc(t("remove"))}">` +
-               `<i class="yi-trash"></i></span>`;
+        /*
+         *  role + tabindex, because a <span> is not a control: these four
+         *  had their title and their aria-label and were still unreachable
+         *  from the keyboard -- no tab stop, and Enter over them does
+         *  nothing a browser understands. The keydown handler below is the
+         *  other half; a real <button> would bring both for free, and it
+         *  also brings Bulma's button box, which is not what a 44px action
+         *  cell can afford.
+         *
+         *  `data-conn_id` so the keyboard path can name the row without
+         *  going back through Tabulator for the cell it came from.
+         */
+        const ctl = (cls, title, label, icon) =>
+            `<span class="icon ${cls}" role="button" tabindex="0" ` +
+            `data-conn_id="${esc(d.conn_id)}" ` +
+            `title="${esc(title)}" aria-label="${esc(label)}">` +
+            `<i class="${icon}"></i></span>`;
+
+        return ctl(`CONNECTIONS_REFRESH${refresh_cls}`,
+                   refresh_title, refresh_title, "yi-arrows-rotate") +
+               ctl(`CONNECTIONS_CONNECT${plug_cls}`,
+                   plug_title, plug_title, plug_icon) +
+               ctl("CONNECTIONS_CLONE",
+                   t("clone this connection"), t("clone"), "yi-copy") +
+               ctl("CONNECTIONS_DELETE has-text-danger",
+                   t("remove"), t("remove"), "yi-trash");
     }
 
     /*  One cell, four actions: which one was pressed is asked of the DOM,
@@ -824,16 +863,7 @@ function make_columns(gobj)
         if(!$hit) {
             return;
         }
-        let event = null;
-        if($hit.classList.contains("CONNECTIONS_REFRESH")) {
-            event = "EV_REFRESH_SERVICES";
-        } else if($hit.classList.contains("CONNECTIONS_CONNECT")) {
-            event = "EV_TOGGLE_CONN_ENABLED";
-        } else if($hit.classList.contains("CONNECTIONS_CLONE")) {
-            event = "EV_CLONE_CONN";
-        } else if($hit.classList.contains("CONNECTIONS_DELETE")) {
-            event = "EV_REMOVE_CONN";
-        }
+        let event = action_of($hit);
         if(!event) {
             return;
         }
@@ -978,6 +1008,36 @@ function create_table(gobj)
     /*  Any inline cell edit → persist the whole table.  */
     table.on("cellEdited", function() {
         persist(gobj);
+    });
+
+    /*
+     *  The keyboard half of the row actions.
+     *
+     *  They are spans carrying role="button" and a tab stop, and a span
+     *  does nothing on Enter: the browser only does that for real controls.
+     *  Delegated on the table and not wired per control, because the
+     *  virtual renderer rebuilds every row it scrolls past -- a listener
+     *  attached at render time is a race with the next one.
+     *
+     *  Space is taken too, and its default is suppressed: over a focused
+     *  control it scrolls the page.
+     */
+    $div.addEventListener("keydown", function(e) {
+        if(e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") {
+            return;
+        }
+        let $hit = e.target && e.target.closest?
+            e.target.closest("span.icon[role='button']") : null;
+        if(!$hit) {
+            return;
+        }
+        let event = action_of($hit);
+        let conn_id = $hit.getAttribute("data-conn_id") || "";
+        if(!event || !conn_id) {
+            return;
+        }
+        e.preventDefault();
+        gobj_send_event(gobj, event, {conn_id: conn_id}, gobj);
     });
     gobj_write_attr(gobj, "tabulator", table);
 }

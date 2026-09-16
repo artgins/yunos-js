@@ -605,15 +605,16 @@ function restore_tab_from_url(gobj)
         /*  Tab not available yet; a later EV_ON_OPEN retries this.  */
         return;
     }
-    /*  Deferred: EV_ON_OPEN is a published event, so navigating synchronously
-     *  would re-enter the shell mid-publish. Navigate to the FULL route so the
-     *  view's selected topic / mode is restored too.  */
-    setTimeout(function() {
-        if(gobj.priv.shell) {
-            /*  Restore, not a user move: no Back entry. */
-            yui_shell_navigate(gobj.priv.shell, cur, {replace: true});
-        }
-    }, 0);
+    /*  Deferred: EV_ON_OPEN is a published event, so navigating
+     *  synchronously would re-enter the shell mid-publish. The FULL route,
+     *  so the view's selected topic / mode is restored too, and `replace`
+     *  because this is a restore and not a user move: no Back entry.
+     *
+     *  A posted event and not a timer -- a deferral is not a time. It also
+     *  buys the two things a bare setTimeout has never given: it is dropped
+     *  if this gobj is being destroyed meanwhile, and it shows up in the
+     *  `machine` trace under its own name.  */
+    gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {route: cur}, gobj);
 }
 
 /***************************************************************
@@ -1399,26 +1400,18 @@ function ac_route_changed(gobj, event, kw, src)
              *  already selected. */
             if(auto_open_treedb(gobj, ws, sub)) {
                 let full = gobj_read_attr(gobj.priv.shell, "current_route") || "";
-                setTimeout(function() {
-                    if(gobj.priv.shell && full) {
-                        /*  Re-land on the route the user already asked for
-                         *  (the deep link) once its tab exists: no Back entry,
-                         *  the hash never changed. */
-                        yui_shell_navigate(gobj.priv.shell, full, {replace: true});
-                    }
-                }, 0);
+                /*  Re-land on the route the user already asked for (the deep
+                 *  link) once its tab exists: no Back entry, the hash never
+                 *  changed. Deferred as a posted event, like the rest.  */
+                gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {route: full}, gobj);
             }
             return 0;
         }
         let target = workspace_first_route(gobj, ws);
         if(target && target !== base) {
-            /*  Deferred so we don't re-enter navigate mid-publish. Redirect of
-             *  a bare workspace route to its first tab: no Back entry. */
-            setTimeout(function() {
-                if(gobj.priv.shell) {
-                    yui_shell_navigate(gobj.priv.shell, target, {replace: true});
-                }
-            }, 0);
+            /*  Deferred so we don't re-enter navigate mid-publish. Redirect
+             *  of a bare workspace route to its first tab: no Back entry. */
+            gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {route: target}, gobj);
         }
         return 0;
     }

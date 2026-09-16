@@ -23,6 +23,40 @@ on its own, outside the yunetas superproject.
 
 ### Fixed
 
+#### Every deferral is a posted event, and the scan watchdog is a C_TIMER child (gui_treedb 0.17.35)
+
+The leftovers of the 2026-07-13 audit that were still using raw `setTimeout`,
+from yunetas' `TODO.md`.
+
+**Five deferrals became `gobj_post_event()`.** Three in `c_app.js` (`:611`,
+`:1402`, `:1417`), all of them "navigate once we are out of the shell's
+publish stack", sitting next to a `gobj_post_event(EV_NORMALIZE_ROUTE)` that
+already did exactly that and that they now use. One in `c_treedb_links.js`,
+the store-and-report half of a scan that answered, now `EV_REPORT_SCAN`. One
+in `c_treedb_view.js`, the transport rebind that destroys the hosted view and
+swaps the DOM, now `EV_REBIND_VIEW`; its `clearTimeout` coalescing is a
+`rebind_pending` flag, so several opens in a row still collapse into one
+rebind and what the rebind does is decided when it RUNS. A deferral is not a
+time, and the posted event brings what a bare `setTimeout` never did: it is
+dropped if the gobj is being destroyed meanwhile, and it appears in the
+`machine` trace under the name of what is being deferred.
+
+**The 15 s scan watchdog is a `C_TIMER` pure child.** That one IS a real time,
+so a timer was right; what was wrong was whose. Its callback published events
+and deleted state from outside the machine, so a scan that timed out left no
+trace and could fire into a gclass that had already stopped. One timer per
+SCAN and not per gclass -- scans run per connection and several can be in
+flight -- and `ac_timeout` finds which scan by the timer's identity, so no
+connection id has to be a legal gobj name.
+
+**The four row actions of the connections table are reachable from the
+keyboard.** They are `<span class="icon">` with a `title` and an `aria-label`
+and no way in: no tab stop, and Enter over a span does nothing. They carry
+`role="button"` and `tabindex="0"` now, with a delegated `keydown` on the
+table (delegated, because the virtual renderer rebuilds every row it scrolls
+past) that turns Enter and Space into the same event the click sends. Which
+action a control IS lives in one function, `action_of()`, read by both paths.
+
 #### A drill of the Tranger view's JSON viewer opens its branch (gui_treedb 0.17.34)
 
 `request_print_tranger()` sent `path` at the top of the kw, and C_IEVENT_CLI

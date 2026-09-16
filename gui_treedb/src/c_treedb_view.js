@@ -30,6 +30,7 @@ import {
     gobj_find_service,
     gobj_parent, gobj_name,
     gobj_subscribe_event, gobj_unsubscribe_event, gobj_send_event,
+    gobj_post_event,
     gobj_start, gobj_stop, gobj_destroy, gobj_is_running, gobj_is_destroying,
     gobj_has_event,
     createElement2,
@@ -76,7 +77,7 @@ let PRIVATE_DATA = {
     view:         null,   /*  the hosted treedb view (a service)  */
     is_graph:     false,  /*  true for the GRAPH view (URL seg = focus topic)  */
     seg:          null,   /*  last applied/navigated subpath (dedup guard)  */
-    rebind_timer: null,   /*  pending deferred transport rebind  */
+    rebind_pending: false,  /*  a deferred transport rebind is posted  */
 };
 
 let __gclass__ = null;
@@ -188,10 +189,7 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     let priv = gobj.priv;
-    if(priv.rebind_timer) {
-        clearTimeout(priv.rebind_timer);
-        priv.rebind_timer = null;
-    }
+    priv.rebind_pending = false;
     /*  Unsubscribe the host's EV_ROUTE_CHANGED while the parent is alive. */
     let host = gobj_parent(gobj);
     if(host) {
@@ -599,13 +597,32 @@ function ac_transport_open(gobj, event, kw, src)
     if(priv.view && bound_transport(gobj) === remote) {
         return 0;   /*  same transport — subscriptions resend on their own  */
     }
-    if(priv.rebind_timer) {
-        clearTimeout(priv.rebind_timer);
+    /*
+     *  Deferred: the rebind destroys the hosted view and swaps the DOM,
+     *  and we are inside treedb_links' publish of EV_ON_OPEN -- tearing
+     *  gobjs down inside a publisher's stack is forbidden.
+     *
+     *  A posted event and not a timer, because a deferral is not a time.
+     *  The flag is what a clearTimeout used to do: several opens in a row
+     *  collapse into ONE rebind, and the action re-reads the transport
+     *  anyway, so what it does is decided when it runs and not when it was
+     *  asked for.
+     */
+    if(priv.rebind_pending) {
+        return 0;
     }
-    priv.rebind_timer = setTimeout(function() {
-        priv.rebind_timer = null;
-        rebind_hosted_view(gobj);
-    }, 0);
+    priv.rebind_pending = true;
+    gobj_post_event(gobj, "EV_REBIND_VIEW", {}, gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The deferred transport rebind.
+ ***************************************************************/
+function ac_rebind_view(gobj, event, kw, src)
+{
+    gobj.priv.rebind_pending = false;
+    rebind_hosted_view(gobj);
     return 0;
 }
 
@@ -668,7 +685,8 @@ function create_gclass(gclass_name)
             ["EV_RECORD_WRITTEN",         ac_record_written, null],
             ["EV_ROUTE_CHANGED",          ac_route_changed,  null],
             ["EV_ON_OPEN",                ac_transport_open, null],
-            ["EV_ON_CLOSE",               ac_transport_close, null]
+            ["EV_ON_CLOSE",               ac_transport_close, null],
+            ["EV_REBIND_VIEW",            ac_rebind_view,    null]
         ]]
     ];
 
@@ -678,7 +696,9 @@ function create_gclass(gclass_name)
         ["EV_RECORD_WRITTEN",         0],
         ["EV_ROUTE_CHANGED",          0],
         ["EV_ON_OPEN",                0],
-        ["EV_ON_CLOSE",               0]
+        ["EV_ON_CLOSE",               0],
+        /*  internal: the deferred transport rebind  */
+        ["EV_REBIND_VIEW",            0]
     ];
 
     __gclass__ = gclass_create(

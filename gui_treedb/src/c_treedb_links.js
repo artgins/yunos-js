@@ -53,12 +53,17 @@ import {
     gobj_send_event,
     gobj_yuno,
     gobj_create,
+    gobj_create_pure_child,
+    gobj_post_event,
     gobj_name, gobj_short_name,
     gobj_write_str_attr,
+    gobj_start, gobj_stop,
     gobj_start_tree, gobj_stop_tree, gobj_destroy,
     gobj_is_running,
     gobj_current_state,
     gobj_command,
+    set_timeout,
+    clear_timeout,
 } from "@yuneta/gobj-js";
 
 import {
@@ -381,12 +386,31 @@ function do_scan(gobj, conn_id)
     if(priv.scans[conn_id]) {
         return 0;   /*  scan already in progress  */
     }
+    /*
+     *  The watchdog is a C_TIMER CHILD and not a raw setTimeout.
+     *
+     *  It is a real time -- fifteen seconds for an answer -- so a timer is
+     *  the right tool; what was wrong was WHOSE timer. A setTimeout's
+     *  callback runs outside the machine, and this one publishes events and
+     *  deletes state, so a scan that timed out left no line in the `machine`
+     *  trace and could fire into a gclass that had already stopped. As a
+     *  child its EV_TIMEOUT arrives as an event, in an action, and it is
+     *  torn down with the parent like any other gobj.
+     *
+     *  One per SCAN and not one per gclass: scans run per connection and
+     *  several can be in flight, so a single timer would be armed twice and
+     *  answer once.
+     */
+    let timer = gobj_create_pure_child(
+        `scan_timer_${++priv.seq}`, "C_TIMER", {}, gobj
+    );
+    gobj_start(timer);
+    set_timeout(timer, SCAN_TIMEOUT_MS);
+
     priv.scans[conn_id] = {
         services: null,   /*  found list; null = no successful answer yet  */
         errors:   [],
-        timer:    setTimeout(function() {
-            finish_scan(gobj, conn_id, "scan timeout");
-        }, SCAN_TIMEOUT_MS)
+        timer:    timer
     };
 
     gobj_command(iev, "services", {service: "__yuno__"}, gobj);
@@ -415,7 +439,9 @@ function finish_scan(gobj, conn_id, error)
     }
     delete priv.scans[conn_id];
     if(scan.timer) {
-        clearTimeout(scan.timer);
+        clear_timeout(scan.timer);
+        gobj_stop(scan.timer);
+        gobj_destroy(scan.timer);
         scan.timer = null;
     }
     if(error) {
@@ -447,31 +473,18 @@ function finish_scan(gobj, conn_id, error)
      *  EV_CONNECTIONS_CHANGED, whose sync path may REOPEN this very
      *  transport (a refresh that dropped a selected service changes the
      *  connection coords) — destroying the publisher inside its own
-     *  dispatch is forbidden. The is_running guard only skips the
-     *  teardown race (service stopping while the timer is pending).
+     *  dispatch is forbidden.
+     *
+     *  A posted event and not a timer: a deferral is not a time. Same next
+     *  turn of the loop, except it is dropped if this gobj is being
+     *  destroyed meanwhile, and it says so in the `machine` trace under the
+     *  name of what is being deferred.
      */
-    setTimeout(function() {
-        if(!gobj_is_running(gobj)) {
-            return;
-        }
-        if(!priv.conns[conn_id]) {
-            /*  The connection died between the answer and this deferral
-             *  (a logout's EV_CLOSE_ALL fits in that one-macrotask window):
-             *  the scan belongs to the dead session, and storing it would
-             *  publish EV_CONNECTIONS_CHANGED into ST_LOGGED_OUT.  */
-            return;
-        }
-        let config = gobj_find_service("treedb_config", false);
-        if(config) {
-            gobj_send_event(config, "EV_STORE_SCANNED_SERVICES",
-                {conn_id: conn_id, services: scan.services}, gobj);
-        }
-        gobj_publish_event(gobj, "EV_TREEDB_SCAN_DONE", {
-            conn_id:  conn_id,
-            services: scan.services,
-            errors:   scan.errors
-        });
-    }, 0);
+    gobj_post_event(gobj, "EV_REPORT_SCAN", {
+        conn_id:  conn_id,
+        services: scan.services,
+        errors:   scan.errors
+    }, gobj);
 }
 
 /***************************************************************
@@ -719,6 +732,61 @@ function ac_on_open_error(gobj, event, kw, src)
     return republish(gobj, src, "EV_ON_OPEN_ERROR", kw);
 }
 
+/***************************************************************
+ *  {conn_id, services, errors} -- the deferred half of a scan
+ *  that ANSWERED: store the found services and report.
+ ***************************************************************/
+function ac_report_scan(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let conn_id = (kw && kw.conn_id) || "";
+
+    if(!gobj_is_running(gobj)) {
+        return 0;
+    }
+    if(!priv.conns[conn_id]) {
+        /*  The connection died between the answer and this deferral (a
+         *  logout's EV_CLOSE_ALL fits in that one turn): the scan belongs
+         *  to the dead session, and storing it would publish
+         *  EV_CONNECTIONS_CHANGED into ST_LOGGED_OUT.  */
+        return 0;
+    }
+
+    let config = gobj_find_service("treedb_config", false);
+    if(config) {
+        gobj_send_event(config, "EV_STORE_SCANNED_SERVICES",
+            {conn_id: conn_id, services: kw.services}, gobj);
+    }
+    gobj_publish_event(gobj, "EV_TREEDB_SCAN_DONE", {
+        conn_id:  conn_id,
+        services: kw.services,
+        errors:   kw.errors
+    });
+
+    return 0;
+}
+
+/***************************************************************
+ *  A scan ran out of time. `src` is the C_TIMER child armed for
+ *  it, and that is what says WHICH scan: the id is looked up by
+ *  the timer's identity instead of being spelled into its name,
+ *  so no connection id has to be a legal gobj name.
+ ***************************************************************/
+function ac_timeout(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    for(let conn_id of Object.keys(priv.scans)) {
+        if(priv.scans[conn_id].timer === src) {
+            finish_scan(gobj, conn_id, "scan timeout");
+            return 0;
+        }
+    }
+
+    log_error(`${gobj_short_name(gobj)}: ${event} of no scan in flight`);
+    return -1;
+}
+
 
 
 
@@ -760,6 +828,8 @@ function create_gclass(gclass_name)
             ["EV_ON_ID_NAK",          ac_on_id_nak,          null],
             ["EV_ON_OPEN_ERROR",      ac_on_open_error,      null],
             ["EV_MT_COMMAND_ANSWER",  ac_mt_command_answer,  null],
+            ["EV_TIMEOUT",            ac_timeout,            null],
+            ["EV_REPORT_SCAN",        ac_report_scan,        null],
             /*  the mutations (the app root, Settings)  */
             ["EV_SYNC_CONNECTIONS",   ac_sync_connections,   null],
             ["EV_SET_TOKEN",          ac_set_token,          null],
@@ -785,6 +855,10 @@ function create_gclass(gclass_name)
         ["EV_TREEDB_SCAN_DONE",   out],
         ["EV_TREEDB_SCAN_ERROR",  out],
         ["EV_MT_COMMAND_ANSWER",  event_flag_t.EVF_PUBLIC_EVENT],
+        /*  internal: the scan watchdog's C_TIMER child, and the deferred
+         *  half of a scan that answered  */
+        ["EV_TIMEOUT",            0],
+        ["EV_REPORT_SCAN",        0],
         /*  input: the mutations  */
         ["EV_SYNC_CONNECTIONS",   0],
         ["EV_SET_TOKEN",          0],
