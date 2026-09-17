@@ -100,6 +100,7 @@ const es = {
         "show this section in the expanded view": "Mostrar esta seccion en la vista expandida",
         "expand": "Expandir",
         "periodic": "Periódico",
+        "clear the filter": "quitar el filtro",
         "trace every event of every automaton": "trazar cada evento de cada autómata",
         "trace the creation and destruction of gobjs": "trazar la creación y destrucción de gobjs",
         "trace the start and stop of gobjs": "trazar el arranque y la parada de gobjs",

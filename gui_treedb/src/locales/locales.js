@@ -8,9 +8,7 @@
  ***********************************************************************/
 import {
     log_error,
-    gobj_yuno,
     kw_get_local_storage_value,
-    gobj_read_attr,
     kw_set_local_storage_value,
 } from "@yuneta/gobj-js";
 
@@ -52,7 +50,7 @@ function setup_locale()
     i18next.init(
         {
             lng: locale, // if you're using a language detector, do not define the lng option
-            debug: gobj_read_attr(gobj_yuno(), "trace_i18n"),
+            debug: Number(kw_get_local_storage_value("trace_i18n", 0, false)) ? true : false,
             resources: locales,
             /*  Treat the entire string as the key.  Default is "."
              *  which would interpret e.g. "enchufe.power_on" as a

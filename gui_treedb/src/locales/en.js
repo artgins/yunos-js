@@ -81,6 +81,7 @@ const en = {
         "show this section in the expanded view": "Show this section in the expanded view",
         "expand": "Expand",
         "periodic": "Periodic",
+        "clear the filter": "clear the filter",
         "trace every event of every automaton": "trace every event of every automaton",
         "trace the creation and destruction of gobjs": "trace the creation and destruction of gobjs",
         "trace the start and stop of gobjs": "trace the start and stop of gobjs",

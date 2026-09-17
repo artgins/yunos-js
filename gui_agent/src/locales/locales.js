@@ -11,8 +11,6 @@
  ***********************************************************************/
 import {
     log_error,
-    gobj_yuno,
-    gobj_read_attr,
     kw_get_local_storage_value,
     kw_set_local_storage_value,
 } from "@yuneta/gobj-js";
@@ -46,7 +44,7 @@ function setup_locale()
     i18next.init({
         lng: locale,
         fallbackLng: "en",      // a key missing in `es` shows English, not the raw key
-        debug: gobj_read_attr(gobj_yuno(), "trace_i18n"),
+        debug: Number(kw_get_local_storage_value("trace_i18n", 0, false)) ? true : false,
         resources: locales,
         initImmediate: false,
     });
