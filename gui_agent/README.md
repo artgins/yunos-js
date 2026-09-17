@@ -102,6 +102,13 @@ The Schemas picker copies the yunos it shows as **gui_treedb connections**
 ("For TreeDB"), and that app's Connections page pastes them. Retyping a dozen
 `wss://host:port` rows between two tabs of one browser was the alternative.
 
+The node's **agent** is copied too: it is a row of the picker, and its treedbs
+are real. Its config has no `__top_url__`, so the port is read from its `wss://`
+gate (`agent_secure_port`, `1993`), the host falls back to the node's name, and
+the service is its `C_AGENT` one (`agent`). `yuneta_agent22` has no such gate
+and is left out. The agent serves a self-signed certificate, so a browser
+reaches that url only once the certificate is trusted.
+
 The document says what each yuno **exposes**, and nothing in it is ticked:
 which treedbs to browse is decided where it is pasted, because a scanned
 deploy centre pasted with everything ticked is two hundred backends asking to

@@ -55,12 +55,14 @@ import {TabulatorFull as Tabulator} from "tabulator-tables";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
     AGENT_YUNO_ID,
+    is_agent_yuno,
     cmd2agent_service,
     version_gte,
     node_id,
     parse_agent_line,
     esc,
     cert_host_of_config,
+    agent_endpoint_of_config,
 } from "./agent_helpers.js";
 import {
     agent_config_get_selected_nodes,
@@ -1079,12 +1081,17 @@ function set_node_yunos(gobj, node, data)
      *  the host to its control center).
      */
     if(gobj_read_bool_attr(gobj, "with_treedb_check")) {
+        let agent = priv.nodes.find((n) => node_id(n) === node);
+        let agent_role = (agent && agent.role) || "yuneta_agent";
         rows.unshift({
             id:     stats_sel_id(node, AGENT_YUNO_ID),
             _type:    "yuno",
             node:     node,
             yuno_id:  AGENT_YUNO_ID,
-            label:    "yuneta_agent",
+            label:    agent_role,
+            /*  What its connection is addressed with, like a yuno's:
+             *  the agent's identity card is checked against its role.  */
+            role:     agent_role,
             running:  true
         });
     }
@@ -1318,7 +1325,8 @@ function endpoint_of_config(config)
  ***************************************************************/
 function conn_of_scanned(row, endpoint, services)
 {
-    let host = endpoint.host || row.realm || "";
+    /*  The agent has no realm: the node's own name is the best guess.  */
+    let host = endpoint.host || row.realm || (is_agent_yuno(row.yuno_id) ? row.node : "");
     let port = endpoint.port;
     let browsable = [];
     let role_service = "";
@@ -1335,6 +1343,11 @@ function conn_of_scanned(row, endpoint, services)
              *  alphabetical luck — it came out `authz` for all nine backends
              *  of a real scan, which is a connection the backend refuses.  */
             if(sv.service === row.role) {
+                role_service = sv.service;
+            }
+            /*  The agent's is not: `agent` (`agent22`) for the role
+             *  `yuneta_agent`. Its gclass names it.  */
+            if(is_agent_yuno(row.yuno_id) && /^C_AGENT/.test(sv.gclass || "")) {
                 role_service = sv.service;
             }
             if(sv.gclass === "C_NODE" || sv.gclass === "C_TRANGER") {
@@ -1494,7 +1507,8 @@ function set_conns_config(gobj, node, yuno_id, data, result)
     }
     entry.answered = true;
     if(typeof result !== "number" || result >= 0) {
-        entry.endpoint = endpoint_of_config(data);
+        entry.endpoint = is_agent_yuno(yuno_id) ? agent_endpoint_of_config(data)
+                                                : endpoint_of_config(data);
     }
 
     scan.pending--;

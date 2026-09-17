@@ -19,6 +19,30 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.63 — 2026-09-17
+
+### Fixed
+
+#### "For TreeDB" copies the node's agent too (gui_agent 0.22.63)
+
+The Schemas picker shows each node's agent as a row, and its treedbs
+(`treedb_yuneta_agent`, `treedb_system_schema`, `treedb_authzs`) are probed
+like any yuno's -- but the export dropped it, because it looked for the yunos'
+`__top_url__`, which the agent's config does not carry. Now the agent row gets
+its own reading of `view-config` (`agent_endpoint_of_config`):
+
+- the **port** is the one of its `wss://` gate (`agent_secure_port`, `1993`).
+  `yuneta_agent22` has no such gate and still contributes nothing.
+- the **host** is the gate's certificate when it names one, else the node's
+  name: the agent's `yuneta_agent.crt` is not a host.
+- `remote_yuno_role` is the node's agent role (`yuneta_agent`), and
+  `remote_yuno_service` is its `C_AGENT` service (`agent`), not the role.
+
+The url stays a proposal, like every other row. The agent serves its own
+self-signed certificate (`CN=yuneta_agent.yuneta.io`), so a browser reaches it
+only once that certificate is trusted, or behind a proxy that serves a public
+one.
+
 ## gui_agent 0.22.62 / gui_treedb 0.17.36 — 2026-09-16
 
 Both deployed (gui_treedb 0.17.34 on 2026-09-15, 0.17.35 and 0.17.36 on

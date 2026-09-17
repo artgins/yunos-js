@@ -28,6 +28,7 @@ import {
     apply_shortkey,
     normalize_history,
     cert_host_of_config,
+    agent_endpoint_of_config,
 } from "./agent_helpers.js";
 
 
@@ -402,5 +403,41 @@ describe("the certificate a scanned yuno serves", () => {
     test("a config with no crypto at all answers nothing, and does not throw", () => {
         expect(cert_host_of_config({a: {b: {c: 1}}}, "1600")).toBe("");
         expect(cert_host_of_config(null, "")).toBe("");
+    });
+});
+
+
+describe("agent_endpoint_of_config", () => {
+    /*  What `command-agent service=__yuno__ command=view-config` answers:
+     *  the variables already expanded, no `__top_url__`.  */
+    const agent = {
+        environment: {realm_id: "/yuneta_agent.trdb"},
+        services: [{
+            name: "__input_side__",
+            gclass: "C_IOGATE",
+            children: [
+                {name: "agent_server_port", kw: {url: "ws://127.0.0.1:1991"}},
+                {name: "agent_secure_port", kw: {
+                    crypto: {ssl_certificate: "/yuneta/agent/certs/yuneta_agent.crt"},
+                    url: "wss://0.0.0.0:1993"
+                }}
+            ]
+        }]
+    };
+
+    test("the port is the one of its wss gate", () => {
+        expect(agent_endpoint_of_config(agent)).toEqual({port: "1993", host: ""});
+    });
+
+    test("a certificate naming a host is the host", () => {
+        const named = JSON.parse(JSON.stringify(agent));
+        named.services[0].children[1].kw.crypto.ssl_certificate = "/c/node.example.com.crt";
+        expect(agent_endpoint_of_config(named)).toEqual({port: "1993", host: "node.example.com"});
+    });
+
+    test("an agent with no wss gate (yuneta_agent22) exposes nothing", () => {
+        expect(agent_endpoint_of_config({services: [{kw: {url: "udp://127.0.0.1:1992"}}]}))
+            .toEqual({port: "", host: ""});
+        expect(agent_endpoint_of_config(null)).toEqual({port: "", host: ""});
     });
 });

@@ -421,6 +421,63 @@ function cert_host_of_config(config, port)
     return "";
 }
 
+/***************************************************************
+ *  agent_endpoint_of_config(config)
+ *
+ *      -> {port, host} where the node's AGENT listens for a browser,
+ *      both "" when it does not.
+ *
+ *      The agent is not a yuno and its config does not say it the
+ *      yunos' way: there is no `__top_url__`, and `view-config` answers
+ *      with the variables already expanded. What it does carry is the
+ *      gate itself, `agent_secure_port`, a `wss://0.0.0.0:1993` with a
+ *      `crypto` -- the only `wss://` url in it, so that is the port.
+ *      `yuneta_agent22` has no such gate (it only dials out to its
+ *      control center) and answers nothing, which is right: there is
+ *      no endpoint to hand over.
+ *
+ *      The host is the gate's certificate only when that names one: the
+ *      agent ships `yuneta_agent.crt`, which is not a host, and then the
+ *      caller falls back to the node's name.
+ ***************************************************************/
+function agent_endpoint_of_config(config)
+{
+    let out = {port: "", host: ""};
+    let gate = null;
+
+    let walk = (node, depth) => {
+        if(gate || !node || typeof node !== "object" || depth > 12) {
+            return;
+        }
+        if(Array.isArray(node)) {
+            for(let item of node) {
+                walk(item, depth + 1);
+            }
+            return;
+        }
+        if(typeof node.url === "string" && /^wss:\/\//i.test(node.url)) {
+            gate = node;
+            return;
+        }
+        for(let key of Object.keys(node)) {
+            walk(node[key], depth + 1);
+        }
+    };
+    walk(config, 0);
+
+    if(!gate) {
+        return out;
+    }
+    let m = gate.url.match(/:(\d+)\s*$/);
+    out.port = m ? m[1] : "";
+
+    let host = cert_host_of_config({kw: gate}, out.port);
+    if(host.includes(".")) {
+        out.host = host;
+    }
+    return out;
+}
+
 
 export {
     AGENT_YUNO_ID,
@@ -439,4 +496,5 @@ export {
     apply_shortkey,
     normalize_history,
     cert_host_of_config,
+    agent_endpoint_of_config,
 };
