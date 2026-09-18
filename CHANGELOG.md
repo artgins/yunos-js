@@ -19,6 +19,30 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.37 / gui_agent 0.22.64 — 2026-09-18
+
+### Fixed
+
+- **The Developer window's TRAFFIC and TRACES are two feeds again**, each with
+    its own controls (gobj-ui **7.23.176**, range raised in both yunos). One
+    selector steered both, and it steered the wrong one: the four view modes
+    rewrote the traffic -- `Name only` left a message as its event name and
+    nothing else -- while the trace lines ignored the selector altogether.
+    Ticking Traffic alone to read what goes to the backend gave a list of event
+    names beside a browser console showing the four payloads.
+
+    `VIEW` is the traffic's now and says only how much room its payload takes
+    (`Collapsed` / `Expanded`); the payload is always there. What shapes a
+    trace moved to the TRACES row, beside `Simple mach`: a new `Payload` chip
+    for the `json` lines a trace dumps, which used to vanish as a side effect
+    of the traffic view being set to names.
+
+    The console mirror of the traffic follows the same filter and the same
+    view now -- it used to print lines the window had just hidden.
+
+    New i18n keys in both yunos: `collapsed`, `payload`, `traffic payload
+    folded`, `traffic payload laid out`, `show the payload of the traces`.
+
 ## gui_agent 0.22.63 — 2026-09-17
 
 ### Fixed

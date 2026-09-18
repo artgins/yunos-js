@@ -34,13 +34,16 @@ const es = {
         /*  Layouts of the frontend view (C_YUI_GOBJ_TREE_JS): the KEY is
          *  the layout id, the same choice its sibling treedb graph makes.  */
         "browser console only":                         "Sólo la consola del navegador (nada se muestra en esta ventana)",
-        "detailed":                                     "Detallada",
+        "collapsed":                                    "Plegada",
+        "payload":                                      "Payload",
+        "traffic payload folded":                       "Tráfico: payload plegado",
+        "traffic payload laid out":                     "Tráfico: payload desplegado",
+        "show the payload of the traces":               "Mostrar el payload que vuelcan las trazas (ev_kw, publicaciones)",
         "dev window and browser console":               "La ventana de desarrollo y la consola del navegador",
         "dev window only":                              "Sólo la ventana de desarrollo (la consola del navegador queda limpia)",
         "expanded":                                     "Expandida",
         "find":                                         "Buscar",
         "log":                                          "Registro",
-        "name only":                                    "Sólo el nombre",
         "output":                                       "Salida",
         "show":                                         "Mostrar",
         "view":                                         "Vista",
