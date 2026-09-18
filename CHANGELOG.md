@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.41 / gui_agent 0.22.68 — 2026-09-18
+
+### Fixed
+
+- **The Developer window's log is readable** (gobj-ui **7.23.180**): it was
+    painted with opacity -- a different amount of the same grey per role --
+    which measured 4.39:1 for a folded object's preview and 3.78:1 for the
+    message's source, both under the 4.5 floor. Eight measured colours now,
+    one per role and one per scheme, and a key, a string and a number read
+    apart from each other the way they do in a browser console.
+
 ## gui_treedb 0.17.40 / gui_agent 0.22.67 — 2026-09-18
 
 ### Fixed
