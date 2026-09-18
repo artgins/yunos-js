@@ -19,6 +19,15 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.40 / gui_agent 0.22.67 — 2026-09-18
+
+### Fixed
+
+- **The Developer window says where a message went through again** (gobj-ui
+    **7.23.179**): the gobj and the url are dim text in the entry's header now,
+    where the removed tooltip used to be the only place they appeared. It
+    matters most here, where an app browses several backends at once.
+
 ## gui_treedb 0.17.39 / gui_agent 0.22.66 — 2026-09-18
 
 ### Fixed
