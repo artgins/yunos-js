@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.38 / gui_agent 0.22.65 — 2026-09-18
+
+### Fixed
+
+- **Reading a payload in the Developer window** (gobj-ui **7.23.177**): a
+    nested payload no longer jumps 16px sideways when the cursor passes over
+    its entry, and a folded object says its first FIELDS instead of how many
+    it has -- `{header: "id", fillspace: 18, type: "string", …}` where it used
+    to say `{5}`, which for a schema of twelve columns was twelve identical
+    `{5}`.
+
 ## gui_treedb 0.17.37 / gui_agent 0.22.64 — 2026-09-18
 
 ### Fixed
