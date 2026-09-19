@@ -19,6 +19,17 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.44 — 2026-09-19
+
+### Fixed
+
+- **A json field no longer takes the whole width of a tranger card**
+    (gui_treedb): the cards fit their columns to the data, and a dict or list
+    field is one line of serialized json, so a `service_descriptor` column was
+    as wide as the screen. A column now starts at 320px at most. The cell is
+    cut with an ellipsis, you can still drag the column wider, and a row click
+    shows the whole record.
+
 ## gui_treedb 0.17.43 — 2026-09-19
 
 ### Added

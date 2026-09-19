@@ -177,6 +177,13 @@ const COPY_FEEDBACK_MS = 1500;
  *  (t, tm, rowid), so this leaves one record field visible.  */
 const MOBILE_COLS = 4;
 
+/*  The widest a card column STARTS at. The tables fit their columns to the
+ *  data, and a field holding a dict or a list is one line of serialized json
+ *  (a service_descriptor ran to the width of the screen), so one such field
+ *  took the whole card. The cell is cut with an ellipsis, the column still
+ *  resizes by hand, and a row click shows the whole record.  */
+const COL_MAX_INITIAL_WIDTH = 320;
+
 /*  A tranger record carries TWO timestamps (t = persistence, tm = message
  *  origin) and they are two independent axes: the iterator's match_cond takes
  *  both ranges and ANDs them, so the Rows-options modal offers both. Their
@@ -3065,6 +3072,7 @@ function tune_columns(defs, sortable)
         .map((d) => {
             d.headerSort = !!sortable;
             d.minWidth = 90;
+            d.maxInitialWidth = COL_MAX_INITIAL_WIDTH;
             d.headerFilter = "input";
             d.headerFilterFunc = op_filter;
             d.headerFilterLiveFilter = true;
