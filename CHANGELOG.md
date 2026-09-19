@@ -19,6 +19,15 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.49 / gui_agent 0.22.71 — 2026-09-19
+
+### Added
+
+- **Each treedb topic table has its own Raw JSON** (gobj-ui 7.23.183): a
+    button between Columns and Export shows the table's records as JSON, each
+    with its `__md_treedb__` metadata. When a filter hides rows, only the
+    records that are shown are kept.
+
 ## gui_treedb 0.17.48 / gui_agent 0.22.70 — 2026-09-19
 
 ### Changed
