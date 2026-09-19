@@ -133,6 +133,9 @@ import {
     epoch_to_local_input,
     fmt_ts,
     flatten_record,
+    LEVELS,
+    normalize_level,
+    column_visible_at,
     op_filter,
     encode_seg,
     decode_seg,
@@ -1666,7 +1669,8 @@ function persist_view(gobj, card)
             topic:       card.topic,
             key:         card.key,
             mode:        card.mode,
-            match_cond:  card.match_cond || {}
+            match_cond:  card.match_cond || {},
+            level:       card.level
         }, gobj);
 }
 
@@ -1707,7 +1711,8 @@ function ask_saved_views(gobj, topic_name)
         for(let v of treedb_config_get_tranger_views(cfg, conn_id,
                 gobj_read_str_attr(gobj, "treedb_name"), topic_name)) {
             wanted.push({key: String(v.key), mode: v.mode,
-                         match_cond: v.match_cond || {}, restoring: true});
+                         match_cond: v.match_cond || {},
+                         level: normalize_level(v.level), restoring: true});
         }
     }
     if(priv.pending_card) {
@@ -1717,6 +1722,7 @@ function ask_saved_views(gobj, topic_name)
         wanted.push({key: String(priv.pending_card.key),
                      mode: priv.pending_card.mode,
                      match_cond: priv.pending_card.match_cond || {},
+                     level: normalize_level(priv.pending_card.level),
                      restoring: false});
         priv.pending_card = null;
     }
@@ -2620,7 +2626,7 @@ function apply_card_match_cond(gobj, card, match_cond)
  *      subscribe to EV_TRANGER_RECORD_ADDED), newest on top.
  *  One card per (key, mode); a duplicate request is ignored.
  ***************************************************************/
-function add_card(gobj, key, mode, match_cond, restoring)
+function add_card(gobj, key, mode, match_cond, restoring, level)
 {
     let priv = gobj.priv;
     /*  cur_topic is guaranteed by ST_TOPIC_SELECTED (the only state that
@@ -2645,6 +2651,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
         key: key, mode: mode, topic: priv.cur_topic,
         tabulator: null, $el: null, $count: null, $pause: null, $share: null,
         match_cond: match_cond || {},
+        level: normalize_level(level),  /*  which columns show (tr2list levels)  */
         live_max: cfg ? treedb_config_get_live_max(cfg) : LIVE_MAX_DEFAULT,
         iterator_id: null, rt_id: null, subscribed: false,
         built: false, seeded: false, pending: [],
@@ -2726,6 +2733,28 @@ function add_card(gobj, key, mode, match_cond, restoring)
             {key: card.key, mode: card.mode}, gobj);
     });
     card.$share = $share;
+
+    /*  What the rows show, named after tr2list's levels: the record (-l3),
+     *  its metadata (-l1: rowid g/i, uflag, sflag, t, tm), or both. It only
+     *  shows and hides columns — every row carries all of them — so it
+     *  needs no new request. Each <option> keeps its value explicit: the
+     *  translated text is for the reader, the value is the level.  */
+    let $level = createElement2(
+        ["select", {class: "TRANGER_CARD_LEVEL",
+                    title: t("what the rows show"),
+                    "aria-label": t("what the rows show"),
+                    "data-i18n-title": "what the rows show",
+                    "data-i18n-aria-label": "what the rows show"},
+            LEVELS.map((l) =>
+                ["option", {value: l, i18n: `level ${l}`}, t(`level ${l}`)])
+        ]);
+    $level.value = card.level;
+    $level.addEventListener("change", () => {
+        gobj_send_event(gobj, "EV_SET_CARD_LEVEL",
+            {key: card.key, mode: card.mode, level: $level.value}, gobj);
+    });
+    let $level_box = createElement2(
+        ["div", {class: "select TRANGER_CARD_LEVEL_BOX"}, [$level]]);
 
     /*  On a phone the card shows only the first MOBILE_COLS columns — a record
      *  with a dozen fields is 1000+px wide and the table just scrolls sideways.
@@ -2868,6 +2897,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
     if($pause) {
         action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$pause]]);
     }
+    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$level_box]]);
     action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$cols]]);
     action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$export]]);
     action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$share]]);
@@ -2937,7 +2967,8 @@ function mount_rows_table(gobj, card, $table)
         autoColumns:    true,
         /*  The whole topic comes in key order, not in time order (a rowid
          *  counts inside one key): its columns sort, over the loaded page.  */
-        autoColumnsDefinitions: (defs) => tune_columns(defs, card.key === ALL_KEYS)
+        autoColumnsDefinitions: (defs) =>
+            tune_columns(defs, card.key === ALL_KEYS, card.level)
     });
     table.on("rowClick", function(e, row) {
         gobj_send_event(gobj, "EV_SHOW_RECORD",
@@ -3055,14 +3086,14 @@ function record_key(card, row)
 /***************************************************************
  *  Shared column tuning for the auto/seeded columns (drop __rec, no
  *  header sort unless `sortable`, per-column operator header filter, tidy
- *  the metadata columns).
+ *  the metadata columns, show only what the card's `level` shows).
  *
  *  On a phone only the first MOBILE_COLS columns are shown: a record with
  *  a dozen fields, each at minWidth 90, is 1000+px wide and the card just
  *  scrolls sideways. Nothing is lost — a row click opens the FULL record
  *  as JSON, which is the way to read a wide record on a phone anyway.
  ***************************************************************/
-function tune_columns(defs, sortable)
+function tune_columns(defs, sortable, level)
 {
     let mobile = is_mobile();
     let shown = 0;
@@ -3084,7 +3115,9 @@ function tune_columns(defs, sortable)
             if(d.field === "t" || d.field === "tm") {
                 d.minWidth = 150;
             }
-            if(mobile) {
+            if(!column_visible_at(d.field, level)) {
+                d.visible = false;
+            } else if(mobile) {
                 shown++;
                 if(shown > MOBILE_COLS) {
                     d.visible = false;
@@ -3098,7 +3131,7 @@ function tune_columns(defs, sortable)
  *  Build column defs from a flattened row (Live: autoColumns can't
  *  generate from an initially-empty table, so seed them on first record).
  ***************************************************************/
-function columns_from_row(row)
+function columns_from_row(row, level)
 {
     let defs = [];
     for(let k in row) {
@@ -3107,7 +3140,7 @@ function columns_from_row(row)
         }
         defs.push({title: k, field: k});
     }
-    return tune_columns(defs);
+    return tune_columns(defs, false, level);
 }
 
 /***************************************************************
@@ -3148,7 +3181,7 @@ function push_live_row(card, row)
     if(!card.seeded) {
         card.seeded = true;
         try {
-            table.setColumns(columns_from_row(row));
+            table.setColumns(columns_from_row(row, card.level));
         } catch(e) {
             log_warning(`${GCLASS_NAME}: table gone: ${e}`);
         }
@@ -4119,7 +4152,8 @@ function ac_open_card(gobj, event, kw, src)
         String((kw && kw.key) !== undefined ? kw.key : ""),
         (kw && kw.mode) || "",
         (kw && kw.match_cond) || {},
-        !!(kw && kw.restoring));
+        !!(kw && kw.restoring),
+        normalize_level(kw && kw.level));
     return 0;
 }
 
@@ -4449,6 +4483,51 @@ function ac_toggle_column(gobj, event, kw, src)
         }
     } catch(e) {
         log_error(`${gobj_short_name(gobj)}: cannot toggle column '${field}': ${e}`);
+        return -1;
+    }
+    return 0;
+}
+
+/************************************************************
+ *  Switch what a card's rows show (its level): show and hide the columns
+ *  in place — the rows already carry all of them — and save the level
+ *  with the view, so the card comes back the way it was left. The same
+ *  phone rule as tune_columns: of the columns the level shows, only the
+ *  first MOBILE_COLS.
+ ************************************************************/
+function ac_set_card_level(gobj, event, kw, src)
+{
+    let card = card_of_event(gobj, event, kw, src);
+    if(!card) {
+        return -1;      /*  Error already logged  */
+    }
+    card.level = normalize_level(kw && kw.level);
+    persist_view(gobj, card);
+
+    if(!card.tabulator) {
+        return 0;       /*  applied by tune_columns when the table builds  */
+    }
+    let mobile = is_mobile();
+    let shown = 0;
+    try {
+        for(let col of card.tabulator.getColumns()) {
+            let field = col.getField();
+            if(!field) {
+                continue;
+            }
+            let visible = column_visible_at(field, card.level);
+            if(visible && mobile) {
+                shown++;
+                visible = shown <= MOBILE_COLS;
+            }
+            if(visible) {
+                col.show();
+            } else {
+                col.hide();
+            }
+        }
+    } catch(e) {
+        log_error(`${gobj_short_name(gobj)}: cannot apply level '${card.level}': ${e}`);
         return -1;
     }
     return 0;
@@ -4963,6 +5042,7 @@ function create_gclass(gclass_name)
             ["EV_SHARE_CARD",           ac_share_card,            null],
             ["EV_OPEN_COLUMNS",         ac_open_columns,          null],
             ["EV_TOGGLE_COLUMN",        ac_toggle_column,         null],
+            ["EV_SET_CARD_LEVEL",       ac_set_card_level,        null],
             ["EV_COPY_DONE",            ac_copy_done,             null],
             ["EV_COPY_RESET",           ac_copy_reset,            null]
         ]]
@@ -5001,6 +5081,7 @@ function create_gclass(gclass_name)
         ["EV_SHARE_CARD",           0],
         ["EV_OPEN_COLUMNS",         0],
         ["EV_TOGGLE_COLUMN",        0],
+        ["EV_SET_CARD_LEVEL",       0],
         ["EV_COPY_DONE",            0],
         ["EV_COPY_RESET",           0]
     ];

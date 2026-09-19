@@ -19,6 +19,21 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.45 — 2026-09-19
+
+### Added
+
+- **A tranger card shows the record's metadata, like `tr2list -l1`**
+    (gui_treedb): a selector in the card header chooses what the rows show:
+    **Record** (the record's fields with key/t/tm/rowid, as before),
+    **Metadata** (key, rowid g and i, uflag, sflag, t, tm, with the flags in
+    hex like `tr2list`) or **All**. Each row already has every column, so a
+    switch sends no new request, and the Columns chooser still works on the
+    result. The level is saved with the view and goes in the Share link (only
+    when it is not the default, so older links stay the same). This works on
+    Rows and Live cards, per key or for the whole topic. The data was already
+    in `__md_tranger__`, so no backend change was needed.
+
 ## gui_treedb 0.17.44 — 2026-09-19
 
 ### Fixed

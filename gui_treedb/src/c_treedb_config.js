@@ -506,7 +506,7 @@ function do_set_conn_expanded(gobj, conn_id, expanded)
  *  Open Tranger key-views, persisted PER CONNECTION so they survive
  *  reloads and are restored when the user returns to a topic; the whole
  *  set for a connection is dropped when that connection is removed.
- *  Shape: {conn_id: [{treedb_name, topic, key, mode, match_cond}]}.
+ *  Shape: {conn_id: [{treedb_name, topic, key, mode, match_cond, level}]}.
  ***************************************************************/
 function read_tranger_views(gobj)
 {
@@ -539,9 +539,9 @@ function treedb_config_get_tranger_views(gobj, conn_id, treedb_name, topic)
 
 /***************************************************************
  *  Persist a view as open (idempotent per conn/treedb/topic/key/mode;
- *  a re-add refreshes its match_cond).
+ *  a re-add refreshes its match_cond and its level).
  ***************************************************************/
-function do_add_tranger_view(gobj, conn_id, treedb_name, topic, key, mode, match_cond)
+function do_add_tranger_view(gobj, conn_id, treedb_name, topic, key, mode, match_cond, level)
 {
     if(!conn_id) {
         return;
@@ -556,7 +556,8 @@ function do_add_tranger_view(gobj, conn_id, treedb_name, topic, key, mode, match
         topic:       topic,
         key:         key,
         mode:        mode,
-        match_cond:  match_cond || {}
+        match_cond:  match_cond || {},
+        level:       level || ""     /*  what the rows show; "" = the default  */
     });
     map[conn_id] = list;
     write_tranger_views(gobj, map);
@@ -959,7 +960,8 @@ function ac_add_tranger_view(gobj, event, kw, src)
     do_add_tranger_view(gobj,
         (kw && kw.conn_id) || "", (kw && kw.treedb_name) || "",
         (kw && kw.topic) || "", (kw && kw.key) || "", (kw && kw.mode) || "",
-        (kw && kw.match_cond) || {});
+        (kw && kw.match_cond) || {},
+        (kw && kw.level) || "");
     return 0;
 }
 

@@ -13,6 +13,11 @@ import {describe, it, expect} from "vitest";
 import {
     SF_T_MS,
     SF_TM_MS,
+    DEFAULT_LEVEL,
+    META_FIELDS,
+    hex_flag,
+    normalize_level,
+    column_visible_at,
     to_epoch,
     epoch_to_local_input,
     fmt_ts,
@@ -117,6 +122,52 @@ describe("flatten_record", () => {
 });
 
 
+describe("tr2list -l1 metadata", () => {
+    it("flattens i_rowid, uflag and sflag the way tr2list prints them", () => {
+        let row = flatten_record({
+            __md_tranger__: {t: 1, tm: 0, g_rowid: 3, i_rowid: 2,
+                             user_flag: 0, system_flag: 0x1001},
+            size: 31747384
+        });
+        expect(row.rowid).toBe(3);
+        expect(row.i_rowid).toBe(2);
+        expect(row.uflag).toBe("0x0");
+        expect(row.sflag).toBe("0x1001");
+        /*  The record's own `size` keeps its name: no metadata column is
+         *  called like that.  */
+        expect(row.size).toBe(31747384);
+    });
+
+    it("leaves an absent flag empty, not 0x0", () => {
+        expect(hex_flag(undefined)).toBe("");
+        expect(hex_flag(null)).toBe("");
+        expect(hex_flag(255)).toBe("0xff");
+    });
+
+    it("shows each column at the right level", () => {
+        /*  record: the record's fields, and the four metadata columns it
+         *  always had.  */
+        expect(column_visible_at("rowid", "record")).toBe(true);
+        expect(column_visible_at("sflag", "record")).toBe(false);
+        expect(column_visible_at("size", "record")).toBe(true);
+        /*  metadata: tr2list -l1, nothing of the record.  */
+        for(let f of META_FIELDS) {
+            expect(column_visible_at(f, "metadata")).toBe(true);
+        }
+        expect(column_visible_at("size", "metadata")).toBe(false);
+        /*  all: everything.  */
+        expect(column_visible_at("sflag", "all")).toBe(true);
+        expect(column_visible_at("size", "all")).toBe(true);
+    });
+
+    it("reads an unknown or missing level as the default one", () => {
+        expect(normalize_level(undefined)).toBe(DEFAULT_LEVEL);
+        expect(normalize_level("storage")).toBe(DEFAULT_LEVEL);
+        expect(normalize_level("metadata")).toBe("metadata");
+    });
+});
+
+
 describe("op_filter", () => {
     it("compares numerically when both sides are numbers", () => {
         expect(op_filter(">200", 201)).toBe(true);
@@ -159,6 +210,16 @@ describe("the URL segment of a view", () => {
         expect(back.card.key).toBe("dev-42");
         expect(back.card.mode).toBe("rows");
         expect(back.card.match_cond).toEqual({from_t: 1000, to_t: 2000, backward: 1});
+    });
+
+    it("carries the level, and only when it is not the default", () => {
+        let plain = {key: "k", mode: "rows", match_cond: {}};
+        expect(encode_seg("readings", plain))
+            .toBe(encode_seg("readings", {...plain, level: DEFAULT_LEVEL}));
+        let back = decode_seg(encode_seg("readings", {...plain, level: "metadata"}));
+        expect(back.card.level).toBe("metadata");
+        /*  A link from before levels existed opens at the default.  */
+        expect(decode_seg(encode_seg("readings", plain)).card.level).toBe(DEFAULT_LEVEL);
     });
 
     it("stays ONE url path segment (no slash, no ?, no #)", () => {
