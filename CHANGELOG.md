@@ -19,6 +19,18 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.48 / gui_agent 0.22.70 — 2026-09-19
+
+### Changed
+
+- **The common toolbar buttons keep one order everywhere.** Buttons that
+    belong to one view go first, then the common block **Refresh, Columns,
+    Export**, then Close at the right.
+    - gui_treedb, tranger cards: Rows is Options, Share · Refresh, Columns,
+      Export · Close. Live is Pause, Clear, Share · Columns, Export · Close.
+    - Both SPAs move to gobj-ui 7.23.182, whose treedb topic toolbar now
+      reads Search, Schema · Refresh, Columns, Export.
+
 ## gui_treedb 0.17.47 — 2026-09-19
 
 ### Changed

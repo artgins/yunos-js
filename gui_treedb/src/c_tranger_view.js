@@ -2923,18 +2923,33 @@ function add_card(gobj, key, mode, match_cond, restoring)
      *  OUTSIDE the box. As a block they wrap to a second line of the head when
      *  they do not fit (see the CSS), still right-aligned (margin-left:auto —
      *  which also replaces the old flex:1 spacer).  */
+    /*
+     *  The ORDER is the one every table toolbar of the ecosystem keeps
+     *  (gobj-ui's treedb topic toolbar too): what is particular to the card
+     *  first (options / pause, clear, share), then the common block ALWAYS
+     *  as Refresh, Columns, Export, then Close at the right. A button that
+     *  moves from view to view has to be looked for every time.
+     */
     let action_children = [];
+    let push_action = ($btn) => {
+        action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$btn]]);
+    };
     if($options) {
-        action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$options]]);
+        push_action($options);
     }
     if($pause) {
-        action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$pause]]);
+        push_action($pause);
     }
-    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$cols]]);
-    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$export]]);
-    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$share]]);
-    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$action]]);
-    action_children.push(["span", {class: "ml-2 is-flex-shrink-0"}, [$close]]);
+    if(mode !== "rows") {
+        push_action($action);   /*  Clear: particular to Live  */
+    }
+    push_action($share);
+    if(mode === "rows") {
+        push_action($action);   /*  Refresh: first of the common block  */
+    }
+    push_action($cols);
+    push_action($export);
+    push_action($close);
     head_children.push(
         ["div", {class: "TRANGER_CARD_ACTIONS is-flex is-align-items-center"},
             action_children]);
