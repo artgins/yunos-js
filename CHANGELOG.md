@@ -19,6 +19,18 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.47 — 2026-09-19
+
+### Changed
+
+- **A tranger card always shows every column** (gui_treedb): the
+    Record / Metadata / All selector of 0.17.45 is gone. The record's fields
+    and the `tr2list -l1` metadata (`i_rowid`, the decoded `uflag` and
+    `sflag`) are always in the table, and "Columns" hides what you do not
+    need. On a phone the three extra metadata columns start hidden, so that
+    the four columns that fit still include a field of the record. Saved
+    views and links that carry a level still open; the level is ignored.
+
 ## gui_treedb 0.17.46 — 2026-09-19
 
 ### Added

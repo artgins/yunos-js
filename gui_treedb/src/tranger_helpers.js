@@ -58,25 +58,6 @@ const SF_NAMES = [
     "",                     // 0x8000
 ];
 
-/*  What a records card shows, named after tr2list's levels:
- *
- *      record    the record's own fields, with key/t/tm/rowid (tr2list -l3)
- *      metadata  the record's metadata only: key, rowid (g, i), uflag,
- *                sflag, t, tm (tr2list -l1)
- *      all       both
- *
- *  A level only picks which columns are VISIBLE: every row carries every
- *  column, so a switch needs no new request and the Columns chooser still
- *  tunes the result by hand.  */
-const LEVELS = ["record", "metadata", "all"];
-const DEFAULT_LEVEL = "record";
-
-/*  The metadata columns flatten_record() writes, in its order. The first
- *  four are shown at the record level too; the last three only exist to
- *  answer what tr2list -l1 answers.  */
-const META_FIELDS = ["key", "t", "tm", "rowid", "i_rowid", "uflag", "sflag"];
-const METADATA_ONLY_FIELDS = ["i_rowid", "uflag", "sflag"];
-
 
 /***************************************************************
  *  Epoch (topic unit) <-> the LOCAL wall clock.
@@ -184,31 +165,6 @@ function snaps_from_records(records)
         }
     }
     return map;
-}
-
-/***************************************************************
- *  A level the view knows, or the default one: a saved view or a shared
- *  link from before levels existed, or from a newer version, still opens.
- ***************************************************************/
-function normalize_level(level)
-{
-    return LEVELS.indexOf(level) >= 0 ? level : DEFAULT_LEVEL;
-}
-
-/***************************************************************
- *  Is a column shown at a level? `field` is a column of a flattened row:
- *  one of META_FIELDS, or a field of the record itself.
- ***************************************************************/
-function column_visible_at(field, level)
-{
-    switch(normalize_level(level)) {
-        case "metadata":
-            return META_FIELDS.indexOf(field) >= 0;
-        case "all":
-            return true;
-        default:
-            return METADATA_ONLY_FIELDS.indexOf(field) < 0;
-    }
 }
 
 /***************************************************************
@@ -324,8 +280,7 @@ function op_filter(headerValue, rowValue)
  *  "look at key X between A and B" — was the one thing you could not send
  *  them. A link is now that whole state.
  *
- *  Wire shape: `<topic>~<base64url of {k, m, c, l?}>` (`l` = the card's
- *  level, only when it is not the default). A bare `<topic>` (every
+ *  Wire shape: `<topic>~<base64url of {k, m, c}>`. A bare `<topic>` (every
  *  link ever shared before this) still parses, and so does a payload this
  *  version cannot read — a link is never worth failing a navigation for, so
  *  a broken one degrades to "just the topic".
@@ -367,11 +322,6 @@ function encode_seg(topic, card)
         m: card.mode,
         c: card.match_cond || {}
     };
-    /*  Only when it is not the default: a link to a plain card stays the
-     *  link it has always been.  */
-    if(card.level && normalize_level(card.level) !== DEFAULT_LEVEL) {
-        payload.l = card.level;
-    }
     return String(topic || "") + SEG_SEP + b64url_encode(JSON.stringify(payload));
 }
 
@@ -393,8 +343,7 @@ function decode_seg(seg)
             card: {
                 key:        String(p.k === undefined || p.k === null ? "" : p.k),
                 mode:       p.m,
-                match_cond: (p.c && typeof p.c === "object") ? p.c : {},
-                level:      normalize_level(p.l)
+                match_cond: (p.c && typeof p.c === "object") ? p.c : {}
             }
         };
     } catch(e) {
@@ -481,16 +430,11 @@ function parse_records_page(data)
 export {
     SF_T_MS,
     SF_TM_MS,
-    LEVELS,
-    DEFAULT_LEVEL,
-    META_FIELDS,
     hex_flag,
     sflag_names,
     fmt_sflag,
     fmt_uflag,
     snaps_from_records,
-    normalize_level,
-    column_visible_at,
     to_epoch,
     epoch_to_local_input,
     fmt_ts,
