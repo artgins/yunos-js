@@ -19,6 +19,22 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.43 — 2026-09-19
+
+### Added
+
+- **Rows of every key of a topic** (gui_treedb): a "Rows topic" button beside
+    "Live topic" opens the Rows options and then one Rows card over the whole
+    topic. The backend lays the keys end to end in key order, the way `tr2list`
+    prints a topic (`open-iterator rkey=.*`, SDK newer than 7.22.0). Each row has a
+    `key` column. That order is not a time order, because a rowid counts
+    inside one key, so in this card the column headers sort the loaded page.
+    The button is coloured while the card is open, and a click closes it. With
+    an older backend, the card shows the backend's "What key?" error.
+- **"All" in the Keys picker's page size** (gui_treedb): shows every key that
+    matches, as one page (`list-keys` with `limit=0`). The Rows cards do not
+    get it: there "All" would mean every record of a key in one answer.
+
 ## gui_treedb 0.17.42 / gui_agent 0.22.69 — 2026-09-19
 
 ### Fixed

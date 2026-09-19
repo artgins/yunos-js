@@ -40,6 +40,11 @@
  *          (bridged to the async gobj_command answer with a per-request
  *          Promise). The iterator is closed (`close-iterator`) when the
  *          card, topic or view goes away;
+ *        - the toolbar "Rows topic" button does the same for EVERY key:
+ *          `open-iterator rkey=.*` lays the keys end to end in key order,
+ *          as tr2list prints a topic, each record naming its key (a key
+ *          column). That is not a time order — a rowid counts inside one
+ *          key — so this card's header sorts, over the loaded page;
  *        - a "Live" card streams new appends (`open-rt` +
  *          EV_TRANGER_RECORD_ADDED), newest on top, no history;
  *        - per-column header filters (client-side, over the LOADED page)
@@ -146,7 +151,8 @@ const GCLASS_NAME = "C_TRANGER_VIEW";
 const PAGE_SIZE = 100;
 
 /*  A card's key when it follows the WHOLE topic instead of one key: what
- *  `open-rt` takes as "every key" (an empty key), and what identifies the
+ *  `open-rt` takes as "every key" (an empty key; a Rows card asks
+ *  `open-iterator` with `rkey` instead), and what identifies the
  *  card in find_card / the persisted view set. A topic has no key named ""
  *  — tranger keys are non-empty — so it can never collide with a real one.  */
 const ALL_KEYS = "";
@@ -433,6 +439,7 @@ let PRIVATE_DATA = {
                              with the dialog  */
     $tabs:       null,
     $live_btn:   null,   /*  toolbar "Live topic" toggle (its dot = card open)  */
+    $rows_btn:   null,   /*  toolbar "Rows topic" toggle (coloured = card open)  */
     $meta:       null,
     $error:      null,
     $dashboard:  null,   /*  cards column  */
@@ -659,6 +666,30 @@ function build_ui(gobj)
     });
     priv.$live_btn = $live_btn;
 
+    /*  Rows on the WHOLE topic: `open-iterator` with `rkey` lays every key
+     *  end to end in key order, as tr2list prints a topic; the card sorts
+     *  the page it holds. Like a key's Rows it goes through the Rows options
+     *  first — a whole topic is where a time range matters most — and like
+     *  the Live topic button it toggles: coloured while the card is open.  */
+    let $rows_btn = createElement2(
+        ["button", {class: "button ml-2 TRANGER_ROWS_TOPIC_BTN",
+                    title: t("rows of every key of the topic"),
+                    "aria-label": t("rows of every key of the topic")},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-eye"}]]],
+                ["span", {i18n: "rows topic"}, t("rows topic")]
+            ]
+        ]);
+    $rows_btn.addEventListener("click", () => {
+        if(find_card(gobj, ALL_KEYS, "rows")) {
+            gobj_send_event(gobj, "EV_CLOSE_CARD",
+                {key: ALL_KEYS, mode: "rows"}, gobj);
+            return;
+        }
+        gobj_send_event(gobj, "EV_OPEN_OPTIONS", {key: ALL_KEYS}, gobj);
+    });
+    priv.$rows_btn = $rows_btn;
+
     /*  Inspect the service's raw tranger json in a lazy tree viewer
      *  (print-tranger). A whole tranger can be huge, so the viewer drills
      *  in on demand — see open_json_viewer / EV_EXPAND_PATH.  */
@@ -704,7 +735,7 @@ function build_ui(gobj)
             [
                 ["div", {class: "tabs is-boxed mb-2 TRANGER_TOPICS"}, [$tabs]],
                 ["div", {class: "is-flex is-align-items-center mb-2 TRANGER_TOOLBAR"},
-                    [$keys_btn, $live_btn, $json_btn, $meta]],
+                    [$keys_btn, $live_btn, $rows_btn, $json_btn, $meta]],
                 $error,
                 $dashboard
             ]
@@ -935,13 +966,13 @@ function request_keys_page(gobj, page, size, rkey, order, desc)
                 rkey:       rkey || "",
                 order:      order || "key",
                 desc:       desc ? 1 : 0,
-                from:       (page - 1) * size + 1,
-                limit:      size,
+                from:       size ? (page - 1) * size + 1 : 1,
+                limit:      size,   /*  0 = every matching key ("All")  */
                 /*  The topic travels so a page of a topic the user has since
                  *  left can be told apart from the current one: its rows would
                  *  otherwise land in the key/span state of the NEW topic.  */
                 __md_command__: {req_id: req_id, purpose: "page",
-                                 topic_name: priv.cur_topic}
+                                 topic_name: priv.cur_topic, all: !size}
             }, gobj);
     });
 }
@@ -1034,7 +1065,8 @@ function set_toolbar_enabled(gobj, enabled)
         return;
     }
     for(let $btn of $c.querySelectorAll(
-            ".TRANGER_KEYS_BTN, .TRANGER_LIVE_TOPIC_BTN, .TRANGER_JSON_BTN")) {
+            ".TRANGER_KEYS_BTN, .TRANGER_LIVE_TOPIC_BTN, .TRANGER_ROWS_TOPIC_BTN, " +
+            ".TRANGER_JSON_BTN")) {
         $btn.disabled = !enabled;
     }
 }
@@ -1248,7 +1280,9 @@ function open_keys_picker(gobj)
         sortMode:       "remote",
         filterMode:     "remote",
         paginationSize: 15,
-        paginationSizeSelector: [15, 30, 50, 100],
+        /*  `true` is Tabulator's "All": the size then arrives as `true`, and
+         *  request_keys_page turns it into list-keys' own "every key".  */
+        paginationSizeSelector: [15, 30, 50, 100, true],
         paginationCounter: rows_counter(),
         initialSort:    [{column: "records", dir: "desc"}],
         ajaxURL:        "list-keys",    /*  dummy: only triggers ajaxRequestFunc  */
@@ -1258,7 +1292,7 @@ function open_keys_picker(gobj)
             return request_keys_page(
                 gobj,
                 params.page || 1,
-                params.size || 15,
+                params.size === true ? 0 : (params.size || 15),
                 filter ? rx_escape(filter.value) : "",
                 sorter ? sorter.field : "records",
                 sorter ? sorter.dir === "desc" : true
@@ -1530,7 +1564,8 @@ function request_print_tranger(gobj, path)
 /***************************************************************
  *  The toolbar's "Live topic" button reflects the whole-topic Live card:
  *  its dot is GREEN while that card is open and colourless while it is
- *  not, and its title says what a click will do (it toggles).
+ *  not, and its title says what a click will do (it toggles). "Rows topic"
+ *  does the same for the whole-topic Rows card.
  ***************************************************************/
 function paint_live_topic_btn(gobj)
 {
@@ -1545,6 +1580,20 @@ function paint_live_topic_btn(gobj)
     let label = open ? t("stop following the topic") : t("live on the whole topic");
     $btn.title = label;
     $btn.setAttribute("aria-label", label);
+
+    /*  The whole-topic Rows card, in the picker's language for a key's Rows:
+     *  the button is coloured while the card is open.  */
+    let $rows = priv.$rows_btn;
+    if($rows) {
+        let rows_open = !!find_card(gobj, ALL_KEYS, "rows");
+        $rows.classList.toggle("is-link", rows_open);
+        $rows.classList.toggle("is-selected", rows_open);
+        let rows_label = rows_open
+            ? t("close the rows of the topic")
+            : t("rows of every key of the topic");
+        $rows.title = rows_label;
+        $rows.setAttribute("aria-label", rows_label);
+    }
 }
 
 /***************************************************************
@@ -2420,8 +2469,8 @@ function open_rows_options(gobj, key, card)
     let opt_modal = show_view_modal(gobj, shell, form.$box, {
         dialog: true,
         logical_class: "TRANGER_ROWS_OPTIONS",
-        title_prefix: key,
-        title:  "rows",
+        title_prefix: key === ALL_KEYS ? gobj.priv.cur_topic : key,
+        title:  key === ALL_KEYS ? "rows topic" : "rows",
         t:      t,
         /*  EVERY way out of the dialog lands here (the X, Escape, the
          *  backdrop, and the confirm button's own close()), so this is the
@@ -2503,9 +2552,15 @@ function arm_iterator(gobj, card)
     let iter_kw = {
         service:     gobj_read_str_attr(gobj, "treedb_name"),
         iterator_id: card.iterator_id,
-        topic_name:  card.topic,
-        key:         card.key
+        topic_name:  card.topic
     };
+    /*  The whole topic: every key, laid end to end in key order by the
+     *  backend (open-iterator with rkey).  */
+    if(card.key === ALL_KEYS) {
+        iter_kw.rkey = ".*";
+    } else {
+        iter_kw.key = card.key;
+    }
     Object.assign(iter_kw, card.match_cond || {});
     gobj_command(remote, "open-iterator", iter_kw, gobj);
     return true;
@@ -2565,12 +2620,6 @@ function add_card(gobj, key, mode, match_cond, restoring)
      *  declares EV_OPEN_CARD); an unknown mode is a caller bug.  */
     if(mode !== "rows" && mode !== "live") {
         log_error(`${gobj_short_name(gobj)}: bad card mode '${mode}'`);
-        return;
-    }
-    if(mode === "rows" && key === ALL_KEYS) {
-        /*  Only the realtime feed takes "every key": an iterator indexes ONE
-         *  key (open-iterator requires it).  */
-        log_error(`${gobj_short_name(gobj)}: a Rows card needs a key`);
         return;
     }
     if(!live_transport(gobj)) {
@@ -2870,6 +2919,7 @@ function mount_rows_table(gobj, card, $table)
         pagination:     true,
         paginationMode: "remote",
         filterMode:     "local",   /*  the head search filters the loaded page  */
+        sortMode:       "local",   /*  a header sort orders the loaded page  */
         paginationSize: PAGE_SIZE,
         paginationSizeSelector: [50, 100, 200, 500],
         paginationCounter: rows_counter(),
@@ -2878,11 +2928,13 @@ function mount_rows_table(gobj, card, $table)
             return request_page(gobj, card, params.page || 1, params.size || PAGE_SIZE);
         },
         autoColumns:    true,
-        autoColumnsDefinitions: tune_columns
+        /*  The whole topic comes in key order, not in time order (a rowid
+         *  counts inside one key): its columns sort, over the loaded page.  */
+        autoColumnsDefinitions: (defs) => tune_columns(defs, card.key === ALL_KEYS)
     });
     table.on("rowClick", function(e, row) {
         gobj_send_event(gobj, "EV_SHOW_RECORD",
-            {record: row.getData().__rec, key: card.key}, gobj);
+            {record: row.getData().__rec, key: record_key(card, row.getData())}, gobj);
     });
     /*  Re-measure once built + laid out (autoResize handles later window
      *  resizes), so the columns fit the card instead of a stale width.  */
@@ -2924,7 +2976,7 @@ function mount_live_table(gobj, card, $table)
     });
     table.on("rowClick", function(e, row) {
         gobj_send_event(gobj, "EV_SHOW_RECORD",
-            {record: row.getData().__rec, key: card.key}, gobj);
+            {record: row.getData().__rec, key: record_key(card, row.getData())}, gobj);
     });
     table.on("tableBuilt", function() {
         card.built = true;
@@ -2982,16 +3034,28 @@ function live_filter(card)
 }
 
 /***************************************************************
+ *  The key a row of a card belongs to: the card's, or — in a whole-topic
+ *  card, which mixes them — the row's own key column.
+ ***************************************************************/
+function record_key(card, row)
+{
+    if(card.key === ALL_KEYS && row && row.key !== undefined) {
+        return String(row.key);
+    }
+    return card.key;
+}
+
+/***************************************************************
  *  Shared column tuning for the auto/seeded columns (drop __rec, no
- *  header sort, per-column operator header filter, tidy the metadata
- *  columns).
+ *  header sort unless `sortable`, per-column operator header filter, tidy
+ *  the metadata columns).
  *
  *  On a phone only the first MOBILE_COLS columns are shown: a record with
  *  a dozen fields, each at minWidth 90, is 1000+px wide and the card just
  *  scrolls sideways. Nothing is lost — a row click opens the FULL record
  *  as JSON, which is the way to read a wide record on a phone anyway.
  ***************************************************************/
-function tune_columns(defs)
+function tune_columns(defs, sortable)
 {
     let mobile = is_mobile();
     let shown = 0;
@@ -2999,7 +3063,7 @@ function tune_columns(defs)
     return defs
         .filter((d) => d.field !== "__rec")
         .map((d) => {
-            d.headerSort = false;
+            d.headerSort = !!sortable;
             d.minWidth = 90;
             d.headerFilter = "input";
             d.headerFilterFunc = op_filter;
@@ -3481,8 +3545,12 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 let page = parse_records_page(data);
                 /*  NOT `.map(flatten_record)`: map would hand it the INDEX as
                  *  its second argument, which is the key parameter.  */
+                /*  A whole-topic page mixes keys: each record names its own
+                 *  in its metadata, and it becomes the key column.  */
+                let all_keys = !!(pend.card && pend.card.key === ALL_KEYS);
                 pend.resolve({
-                    data:      page.records.map((rec) => flatten_record(rec)),
+                    data:      page.records.map((rec) => flatten_record(rec,
+                        all_keys ? ((rec && rec.__md_tranger__) || {}).key : undefined)),
                     last_page: page.last_page,
                     last_row:  page.last_row
                 });
@@ -3518,7 +3586,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
             return 0;
         }
         let answer = parse_keys_answer(data);
-        if(answer.whole_list) {
+        if(answer.whole_list && !kw_command.all) {
             /*  A backend older than the paged list-keys ignores from/limit and
              *  answers the whole key list, as it always did. Do not leave the
              *  picker empty for that: show the lot as a single page. The search
