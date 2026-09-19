@@ -133,6 +133,9 @@ import {
     epoch_to_local_input,
     fmt_ts,
     flatten_record,
+    fmt_uflag,
+    fmt_sflag,
+    snaps_from_records,
     LEVELS,
     normalize_level,
     column_visible_at,
@@ -411,6 +414,9 @@ let PRIVATE_DATA = {
     cur_topic:   "",     /*  selected topic  */
     pending_seg: "",     /*  topic asked via EV_SHOW before topics loaded  */
     pending_card: null,  /*  card carried by a shared link, until its keys land  */
+    snaps:       null,   /*  snap id -> name, from __snaps__ (null: no treedb
+                             here, or not read yet) — what a uflag means  */
+    snaps_seq:   0,      /*  one-shot list id uniquifier  */
     keys:        null,   /*  the picker's CURRENT PAGE: [{key, records, fr_t,
                              to_t, fr_tm, to_tm}]. NOT every key of the topic —
                              the backend filters/sorts/pages them  */
@@ -480,6 +486,7 @@ function mt_create(gobj)
 {
     let priv = gobj.priv;
     priv.topics = null;
+    priv.snaps = null;
     priv.topic_flags = {};
     priv.cur_topic = "";
     priv.pending_seg = "";
@@ -589,6 +596,7 @@ function mt_stop(gobj)
      *  answered `topics` yet.  */
     let priv = gobj.priv;
     priv.topics = null;
+    priv.snaps = null;
     priv.topic_flags = {};
     priv.keys = null;
     priv.key_spans = {};
@@ -1082,6 +1090,53 @@ function set_toolbar_enabled(gobj, enabled)
 }
 
 /***************************************************************
+ *  Command to remote service: the snaps of the treedb this tranger holds
+ *  (every record of its __snaps__ topic, in one read). A record's user_flag
+ *  is the id of the snap that tagged it, and this is what names it. Only a
+ *  treedb's tranger has __snaps__: a plain one has nothing to ask, and its
+ *  user_flag means whatever its application says (it stays hex).
+ ***************************************************************/
+function request_snaps(gobj)
+{
+    let priv = gobj.priv;
+    if(!(priv.topics || []).includes("__snaps__")) {
+        priv.snaps = null;
+        return;
+    }
+    let remote = live_transport(gobj);
+    if(!remote) {
+        log_error(`${gobj_short_name(gobj)}: no session, cannot read the snaps`);
+        return;
+    }
+    gobj_command(remote, "open-list",
+        {
+            service:     gobj_read_str_attr(gobj, "treedb_name"),
+            list_id:     `spa-snaps-${priv.tok}-${++priv.snaps_seq}`,
+            topic_name:  "__snaps__",
+            return_data: 1,     /*  one-shot: loads, answers and closes  */
+            __md_command__: {purpose: "snaps"}
+        }, gobj);
+}
+
+/***************************************************************
+ *  The snaps changed: re-print the uflag cells of every open card (their
+ *  formatter reads the snaps when it runs, so a re-run is all it takes).
+ ***************************************************************/
+function reformat_flag_cells(gobj)
+{
+    for(let card of gobj.priv.cards) {
+        if(!card.tabulator) {
+            continue;
+        }
+        try {
+            card.tabulator.getRows().forEach((r) => r.reformat());
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: table gone: ${e}`);
+        }
+    }
+}
+
+/***************************************************************
  *  Select a topic: mark its tab, drop any open cards, (re)load its
  *  keys for the picker, publish the selection for the URL deep link.
  *  The work of ac_select_topic (which owns the state change).
@@ -1105,6 +1160,7 @@ function do_select_topic(gobj, topic_name)
      *  at a key that exists. The picker asks for its own page when it opens.  */
     request_keys_count(gobj, topic_name);
     ask_saved_views(gobj, topic_name);
+    request_snaps(gobj);    /*  what the uflag of a record means  */
 
     gobj_publish_event(gobj, "EV_TOPIC_SELECTED", {topic: topic_name});
 }
@@ -2652,6 +2708,7 @@ function add_card(gobj, key, mode, match_cond, restoring, level)
         tabulator: null, $el: null, $count: null, $pause: null, $share: null,
         match_cond: match_cond || {},
         level: normalize_level(level),  /*  which columns show (tr2list levels)  */
+        get_snaps: () => priv.snaps,    /*  read at RENDER: a later answer counts  */
         live_max: cfg ? treedb_config_get_live_max(cfg) : LIVE_MAX_DEFAULT,
         iterator_id: null, rt_id: null, subscribed: false,
         built: false, seeded: false, pending: [],
@@ -2968,7 +3025,7 @@ function mount_rows_table(gobj, card, $table)
         /*  The whole topic comes in key order, not in time order (a rowid
          *  counts inside one key): its columns sort, over the loaded page.  */
         autoColumnsDefinitions: (defs) =>
-            tune_columns(defs, card.key === ALL_KEYS, card.level)
+            tune_columns(defs, card, card.key === ALL_KEYS)
     });
     table.on("rowClick", function(e, row) {
         gobj_send_event(gobj, "EV_SHOW_RECORD",
@@ -3093,8 +3150,9 @@ function record_key(card, row)
  *  scrolls sideways. Nothing is lost — a row click opens the FULL record
  *  as JSON, which is the way to read a wide record on a phone anyway.
  ***************************************************************/
-function tune_columns(defs, sortable, level)
+function tune_columns(defs, card, sortable)
 {
+    let level = card.level;
     let mobile = is_mobile();
     let shown = 0;
 
@@ -3115,6 +3173,19 @@ function tune_columns(defs, sortable, level)
             if(d.field === "t" || d.field === "tm") {
                 d.minWidth = 150;
             }
+            /*  The flags keep their raw number (a filter `>0` finds every
+             *  record a snap tagged) and PRINT decoded: the snap's name, the
+             *  names of the system bits. A bare term also matches the printed
+             *  text, so `18-sep` or `immutable` filters too.  */
+            if(d.field === "uflag") {
+                let fmt = (v) => fmt_uflag(v, card.get_snaps());
+                d.formatter = (cell) => fmt(cell.getValue());
+                d.headerFilterFunc = (hv, rv) => op_filter(hv, rv) || op_filter(hv, fmt(rv));
+            }
+            if(d.field === "sflag") {
+                d.formatter = (cell) => fmt_sflag(cell.getValue());
+                d.headerFilterFunc = (hv, rv) => op_filter(hv, rv) || op_filter(hv, fmt_sflag(rv));
+            }
             if(!column_visible_at(d.field, level)) {
                 d.visible = false;
             } else if(mobile) {
@@ -3131,7 +3202,7 @@ function tune_columns(defs, sortable, level)
  *  Build column defs from a flattened row (Live: autoColumns can't
  *  generate from an initially-empty table, so seed them on first record).
  ***************************************************************/
-function columns_from_row(row, level)
+function columns_from_row(row, card)
 {
     let defs = [];
     for(let k in row) {
@@ -3140,7 +3211,7 @@ function columns_from_row(row, level)
         }
         defs.push({title: k, field: k});
     }
-    return tune_columns(defs, false, level);
+    return tune_columns(defs, card, false);
 }
 
 /***************************************************************
@@ -3181,7 +3252,7 @@ function push_live_row(card, row)
     if(!card.seeded) {
         card.seeded = true;
         try {
-            table.setColumns(columns_from_row(row, card.level));
+            table.setColumns(columns_from_row(row, card));
         } catch(e) {
             log_warning(`${GCLASS_NAME}: table gone: ${e}`);
         }
@@ -3652,6 +3723,21 @@ function ac_mt_command_answer(gobj, event, kw, src)
     }
 
     /*
+     *  The snaps, read to name a record's user_flag. A failure costs only the
+     *  names (the flags stay hex), so it is logged, not bannered.
+     */
+    if(command === "open-list" && kw_command && kw_command.purpose === "snaps") {
+        if(result < 0) {
+            log_error(`${gobj_short_name(gobj)}: cannot read __snaps__: ` +
+                      `${comment || "(no comment)"}`);
+            return 0;
+        }
+        priv.snaps = snaps_from_records(data);
+        reformat_flag_cells(gobj);
+        return 0;
+    }
+
+    /*
      *  print-tranger feeds the JSON viewer, correlated by the echoed `path`:
      *  empty path is the first whole-tranger fetch (EV_SET_JSON), a set path
      *  is a lazy drill (EV_SUBTREE_LOADED). Handled before the generic error
@@ -3907,6 +3993,7 @@ function ac_transport_closed(gobj, event, kw, src)
 
     priv.pending_seg = priv.cur_topic || "";
     priv.topics = null;
+    priv.snaps = null;
     priv.topic_flags = {};
     priv.keys = null;
     priv.key_spans = {};
@@ -4272,6 +4359,7 @@ function ac_refresh_card(gobj, event, kw, src)
         return -1;      /*  Error already logged  */
     }
     rearm_rows_card(gobj, card);
+    request_snaps(gobj);    /*  a snap shot since then tags records too  */
     return 0;
 }
 

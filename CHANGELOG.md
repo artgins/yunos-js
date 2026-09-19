@@ -19,6 +19,20 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.46 — 2026-09-19
+
+### Added
+
+- **The uflag and sflag of a record are decoded** (gui_treedb). In a treedb's
+    tranger, a record's `uflag` is the id of the snap that tagged it. The view
+    reads `__snaps__` (`open-list return_data=1`) and shows the name:
+    `0x1 snap 18-sep`. `sflag` shows its bit names, from `sf_names` in
+    `timeranger2.c`: `0x1001 string_key loading_from_disk`. The cells keep
+    the raw number, so the header filter `>0` finds every tagged record. A
+    plain word (`18-sep`, `immutable`) matches the decoded text. The snaps are
+    read again when a card is refreshed, so a new `shoot-snap` gets its name.
+    A tranger with no `__snaps__` shows `uflag` in hex only.
+
 ## gui_treedb 0.17.45 — 2026-09-19
 
 ### Added

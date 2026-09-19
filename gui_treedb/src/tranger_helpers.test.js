@@ -16,6 +16,10 @@ import {
     DEFAULT_LEVEL,
     META_FIELDS,
     hex_flag,
+    sflag_names,
+    fmt_sflag,
+    fmt_uflag,
+    snaps_from_records,
     normalize_level,
     column_visible_at,
     to_epoch,
@@ -131,11 +135,34 @@ describe("tr2list -l1 metadata", () => {
         });
         expect(row.rowid).toBe(3);
         expect(row.i_rowid).toBe(2);
-        expect(row.uflag).toBe("0x0");
-        expect(row.sflag).toBe("0x1001");
+        /*  Raw numbers, so a header filter `>0` finds the tagged records;
+         *  the cell prints them decoded.  */
+        expect(row.uflag).toBe(0);
+        expect(row.sflag).toBe(0x1001);
         /*  The record's own `size` keeps its name: no metadata column is
          *  called like that.  */
         expect(row.size).toBe(31747384);
+    });
+
+    it("decodes the system_flag bits by name, like sf_names in timeranger2.c", () => {
+        expect(sflag_names(0x1001)).toEqual(["string_key", "loading_from_disk"]);
+        expect(sflag_names(0x0c00)).toEqual(["deleted_instance", "immutable_record"]);
+        expect(sflag_names(0x0008)).toEqual(["0x8"]);    /*  an unnamed bit  */
+        expect(fmt_sflag(0x1001)).toBe("0x1001 string_key loading_from_disk");
+        expect(fmt_sflag("")).toBe("");
+    });
+
+    it("names the snap that tagged a record", () => {
+        let snaps = snaps_from_records([
+            {id: "1", name: "old name"},
+            {id: "1", name: "18-sep"},     /*  the last record of an id wins  */
+            {id: "2", name: "19-sep"}
+        ]);
+        expect(fmt_uflag(1, snaps)).toBe("0x1 snap 18-sep");
+        expect(fmt_uflag(2, snaps)).toBe("0x2 snap 19-sep");
+        expect(fmt_uflag(7, snaps)).toBe("0x7 snap ?");
+        expect(fmt_uflag(0, snaps)).toBe("0x0");        /*  untagged  */
+        expect(fmt_uflag(1, null)).toBe("0x1");         /*  no treedb: just hex  */
     });
 
     it("leaves an absent flag empty, not 0x0", () => {

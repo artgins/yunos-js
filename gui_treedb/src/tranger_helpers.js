@@ -36,6 +36,28 @@ import {
 const SF_T_MS  = 0x0100;    /*  sf_t_ms:  t  is in milliseconds  */
 const SF_TM_MS = 0x0200;    /*  sf_tm_ms: tm is in milliseconds  */
 
+/*  The system_flag bits, by position: the mirror of sf_names[] in
+ *  timeranger2.c (system_flag2_t in timeranger2.h), without the `sf_`
+ *  prefix. An unnamed bit is "" and prints as its hex value.  */
+const SF_NAMES = [
+    "string_key",           // 0x0001
+    "rowid_key",            // 0x0002
+    "int_key",              // 0x0004
+    "",                     // 0x0008
+    "zip_record",           // 0x0010
+    "cipher_record",        // 0x0020
+    "",                     // 0x0040
+    "",                     // 0x0080
+    "t_ms",                 // 0x0100
+    "tm_ms",                // 0x0200
+    "deleted_instance",     // 0x0400
+    "immutable_record",     // 0x0800
+    "loading_from_disk",    // 0x1000
+    "",                     // 0x2000
+    "",                     // 0x4000
+    "",                     // 0x8000
+];
+
 /*  What a records card shows, named after tr2list's levels:
  *
  *      record    the record's own fields, with key/t/tm/rowid (tr2list -l3)
@@ -98,6 +120,73 @@ function hex_flag(v)
 }
 
 /***************************************************************
+ *  The names of the system_flag bits that are set, in bit order.
+ ***************************************************************/
+function sflag_names(v)
+{
+    let n = Number(v);
+    if(v === "" || v === null || v === undefined || !Number.isFinite(n)) {
+        return [];
+    }
+    let names = [];
+    for(let bit = 0; bit < 16; bit++) {
+        let mask = 1 << bit;
+        if(n & mask) {
+            names.push(SF_NAMES[bit] || hex_flag(mask));
+        }
+    }
+    return names;
+}
+
+/***************************************************************
+ *  A system_flag as a cell prints it: the hex tr2list prints, then the
+ *  names of its bits (`0x1001 string_key loading_from_disk`).
+ ***************************************************************/
+function fmt_sflag(v)
+{
+    let hex = hex_flag(v);
+    let names = sflag_names(v);
+    return names.length ? `${hex} ${names.join(" ")}` : hex;
+}
+
+/***************************************************************
+ *  A user_flag as a cell prints it. In a treedb's tranger the user_flag of
+ *  a record is the id of the snap that tagged it (a row of __snaps__), so
+ *  with the snaps at hand it says which one: `0x1 snap 18-sep`. A flag no
+ *  snap explains — a plain tranger, or an id __snaps__ no longer has —
+ *  stays hex, and 0 (untagged) is just 0x0.
+ *
+ *  `snaps` maps a snap id (as a string) to its name, or is null when the
+ *  tranger holds no treedb.
+ ***************************************************************/
+function fmt_uflag(v, snaps)
+{
+    let hex = hex_flag(v);
+    let n = Number(v);
+    if(!snaps || !hex || !Number.isFinite(n) || n === 0) {
+        return hex;
+    }
+    let name = snaps[String(n)];
+    return name !== undefined ? `${hex} snap ${name}` : `${hex} snap ?`;
+}
+
+/***************************************************************
+ *  The snaps of a treedb, id -> name, from the records of its __snaps__
+ *  topic. A snap is a node: each save appends a record, so the LAST record
+ *  of an id is its current state.
+ ***************************************************************/
+function snaps_from_records(records)
+{
+    let map = {};
+    for(let r of (Array.isArray(records) ? records : [])) {
+        if(r && r.id !== undefined && r.id !== null) {
+            map[String(r.id)] = String(r.name === undefined ? "" : r.name);
+        }
+    }
+    return map;
+}
+
+/***************************************************************
  *  A level the view knows, or the default one: a saved view or a shared
  *  link from before levels existed, or from a newer version, still opens.
  ***************************************************************/
@@ -125,7 +214,7 @@ function column_visible_at(field, level)
 /***************************************************************
  *  Flatten a tranger record for the records table: metadata columns
  *  (t and tm formatted, rowid, and the i_rowid / uflag / sflag of
- *  tr2list -l1) first, then the record's own fields; the
+ *  tr2list -l1, the flags as raw numbers) first, then the record's own fields; the
  *  full record is kept in __rec (no column) for the row dialog.
  *
  *  BOTH timestamps get a column: they are the two axes the Rows options
@@ -150,8 +239,10 @@ function flatten_record(r, key)
     row.tm = fmt_ts(md.tm, (flags & SF_TM_MS) !== 0);
     row.rowid = md.g_rowid !== undefined ? md.g_rowid : (md.rowid || "");
     row.i_rowid = md.i_rowid !== undefined ? md.i_rowid : "";
-    row.uflag = hex_flag(md.user_flag);
-    row.sflag = hex_flag(md.system_flag);
+    /*  The RAW numbers: a header filter `>0` then finds every record a snap
+     *  tagged. The cells PRINT them decoded (fmt_uflag / fmt_sflag).  */
+    row.uflag = md.user_flag !== undefined ? md.user_flag : "";
+    row.sflag = md.system_flag !== undefined ? md.system_flag : "";
 
     if(r && typeof r === "object") {
         for(let k in r) {
@@ -394,6 +485,10 @@ export {
     DEFAULT_LEVEL,
     META_FIELDS,
     hex_flag,
+    sflag_names,
+    fmt_sflag,
+    fmt_uflag,
+    snaps_from_records,
     normalize_level,
     column_visible_at,
     to_epoch,
