@@ -19,6 +19,14 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.50 / gui_agent 0.22.72 — 2026-09-19
+
+### Changed
+
+- **The Developer window is readable** (gobj-ui 7.23.184): sizes in rem,
+    controls at 1rem with a finger's padding, and log text at 0.9375rem. It
+    was all 9-13px before.
+
 ## gui_treedb 0.17.49 / gui_agent 0.22.71 — 2026-09-19
 
 ### Added
