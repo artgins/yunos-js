@@ -437,6 +437,7 @@ let PRIVATE_DATA = {
     $error:      null,
     $dashboard:  null,   /*  cards column  */
     record_json_gobj: null, /*  the C_YUI_JSON showing one record (or null)  */
+    record_win:  null,   /*  C_YUI_WINDOW hosting it, desktop (or null)  */
     $copy_btn:   null,   /*  button awaiting clipboard feedback (or null)  */
     copy_fb:     null,   /*  feedback being shown: {$btn, label} to restore  */
     copy_timer:  null,   /*  its reset timer (cleared if another copy lands)  */
@@ -3291,8 +3292,20 @@ function close_record_viewer(gobj)
 {
     let priv = gobj.priv;
     let jv = priv.record_json_gobj;
+    let win = priv.record_win;
 
     priv.record_json_gobj = null;
+    priv.record_win = null;
+    if(win && is_gobj(win) && !gobj_is_destroying(win)) {
+        try {
+            if(gobj_is_running(win)) {
+                gobj_stop(win);
+            }
+            gobj_destroy(win);
+        } catch(e) {
+            log_warning(`${GCLASS_NAME}: already gone: ${e}`);
+        }
+    }
     if(jv && is_gobj(jv) && !gobj_is_destroying(jv)) {
         try {
             if(gobj_is_running(jv)) {
@@ -3306,15 +3319,15 @@ function close_record_viewer(gobj)
 }
 
 /***************************************************************
- *  Full record in the shell's adaptive dialog, read with the
- *  library's JSON VIEWER and not as a block of text.
+ *  Full record read with the library's JSON VIEWER and not as a
+ *  block of text: a moveable, resizable, maximizable C_YUI_WINDOW on
+ *  desktop, the shell's adaptive sheet on mobile (the same split as
+ *  the raw-tranger viewer).
  *
  *  A record of a tranger is a DOCUMENT -- a jwt payload with its
- *  roles, its allowed origins and its nested claims -- and it was
- *  being shown as a `<pre>` with a Copy button under it: no tree,
- *  no search, no raw/graph views, and a long record read by
- *  scrolling text. `C_YUI_JSON` is one gclass away and this view
- *  already hosts one for the raw tranger.
+ *  roles, its allowed origins and its nested claims -- so a fixed
+ *  dialog was the wrong host: it could not be moved off the table
+ *  it describes, nor made bigger than the dialog cap.
  *
  *  It is given the WHOLE record, so nothing in it is collapsed and
  *  it never asks for a subtree: no subscriber, and its
@@ -3331,7 +3344,7 @@ function show_record_dialog(gobj, record, key)
         return;
     }
 
-    /*  One at a time, and destroyed when the dialog closes: a viewer
+    /*  One at a time, and destroyed when its host closes: a viewer
      *  left alive holds its SERVICE NAME, and the next record would
      *  find the name taken and open nothing.  */
     close_record_viewer(gobj);
@@ -3339,7 +3352,7 @@ function show_record_dialog(gobj, record, key)
     let jv = gobj_create_service(
         `tranger-record-${priv.tok}`,
         "C_YUI_JSON",
-        {json_data: record},
+        {},
         gobj
     );
     if(!jv) {
@@ -3348,44 +3361,77 @@ function show_record_dialog(gobj, record, key)
     }
     priv.record_json_gobj = jv;
     gobj_start(jv);
+    gobj_send_event(jv, "EV_SET_JSON", {json: record}, gobj);
 
     let $view = gobj_read_pointer_attr(jv, "$container");
 
-    /*  The viewer fills a sized box: its tree scrolls and its graph is
-     *  a canvas, and a canvas pushes no height -- so the HOST is what
-     *  says how tall the thing is.  */
-    if($view) {
-        $view.style.flex = "1 1 auto";
-        $view.style.minHeight = "0";
-    }
-    let $box = createElement2(
-        ["div", {class: "TRANGER_RECORD_BOX",
-                 style: "width:min(86vw, 900px); height:min(70vh, 640px); " +
-                        "display:flex; flex-direction:column;"},
-         $view? [$view] : []]);
+    /*  Only the ALL_KEYS form has a translatable half. A real key is
+     *  data on both sides, so it composes into the prefix — there is
+     *  nothing there for a language switch to change. */
+    let title_prefix = key === ALL_KEYS
+        ? priv.cur_topic
+        : `${priv.cur_topic} · ${key}`;
+    let title = key === ALL_KEYS ? "all keys" : "";
 
-    show_view_modal(gobj, shell, $box, {
-        /*  A DOCUMENT, so the dialog gets the wide cap (gobj-ui
-         *  7.23.108): at 640px the viewer wraps every long value and
-         *  its view switch ends up behind the toolbar's arrow.  */
-        wide: true,
-        on_close: () => {
-            if(gobj_is_destroying(gobj)) {
-                return;
+    if(is_mobile()) {
+        show_view_modal(gobj, shell, $view, {
+            on_close: () => {
+                if(gobj_is_destroying(gobj)) {
+                    return;
+                }
+                close_record_viewer(gobj);
+            },
+            dialog: true,
+            logical_class: "TRANGER_RECORD_SHEET",
+            title_prefix: title_prefix,
+            title:  title,
+            t:      t
+        });
+        return;
+    }
+
+    let $win_parent = yui_shell_popup_layer(shell) ||
+        (typeof document !== "undefined" && document.getElementById("top-layer")) ||
+        null;
+
+    priv.record_win = gobj_create_service(
+        `tranger-recwin-${priv.tok}`,
+        "C_YUI_WINDOW",
+        {
+            $parent:    $win_parent,
+            subscriber: null,
+            modal:      false,
+            showMax:    true,
+            showFooter: false,
+            resizable:  true,
+            center:     true,
+            auto_save_size_and_position: true,
+            width:      720,
+            height:     620,
+            logical_class: "TRANGER_RECORD_WINDOW",
+            title_prefix: title_prefix,
+            title:      title,
+            icon:       "yi-js-square",
+            body:       $view,
+            manager:    null,
+            /*  close_window() calls this and THEN destroys itself: drop
+             *  the reference first so the teardown leaves it alone. */
+            on_close: () => {
+                if(gobj_is_destroying(gobj)) {
+                    return;
+                }
+                priv.record_win = null;
+                close_record_viewer(gobj);
             }
-            close_record_viewer(gobj);
         },
-        dialog: true,
-        logical_class: "TRANGER_RECORD_DIALOG",
-        /*  Only the ALL_KEYS form has a translatable half. A real key is
-         *  data on both sides, so it composes into the prefix — there is
-         *  nothing there for a language switch to change. */
-        title_prefix: key === ALL_KEYS
-            ? priv.cur_topic
-            : `${priv.cur_topic} · ${key}`,
-        title:  key === ALL_KEYS ? "all keys" : "",
-        t:      t
-    });
+        gobj
+    );
+    if(!priv.record_win) {
+        log_error(`${gobj_short_name(gobj)}: cannot create the record window`);
+        close_record_viewer(gobj);
+        return;
+    }
+    gobj_start(priv.record_win);
 }
 
 

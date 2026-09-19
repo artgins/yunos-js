@@ -19,6 +19,21 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.42 / gui_agent 0.22.69 — 2026-09-19
+
+### Fixed
+
+- **A tranger record opens in a window you can move, resize and maximize**
+    (gui_treedb): on desktop the record's JSON viewer is hosted in a
+    `C_YUI_WINDOW` (remembered size and position), the same way the raw
+    tranger viewer is; on mobile it stays the shell's adaptive sheet. It was a
+    fixed dialog that covered the table it described.
+- **The record's tree expands again** (gobj-ui **7.23.181**): the viewer was
+    created with `json_data`, which left `C_YUI_JSON` in `ST_EMPTY`, so every
+    click on a `>` answered *"Event NOT DEFINED in state"*. The library now
+    starts such a viewer in `ST_READY`, and gui_treedb hands it the record with
+    `EV_SET_JSON` as well.
+
 ## gui_treedb 0.17.41 / gui_agent 0.22.68 — 2026-09-18
 
 ### Fixed
