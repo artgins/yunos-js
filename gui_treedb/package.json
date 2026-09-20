@@ -16,13 +16,13 @@
   "dependencies": {
     "@antv/g6": "^5.1.1",
     "@yuneta/gobj-js": "^7.22.2",
-    "@yuneta/gobj-ui": "^7.23.191",
+    "@yuneta/gobj-ui": "^7.23.192",
     "bulma": "^1.0.4",
     "bulma-switch-control": "^1.2.2",
     "i18next": "^26.4.2",
     "luxon": "^3.7.2",
-    "maplibre-gl": "^6.7.0",
-    "tabulator-tables": "^6.5.2",
+    "maplibre-gl": "^6.10.0",
+    "tabulator-tables": "^6.5.3",
     "tom-select": "^2.6.2",
     "uplot": "^1.6.32",
     "vanilla-jsoneditor": "^3.13.0"
