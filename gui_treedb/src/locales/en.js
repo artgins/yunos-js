@@ -445,6 +445,7 @@ const en = {
         "showing rows": "Showing {{from}}-{{to}} of {{total}} rows",
         "keys": "Keys",
         "raw json": "Raw JSON",
+        "schema json": "Schema JSON",
         "search": "Search",
         "no data": "No data",
         "too many rows; collapse some branches": "Too many rows; collapse some branches",

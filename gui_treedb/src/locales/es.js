@@ -449,6 +449,7 @@ const es = {
         "showing rows": "Mostrando {{from}}-{{to}} de {{total}} filas",
         "keys": "Claves",
         "raw json": "JSON crudo",
+        "schema json": "JSON del esquema",
         "search": "Buscar",
         "no data": "Sin datos",
         "too many rows; collapse some branches": "Demasiadas filas; colapsa algunas ramas",

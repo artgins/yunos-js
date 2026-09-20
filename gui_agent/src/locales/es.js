@@ -500,6 +500,7 @@ const es = {
         "key":               "Clave",
         "rows":              "Filas",
         "raw json":          "JSON crudo",
+        "schema json":          "JSON del esquema",
         "schema editor": "Editor",
         "storage tables": "Tablas",
         "show json":         "Ver JSON",
