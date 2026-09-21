@@ -19,6 +19,18 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.52 — 2026-09-21
+
+### Fixed
+
+- **Deleting a key re-opens the whole-topic Rows card.** Its iterator pages
+    every key, the deleted one included, and it stayed open: against yunetas
+    7.24.1 its next page was short and kept the old total (and a FILTERED one
+    stopped a master C_TRANGER with `exit(0)`); against the fix in yunetas
+    (A5 of the 2026-09-21 review) the backend closes it and answers *"its key
+    was deleted"*. The `delete-key` answer now re-opens that card, so it shows
+    the topic as it is.
+
 ## gui_treedb 0.17.51 / gui_agent 0.22.73 — 2026-09-19
 
 ### Changed

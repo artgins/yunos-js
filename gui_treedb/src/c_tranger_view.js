@@ -3851,6 +3851,15 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 }
             }
             request_keys_count(gobj, topic);
+
+            /*  A whole-topic Rows card pages an iterator over EVERY key, the
+             *  deleted one included, and the backend closes it at its next
+             *  page ("its key was deleted"). Re-open it now, so the card shows
+             *  the topic as it is instead of an error on the next click.  */
+            for(let card of priv.cards.filter(
+                    (c) => c.mode === "rows" && c.key === ALL_KEYS && c.topic === topic)) {
+                rearm_rows_card(gobj, card);
+            }
             break;
         }
 
