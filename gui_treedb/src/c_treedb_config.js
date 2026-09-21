@@ -169,6 +169,30 @@ function sanitize_services(list)
 }
 
 /***************************************************************
+ *  A scan's found services replacing a connection's stored ones:
+ *  the WHOLE found list, keeping the `selected` flag of every
+ *  service that survived, and keeping what the scan learned -- its
+ *  `master` answer. Rebuilding each service with service / gclass /
+ *  selected alone dropped it, so a replica was never known as one
+ *  (M35 of the 2026-09-21 treedb review).
+ ***************************************************************/
+function treedb_config_merge_scanned(prev_services, found)
+{
+    let prev_selected = {};
+    for(let svc of sanitize_services(prev_services)) {
+        if(svc.selected) {
+            prev_selected[svc.service] = true;
+        }
+    }
+    return sanitize_services(found).map((svc) => ({
+        service:  svc.service,
+        gclass:   svc.gclass,
+        selected: !!prev_selected[svc.service],
+        ...(typeof svc.master === "boolean" ? {master: svc.master} : {})
+    }));
+}
+
+/***************************************************************
  *  A stable per-connection key for a browsable service: the service
  *  name (every discovered service lives in the connected yuno).
  ***************************************************************/
@@ -289,17 +313,7 @@ function do_store_scanned_services(gobj, conn_id, found)
         log_error(`${gobj_short_name(gobj)}: no connection '${conn_id}' to mutate`);
         return;
     }
-    let prev_selected = {};
-    for(let svc of sanitize_services(list[idx].services)) {
-        if(svc.selected) {
-            prev_selected[svc.service] = true;
-        }
-    }
-    let services = sanitize_services(found).map((svc) => ({
-        service:  svc.service,
-        gclass:   svc.gclass,
-        selected: !!prev_selected[svc.service]
-    }));
+    let services = treedb_config_merge_scanned(list[idx].services, found);
     list[idx] = Object.assign({}, list[idx], {services: services});
     gobj_write_attr(gobj, "connections", list);
     persist(gobj, "connections");
@@ -1082,6 +1096,7 @@ export {
     register_c_treedb_config,
     sel_id,
     treedb_config_conn_services,
+    treedb_config_merge_scanned,
     treedb_config_service_key,
     treedb_config_normalize_sel,
     treedb_config_get_connections,

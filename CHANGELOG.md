@@ -19,6 +19,27 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.53 — 2026-09-21
+
+### Fixed
+
+Block 4 of the 2026-09-21 treedb review (ids of yunetas' `TODO.md`).
+
+- **M35 — "a replica opens without its write buttons" (0.17.36) did
+    nothing.** `treedb-info` went out with `{service}` alone, and C_IEVENT_CLI
+    hands back only `__md_command__`, so the answer named no service; and had
+    it matched, storing the scanned services dropped `master`. The service
+    rides in `__md_command__` now (`treedb_info.js`), and
+    `treedb_config_merge_scanned()` keeps `master`.
+- **M20 — "newest first" served the oldest page.** It sent `backward` only
+    at `open-iterator`; every `get-page` carries it now (`rows_page.js`).
+    Against a backend with the C half of this fix (yunetas after 7.24.1) the
+    first page is the newest one for every card; against an older one it is
+    for a FILTERED card, and an unfiltered card still gets the oldest page,
+    now in reverse order.
+- **M19 — a Rows card whose iterator the backend no longer holds stayed on
+    the error.** It opens a new iterator once, until a page lands.
+
 ## gui_treedb 0.17.52 — 2026-09-21
 
 ### Fixed

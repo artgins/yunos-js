@@ -71,6 +71,7 @@ import {
     treedb_config_conn_services,
     treedb_config_get_connection,
 } from "./c_treedb_config.js";
+import {treedb_info_kw, treedb_info_service} from "./treedb_info.js";
 
 
 /***************************************************************
@@ -694,7 +695,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
 
     if(command === "treedb-info") {
         master_answered(
-            gobj, conn_id, kw_command.service || "",
+            gobj, conn_id, treedb_info_service(kw_command),
             (result >= 0 && data && typeof data.master === "boolean")?
                 data.master : null,
             (result < 0)? String(comment || "treedb-info failed") : ""
@@ -762,7 +763,9 @@ function ask_masters(gobj, conn_id)
     let nodes = scan.services.filter((s) => s.gclass === "C_NODE");
     scan.master_left = nodes.length;
     for(let svc of nodes) {
-        gobj_command(iev, "treedb-info", {service: svc.service}, gobj);
+        /*  The service rides in __md_command__ too: it is the only part
+         *  of the kw C_IEVENT_CLI hands back with the answer.  */
+        gobj_command(iev, "treedb-info", treedb_info_kw(svc.service), gobj);
     }
     return scan.master_left;
 }

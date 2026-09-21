@@ -126,6 +126,7 @@ import {
 } from "./c_treedb_config.js";
 import {treedb_links_get_iev} from "./c_treedb_links.js";
 
+import {get_page_kw, iterator_is_gone} from "./rows_page.js";
 import {
     SF_T_MS,
     SF_TM_MS,
@@ -3432,15 +3433,15 @@ function request_page(gobj, card, page, size)
             resolve: resolve, reject: reject, card: card, timer: timer
         };
 
-        let from_rowid = (page - 1) * size + 1;
         gobj_command(remote, "get-page",
-            {
+            get_page_kw({
                 service:     service,
                 iterator_id: card.iterator_id,
-                from_rowid:  from_rowid,
-                limit:       size,
-                __md_command__: {req_id: req_id}   /*  echoed back for correlation  */
-            }, gobj);
+                page:        page,
+                size:        size,
+                req_id:      req_id,
+                match_cond:  card.match_cond
+            }), gobj);
     });
 }
 
@@ -3642,7 +3643,21 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 log_error(`${gobj_short_name(gobj)}: get-page failed: ` +
                           `${comment || "(no comment)"}`);
                 pend.reject(new Error(comment || "get-page failed"));
+                /*  The backend no longer holds the iterator (it restarted,
+                 *  the topic was closed, the key was deleted): open a new
+                 *  one instead of staying on the error. ONCE until a page
+                 *  lands, so an iterator that cannot be opened again does
+                 *  not become a loop.  */
+                let card = pend.card;
+                if(card && iterator_is_gone(comment) && !card.rearmed_once &&
+                        priv.cards.includes(card)) {
+                    card.rearmed_once = true;
+                    rearm_rows_card(gobj, card);
+                }
             } else {
+                if(pend.card) {
+                    pend.card.rearmed_once = false;
+                }
                 let page = parse_records_page(data);
                 /*  NOT `.map(flatten_record)`: map would hand it the INDEX as
                  *  its second argument, which is the key parameter.  */
