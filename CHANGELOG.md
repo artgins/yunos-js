@@ -19,6 +19,19 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_treedb 0.17.54 — 2026-09-21
+
+### Changed
+
+- **The whole-topic Rows card is bounded and not reopened by itself**
+  (M22 of yunetas' 2026-09-21 treedb review). It is no longer remembered, so
+  a visit to a topic does not reopen it (a card saved by an older release is
+  skipped; a shared link still opens it). Its options offer **keys (regex)**,
+  filled with `.*`, to read some keys and not all. And a new Rows card starts
+  at **from rowid = -100**: the last 100 records of each key, not all of them.
+  With the SDK's lazy multi-key iterator, the card no longer holds one
+  iterator per key on the node.
+
 ## gui_agent 0.22.74 — 2026-09-21
 
 ### Changed

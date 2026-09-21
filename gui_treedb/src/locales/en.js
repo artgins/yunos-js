@@ -517,6 +517,8 @@ const en = {
         "the key holds": "The key holds:",
         "the key has no records in this period": "The key has no records in this period",
 
+        "keys (regex)":      "Keys (regex)",
+        "regex over the keys": "regex over the key names; .* = all",
         "from rowid": "From rowid",
         "to rowid": "To rowid",
         "user-flag mask set": "User-flag mask (set)",

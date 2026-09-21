@@ -1791,6 +1791,9 @@ function ask_saved_views(gobj, topic_name)
     let keyed = wanted.filter((v) => v.key !== ALL_KEYS);
     for(let v of wanted) {
         if(v.key === ALL_KEYS) {
+            if(v.mode === "rows" && v.restoring) {
+                continue;   /*  saved by an older release: not reopened, see add_card()  */
+            }
             gobj_send_event(gobj, "EV_OPEN_CARD", v, gobj);
         }
     }
@@ -2319,9 +2322,13 @@ function paint_hint(time)
  *  apply to this one) — the fields are the same either way.
  *  Returns {$box, inputs, ranges, $open}.
  ***************************************************************/
-function build_rows_options_form(gobj, match_cond, editing, span, units)
+function build_rows_options_form(gobj, match_cond, editing, span, units, whole_topic)
 {
     let mc = match_cond || {};
+    /*  A NEW card asks for the last 100 records of each key, not all of
+     *  them: an iterator opened on a topic nobody bounded indexes every
+     *  record of every key it names. Editing shows what the card has.  */
+    let from_rowid = editing ? mc.from_rowid : -100;
 
     let mk_input = (cls, type, ph, val) => createElement2(
         ["input", {class: `input ${cls}`, type: type, placeholder: ph || "",
@@ -2331,7 +2338,7 @@ function build_rows_options_form(gobj, match_cond, editing, span, units)
 
     let inputs = {
         from_rowid:  mk_input("TRANGER_OPT_FROM_ROWID",  "number", t("1-based; negative = from end"),
-                        mc.from_rowid),
+                        from_rowid),
         to_rowid:    mk_input("TRANGER_OPT_TO_ROWID",    "number", t("0 = last"),
                         mc.to_rowid),
         mask_set:    mk_input("TRANGER_OPT_MASK_SET",    "number", t("user_flag bits"),
@@ -2340,6 +2347,16 @@ function build_rows_options_form(gobj, match_cond, editing, span, units)
                         mc.user_flag_mask_notset)
     };
 
+
+    /*  WHICH keys a whole-topic card reads: a regex over the key names,
+     *  `.*` for all of them -- shown, so the operator sees what is asked and
+     *  narrows it by editing. A card on one key has no use for it.  */
+    if(whole_topic) {
+        inputs.rkey = mk_input("TRANGER_OPT_RKEY", "text", t("regex over the keys"),
+            (mc.rkey === undefined || mc.rkey === "") ? ".*" : mc.rkey);
+        inputs.rkey.setAttribute("title", t("keys (regex)"));
+        inputs.rkey.setAttribute("data-i18n-title", "keys (regex)");
+    }
 
     /*  The iterator can index the key from the END (open-iterator's
      *  `backward`). In a log that is what you almost always want — the last
@@ -2421,6 +2438,10 @@ function build_rows_options_form(gobj, match_cond, editing, span, units)
                     [
                         ["div", {class: "columns is-mobile is-multiline"},
                             [
+                                inputs.rkey
+                                    ? ["div", {class: "column is-full"},
+                                        [field("keys (regex)", inputs.rkey)]]
+                                    : ["span", {}, ""],
                                 ["div", {class: "column is-half"},
                                     [field("from rowid", inputs.from_rowid)]],
                                 ["div", {class: "column is-half"},
@@ -2494,6 +2515,9 @@ function collect_rows_match_cond(form)
     if(inputs.backward && inputs.backward.checked) {
         mc.backward = 1;
     }
+    if(inputs.rkey) {
+        mc.rkey = inputs.rkey.value.trim() || ".*";
+    }
     return mc;
 }
 
@@ -2530,7 +2554,7 @@ function open_rows_options(gobj, key, card)
 
     let form = build_rows_options_form(gobj,
         editing ? card.match_cond : null, editing,
-        key_span(gobj, key), topic_time_units(gobj));
+        key_span(gobj, key), topic_time_units(gobj), key === ALL_KEYS);
 
     priv.rows_options = form;
     paint_hint(form.time);
@@ -2970,7 +2994,11 @@ function add_card(gobj, key, mode, match_cond, restoring)
     priv.$dashboard.appendChild($el);
     update_meta(gobj);
     refresh_picker_actions(gobj);
-    if(!restoring) {
+    /*  A whole-topic Rows card is not remembered: it indexes rows of every
+     *  key it names, and reopening it on every visit paid that for a card
+     *  nobody asked for this time (M22 of the 2026-09-21 review). Open it
+     *  by hand, or from a shared link.  */
+    if(!restoring && !(key === ALL_KEYS && mode === "rows")) {
         persist_view(gobj, card);
     }
 

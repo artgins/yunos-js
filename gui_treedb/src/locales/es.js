@@ -522,6 +522,8 @@ const es = {
         "the key holds": "La clave contiene:",
         "the key has no records in this period": "La clave no tiene registros en este periodo",
 
+        "keys (regex)":      "Claves (regex)",
+        "regex over the keys": "regex sobre los nombres de clave; .* = todas",
         "from rowid": "Desde rowid",
         "to rowid": "Hasta rowid",
         "user-flag mask set": "Máscara user-flag (activos)",
