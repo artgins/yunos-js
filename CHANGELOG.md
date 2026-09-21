@@ -19,6 +19,26 @@ Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
 registry**, the same way wattyzer does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
+## gui_agent 0.22.74 — 2026-09-21
+
+### Changed
+
+- **Schemas tab: an edit is a draft; Save publishes it, Apply puts it in use**
+  (M36 of yunetas' 2026-09-21 treedb review, the owner's design; needs
+  gobj-ui 7.23.196 and an SDK with `save-schema`).
+  - **Save** (`save-schema` on every C_TREEDB of the yuno) publishes the
+    drafts the editor wrote: the versions of what changed, written beside the
+    schema file in use, never over it. It re-mounts the view, which is what
+    forgets the drafts. Toolbar: *unsaved changes* while there are drafts.
+  - **Apply** is on only when a saved schema can be applied (`saved-schema`
+    says `can_apply`). Its dialog names the yuno that is relaunched and lists
+    the changes (the `flat_diff` of the saved schema against the one in use,
+    per treedb, capped); confirmed, it sends `apply-schema`, then
+    `kill-yuno` → `run-yuno play=0` → `play-yuno` (new state `ST_APPLYING`).
+  - A treedb whose schema the binary imposes (`impose_c_schema`, every
+    in-tree yuno) shows a banner: save and export work, apply does not.
+  - The export as C literal stays where it was, in the editor, always there.
+
 ## gui_treedb 0.17.53 — 2026-09-21
 
 ### Fixed

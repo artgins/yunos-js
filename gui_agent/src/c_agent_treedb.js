@@ -36,9 +36,19 @@
  *      this console — and not the gui_treedb data browser — is where
  *      schema editing lives.
  *
- *      APPLYING a schema is restarting the yuno that opened it, so the
- *      tab offers it: `kill-yuno` -> `run-yuno play=0` -> `play-yuno`,
- *      confirmed first because it disconnects every client of that yuno.
+ *      AN EDIT IS A DRAFT (the SDK's M36 design). The editor writes
+ *      __system__ and moves no version; SAVE (`save-schema` on every
+ *      C_TREEDB of the yuno) publishes the drafts -- the versions of what
+ *      changed, written beside the schema file in use, never over it --
+ *      and re-mounts the view, which is what forgets them. APPLY puts the
+ *      saved schema in use (`apply-schema`) and restarts the yuno that
+ *      opened it: `kill-yuno` -> `run-yuno play=0` -> `play-yuno`,
+ *      confirmed first, in a dialog that names the yuno and lists the
+ *      changes (`saved-schema`), because it disconnects every client of
+ *      that yuno. Apply is off while nothing saved can be applied, and a
+ *      treedb whose schema the binary imposes (`impose_c_schema`, every
+ *      in-tree yuno) can be saved and exported but never applied: the
+ *      banner says so.
  *      Each command answers ONCE and only when it is done (the agent
  *      counts the channel closing and re-opening), so the sequence needs
  *      neither timer nor polling — and it ends by re-discovering, which
@@ -61,6 +71,7 @@
  *          ST_DISCOVERING  `services` in flight
  *          ST_EMPTY        the yuno exposes no treedb
  *          ST_READY        a treedb is mounted
+ *          ST_APPLYING     apply: waiting for apply-schema
  *          ST_KILLING      apply: waiting for the yuno to die
  *          ST_STARTING     apply: waiting for it to connect back
  *          ST_PLAYING      apply: waiting for its services to play
@@ -127,6 +138,13 @@ const PURPOSE = "treedbs";
  *  says that the schema compiled in C does not.  */
 const DIFF_PURPOSE = "treedbdiff";
 
+/*  Markers of the per-owner `save-schema` and `saved-schema` requests.  */
+const SAVE_PURPOSE = "treedbsave";
+const SAVED_PURPOSE = "treedbsaved";
+
+/*  How many lines of changes the apply dialog lists before it counts.  */
+const APPLY_DIFF_LINES = 40;
+
 /*  What `kind` a difference is, as an i18n key. A kind this console does
  *  not know is shown as it came: a newer node may report one.  */
 const DIFF_KINDS = {
@@ -176,7 +194,14 @@ let PRIVATE_DATA = {
     diff_notes:  null,  /*  what each owner said about them  */
     diff_left:   0,     /*  `diff-schema` answers still owed  */
     diff_modal:  null,  /*  the differences report  */
-    $toolbar:    null,  /*  differences + pending flag + apply  */
+    saved:       null,  /*  {owner: [saved-schema answer of each treedb]}  */
+    saved_left:  0,     /*  `saved-schema` answers still owed  */
+    save_left:   0,     /*  `save-schema` answers still owed  */
+    save_errors: null,  /*  what the save answered wrong  */
+    apply_left:  0,     /*  `apply-schema` answers still owed  */
+    $toolbar:    null,  /*  imposed banner + differences + save + pending + apply  */
+    $imposed:    null,
+    $save:       null,
     $apply:      null,
     $diff:       null,
     $pending:    null,
@@ -371,10 +396,35 @@ function build_ui(gobj)
             }}
         ]
     );
+    /*  Publishes the drafts, applies nothing: it writes beside the schema
+     *  file in use, so it can always be done, imposed schema or not.  */
+    priv.$save = createElement2(
+        ["button", {class: "TREEDB_SAVE button",
+                    title: t("save schema"), "aria-label": t("save schema"),
+                    "data-i18n-title": "save schema",
+                    "data-i18n-aria-label": "save schema"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-floppy-disk"}]]],
+                ["span", {class: "is-hidden-mobile", i18n: "save"}, t("save")]
+            ],
+            {click: (e) => {
+                e.stopPropagation();
+                gobj_send_event(gobj, "EV_SAVE_SCHEMA", {}, gobj);
+            }}
+        ]
+    );
     priv.$pending = createElement2(
         ["span", {class: "TREEDB_PENDING has-text-warning-dark is-hidden",
-                  i18n: "pending changes"},
-            t("pending changes")]
+                  i18n: "unsaved changes"},
+            t("unsaved changes")]
+    );
+    priv.$imposed = createElement2(
+        ["span", {class: "TREEDB_IMPOSED tag is-warning is-light is-hidden",
+                  style: "white-space:normal; height:auto;"}, [
+            ["span", {class: "icon"}, [["i", {class: "yi-lock"}]]],
+            ["span", {i18n: "schema imposed by the binary"},
+                t("schema imposed by the binary")]
+        ]]
     );
     priv.$toolbar = createElement2(
         /*  NO `is-flex` here: it is a Bulma helper and carries !important,
@@ -385,9 +435,10 @@ function build_ui(gobj)
         ["div", {class: "TREEDB_TOOLBAR is-align-items-center is-hidden",
                  style: "display:flex; gap:.5rem; padding:.25rem .5rem;"},
             [
+                priv.$imposed,
                 ["div", {class: "TREEDB_TOOLBAR_END is-align-items-center",
                          style: "display:flex; gap:.5rem; margin-left:auto;"},
-                    [priv.$diff, priv.$pending, priv.$apply]]
+                    [priv.$diff, priv.$pending, priv.$save, priv.$apply]]
             ]
         ]
     );
@@ -918,23 +969,198 @@ function render_apply(gobj)
     if(!priv.$apply || !priv.$pending) {
         return;
     }
+    let entries = saved_entries(gobj);
+    let applicable = entries.some((e) => e.data && e.data.can_apply);
+    let imposed = entries.filter((e) => e.data && e.data.impose_c_schema);
+
     /*
-     *  The AGENT's own treedbs can be edited from here, but not APPLIED:
-     *  applying is restarting the owning yuno, and the agent is not one of
-     *  the yunos it manages -- `kill-yuno` does nothing to it. It is
-     *  restarted on the node (`yuneta_agent --stop` / `--start`). So the
-     *  button is disabled and says why, instead of sending three commands
-     *  that would report success and change nothing.
+     *  The AGENT's own treedbs can be edited and saved from here, but not
+     *  APPLIED: applying is restarting the owning yuno, and the agent is
+     *  not one of the yunos it manages -- `kill-yuno` does nothing to it.
+     *  It is restarted on the node (`yuneta_agent --stop` / `--start`).
      */
+    let key = "apply schema";
     if(is_agent_yuno(gobj_read_str_attr(gobj, "yuno_id"))) {
-        priv.$apply.disabled = true;
-        priv.$apply.title = t("apply needs a node restart");
-        priv.$apply.setAttribute("aria-label", t("apply needs a node restart"));
-        priv.$apply.setAttribute("data-i18n-title", "apply needs a node restart");
-        priv.$apply.setAttribute("data-i18n-aria-label", "apply needs a node restart");
+        key = "apply needs a node restart";
+    } else if(!applicable) {
+        key = imposed.length? "schema imposed by the binary": "nothing saved to apply";
     }
-    priv.$apply.classList.toggle("is-warning", priv.dirty);
+    let off = key !== "apply schema";
+    priv.$apply.disabled = off;
+    priv.$apply.title = t(key);
+    priv.$apply.setAttribute("aria-label", t(key));
+    priv.$apply.setAttribute("data-i18n-title", key);
+    priv.$apply.setAttribute("data-i18n-aria-label", key);
+    priv.$apply.classList.toggle("is-warning", !off);
     priv.$pending.classList.toggle("is-hidden", !priv.dirty);
+    if(priv.$save) {
+        priv.$save.disabled = priv.save_left > 0 || !priv.owners || priv.owners.length === 0;
+        priv.$save.classList.toggle("is-warning", priv.dirty);
+    }
+    if(priv.$imposed) {
+        priv.$imposed.classList.toggle("is-hidden", imposed.length === 0);
+    }
+}
+
+/***************************************************************
+ *  Every `saved-schema` answer, one per treedb of every owner.
+ ***************************************************************/
+function saved_entries(gobj)
+{
+    let priv = gobj.priv;
+    let entries = [];
+    for(let owner of Object.keys(priv.saved || {})) {
+        for(let entry of priv.saved[owner] || []) {
+            entries.push(entry);
+        }
+    }
+    return entries;
+}
+
+/***************************************************************
+ *  Ask ONE `C_TREEDB` service a schema command for every treedb it
+ *  opened (no `treedb_name`: see request_diff() for why).
+ ***************************************************************/
+function request_owner(gobj, owner, command, purpose)
+{
+    let link = link_service(gobj);
+    let node = gobj_read_str_attr(gobj, "node");
+    let yuno_id = gobj_read_str_attr(gobj, "yuno_id");
+
+    if(!link || !agent_link_is_connected(link)) {
+        return -1;
+    }
+    let kw_send = {
+        agent_id:  node,
+        cmd2agent: cmd2agent_service(yuno_id, owner, command)
+    };
+    msg_iev_write_key(kw_send, "console_purpose", purpose);
+    msg_iev_write_key(kw_send, "console_node", node);
+    msg_iev_write_key(kw_send, "console_yuno", yuno_id);
+    msg_iev_write_key(kw_send, "console_owner", owner);
+    agent_link_command(link, "command-agent", kw_send);
+    return 0;
+}
+
+/***************************************************************
+ *  What each treedb has saved, and whether it can be applied: what
+ *  the Apply button and the imposed banner say.
+ ***************************************************************/
+function request_saved(gobj)
+{
+    let priv = gobj.priv;
+
+    priv.saved = {};
+    priv.saved_left = 0;
+    for(let owner of priv.owners || []) {
+        if(request_owner(gobj, owner, "saved-schema", SAVED_PURPOSE) === 0) {
+            priv.saved_left++;
+        }
+    }
+    render_apply(gobj);
+}
+
+/***************************************************************
+ *  One `saved-schema` answer. A node older than the command answers
+ *  an error: nothing is saved there, and Apply stays off.
+ ***************************************************************/
+function saved_answered(gobj, owner, kw)
+{
+    let priv = gobj.priv;
+
+    if(priv.saved_left <= 0) {
+        return 0;
+    }
+    priv.saved_left--;
+    if(kw && !(typeof kw.result === "number" && kw.result < 0) && Array.isArray(kw.data)) {
+        priv.saved[owner] = kw.data;
+    }
+    render_apply(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  One `save-schema` answer. When the last one lands, the view is
+ *  re-mounted: that is what forgets the drafts, and discovery asks
+ *  `saved-schema` again, which is what lights Apply.
+ ***************************************************************/
+function save_answered(gobj, owner, kw)
+{
+    let priv = gobj.priv;
+
+    if(priv.save_left <= 0) {
+        return 0;
+    }
+    priv.save_left--;
+    if(!kw) {
+        priv.save_errors.push(`${owner}: ${t("not connected to an agent")}`);
+    } else if(typeof kw.result === "number" && kw.result < 0) {
+        priv.save_errors.push(`${owner}: ${kw.comment || ""}`);
+        for(let one of Array.isArray(kw.data)? kw.data: []) {
+            if(one && one.result < 0 && one.comment) {
+                priv.save_errors.push(one.comment);
+            }
+        }
+    }
+    if(priv.save_left > 0) {
+        return 0;
+    }
+    if(priv.save_errors.length) {
+        yui_shell_show_error(yui_shell_of(gobj), priv.save_errors.join("\n"), {t: t});
+    } else {
+        priv.dirty = false;
+    }
+    render_apply(gobj);
+    start_discovery(gobj);
+    render_state(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The changes of the saved schemas, as dialog lines: one per leaf
+ *  of the `flat_diff` saved-schema answers, capped.
+ ***************************************************************/
+function apply_changes_lines(gobj)
+{
+    let lines = [];
+    let count = 0;
+    let show = (v) => (typeof v === "string")? v: JSON.stringify(v);
+    for(let entry of saved_entries(gobj)) {
+        let data = entry.data;
+        if(!data || !data.can_apply) {
+            continue;
+        }
+        lines.push(["li", {class: "TREEDB_APPLY_SCHEMA has-text-weight-semibold mt-2"}, [
+            ["code", {}, `${entry.treedb_name}`],
+            ["span", {class: "ml-2"}, `${data.in_use_schema_version} \u2192 ${data.saved_schema_version}`]
+        ]]);
+        let diff = data.diff || {};
+        let rows = [];
+        for(let [id, v] of Object.entries(diff.changed || {})) {
+            rows.push(["changed", id, `${show(v.from)} \u2192 ${show(v.to)}`]);
+        }
+        for(let [id, v] of Object.entries(diff.added || {})) {
+            rows.push(["added", id, show(v)]);
+        }
+        for(let [id, v] of Object.entries(diff.removed || {})) {
+            rows.push(["removed", id, show(v)]);
+        }
+        for(let [kind, id, text] of rows) {
+            count++;
+            if(count > APPLY_DIFF_LINES) {
+                continue;
+            }
+            lines.push(["li", {class: "TREEDB_APPLY_CHANGE"}, [
+                ["span", {class: "tag is-light mr-2", i18n: kind}, t(kind)],
+                ["code", {}, `${id.replace(/`/g, ".")}`],
+                ["span", {class: "ml-2"}, text]
+            ]]);
+        }
+    }
+    if(count > APPLY_DIFF_LINES) {
+        lines.push(["li", {class: "TREEDB_APPLY_MORE"}, `+${count - APPLY_DIFF_LINES}`]);
+    }
+    return lines;
 }
 
 /***************************************************************
@@ -1076,7 +1302,8 @@ function render_state(gobj)
     }
     let state = gobj_current_state(gobj);
     let key;
-    if(state === "ST_KILLING" || state === "ST_STARTING" || state === "ST_PLAYING") {
+    if(state === "ST_APPLYING" || state === "ST_KILLING" ||
+            state === "ST_STARTING" || state === "ST_PLAYING") {
         key = "applying";
     } else if(empty_string(gobj_read_str_attr(gobj, "yuno_id"))) {
         key = "select a yuno";
@@ -1169,7 +1396,8 @@ function ac_mt_command_answer(gobj, event, kw, src)
      *  per-treedb `treedb-info` and the per-owner `diff-schema`. Anything
      *  else belongs to another panel.  */
     let purpose = msg_iev_read_key(kw, "console_purpose");
-    if(purpose !== PURPOSE && purpose !== MASTER_PURPOSE && purpose !== DIFF_PURPOSE) {
+    if(purpose !== PURPOSE && purpose !== MASTER_PURPOSE && purpose !== DIFF_PURPOSE &&
+            purpose !== SAVE_PURPOSE && purpose !== SAVED_PURPOSE) {
         return 0;   /*  another panel's answer  */
     }
 
@@ -1182,6 +1410,19 @@ function ac_mt_command_answer(gobj, event, kw, src)
     if(msg_iev_read_key(kw, "console_node") !== gobj_read_str_attr(gobj, "node") ||
             msg_iev_read_key(kw, "console_yuno") !== gobj_read_str_attr(gobj, "yuno_id")) {
         return 0;   /*  another tab's  */
+    }
+
+    if(purpose === SAVE_PURPOSE || purpose === SAVED_PURPOSE) {
+        let stack_s = msg_iev_get_stack(gobj, kw, "command_stack", false);
+        let outer_s = kw_get_str(gobj, stack_s, "command", "", 0);
+        let failed_s = (typeof kw.result === "number" && kw.result < 0);
+        if(outer_s === "command-agent" && !failed_s) {
+            return 0;   /*  dispatch ack: the real answer is still coming  */
+        }
+        let owner = msg_iev_read_key(kw, "console_owner") || "";
+        return (purpose === SAVE_PURPOSE)?
+            save_answered(gobj, owner, kw):
+            saved_answered(gobj, owner, kw);
     }
 
     if(purpose === DIFF_PURPOSE) {
@@ -1285,6 +1526,7 @@ function master_answered(gobj, treedb_name, master)
     activate_tree(gobj);
     gobj_change_state(gobj, "ST_READY");
     render_state(gobj);
+    request_saved(gobj);
     return 0;
 }
 
@@ -1336,6 +1578,37 @@ function ac_nav_mode_changed(gobj, event, kw, src)
 function ac_record_written(gobj, event, kw, src)
 {
     gobj.priv.dirty = true;
+    render_apply(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Save asked for: `save-schema` on every C_TREEDB of the yuno.
+ *  Nothing is restarted and nothing is applied, so it needs no
+ *  confirmation -- it publishes the drafts beside the schema in use.
+ ***************************************************************/
+function ac_save_schema(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    if(priv.save_left > 0) {
+        return 0;   /*  already saving  */
+    }
+    if(!priv.owners || priv.owners.length === 0) {
+        log_error(`${gobj_short_name(gobj)}: no C_TREEDB service in this yuno`);
+        return -1;
+    }
+    priv.save_errors = [];
+    priv.save_left = 0;
+    for(let owner of priv.owners) {
+        if(request_owner(gobj, owner, "save-schema", SAVE_PURPOSE) === 0) {
+            priv.save_left++;
+        }
+    }
+    if(priv.save_left === 0) {
+        log_error(`${gobj_short_name(gobj)}: cannot save the schema -- not in session`);
+        return -1;
+    }
     render_apply(gobj);
     return 0;
 }
@@ -1393,6 +1666,10 @@ function ac_apply_changes(gobj, event, kw, src)
             `a managed yuno -- restart it on the node`);
         return -1;
     }
+    if(!saved_entries(gobj).some((e) => e.data && e.data.can_apply)) {
+        log_error(`${gobj_short_name(gobj)}: apply refused, nothing saved can be applied`);
+        return -1;
+    }
     let shell = yui_shell_of(gobj);
     if(!shell) {
         log_error(`${gobj_short_name(gobj)}: no shell to confirm the apply`);
@@ -1403,21 +1680,31 @@ function ac_apply_changes(gobj, event, kw, src)
 
     let $content = createElement2(
         ["div", {class: "TREEDB_APPLY_DIALOG box"}, [
+            ["p", {class: "TREEDB_APPLY_RELAUNCHED is-size-7", i18n: "relaunched yuno"},
+                t("relaunched yuno")],
             ["p", {class: "TREEDB_APPLY_TARGET has-text-weight-bold mb-2"},
                 `${label} · ${gobj_read_str_attr(gobj, "node")}`],
-            ["p", {class: "TREEDB_APPLY_WARN mb-4", i18n: "apply restart warning"},
+            ["p", {class: "TREEDB_APPLY_WARN mb-3", i18n: "apply restart warning"},
                 t("apply restart warning")],
+            ["p", {class: "TREEDB_APPLY_CHANGES_TITLE is-size-7 has-text-weight-semibold",
+                   i18n: "schema changes"}, t("schema changes")],
+            ["ul", {class: "TREEDB_APPLY_CHANGES is-size-7 mb-4",
+                    style: "max-height:16rem; overflow:auto;"}, apply_changes_lines(gobj)],
             apply_check_notice(gobj),
             ["div", {class: "TREEDB_APPLY_ACTIONS is-align-items-center",
                      style: "display:flex; gap:.5rem; justify-content:flex-end;"}, [
-                ["button", {class: "TREEDB_APPLY_CANCEL button"},
+                ["button", {class: "TREEDB_APPLY_CANCEL button",
+                            title: t("cancel"), "data-i18n-title": "cancel",
+                            "aria-label": t("cancel"), "data-i18n-aria-label": "cancel"},
                     [["span", {i18n: "cancel"}, t("cancel")]],
                     {click: (e) => {
                         e.stopPropagation();
                         gobj_send_event(gobj, "EV_APPLY_CANCELLED", {}, gobj);
                     }}
                 ],
-                ["button", {class: "TREEDB_APPLY_CONFIRM button is-warning"},
+                ["button", {class: "TREEDB_APPLY_CONFIRM button is-warning",
+                            title: t("apply schema"), "data-i18n-title": "apply schema",
+                            "aria-label": t("apply schema"), "data-i18n-aria-label": "apply schema"},
                     [
                         ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
                         ["span", {i18n: "apply"}, t("apply")]
@@ -1542,11 +1829,17 @@ function ac_apply_confirmed(gobj, event, kw, src)
     destroy_tree(gobj);
     priv.notice = "";
 
-    if(send_apply_step(gobj, "kill", `kill-yuno id="${yuno}"`) < 0) {
-        end_apply(gobj, t("not connected to an agent"));
-        return 0;
+    /*  The saved schema goes in place first -- on every owner, each one
+     *  applying only what it can -- and the restart is what reads it.  */
+    priv.apply_left = 0;
+    for(let owner of priv.owners || []) {
+        if(send_apply_step(gobj, "apply", cmd2agent_service(yuno, owner, "apply-schema")) < 0) {
+            end_apply(gobj, t("not connected to an agent"));
+            return 0;
+        }
+        priv.apply_left++;
     }
-    gobj_change_state(gobj, "ST_KILLING");
+    gobj_change_state(gobj, "ST_APPLYING");
     render_state(gobj);
     return 0;
 }
@@ -1561,6 +1854,7 @@ function ac_apply_answer(gobj, event, kw, src)
 {
     let yuno = gobj_read_str_attr(gobj, "yuno_id");
     const expected = {
+        ST_APPLYING: "apply",
         ST_KILLING:  "kill",
         ST_STARTING: "run",
         ST_PLAYING:  "play"
@@ -1583,6 +1877,20 @@ function ac_apply_answer(gobj, event, kw, src)
     }
     if(failed) {
         end_apply(gobj, kw.comment || `${state}: failed`);
+        return 0;
+    }
+
+    if(state === "ST_APPLYING") {
+        let priv = gobj.priv;
+        priv.apply_left--;
+        if(priv.apply_left > 0) {
+            return 0;   /*  another owner still to answer  */
+        }
+        if(send_apply_step(gobj, "kill", `kill-yuno id="${yuno}"`) < 0) {
+            end_apply(gobj, t("not connected to an agent"));
+            return 0;
+        }
+        gobj_change_state(gobj, "ST_KILLING");
         return 0;
     }
 
@@ -1731,6 +2039,7 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
             ["EV_DIFF_SCHEMA",          ac_diff_schema,       null],
+            ["EV_SAVE_SCHEMA",          ac_save_schema,       null],
             ["EV_APPLY_CHANGES",        ac_apply_changes,     null],
             ["EV_APPLY_CONFIRMED",      ac_apply_confirmed,   null],
             ...dialog_events,
@@ -1740,6 +2049,14 @@ function create_gclass(gclass_name)
         /*  The restart, one state per command in flight, so the trace
          *  says which one is being waited for. Each answers once and only
          *  when it is done — see send_apply_step().  */
+        ["ST_APPLYING", [
+            ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
+            ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
+            ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
+            ...dialog_events,
+            ...route_events,
+            ...view_events
+        ]],
         ["ST_KILLING", [
             ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
             ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
@@ -1774,6 +2091,7 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",          0],
         ["EV_MT_COMMAND_ANSWER", 0],
         ["EV_DIFF_SCHEMA",       0],
+        ["EV_SAVE_SCHEMA",       0],
         ["EV_APPLY_CHANGES",     0],
         ["EV_APPLY_CONFIRMED",   0],
         ["EV_APPLY_CANCELLED",   0],
