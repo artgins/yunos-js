@@ -6,6 +6,20 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.55, gui_agent 0.22.77 + gobj-ui ^7.25.4 (2026-09-22)
+
+- **The lows of the 2026-09-22 review.** gui_treedb: a connection stored
+  before `master` was kept (0.17.53) is re-scanned on its first session, so
+  a replica opens without its write buttons instead of waiting for a
+  Settings refresh; editing the options of a whole-topic Rows card no longer
+  persists it (it is never remembered); the "keys (regex)" placeholder
+  follows the language. gui_agent: a late answer of an apply step is no
+  longer read as a discovery answer (it emptied the tab); a Save asked while
+  one is in flight is logged, not swallowed; the change ids of the apply
+  dialog keep a literal backtick (doubled in the flat grammar) instead of
+  turning it into a dot; the Apply tooltip blames the binary only when EVERY
+  treedb is imposed. Both SPAs take gobj-ui ^7.25.4 and its new i18n key.
+
 ## gui_agent 0.22.76 + gobj-ui ^7.25.3 (2026-09-22)
 
 - **gui_agent: the Schemas tab tells the editor which topics are drafts (N13

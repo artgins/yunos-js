@@ -2356,6 +2356,7 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
             (mc.rkey === undefined || mc.rkey === "") ? ".*" : mc.rkey);
         inputs.rkey.setAttribute("title", t("keys (regex)"));
         inputs.rkey.setAttribute("data-i18n-title", "keys (regex)");
+        inputs.rkey.setAttribute("data-i18n-placeholder", "regex over the keys");
     }
 
     /*  The iterator can index the key from the END (open-iterator's
@@ -2682,7 +2683,11 @@ function apply_card_match_cond(gobj, card, match_cond)
         return;     /*  Error already logged  */
     }
 
-    persist_view(gobj, card);   /*  upsert: the saved view carries match_cond  */
+    /*  upsert: the saved view carries match_cond. Not for a whole-topic
+     *  Rows card, which is never remembered (see add_card).  */
+    if(!(card.key === ALL_KEYS && card.mode === "rows")) {
+        persist_view(gobj, card);
+    }
 
     if(!card.tabulator) {
         return;

@@ -508,6 +508,7 @@ const en = {
         "copy":              "Copy",
         "undo":              "Undo",
         "no session":        "No session",
+        "some records were gone before the delete": "Some records were gone before the delete and were not deleted; the table was refreshed",
         "coordinates":       "Coordinates",
         "remove all selected options": "Remove all selected options",
         "permission denied": "Permission denied",

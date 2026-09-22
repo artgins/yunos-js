@@ -461,6 +461,7 @@ const es = {
         "dagre top-down": "Dagre arriba-abajo",
         "dagre left-right": "Dagre izq-dcha",
         "no session": "Sin sesión",
+        "some records were gone before the delete": "Algunos registros ya no existían al confirmar el borrado y no se han borrado; la tabla se ha refrescado",
         "expand loaded": "Expandir lo cargado",
         "collapse all": "Colapsar todo",
         "copy json": "Copiar JSON",

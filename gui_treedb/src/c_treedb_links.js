@@ -642,7 +642,12 @@ function ac_on_open(gobj, event, kw, src)
     if(conn_id) {
         let config = gobj_find_service("treedb_config", false);
         let conn = config ? treedb_config_get_connection(config, conn_id) : null;
-        if(conn && !treedb_config_conn_services(conn).length) {
+        /*  ...or of a connection stored before `master` was kept: a replica
+         *  saved by an older release opened with its write buttons until a
+         *  Settings refresh (a low of the 2026-09-22 review).  */
+        let services = conn? treedb_config_conn_services(conn) : [];
+        if(conn && (!services.length ||
+                services.some((svc) => svc.master === undefined || svc.master === null))) {
             do_scan(gobj, conn_id);
         }
     }

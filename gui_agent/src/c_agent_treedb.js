@@ -88,6 +88,7 @@
  ***********************************************************************/
 import {
     gobj_match_children_tree,
+    log_warning,
     SDATA, SDATA_END, data_type_t,
     gclass_create, log_error,
     gobj_parent,
@@ -989,7 +990,10 @@ function render_apply(gobj)
     if(is_agent_yuno(gobj_read_str_attr(gobj, "yuno_id"))) {
         key = "apply needs a node restart";
     } else if(!applicable) {
-        key = imposed.length? "schema imposed by the binary": "nothing saved to apply";
+        /*  "imposed" only when EVERY treedb is: with one imposed and one
+         *  dynamic with nothing saved, the tooltip blamed the binary.  */
+        key = (imposed.length && imposed.length === entries.length)?
+            "schema imposed by the binary": "nothing saved to apply";
     }
     let off = key !== "apply schema";
     priv.$apply.disabled = off;
@@ -1155,6 +1159,30 @@ function save_answered(gobj, owner, kw)
 }
 
 /***************************************************************
+ *  A flat id as a label: the segments are joined by `` ` ``, and a
+ *  literal backtick in a key is DOUBLED (the json2flat grammar), so
+ *  replacing every backtick mangled such a key. Shown as a path.
+ ***************************************************************/
+function flat_id_label(id)
+{
+    const s = String(id);
+    let out = "";
+    for(let i = 0; i < s.length; i++) {
+        if(s[i] === "`") {
+            if(s[i + 1] === "`") {
+                out += "`";
+                i++;
+            } else {
+                out += ".";
+            }
+        } else {
+            out += s[i];
+        }
+    }
+    return out;
+}
+
+/***************************************************************
  *  The changes of the saved schemas, as dialog lines: one per leaf
  *  of the `flat_diff` saved-schema answers, capped.
  ***************************************************************/
@@ -1190,7 +1218,7 @@ function apply_changes_lines(gobj)
             }
             lines.push(["li", {class: "TREEDB_APPLY_CHANGE"}, [
                 ["span", {class: "tag is-light mr-2", i18n: kind}, t(kind)],
-                ["code", {}, `${id.replace(/`/g, ".")}`],
+                ["code", {}, flat_id_label(id)],
                 ["span", {class: "ml-2"}, text]
             ]]);
         }
@@ -1449,6 +1477,12 @@ function ac_mt_command_answer(gobj, event, kw, src)
             msg_iev_read_key(kw, "console_yuno") !== gobj_read_str_attr(gobj, "yuno_id")) {
         return 0;   /*  another tab's  */
     }
+    if(msg_iev_read_key(kw, "apply_step")) {
+        /*  A late answer of an apply step whose sequence is over (an owner
+         *  failed, a timeout): read as a discovery answer it emptied the tab
+         *  (a low of the 2026-09-22 review).  */
+        return 0;
+    }
 
     if(purpose === SAVE_PURPOSE || purpose === SAVED_PURPOSE) {
         let stack_s = msg_iev_get_stack(gobj, kw, "command_stack", false);
@@ -1630,7 +1664,8 @@ function ac_save_schema(gobj, event, kw, src)
     let priv = gobj.priv;
 
     if(priv.save_left > 0) {
-        return 0;   /*  already saving  */
+        log_warning(`${gobj_short_name(gobj)}: save ignored, a save is still in flight`);
+        return 0;
     }
     if(!priv.owners || priv.owners.length === 0) {
         log_error(`${gobj_short_name(gobj)}: no C_TREEDB service in this yuno`);

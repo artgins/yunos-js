@@ -516,6 +516,7 @@ const es = {
         "copy":              "Copiar",
         "undo":              "Deshacer",
         "no session":        "Sin sesión",
+        "some records were gone before the delete": "Algunos registros ya no existían al confirmar el borrado y no se han borrado; la tabla se ha refrescado",
         "coordinates":       "Coordenadas",
         "remove all selected options": "Quitar todas las opciones seleccionadas",
         "permission denied": "Permiso denegado",
