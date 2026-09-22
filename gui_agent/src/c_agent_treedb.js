@@ -87,6 +87,7 @@
  *          All Rights Reserved.
  ***********************************************************************/
 import {
+    gobj_match_children_tree,
     SDATA, SDATA_END, data_type_t,
     gclass_create, log_error,
     gobj_parent,
@@ -115,6 +116,7 @@ import {yui_shell_show_modal, yui_shell_show_error} from "@yuneta/gobj-ui/src/sh
 
 import {is_agent_yuno, cmd2agent_service, SYSTEM_TREEDB} from "./agent_helpers.js";
 import {apply_outcome} from "./apply_outcome.js";
+import {drafts_of_saved_answer} from "@yuneta/gobj-ui/src/host_drafts.js";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {agent_config_get_nav_mode} from "./c_agent_config.js";
 
@@ -196,6 +198,7 @@ let PRIVATE_DATA = {
     diff_left:   0,     /*  `diff-schema` answers still owed  */
     diff_modal:  null,  /*  the differences report  */
     saved:       null,  /*  {owner: [saved-schema answer of each treedb]}  */
+    drafts:      null,  /*  {treedb_name: [topic names]} whose draft differs from the file in use  */
     saved_left:  0,     /*  `saved-schema` answers still owed  */
     save_left:   0,     /*  `save-schema` answers still owed  */
     save_errors: null,  /*  what the save answered wrong  */
@@ -1077,9 +1080,41 @@ function saved_answered(gobj, owner, kw)
     priv.saved_left--;
     if(kw && !(typeof kw.result === "number" && kw.result < 0) && Array.isArray(kw.data)) {
         priv.saved[owner] = kw.data;
+        priv.drafts = drafts_of_saved_answer(kw.data, priv.drafts || {});
     }
     render_apply(gobj);
+    if(priv.saved_left === 0) {
+        push_drafts(gobj);
+    }
     return 0;
+}
+
+/***************************************************************
+ *  Tell every schema editor under the tree which topics hold a
+ *  draft (EV_DRAFTS, from saved-schema's `draft_changed`): the mark
+ *  of a write lived in the editor's session memory only, and a
+ *  reload of the page showed no draft while __system__ still
+ *  differed from the file in use (N13 of the 2026-09-22 review).
+ *  Sent when the saved-schema answers land, and when an editor asks
+ *  for it on its creation (EV_DRAFTS_WANTED, from the treedb view).
+ ***************************************************************/
+function push_drafts(gobj)
+{
+    let priv = gobj.priv;
+
+    if(!priv.tree || !priv.drafts) {
+        return 0;
+    }
+    let editors = gobj_match_children_tree(priv.tree, {__gclass_name__: "C_YUI_SCHEMA_EDITOR"});
+    for(let editor of editors) {
+        gobj_send_event(editor, "EV_DRAFTS", {drafts: priv.drafts}, gobj);
+    }
+    return 0;
+}
+
+function ac_drafts_wanted(gobj, event, kw, src)
+{
+    return push_drafts(gobj);
 }
 
 /***************************************************************
@@ -2022,7 +2057,8 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const view_events = [
         ["EV_RECORD_WRITTEN",       ac_record_written,    null],
-        ["EV_SCHEMA_CHECKED",       ac_schema_checked,    null]
+        ["EV_SCHEMA_CHECKED",       ac_schema_checked,    null],
+        ["EV_DRAFTS_WANTED",        ac_drafts_wanted,     null]
     ];
     /*  The apply confirmation can be answered in any state it can be
      *  opened in, and it can only be opened where there is something to
@@ -2127,6 +2163,7 @@ function create_gclass(gclass_name)
         ["EV_APPLY_CONFIRMED",   0],
         ["EV_APPLY_CANCELLED",   0],
         ["EV_APPLY_TIMEOUT",     0],
+        ["EV_DRAFTS_WANTED",     0],
         ["EV_DISCOVER",          0],
         ["EV_ROUTE_CHANGED",     0],
         ["EV_NAV_MODE_CHANGED",  0],

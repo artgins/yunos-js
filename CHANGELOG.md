@@ -6,6 +6,18 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.76 + gobj-ui ^7.25.3 (2026-09-22)
+
+- **gui_agent: the Schemas tab tells the editor which topics are drafts (N13
+  of the 2026-09-22 review).** The editor kept the mark of a write in its
+  session memory only, so a reload of the page showed no draft while
+  `__system__` still differed from the file in use. The tab reads
+  `draft_changed` off every `saved-schema` answer (gobj-ui's
+  `drafts_of_saved_answer()`) and sends `EV_DRAFTS` to every schema editor
+  under its tree; a treedb view whose editor is created later asks for it
+  (`EV_DRAFTS_WANTED`). Needs a yuno at 7.25.3+ to answer it; an older one
+  says nothing and the editor behaves as before.
+
 ## gui_agent 0.22.75 + gobj-ui ^7.25.2 (2026-09-22)
 
 - **gui_agent: an apply that one owner refuses after another applied goes on

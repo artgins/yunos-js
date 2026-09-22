@@ -631,6 +631,13 @@ function mount_editor(gobj)
         gobj_start(editor);
     }
     notify_view_transport(gobj, agent_link_is_connected(priv.link));
+
+    /*  The editor is LAZY, and the tab learnt the drafts before it was
+     *  born: ask the tab to tell it (EV_DRAFTS, see push_drafts).  */
+    let tab = owner_tab(gobj);
+    if(tab) {
+        gobj_send_event(tab, "EV_DRAFTS_WANTED", {}, gobj);
+    }
     return 0;
 }
 
