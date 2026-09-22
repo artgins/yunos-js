@@ -442,6 +442,7 @@ const en = {
         "apply schema": "Apply the schema: restarts the yuno",
         "apply restart warning": "The yuno is restarted (kill, run, play) so it re-reads its schema. Every client connected to it is disconnected.",
         "apply timeout":     "The node's agent did not answer; the yuno may be down",
+        "schema applied partially": "The schema was applied for some treedbs only; the yuno restarts with them. Refused:",
         "applying": "Applying…",
         "save schema": "Save the schema: publishes the drafts beside the schema in use, applies nothing",
         "unsaved changes": "Unsaved changes",

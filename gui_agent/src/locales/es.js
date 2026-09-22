@@ -450,6 +450,7 @@ const es = {
         "apply schema": "Aplicar el esquema: reinicia el yuno",
         "apply restart warning": "El yuno se reinicia (kill, run, play) para que relea su esquema. Todo cliente conectado a él se desconecta.",
         "apply timeout":     "El agente del nodo no ha contestado; el yuno puede estar parado",
+        "schema applied partially": "El schema se ha aplicado sólo en parte de los treedbs; el yuno se reinicia con ellos. Rechazado:",
         "applying": "Aplicando…",
         "save schema": "Guardar el esquema: publica los borradores junto al esquema en uso, no aplica nada",
         "unsaved changes": "Cambios sin guardar",

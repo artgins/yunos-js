@@ -6,6 +6,22 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.75 + gobj-ui ^7.25.2 (2026-09-22)
+
+- **gui_agent: an apply that one owner refuses after another applied goes on
+  to the restart (N10 of the 2026-09-22 review).** `apply-schema` is sent to
+  every owner before the restart, each one replacing its own file in use; a
+  refusal ended the sequence, and the owner that had already applied was left
+  with the new schema on disk and the old one running -- `saved-schema` then
+  said saved == in use, Apply went dark, and the next unrelated restart applied
+  it in silence. Every owner answers first (`apply_outcome.js`): nobody
+  applied -> no restart, the refusals are the error; some applied -> the
+  yuno restarts with them, and a *"schema applied partially"* error names
+  who refused. New key in en + es.
+- **Both SPAs take `@yuneta/gobj-ui` ^7.25.2**: a form's write is answered
+  every way it ends (transport closed, no session), and a form busy twice
+  comes back whole.
+
 Contents:
 
 - **gui_agent** — Agent Console: a control-plane CLI/GUI to operate yuneta

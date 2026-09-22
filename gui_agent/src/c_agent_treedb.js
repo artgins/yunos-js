@@ -114,6 +114,7 @@ import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.
 import {yui_shell_show_modal, yui_shell_show_error} from "@yuneta/gobj-ui/src/shell_modals.js";
 
 import {is_agent_yuno, cmd2agent_service, SYSTEM_TREEDB} from "./agent_helpers.js";
+import {apply_outcome} from "./apply_outcome.js";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {agent_config_get_nav_mode} from "./c_agent_config.js";
 
@@ -199,6 +200,8 @@ let PRIVATE_DATA = {
     save_left:   0,     /*  `save-schema` answers still owed  */
     save_errors: null,  /*  what the save answered wrong  */
     apply_left:  0,     /*  `apply-schema` answers still owed  */
+    apply_done:  0,     /*  owners that answered `apply-schema` 0  */
+    apply_failed: null, /*  what the owners that refused it answered  */
     $toolbar:    null,  /*  imposed banner + differences + save + pending + apply  */
     $imposed:    null,
     $save:       null,
@@ -1832,6 +1835,8 @@ function ac_apply_confirmed(gobj, event, kw, src)
     /*  The saved schema goes in place first -- on every owner, each one
      *  applying only what it can -- and the restart is what reads it.  */
     priv.apply_left = 0;
+    priv.apply_done = 0;
+    priv.apply_failed = [];
     for(let owner of priv.owners || []) {
         if(send_apply_step(gobj, "apply", cmd2agent_service(yuno, owner, "apply-schema")) < 0) {
             end_apply(gobj, t("not connected to an agent"));
@@ -1875,16 +1880,42 @@ function ac_apply_answer(gobj, event, kw, src)
     if(outer === "command-agent" && !failed) {
         return 0;   /*  dispatch ok: the real answer is still coming  */
     }
-    if(failed) {
+    if(failed && state !== "ST_APPLYING") {
         end_apply(gobj, kw.comment || `${state}: failed`);
         return 0;
     }
 
     if(state === "ST_APPLYING") {
         let priv = gobj.priv;
+        /*
+         *  Every owner answers, refused or not, before anything else
+         *  happens: an owner that refused AFTER another applied undoes
+         *  nothing -- that other's file in use already carries the saved
+         *  schema, and the restart is what reads it. Ending here left the
+         *  running yuno on the old schema with the new one on disk, and
+         *  the next unrelated restart applied it in silence (N10 of the
+         *  2026-09-22 review). See apply_outcome().
+         */
+        if(failed) {
+            priv.apply_failed.push(kw.comment || "apply-schema failed");
+        } else {
+            priv.apply_done++;
+        }
         priv.apply_left--;
         if(priv.apply_left > 0) {
             return 0;   /*  another owner still to answer  */
+        }
+        const outcome = apply_outcome(priv.apply_done, priv.apply_failed);
+        if(!outcome.restart) {
+            end_apply(gobj, outcome.error);
+            return 0;
+        }
+        if(outcome.error) {
+            yui_shell_show_error(
+                yui_shell_of(gobj),
+                `${t("schema applied partially")}\n${outcome.error}`,
+                {t: t}
+            );
         }
         if(send_apply_step(gobj, "kill", `kill-yuno id="${yuno}"`) < 0) {
             end_apply(gobj, t("not connected to an agent"));
