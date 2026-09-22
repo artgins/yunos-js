@@ -60,5 +60,15 @@ export default defineConfig({
     },
     plugins: [
         yunetaHtmlPlugin({ defaultTitle: "Yuneta Agent Console" })
-    ]
+    ],
+    test: {
+        /*  The wiring tests import gclasses that import gobj-ui SOURCE,
+         *  which imports its CSS: vite has to transform the package
+         *  (node would refuse the .css), so it is not externalized.  */
+        server: {
+            deps: {
+                inline: [/@yuneta\/gobj-ui/]
+            }
+        }
+    }
 });

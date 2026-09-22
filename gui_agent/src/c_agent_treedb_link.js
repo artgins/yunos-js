@@ -66,12 +66,25 @@
  *      echo either way, not the treedb's event: another operator's
  *      change is not seen here.
  *
+ *      EVERY REQUEST IS ANSWERED. A view that sent a write waits for its
+ *      answer with the form busy, and two hops can lose one: the
+ *      controlcenter acks the dispatch and the node's agent never answers
+ *      (an agent restarting, a yuno that died under the command). So each
+ *      request carries a DEADLINE (REQUEST_TIMEOUT, a real time) and a
+ *      C_TIMER child settles the ones past it as failed, with a comment
+ *      the view shows. And a request this adapter cannot even route is
+ *      refused in the RETURN of mt_command_parser (a string, as every
+ *      caller of gobj_command() reads a failure), never with a null that
+ *      reads as "sent".
+ *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t, event_flag_t,
     gclass_create, log_error,
+    gobj_create_pure_child,
+    set_timeout, clear_timeout,
     gobj_read_attr, gobj_read_str_attr, gobj_read_pointer_attr,
     gobj_subscribe_event, gobj_unsubscribe_event,
     gobj_change_state, gobj_current_state,
@@ -105,6 +118,15 @@ const GCLASS_NAME = "C_AGENT_TREEDB_LINK";
  *  theirs invisible to us.  */
 const PURPOSE = "treedb";
 
+/*  How long a routed request may go unanswered before it is settled as
+ *  failed. A deadline, not a performance target: the node answers when
+ *  the command is DONE, and a big `nodes` two hops away is slow.  */
+const REQUEST_TIMEOUT = 60 * 1000;
+
+/*  The comment of a request settled by the deadline: an i18n KEY, which
+ *  the view's error toast translates.  */
+const NO_ANSWER_KEY = "the node did not answer";
+
 
 /***************************************************************
  *              Attrs
@@ -121,7 +143,8 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     seq:     0,     /*  request counter, echoed in __md_iev__  */
-    pending: null,  /*  seq -> {view, command, md_command, treedb_name, topic_name, record, options}  */
+    pending: null,  /*  seq -> {view, command, md_command, treedb_name, topic_name, record, options, deadline}  */
+    timer:   null,  /*  C_TIMER child: the earliest deadline of `pending`  */
 };
 
 let __gclass__ = null;
@@ -145,6 +168,7 @@ function mt_create(gobj)
 
     priv.seq = 0;
     priv.pending = {};
+    priv.timer = gobj_create_pure_child("deadline", "C_TIMER", {}, gobj);
 
     /*
      *  SERVICE subscription model
@@ -197,14 +221,21 @@ function mt_stop(gobj)
     }
     gobj_change_state(gobj, "ST_DISCONNECTED");
     priv.pending = {};
+    if(priv.timer) {
+        clear_timeout(priv.timer);
+    }
 }
 
 /***************************************************************
  *          Framework Method: Command parser
  *
  *  THE PIECE: the view's command, re-wrapped for the two hops.
- *  Returns null (asynchronous answer), exactly like the
- *  C_IEVENT_CLI the views normally talk to.
+ *  Returns null when the request LEFT (the answer is asynchronous,
+ *  as with the C_IEVENT_CLI the views normally talk to), and a
+ *  STRING when it did not: a non-null return is how gobj_command()
+ *  says "failed" to every caller, which logs it and does not wait.
+ *  A null here used to mean both, and a form whose write could not
+ *  be routed waited for an answer that was never asked for.
  ***************************************************************/
 function mt_command_parser(gobj, command, kw, src)
 {
@@ -214,8 +245,7 @@ function mt_command_parser(gobj, command, kw, src)
         kw = {};
     }
     if(empty_string(command)) {
-        log_error(`${gobj_short_name(gobj)}: command without name`);
-        return null;
+        return `${gobj_short_name(gobj)}: command without name`;
     }
 
     let node    = gobj_read_str_attr(gobj, "node");
@@ -225,15 +255,11 @@ function mt_command_parser(gobj, command, kw, src)
     let link    = gobj_read_attr(gobj, "link_svc");
 
     if(empty_string(node) || empty_string(yuno_id) || empty_string(treedb)) {
-        log_error(
-            `${gobj_short_name(gobj)}: cannot route '${command}' ` +
-            `— node/yuno_id/treedb_name incomplete`
-        );
-        return null;
+        return `${gobj_short_name(gobj)}: cannot route '${command}' ` +
+            `— node/yuno_id/treedb_name incomplete`;
     }
     if(!link || gobj_current_state(gobj) !== "ST_SESSION") {
-        log_error(`${gobj_short_name(gobj)}: cannot route '${command}' — not in session`);
-        return null;
+        return `${gobj_short_name(gobj)}: cannot route '${command}' — not in session`;
     }
 
     /*  Trap 1: a top-level `id` would name the YUNO, not the node the
@@ -242,11 +268,8 @@ function mt_command_parser(gobj, command, kw, src)
      *  that does not has to be fixed at the caller, so say so here
      *  instead of routing a request that cannot work.  */
     if(Object.prototype.hasOwnProperty.call(kw, "id")) {
-        log_error(
-            `${gobj_short_name(gobj)}: '${command}' carries a top-level 'id' ` +
-            `— it would filter the YUNO, not the node. Send it nested.`
-        );
-        return null;
+        return `${gobj_short_name(gobj)}: '${command}' carries a top-level 'id' ` +
+            `— it would filter the YUNO, not the node. Send it nested.`;
     }
 
     let seq = ++priv.seq;
@@ -279,12 +302,17 @@ function mt_command_parser(gobj, command, kw, src)
         /*  A link names its two ends and no topic: `<topic>^<id>^<hook>`
          *  for the parent, `<topic>^<id>` for the child.  */
         parent_ref:  kw_get_str(gobj, kw, "parent_ref", "", 0),
-        child_ref:   kw_get_str(gobj, kw, "child_ref", "", 0)
+        child_ref:   kw_get_str(gobj, kw, "child_ref", "", 0),
+        deadline:    now_msec() + REQUEST_TIMEOUT
     };
 
     /*  No `src`: the answer is addressed to the link service, which
      *  re-publishes it to every panel — the app's established pattern.  */
-    agent_link_command(link, "command-agent", kw_send);
+    if(agent_link_command(link, "command-agent", kw_send) < 0) {
+        delete priv.pending[seq];
+        return `${gobj_short_name(gobj)}: cannot route '${command}' — the link has no transport`;
+    }
+    arm_deadline(gobj);
 
     return null;    /*  asynchronous answer  */
 }
@@ -298,6 +326,41 @@ function mt_command_parser(gobj, command, kw, src)
 
 
 
+
+/***************************************************************
+ *  A monotonic clock in milliseconds: a deadline measured on the
+ *  wall clock moves when the clock is set.
+ ***************************************************************/
+function now_msec()
+{
+    return (typeof performance !== "undefined" && performance.now)?
+        performance.now() : Date.now();
+}
+
+/***************************************************************
+ *  Point the timer at the earliest deadline still pending, or
+ *  disarm it when nothing is.
+ ***************************************************************/
+function arm_deadline(gobj)
+{
+    let priv = gobj.priv;
+    let earliest = null;
+
+    if(!priv.timer) {
+        return;
+    }
+    for(let seq of Object.keys(priv.pending)) {
+        let d = priv.pending[seq].deadline;
+        if(earliest === null || d < earliest) {
+            earliest = d;
+        }
+    }
+    if(earliest === null) {
+        clear_timeout(priv.timer);
+        return;
+    }
+    set_timeout(priv.timer, Math.max(1, Math.ceil(earliest - now_msec())));
+}
 
 /***************************************************************
  *  Give the answer to the view that asked, with ITS command back on
@@ -432,10 +495,44 @@ function ac_mt_command_answer(gobj, event, kw, src)
     }
 
     delete priv.pending[seq];
+    arm_deadline(gobj);
     deliver(gobj, pend, kw);
     if(typeof kw.result === "number" && kw.result >= 0) {
         echo_node_event(gobj, pend, kw);
     }
+    return 0;
+}
+
+/***************************************************************
+ *  A deadline passed: every request past it is settled as FAILED,
+ *  in the shape of a refusal from the node, so the view does what
+ *  it does with any refused request -- the form comes back on what
+ *  was typed, a load shows its error. A late answer, if one still
+ *  comes, finds no pending entry and is dropped.
+ ***************************************************************/
+function ac_timeout(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let now = now_msec();
+
+    for(let seq of Object.keys(priv.pending)) {
+        let pend = priv.pending[seq];
+        if(pend.deadline > now) {
+            continue;
+        }
+        delete priv.pending[seq];
+        log_error(
+            `${gobj_short_name(gobj)}: '${pend.command}' of '${pend.topic_name || pend.treedb_name}' ` +
+            `not answered by node '${gobj_read_str_attr(gobj, "node")}' in ${REQUEST_TIMEOUT / 1000} s`
+        );
+        deliver(gobj, pend, {
+            result:  -1,
+            comment: NO_ANSWER_KEY,
+            schema:  null,
+            data:    null
+        });
+    }
+    arm_deadline(gobj);
     return 0;
 }
 
@@ -456,7 +553,10 @@ function ac_on_open(gobj, event, kw, src)
  ***************************************************************/
 function ac_on_close(gobj, event, kw, src)
 {
-    gobj.priv.pending = {};
+    let priv = gobj.priv;
+
+    priv.pending = {};
+    arm_deadline(gobj);
     return 0;
 }
 
@@ -503,12 +603,14 @@ function create_gclass(gclass_name)
         ["ST_DISCONNECTED", [
             ["EV_ON_OPEN",           ac_on_open,           "ST_SESSION"],
             ["EV_ON_CLOSE",          ac_on_close,          null],
-            ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null]
+            ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
+            ["EV_TIMEOUT",           ac_timeout,           null]
         ]],
         ["ST_SESSION", [
             ["EV_ON_CLOSE",          ac_on_close,          "ST_DISCONNECTED"],
             ["EV_ON_OPEN",           ac_on_open,           null],
-            ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null]
+            ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
+            ["EV_TIMEOUT",           ac_timeout,           null]
         ]]
     ];
 
@@ -536,7 +638,8 @@ function create_gclass(gclass_name)
         ["EV_TREEDB_NODE_UNLINKED", out],
         ["EV_MT_COMMAND_ANSWER",   0],
         ["EV_ON_OPEN",             0],
-        ["EV_ON_CLOSE",            0]
+        ["EV_ON_CLOSE",            0],
+        ["EV_TIMEOUT",             0]
     ];
 
     __gclass__ = gclass_create(

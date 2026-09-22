@@ -2330,21 +2330,28 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
      *  record of every key it names. Editing shows what the card has.  */
     let from_rowid = editing ? mc.from_rowid : -100;
 
-    let mk_input = (cls, type, ph, val) => createElement2(
-        ["input", {class: `input ${cls}`, type: type, placeholder: ph || "",
+    /*  `label` names the control (title + aria-label) and `ph` is its
+     *  placeholder: both are i18n KEYS, written with their data-i18n-*
+     *  so a language change reaches them -- a placeholder passed through
+     *  t() once stayed in the language it was built in.  */
+    let mk_input = (cls, type, ph, val, label) => createElement2(
+        ["input", {class: `input ${cls}`, type: type,
+                   placeholder: t(ph), "data-i18n-placeholder": ph,
+                   title: t(label), "data-i18n-title": label,
+                   "aria-label": t(label), "data-i18n-aria-label": label,
                    value: (val === 0 || val === undefined || val === null) ? "" : String(val)}]);
 
     let time = build_time_block(gobj, mc, span, units);
 
     let inputs = {
-        from_rowid:  mk_input("TRANGER_OPT_FROM_ROWID",  "number", t("1-based; negative = from end"),
-                        from_rowid),
-        to_rowid:    mk_input("TRANGER_OPT_TO_ROWID",    "number", t("0 = last"),
-                        mc.to_rowid),
-        mask_set:    mk_input("TRANGER_OPT_MASK_SET",    "number", t("user_flag bits"),
-                        mc.user_flag_mask_set),
-        mask_notset: mk_input("TRANGER_OPT_MASK_NOTSET", "number", t("user_flag bits"),
-                        mc.user_flag_mask_notset)
+        from_rowid:  mk_input("TRANGER_OPT_FROM_ROWID",  "number", "1-based; negative = from end",
+                        from_rowid, "from rowid"),
+        to_rowid:    mk_input("TRANGER_OPT_TO_ROWID",    "number", "0 = last",
+                        mc.to_rowid, "to rowid"),
+        mask_set:    mk_input("TRANGER_OPT_MASK_SET",    "number", "user_flag bits",
+                        mc.user_flag_mask_set, "user-flag mask set"),
+        mask_notset: mk_input("TRANGER_OPT_MASK_NOTSET", "number", "user_flag bits",
+                        mc.user_flag_mask_notset, "user-flag mask clear")
     };
 
 
@@ -2352,11 +2359,8 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
      *  `.*` for all of them -- shown, so the operator sees what is asked and
      *  narrows it by editing. A card on one key has no use for it.  */
     if(whole_topic) {
-        inputs.rkey = mk_input("TRANGER_OPT_RKEY", "text", t("regex over the keys"),
-            (mc.rkey === undefined || mc.rkey === "") ? ".*" : mc.rkey);
-        inputs.rkey.setAttribute("title", t("keys (regex)"));
-        inputs.rkey.setAttribute("data-i18n-title", "keys (regex)");
-        inputs.rkey.setAttribute("data-i18n-placeholder", "regex over the keys");
+        inputs.rkey = mk_input("TRANGER_OPT_RKEY", "text", "regex over the keys",
+            (mc.rkey === undefined || mc.rkey === "") ? ".*" : mc.rkey, "keys (regex)");
     }
 
     /*  The iterator can index the key from the END (open-iterator's
@@ -2364,7 +2368,8 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
      *  records, not the first ones the key ever got — and it is the only way
      *  to reach them without paging by hand through 400k rows to the end.  */
     let $backward = createElement2(["input", {type: "checkbox",
-        class: "TRANGER_OPT_BACKWARD"}]);
+        class: "TRANGER_OPT_BACKWARD",
+        title: t("newest first"), "data-i18n-title": "newest first"}]);
     $backward.checked = !!mc.backward;
     inputs.backward = $backward;
 
@@ -2383,8 +2388,11 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
             ]];
     };
 
+    let open_key = editing ? "apply" : "open rows";
     let $open = createElement2(
-        ["button", {class: "button is-link TRANGER_OPT_OPEN", type: "button"},
+        ["button", {class: "button is-link TRANGER_OPT_OPEN", type: "button",
+                    title: t(open_key), "data-i18n-title": open_key,
+                    "aria-label": t(open_key), "data-i18n-aria-label": open_key},
             [
                 ["span", {class: "icon"},
                     [["i", {class: editing ? "yi-square-check" : "yi-eye"}]]],

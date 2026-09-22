@@ -116,7 +116,7 @@ import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.
 import {yui_shell_show_modal, yui_shell_show_error} from "@yuneta/gobj-ui/src/shell_modals.js";
 
 import {is_agent_yuno, cmd2agent_service, SYSTEM_TREEDB} from "./agent_helpers.js";
-import {apply_outcome} from "./apply_outcome.js";
+import {owner_apply_outcome, apply_outcome} from "./apply_outcome.js";
 import {drafts_of_saved_answer} from "@yuneta/gobj-ui/src/host_drafts.js";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {agent_config_get_nav_mode} from "./c_agent_config.js";
@@ -199,13 +199,14 @@ let PRIVATE_DATA = {
     diff_left:   0,     /*  `diff-schema` answers still owed  */
     diff_modal:  null,  /*  the differences report  */
     saved:       null,  /*  {owner: [saved-schema answer of each treedb]}  */
-    drafts:      null,  /*  {treedb_name: [topic names]} whose draft differs from the file in use  */
+    drafts:      null,  /*  {treedb_name: [topic names]} not saved: the last COMPLETE saved-schema round; null while one is in flight  */
+    drafts_round: null, /*  the round in flight, filled answer by answer  */
     saved_left:  0,     /*  `saved-schema` answers still owed  */
     save_left:   0,     /*  `save-schema` answers still owed  */
     save_errors: null,  /*  what the save answered wrong  */
     apply_left:  0,     /*  `apply-schema` answers still owed  */
-    apply_done:  0,     /*  owners that answered `apply-schema` 0  */
-    apply_failed: null, /*  what the owners that refused it answered  */
+    apply_applied: null, /*  treedbs `apply-schema` put in place  */
+    apply_refused: null, /*  what it refused, one line per treedb (or owner)  */
     $toolbar:    null,  /*  imposed banner + differences + save + pending + apply  */
     $imposed:    null,
     $save:       null,
@@ -499,6 +500,12 @@ function request_treedbs(gobj)
  ***************************************************************/
 function start_discovery(gobj)
 {
+    /*  What the drafts were is stale from here: a discovery follows a
+     *  Save, an Apply or a reconnect, and ends in a saved-schema round
+     *  that says what they are now. Until it does, nobody is told the
+     *  old ones -- that is how an editor rebuilt after a Save was handed
+     *  the drafts from BEFORE it (M1 of the 2026-09-23 review).  */
+    gobj.priv.drafts = null;
     if(request_treedbs(gobj) === 0) {
         gobj_change_state(gobj, "ST_DISCOVERING");
         return;
@@ -1062,12 +1069,33 @@ function request_saved(gobj)
 
     priv.saved = {};
     priv.saved_left = 0;
+    priv.drafts = null;
+    priv.drafts_round = {};
     for(let owner of priv.owners || []) {
         if(request_owner(gobj, owner, "saved-schema", SAVED_PURPOSE) === 0) {
             priv.saved_left++;
         }
     }
+    if(priv.saved_left === 0 && (!priv.owners || priv.owners.length === 0)) {
+        /*  No owner, no draft: that is an answer too.  */
+        end_saved_round(gobj);
+    }
     render_apply(gobj);
+}
+
+/***************************************************************
+ *  The saved-schema round is complete: what it gathered IS the set
+ *  of drafts now -- a new object, never merged into the one before,
+ *  because the editor replaces its marks with it (EV_DRAFTS) and a
+ *  topic saved since must drop out of it.
+ ***************************************************************/
+function end_saved_round(gobj)
+{
+    let priv = gobj.priv;
+
+    priv.drafts = priv.drafts_round || {};
+    priv.drafts_round = null;
+    push_drafts(gobj);
 }
 
 /***************************************************************
@@ -1084,11 +1112,11 @@ function saved_answered(gobj, owner, kw)
     priv.saved_left--;
     if(kw && !(typeof kw.result === "number" && kw.result < 0) && Array.isArray(kw.data)) {
         priv.saved[owner] = kw.data;
-        priv.drafts = drafts_of_saved_answer(kw.data, priv.drafts || {});
+        priv.drafts_round = drafts_of_saved_answer(kw.data, priv.drafts_round || {});
     }
     render_apply(gobj);
     if(priv.saved_left === 0) {
-        push_drafts(gobj);
+        end_saved_round(gobj);
     }
     return 0;
 }
@@ -1098,16 +1126,20 @@ function saved_answered(gobj, owner, kw)
  *  draft (EV_DRAFTS, from saved-schema's `draft_changed`): the mark
  *  of a write lived in the editor's session memory only, and a
  *  reload of the page showed no draft while __system__ still
- *  differed from the file in use (N13 of the 2026-09-22 review).
- *  Sent when the saved-schema answers land, and when an editor asks
- *  for it on its creation (EV_DRAFTS_WANTED, from the treedb view).
+ *  differed (N13 of the 2026-09-22 review).
+ *  Sent when a saved-schema round completes, and when an editor asks
+ *  for it on its creation (EV_DRAFTS_WANTED, from the treedb view)
+ *  -- then only if a round is complete: while one is in flight
+ *  there is nothing true to say, and its end tells every editor.
+ *  The set is COMPLETE each time, an empty one included: the editor
+ *  REPLACES what the host said before.
  ***************************************************************/
 function push_drafts(gobj)
 {
     let priv = gobj.priv;
 
     if(!priv.tree || !priv.drafts) {
-        return 0;
+        return 0;       /*  no editor yet, or a round in flight  */
     }
     let editors = gobj_match_children_tree(priv.tree, {__gclass_name__: "C_YUI_SCHEMA_EDITOR"});
     for(let editor of editors) {
@@ -1269,7 +1301,7 @@ function is_ours(gobj, kw)
  *  a second answer). So the sequence needs no timer and no polling:
  *  every step is driven by the answer of the one before.
  ***************************************************************/
-function send_apply_step(gobj, step, cmd_line)
+function send_apply_step(gobj, step, cmd_line, owner)
 {
     let priv = gobj.priv;
     let node = gobj_read_str_attr(gobj, "node");
@@ -1300,6 +1332,9 @@ function send_apply_step(gobj, step, cmd_line)
     msg_iev_write_key(kw_send, "console_node", node);
     msg_iev_write_key(kw_send, "console_yuno", yuno);
     msg_iev_write_key(kw_send, "apply_step", step);
+    if(owner) {
+        msg_iev_write_key(kw_send, "console_owner", owner);
+    }
     agent_link_command(link, "command-agent", kw_send);
     return 0;
 }
@@ -1324,6 +1359,10 @@ function clear_apply_timer(gobj)
  *  A failure is reported as a toast, not as the notice: discovery
  *  replaces the notice with the view a second later, and an error
  *  that disappears before it is read is not reported at all.
+ *  `error_comment` is an i18n KEY, the node's own words, or an
+ *  element spec whose sentence half carries its key: the toast
+ *  translates what carries a key, and a string already passed
+ *  through t() would be a key that exists in no language.
  ***************************************************************/
 function end_apply(gobj, error_comment)
 {
@@ -1905,11 +1944,11 @@ function ac_apply_confirmed(gobj, event, kw, src)
     /*  The saved schema goes in place first -- on every owner, each one
      *  applying only what it can -- and the restart is what reads it.  */
     priv.apply_left = 0;
-    priv.apply_done = 0;
-    priv.apply_failed = [];
+    priv.apply_applied = [];
+    priv.apply_refused = [];
     for(let owner of priv.owners || []) {
-        if(send_apply_step(gobj, "apply", cmd2agent_service(yuno, owner, "apply-schema")) < 0) {
-            end_apply(gobj, t("not connected to an agent"));
+        if(send_apply_step(gobj, "apply", cmd2agent_service(yuno, owner, "apply-schema"), owner) < 0) {
+            end_apply(gobj, "not connected to an agent");
             return 0;
         }
         priv.apply_left++;
@@ -1959,36 +1998,45 @@ function ac_apply_answer(gobj, event, kw, src)
         let priv = gobj.priv;
         /*
          *  Every owner answers, refused or not, before anything else
-         *  happens: an owner that refused AFTER another applied undoes
-         *  nothing -- that other's file in use already carries the saved
-         *  schema, and the restart is what reads it. Ending here left the
-         *  running yuno on the old schema with the new one on disk, and
-         *  the next unrelated restart applied it in silence (N10 of the
-         *  2026-09-22 review). See apply_outcome().
+         *  happens, and what is counted is TREEDBS, not owners: an owner
+         *  holds several, answers -1 when one of them refused although
+         *  another was put in place, and 0 when it had none to apply. A
+         *  treedb applied is a file in use that already carries the saved
+         *  schema, and the restart is what reads it -- so one applied
+         *  means restart, and none applied means no restart (N10 of the
+         *  2026-09-22 review, M2 of the 2026-09-23 one). See
+         *  owner_apply_outcome() for how a 7.25.3 node is read.
          */
-        if(failed) {
-            priv.apply_failed.push(kw.comment || "apply-schema failed");
-        } else {
-            priv.apply_done++;
-        }
+        let owner = msg_iev_read_key(kw, "console_owner") || "";
+        let one = owner_apply_outcome(kw, owner);
+        priv.apply_applied = priv.apply_applied.concat(one.applied);
+        priv.apply_refused = priv.apply_refused.concat(one.refused);
         priv.apply_left--;
         if(priv.apply_left > 0) {
             return 0;   /*  another owner still to answer  */
         }
-        const outcome = apply_outcome(priv.apply_done, priv.apply_failed);
+        const outcome = apply_outcome(priv.apply_applied, priv.apply_refused);
         if(!outcome.restart) {
-            end_apply(gobj, outcome.error);
+            end_apply(gobj, outcome.error_key || outcome.error);
             return 0;
         }
         if(outcome.error) {
+            /*  Two halves, so the one that is a sentence keeps its key and
+             *  changes language; the refusals are the node's words.  */
             yui_shell_show_error(
                 yui_shell_of(gobj),
-                `${t("schema applied partially")}\n${outcome.error}`,
+                [
+                    ["span", {class: "TREEDB_APPLY_PARTIAL", i18n: "schema applied partially"},
+                        t("schema applied partially")],
+                    ["span", {class: "TREEDB_APPLY_REFUSED",
+                              style: "display:block; white-space:pre-wrap;"},
+                        outcome.error]
+                ],
                 {t: t}
             );
         }
         if(send_apply_step(gobj, "kill", `kill-yuno id="${yuno}"`) < 0) {
-            end_apply(gobj, t("not connected to an agent"));
+            end_apply(gobj, "not connected to an agent");
             return 0;
         }
         gobj_change_state(gobj, "ST_KILLING");
@@ -2000,7 +2048,7 @@ function ac_apply_answer(gobj, event, kw, src)
      *  twice moves the sequence twice.  */
     if(state === "ST_KILLING") {
         if(send_apply_step(gobj, "run", `run-yuno id="${yuno}" play=0`) < 0) {
-            end_apply(gobj, t("not connected to an agent"));
+            end_apply(gobj, "not connected to an agent");
             return 0;
         }
         gobj_change_state(gobj, "ST_STARTING");
@@ -2008,7 +2056,7 @@ function ac_apply_answer(gobj, event, kw, src)
     }
     if(state === "ST_STARTING") {
         if(send_apply_step(gobj, "play", `play-yuno id="${yuno}"`) < 0) {
-            end_apply(gobj, t("not connected to an agent"));
+            end_apply(gobj, "not connected to an agent");
             return 0;
         }
         gobj_change_state(gobj, "ST_PLAYING");
@@ -2049,7 +2097,10 @@ function ac_apply_timeout(gobj, event, kw, src)
         `${gobj_short_name(gobj)}: the node's agent did not answer '${step}' ` +
         `for '${yuno}'`
     );
-    end_apply(gobj, `${t("apply timeout")} (${step})`);
+    end_apply(gobj, [
+        ["span", {class: "TREEDB_APPLY_TIMEOUT", i18n: "apply timeout"}, t("apply timeout")],
+        ["span", {class: "TREEDB_APPLY_STEP ml-1"}, `(${step})`]
+    ]);
     return 0;
 }
 

@@ -457,7 +457,7 @@ const en = {
         "dagre top-down": "Dagre top-down",
         "dagre left-right": "Dagre left-right",
         "no session": "No session",
-        "some records were gone before the delete": "Some records were gone before the delete and were not deleted; the table was refreshed",
+        "some records were gone before the delete": "Some records no longer existed when the delete was confirmed; they were not deleted",
         "expand loaded": "Expand loaded",
         "collapse all": "Collapse all",
         "copy json": "Copy JSON",

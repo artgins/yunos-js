@@ -6,6 +6,56 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.57, gui_agent 0.22.78 + gobj-ui ^7.25.5 (2026-09-23)
+
+Fixes from the 2026-09-23 review of the 2026-09-22 round.
+
+- **gui_agent: after a Save the schema editor no longer says "unsaved
+  schema changes" again (M1, JS half).** The tab merged every saved-schema
+  answer into one set of drafts that was never reset, and the editor rebuilt
+  after the Save asked for them (`EV_DRAFTS_WANTED`) before the new round had
+  answered, so it was handed the drafts from BEFORE the Save. The set is now
+  per round: forgotten at every discovery, gathered anew, handed to every
+  editor only when the round is complete, and an editor asking in between is
+  told nothing until the round ends. With gobj-ui 7.25.5 the editor
+  REPLACES its host marks with it. (On a 7.25.3 node `draft_changed` still
+  means "differs from the file in use", so a topic saved and not applied
+  shows as a draft until the Apply; a newer node diffs against the saved
+  schema.)
+- **gui_agent: Apply counts TREEDBS, not owners (M2, JS half).** One owner
+  that applied A and refused B answered -1, and the tab skipped the restart:
+  A was applied in silence by the next unrelated restart. An owner with
+  nothing to apply ("0 treedb(s)") next to a refusal restarted the yuno for
+  nothing. Each owner's rows are read (`owner_apply_outcome()`,
+  `data.applied` on a newer node, the row's result on a 7.25.3 one); the
+  yuno restarts iff at least one treedb was applied, and the refusals are
+  named.
+- **gui_agent: the "schema applied partially" toast is re-translatable.**
+  It was one composed string; the sentence keeps its key and the refusals
+  follow as data. The apply-timeout toast likewise, and the "not connected"
+  one passes its key.
+- **gui_agent: every routed treedb request is answered.** The two-hop
+  adapter (`C_AGENT_TREEDB_LINK`) had no deadline, so a node agent that
+  never answered after the dispatch ack left a form busy for ever. Each
+  request now carries a 60 s deadline on a `C_TIMER` child and is settled as
+  failed with "the node did not answer" (new i18n key). And a request it
+  cannot route (incomplete target, top-level `id`, no session) is refused
+  in `mt_command_parser`'s RETURN -- it returned null, which every caller
+  reads as "sent".
+- **gui_treedb: the Rows-options inputs carry their names.** From/to rowid
+  and the two user-flag masks had no title, and their placeholders no
+  `data-i18n-placeholder` (they stayed in the language they were built in);
+  the open/apply button and the newest-first checkbox had no title.
+- **Both: "some records were gone before the delete"** no longer promises a
+  refresh that does not happen. Both take gobj-ui ^7.25.5, whose topic view
+  also answers a Save in flight when the backend drops without any host
+  forwarding.
+- **Tests: wiring, not only helpers.** gui_agent drives `C_AGENT_TREEDB` and
+  `C_AGENT_TREEDB_LINK` through their FSMs on a document double
+  (`test/dom_double.js`, a copy of gobj-ui's): the drafts after a Save, the
+  four apply outcomes, the deadline. They fail on 0.22.77. `vite.config.js`
+  inlines `@yuneta/gobj-ui` for vitest (its source imports CSS).
+
 ## gui_treedb 0.17.56 (2026-09-23)
 
 - **Discovery runs once per old connection, not on every session.** 0.17.55
