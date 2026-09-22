@@ -57,7 +57,7 @@ import {
     gobj_post_event,
     gobj_name, gobj_short_name,
     gobj_write_str_attr,
-    gobj_start, gobj_stop,
+    gobj_start,
     gobj_start_tree, gobj_stop_tree, gobj_destroy,
     gobj_is_running,
     gobj_current_state,
@@ -442,8 +442,7 @@ function finish_scan(gobj, conn_id, error)
     }
     delete priv.scans[conn_id];
     if(scan.timer) {
-        clear_timeout(scan.timer);
-        gobj_stop(scan.timer);
+        clear_timeout(scan.timer);     /*  also stops it  */
         gobj_destroy(scan.timer);
         scan.timer = null;
     }
@@ -644,10 +643,13 @@ function ac_on_open(gobj, event, kw, src)
         let conn = config ? treedb_config_get_connection(config, conn_id) : null;
         /*  ...or of a connection stored before `master` was kept: a replica
          *  saved by an older release opened with its write buttons until a
-         *  Settings refresh (a low of the 2026-09-22 review).  */
+         *  Settings refresh (a low of the 2026-09-22 review). Only a C_NODE
+         *  is asked `treedb-info`: a C_TRANGER never has a `master`, and
+         *  counting it re-ran the whole discovery on every session.  */
         let services = conn? treedb_config_conn_services(conn) : [];
         if(conn && (!services.length ||
-                services.some((svc) => svc.master === undefined || svc.master === null))) {
+                services.some((svc) => svc.gclass === "C_NODE" &&
+                    (svc.master === undefined || svc.master === null)))) {
             do_scan(gobj, conn_id);
         }
     }

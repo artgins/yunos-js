@@ -6,6 +6,19 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.56 (2026-09-23)
+
+- **Discovery runs once per old connection, not on every session.** 0.17.55
+  re-scanned a connection whenever any stored service had no `master`, but
+  only a `C_NODE` is asked `treedb-info`: a `C_TRANGER` never gets one, so
+  every page load and every reconnect re-ran the whole discovery. Only
+  `C_NODE` services count now. (A node too old to answer `treedb-info` is
+  still re-scanned per session until its agent is upgraded.)
+- **A scan that finishes no longer logs `GObj NOT RUNNING`.** `finish_scan()`
+  stopped its watchdog after `clear_timeout()`, which already stops a
+  `C_TIMER` since gobj-js 7.x; the second stop logged an ERROR at the end of
+  every scan.
+
 ## gui_treedb 0.17.55, gui_agent 0.22.77 + gobj-ui ^7.25.4 (2026-09-22)
 
 - **The lows of the 2026-09-22 review.** gui_treedb: a connection stored
