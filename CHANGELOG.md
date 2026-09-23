@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.58 + gobj-ui ^7.25.11 (2026-09-23)
+
+gui_treedb moves from gobj-ui ^7.25.5 to ^7.25.11. It mounts no schema editor;
+what reaches it is the shell chrome of 7.25.6-7.25.11: one toast per message on
+screen (a repeat is a caller of its own), and a translatable `title` as well as
+an `aria-label` on every ✕ (toast, modal, confirmation), on the back arrow of an
+adaptive dialog and on every confirmation answer -- named by the label keys this
+app already passes (`yes`, `no`, `install`, `not now`, `accept`). No new locale
+key; validate-locales: OK. Deployed to artgins.ytreedb.com, console clean
+through login and a forced reconnect.
+
 ## gui_agent 0.22.85 + gobj-ui ^7.25.11 (2026-09-23)
 
 gobj-ui 7.25.11: the schema editor's confirmations (a column or topic
