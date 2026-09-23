@@ -30,6 +30,7 @@ const {register_c_agent_treedb_link} = await import("./c_agent_treedb_link.js");
 const logged = [];
 const sent = [];
 const answers = [];
+const answers_b = [];
 const echoes = [];
 
 let yuno = null;
@@ -84,6 +85,13 @@ beforeAll(() => {
             return 0;
         }, null]))]],
         {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
+    /*  A second view, on a second adapter over the SAME link.  */
+    gclass_create("C_TEST_VIEW_B", [["EV_MT_COMMAND_ANSWER", 0]],
+        [["ST_IDLE", [["EV_MT_COMMAND_ANSWER", (gobj, ev, kw) => {
+            answers_b.push(kw);
+            return 0;
+        }, null]]]],
+        {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
     register_c_agent_treedb_link();
 
     yuno = gobj_create_yuno("link_yuno", "C_TEST_HOST", {});
@@ -100,6 +108,7 @@ beforeEach(() => {
     logged.length = 0;
     sent.length = 0;
     answers.length = 0;
+    answers_b.length = 0;
     echoes.length = 0;
 });
 
@@ -302,5 +311,53 @@ describe("M-2: the deadline", () => {
         expect(answers.length).toBe(2);
         expect(echoes).toEqual([]);
         expect(warnings().filter((w) => w.includes("after its deadline")).length).toBe(2);
+    });
+});
+
+
+/*  The link re-publishes every answer of the session to EVERY adapter
+ *  subscribed to it: what one answer does, it does to all of them.  */
+function publish(adapters, req, hop, result, data, comment)
+{
+    for(const a of adapters) {
+        reply(a, req, hop, result, data, comment);
+    }
+}
+
+describe("two treedb views mounted on one link", () => {
+
+    test("an answer reaches the view that asked, and only that one", () => {
+        const view_b = gobj_create_service("view_b1", "C_TEST_VIEW_B", {}, yuno);
+        const a = adapter("t1a", {subscriber: table});
+        const b = adapter("t1b", {subscriber: view_b});
+        gobj_command(a, "update-node", {topic_name: "users", record: {id: "x"}}, table);
+        gobj_command(b, "nodes", {topic_name: "roles"}, view_b);
+        expect(sent.length).toBe(2);
+
+        /*  b's answer, heard by both adapters.  */
+        publish([a, b], sent[1], "command-yuno", 0, [{id: "r"}]);
+        expect(answers).toEqual([]);            /*  not a's write  */
+        expect(answers_b.length).toBe(1);
+        expect(answers_b[0].data).toEqual([{id: "r"}]);
+
+        publish([a, b], sent[0], "command-yuno", 0, {id: "x"});
+        expect(answers.length).toBe(1);
+        expect(answers_b.length).toBe(1);
+        expect(errors()).toEqual([]);
+    });
+
+    test("another view's answer is not a LATE answer of ours: no false echo", () => {
+        const view_b = gobj_create_service("view_b2", "C_TEST_VIEW_B", {}, yuno);
+        const a = adapter("t2a", {subscriber: table});
+        const b = adapter("t2b", {subscriber: view_b});
+        gobj_command(a, "delete-node", {topic_name: "users", record: {id: "x"}}, table);
+        vi.advanceTimersByTime(61 * 1000);      /*  a's delete: settled, remembered  */
+        expect(answers.length).toBe(1);
+
+        gobj_command(b, "nodes", {topic_name: "roles"}, view_b);
+        publish([a, b], sent[1], "command-yuno", 0, [{id: "r"}]);
+        expect(echoes).toEqual([]);             /*  no EV_TREEDB_NODE_DELETED of x  */
+        expect(answers_b.length).toBe(1);
+        expect(warnings().filter((w) => w.includes("after its deadline"))).toEqual([]);
     });
 });

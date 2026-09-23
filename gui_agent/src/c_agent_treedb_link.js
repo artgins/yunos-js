@@ -161,6 +161,15 @@ const LATE_MAX = 64;
 const NO_ANSWER_KEY = "the node did not answer";
 const CLOSED_KEY = "the connection dropped";
 
+/*  The request counter, ONE for the page and not one per adapter: every
+ *  adapter subscribed to the link hears every answer of the session, and
+ *  tells its own by `treedb_seq`. A counter per adapter started at 1 in
+ *  each, so with two treedb views mounted an answer to one was taken by
+ *  the other -- delivered to the wrong view, or read as a LATE answer of
+ *  a request it had given up, which echoed a node event (a DELETED) that
+ *  never happened.  */
+let __treedb_seq__ = 0;
+
 
 /***************************************************************
  *              Attrs
@@ -176,7 +185,6 @@ SDATA_END()
 ];
 
 let PRIVATE_DATA = {
-    seq:     0,     /*  request counter, echoed in __md_iev__  */
     pending: null,  /*  seq -> {view, command, md_command, treedb_name, topic_name, record, options, timeout, deadline}  */
     late:    null,  /*  seq -> {pend, settled_at}: settled by the deadline, a late answer may still come  */
     timer:   null,  /*  C_TIMER child: the earliest deadline of `pending`  */
@@ -201,7 +209,6 @@ function mt_create(gobj)
 {
     let priv = gobj.priv;
 
-    priv.seq = 0;
     priv.pending = {};
     priv.late = {};
     priv.timer = gobj_create_pure_child("deadline", "C_TIMER", {}, gobj);
@@ -309,7 +316,7 @@ function mt_command_parser(gobj, command, kw, src)
             `— it would filter the YUNO, not the node. Send it nested.`;
     }
 
-    let seq = ++priv.seq;
+    let seq = ++__treedb_seq__;
 
     /*  Everything the view sent travels as kw, except what belongs to
      *  the hops: `service` is the INNER routing (inline in cmd2agent, and
