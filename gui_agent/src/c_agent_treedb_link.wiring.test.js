@@ -361,3 +361,38 @@ describe("two treedb views mounted on one link", () => {
         expect(warnings().filter((w) => w.includes("after its deadline"))).toEqual([]);
     });
 });
+
+describe("a request remembered for its late answer", () => {
+
+    test("keeps what the echo needs, not the base64 it carried", () => {
+        const a = adapter("r1", {subscriber: table});
+        const content64 = "QUJD".repeat(64 * 1024);
+        gobj_command(a, "update-node", {
+            topic_name: "devices", options: {create: true},
+            record: {id: "dev-1", name: "d", __files__: {foto: {content64: content64, original_name: "f.png"}}}
+        }, table);
+        vi.advanceTimersByTime(10 * 60 * 1000);
+        expect(answers.length).toBe(1);
+
+        /*  The view is a gobj (circular): not the question here.  */
+        const kept = JSON.stringify(a.priv.late, (k, v) => (k === "view" ? undefined : v));
+        expect(kept).not.toContain(content64.slice(0, 64));
+        expect(kept.length).toBeLessThan(4096);
+
+        /*  ...and the echo of a late success is still right.  */
+        reply(a, sent[0], "command-yuno", 0, {id: "dev-1", name: "d"});
+        expect(echoes.length).toBe(1);
+        expect(echoes[0].event).toBe("EV_TREEDB_NODE_CREATED");
+        expect(echoes[0].kw.topic_name).toBe("devices");
+    });
+
+    test("a late delete still echoes the record it named", () => {
+        const a = adapter("r2", {subscriber: table});
+        gobj_command(a, "delete-node", {topic_name: "users", record: {id: "x", name: "n"}}, table);
+        vi.advanceTimersByTime(61 * 1000);
+        reply(a, sent[0], "command-yuno", 0, null);
+        expect(echoes.length).toBe(1);
+        expect(echoes[0].event).toBe("EV_TREEDB_NODE_DELETED");
+        expect(echoes[0].kw.node).toEqual({id: "x", name: "n"});
+    });
+});

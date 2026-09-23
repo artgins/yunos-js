@@ -422,7 +422,10 @@ function settle_failed(gobj, pend, comment_key)
 
 /***************************************************************
  *  Remember a request the deadline settled, so its answer, if it
- *  still comes, is recognised. Bounded in time and in number.
+ *  still comes, is recognised. Bounded in time and in number, and
+ *  in what it keeps: what late_answer() says and echo_node_event()
+ *  publishes. Not the view (it was answered), and not the base64 of
+ *  a write's `__files__` -- up to 171 MB, held for LATE_KEEP.
  ***************************************************************/
 function remember_late(gobj, seq, pend)
 {
@@ -438,7 +441,23 @@ function remember_late(gobj, seq, pend)
     while(keys.length >= LATE_MAX) {
         delete priv.late[keys.shift()];
     }
-    priv.late[seq] = {pend: pend, settled_at: now};
+    let record = null;
+    if(pend.record) {
+        record = Object.assign({}, pend.record);
+        delete record.__files__;
+    }
+    priv.late[seq] = {
+        pend: {
+            command:     pend.command,
+            treedb_name: pend.treedb_name,
+            topic_name:  pend.topic_name,
+            record:      record,
+            options:     pend.options,
+            parent_ref:  pend.parent_ref,
+            child_ref:   pend.child_ref
+        },
+        settled_at: now
+    };
 }
 
 /***************************************************************
