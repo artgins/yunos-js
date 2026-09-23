@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.85 + gobj-ui ^7.25.11 (2026-09-23)
+
+gobj-ui 7.25.11: the schema editor's confirmations (a column or topic
+delete, an import that deletes) answer with the keys `delete` / `cancel`. The
+console check of 0.22.84 on the deployed console, in Spanish, showed them
+reading "Delete" / "Cancel" -- text, title and aria-label. No new locale key.
+
 ## gui_agent 0.22.84 + gobj-ui ^7.25.10 (2026-09-23)
 
 Fixes from the fifth independent review (after 7.25.9). gui_agent takes
