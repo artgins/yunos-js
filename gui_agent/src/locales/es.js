@@ -451,6 +451,8 @@ const es = {
         "apply restart warning": "El yuno se reinicia (kill, run, play) para que relea su esquema. Todo cliente conectado a él se desconecta.",
         "apply timeout":     "El agente del nodo no ha contestado; el yuno puede estar parado",
         "the node did not answer": "El nodo no ha contestado a tiempo; no hay nada confirmado",
+        "the connection dropped": "La conexión se ha caído antes de que el nodo contestara; no hay nada confirmado",
+        "the connection dropped during the write": "La conexión se ha caído durante la escritura: puede que se haya hecho o no. El esquema se vuelve a leer al volver la conexión",
         "schema applied partially": "El schema se ha aplicado sólo en parte de los treedbs; el yuno se reinicia con ellos. Rechazado:",
         "applying": "Aplicando…",
         "save schema": "Guardar el esquema: publica los borradores junto al esquema en uso, no aplica nada",

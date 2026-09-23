@@ -70,19 +70,41 @@
  *      answer with the form busy, and two hops can lose one: the
  *      controlcenter acks the dispatch and the node's agent never answers
  *      (an agent restarting, a yuno that died under the command). So each
- *      request carries a DEADLINE (REQUEST_TIMEOUT, a real time) and a
- *      C_TIMER child settles the ones past it as failed, with a comment
- *      the view shows. And a request this adapter cannot even route is
- *      refused in the RETURN of mt_command_parser (a string, as every
- *      caller of gobj_command() reads a failure), never with a null that
- *      reads as "sent".
+ *      request carries a DEADLINE (a real time) and a C_TIMER child
+ *      settles the ones past it as failed, with a comment the view shows.
+ *      The session closing settles every request in flight the same way,
+ *      at once: their answers died with it. And a request this adapter
+ *      cannot even route is refused in the RETURN of mt_command_parser (a
+ *      string, as every caller of gobj_command() reads a failure), never
+ *      with a null that reads as "sent".
+ *
+ *      THE DEADLINE (request_timeout()). It is armed at the queueing and
+ *      armed AGAIN at the controlcenter's dispatch ack, so the time the
+ *      frame took to reach the controlcenter is not taken from the node's
+ *      answer. It is REQUEST_TIMEOUT for everything but a write carrying
+ *      `__files__`, which gets REQUEST_TIMEOUT plus the time its base64
+ *      needs at UPLOAD_FLOOR: an upload of up to 128 MB (~171 MB of
+ *      base64, two hops) is not a request that went unanswered after a
+ *      minute. It is scaled and NOT disabled: an agent that never answers
+ *      an upload must still end with the form answered, in a time
+ *      proportional to what it carried (~23 min for the largest).
+ *
+ *      A LATE ANSWER -- one that arrives after its deadline settled the
+ *      request -- is not dropped in silence: it is logged as a warning,
+ *      and when it is a WRITE that succeeded its node event is echoed, so
+ *      the tables show what the treedb holds (the form was already
+ *      answered, as failed; a second answer to it would re-settle a write
+ *      it has forgotten). A late read or a late refusal changes nothing
+ *      on screen and is only logged: the view already said it failed, and
+ *      a refresh asks again. Settled requests are remembered for LATE_KEEP
+ *      (at most LATE_MAX of them) for this.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t, event_flag_t,
-    gclass_create, log_error,
+    gclass_create, log_error, log_warning,
     gobj_create_pure_child,
     set_timeout, clear_timeout,
     gobj_read_attr, gobj_read_str_attr, gobj_read_pointer_attr,
@@ -119,13 +141,25 @@ const GCLASS_NAME = "C_AGENT_TREEDB_LINK";
 const PURPOSE = "treedb";
 
 /*  How long a routed request may go unanswered before it is settled as
- *  failed. A deadline, not a performance target: the node answers when
- *  the command is DONE, and a big `nodes` two hops away is slow.  */
+ *  failed, counted from its dispatch ack (see the header). A deadline,
+ *  not a performance target: the node answers when the command is DONE,
+ *  and a big `nodes` two hops away is slow.  */
 const REQUEST_TIMEOUT = 60 * 1000;
 
-/*  The comment of a request settled by the deadline: an i18n KEY, which
- *  the view's error toast translates.  */
+/*  The slowest link an upload is waited for, in bytes of base64 per
+ *  second, two hops included: a floor, so a slow uplink is not reported
+ *  as a node that did not answer.  */
+const UPLOAD_FLOOR = 128 * 1024;
+
+/*  How long, and how many, settled requests are remembered to recognise
+ *  their late answers.  */
+const LATE_KEEP = 30 * 60 * 1000;
+const LATE_MAX = 64;
+
+/*  The comments of a request settled here: i18n KEYS, which the view's
+ *  error toast translates.  */
 const NO_ANSWER_KEY = "the node did not answer";
+const CLOSED_KEY = "the connection dropped";
 
 
 /***************************************************************
@@ -143,7 +177,8 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     seq:     0,     /*  request counter, echoed in __md_iev__  */
-    pending: null,  /*  seq -> {view, command, md_command, treedb_name, topic_name, record, options, deadline}  */
+    pending: null,  /*  seq -> {view, command, md_command, treedb_name, topic_name, record, options, timeout, deadline}  */
+    late:    null,  /*  seq -> {pend, settled_at}: settled by the deadline, a late answer may still come  */
     timer:   null,  /*  C_TIMER child: the earliest deadline of `pending`  */
 };
 
@@ -168,6 +203,7 @@ function mt_create(gobj)
 
     priv.seq = 0;
     priv.pending = {};
+    priv.late = {};
     priv.timer = gobj_create_pure_child("deadline", "C_TIMER", {}, gobj);
 
     /*
@@ -221,6 +257,7 @@ function mt_stop(gobj)
     }
     gobj_change_state(gobj, "ST_DISCONNECTED");
     priv.pending = {};
+    priv.late = {};
     if(priv.timer) {
         clear_timeout(priv.timer);
     }
@@ -303,8 +340,12 @@ function mt_command_parser(gobj, command, kw, src)
          *  for the parent, `<topic>^<id>` for the child.  */
         parent_ref:  kw_get_str(gobj, kw, "parent_ref", "", 0),
         child_ref:   kw_get_str(gobj, kw, "child_ref", "", 0),
-        deadline:    now_msec() + REQUEST_TIMEOUT
+        timeout:     0,
+        deadline:    0
     };
+    let pend = priv.pending[seq];
+    pend.timeout = request_timeout(pend.record);
+    pend.deadline = now_msec() + pend.timeout;
 
     /*  No `src`: the answer is addressed to the link service, which
      *  re-publishes it to every panel — the app's established pattern.  */
@@ -335,6 +376,110 @@ function now_msec()
 {
     return (typeof performance !== "undefined" && performance.now)?
         performance.now() : Date.now();
+}
+
+/***************************************************************
+ *  The deadline of a request (see the header): REQUEST_TIMEOUT, plus
+ *  the time the base64 of its `__files__` needs at UPLOAD_FLOOR.
+ ***************************************************************/
+function request_timeout(record)
+{
+    let files = (record && is_object(record.__files__)) ? record.__files__ : null;
+    let bytes = 0;
+
+    if(files) {
+        for(let col of Object.keys(files)) {
+            let one = files[col];
+            if(is_object(one) && typeof one.content64 === "string") {
+                bytes += one.content64.length;
+            }
+        }
+    }
+    return REQUEST_TIMEOUT + Math.ceil(bytes * 1000 / UPLOAD_FLOOR);
+}
+
+/***************************************************************
+ *  Settle a request as FAILED, in the shape of a refusal from the
+ *  node, so the view does what it does with any refused request --
+ *  the form comes back on what was typed, a load shows its error.
+ ***************************************************************/
+function settle_failed(gobj, pend, comment_key)
+{
+    deliver(gobj, pend, {
+        result:  -1,
+        comment: comment_key,
+        schema:  null,
+        data:    null
+    });
+}
+
+/***************************************************************
+ *  Remember a request the deadline settled, so its answer, if it
+ *  still comes, is recognised. Bounded in time and in number.
+ ***************************************************************/
+function remember_late(gobj, seq, pend)
+{
+    let priv = gobj.priv;
+    let now = now_msec();
+
+    for(let old of Object.keys(priv.late)) {
+        if(now - priv.late[old].settled_at > LATE_KEEP) {
+            delete priv.late[old];
+        }
+    }
+    let keys = Object.keys(priv.late).sort((a, b) => Number(a) - Number(b));
+    while(keys.length >= LATE_MAX) {
+        delete priv.late[keys.shift()];
+    }
+    priv.late[seq] = {pend: pend, settled_at: now};
+}
+
+/***************************************************************
+ *  The answer of a request its deadline settled. Said, always; and
+ *  a write that succeeded is echoed, so the tables show what the
+ *  treedb holds. The view is not answered again: it was, as failed.
+ ***************************************************************/
+function late_answer(gobj, seq, kw, outer)
+{
+    let priv = gobj.priv;
+    let late = priv.late[seq];
+    let pend = late.pend;
+    let ok = !(typeof kw.result === "number" && kw.result < 0);
+    let what = `'${pend.command}' of '${pend.topic_name || pend.treedb_name}'`;
+    let secs = Math.round((now_msec() - late.settled_at) / 1000);
+
+    if(outer === "command-agent") {
+        if(!ok) {
+            delete priv.late[seq];
+            log_warning(`${gobj_short_name(gobj)}: ${what}: dispatch refused ${secs} s ` +
+                `after its deadline: ${kw.comment || ""}`);
+        }
+        return 0;   /*  a late dispatch ack: the real answer may still come  */
+    }
+    delete priv.late[seq];
+    if(!ok) {
+        log_warning(`${gobj_short_name(gobj)}: ${what} answered ${secs} s after its deadline: ` +
+            `refused (${kw.comment || ""})`);
+        return 0;
+    }
+    if(is_write(pend.command)) {
+        log_warning(`${gobj_short_name(gobj)}: ${what} answered ${secs} s after its deadline: ` +
+            `done -- the view was told it failed; its node event is echoed`);
+        echo_node_event(gobj, pend, kw);
+        return 0;
+    }
+    log_warning(`${gobj_short_name(gobj)}: ${what} answered ${secs} s after its deadline: ` +
+        `not delivered, the view already reported it failed`);
+    return 0;
+}
+
+/***************************************************************
+ *  The commands this adapter echoes as node events.
+ ***************************************************************/
+function is_write(command)
+{
+    return ["create-node", "update-node", "delete-node",
+            "link-nodes", "unlink-nodes"].includes(command);
 }
 
 /***************************************************************
@@ -478,19 +623,26 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return 0;
     }
     let seq = msg_iev_read_key(kw, "treedb_seq");
-    let pend = seq ? priv.pending[seq] : null;
-    if(!pend) {
-        return 0;   /*  another treedb tab's request  */
-    }
-
     let stack = msg_iev_get_stack(gobj, kw, "command_stack", false);
     let outer = kw_get_str(gobj, stack, "command", "", 0);
+    let pend = seq ? priv.pending[seq] : null;
+    if(!pend) {
+        if(seq && priv.late[seq]) {
+            return late_answer(gobj, seq, kw, outer);
+        }
+        return 0;   /*  another treedb tab's request  */
+    }
 
     if(outer === "command-agent") {
         if(typeof kw.result === "number" && kw.result < 0) {
             delete priv.pending[seq];
+            arm_deadline(gobj);
             deliver(gobj, pend, kw);
+            return 0;
         }
+        /*  Dispatched: from here the node has the whole deadline.  */
+        pend.deadline = now_msec() + pend.timeout;
+        arm_deadline(gobj);
         return 0;   /*  success: the real answer is still coming  */
     }
 
@@ -504,11 +656,9 @@ function ac_mt_command_answer(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  A deadline passed: every request past it is settled as FAILED,
- *  in the shape of a refusal from the node, so the view does what
- *  it does with any refused request -- the form comes back on what
- *  was typed, a load shows its error. A late answer, if one still
- *  comes, finds no pending entry and is dropped.
+ *  A deadline passed: every request past it is settled as FAILED
+ *  (settle_failed()). A late answer, if one still comes, is
+ *  recognised (remember_late(), late_answer()).
  ***************************************************************/
 function ac_timeout(gobj, event, kw, src)
 {
@@ -523,14 +673,10 @@ function ac_timeout(gobj, event, kw, src)
         delete priv.pending[seq];
         log_error(
             `${gobj_short_name(gobj)}: '${pend.command}' of '${pend.topic_name || pend.treedb_name}' ` +
-            `not answered by node '${gobj_read_str_attr(gobj, "node")}' in ${REQUEST_TIMEOUT / 1000} s`
+            `not answered by node '${gobj_read_str_attr(gobj, "node")}' in ${Math.round(pend.timeout / 1000)} s`
         );
-        deliver(gobj, pend, {
-            result:  -1,
-            comment: NO_ANSWER_KEY,
-            schema:  null,
-            data:    null
-        });
+        remember_late(gobj, seq, pend);
+        settle_failed(gobj, pend, NO_ANSWER_KEY);
     }
     arm_deadline(gobj);
     return 0;
@@ -549,14 +695,33 @@ function ac_on_open(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  The session dropped: every request in flight died with it.
+ *  The session dropped: every request in flight died with it, so
+ *  each one is ANSWERED now, as failed -- wiped without an answer,
+ *  a form stayed busy and a schema editor stuck in its load or its
+ *  write until the page was reloaded (M-1 of the independent review
+ *  of 7.25.4). Nothing is remembered for a late answer: none can
+ *  come through a session that is gone.
+ *
+ *  The state is already ST_DISCONNECTED here (the framework changes
+ *  it before the action), which is how a view tells this failure
+ *  from a refusal.
  ***************************************************************/
 function ac_on_close(gobj, event, kw, src)
 {
     let priv = gobj.priv;
+    let pending = priv.pending;
+    let seqs = Object.keys(pending);
 
     priv.pending = {};
+    priv.late = {};
     arm_deadline(gobj);
+    if(seqs.length > 0) {
+        log_warning(`${gobj_short_name(gobj)}: the session closed with ${seqs.length} ` +
+            `request(s) in flight: answered as failed`);
+    }
+    for(let seq of seqs) {
+        settle_failed(gobj, pending[seq], CLOSED_KEY);
+    }
     return 0;
 }
 

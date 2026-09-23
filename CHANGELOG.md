@@ -6,6 +6,32 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## Unreleased
+
+Fixes from the independent review of 7.25.4.
+
+- **gui_agent: the session closing ANSWERS every routed treedb request in
+  flight (M-1).** `C_AGENT_TREEDB_LINK` wiped its pending requests on
+  `EV_ON_CLOSE` without answering them, so a form stayed busy and the schema
+  editor stuck in its load or its write until the page was reloaded. Each one
+  is now settled at once as failed with "the connection dropped" (new i18n
+  key). The adapter's state is already `ST_DISCONNECTED` when the views get
+  it, which is how gobj-ui 7.25.6's schema editor reads it as the drop.
+- **gui_agent: the deadline of a routed request is measured fairly, and a
+  late answer is not lost (M-2).** The 60 s started at the queueing and was
+  the same for everything: a big `__files__` upload (up to 128 MB, ~171 MB of
+  base64 over two hops) or a slow `nodes` was reported failed and then
+  succeeded, and the late answer was dropped in silence -- a repeated +New
+  was then refused "already exists". Now the deadline is re-armed at the
+  controlcenter's dispatch ack; a write carrying `__files__` gets 60 s plus
+  its base64 at a floor of 128 KiB/s (scaled, not disabled: an agent that
+  never answers an upload must still end with the form answered); and an
+  answer after the deadline is logged as a warning, and when it is a write
+  that succeeded its node event is echoed, so the table shows what the
+  treedb holds. A late read or refusal is only logged.
+- **gui_agent: a failed dispatch ack re-arms the deadline timer (L-2).** It
+  deleted its request and left the timer pointed at a deadline nobody had.
+
 ## gui_treedb 0.17.57, gui_agent 0.22.78 + gobj-ui ^7.25.5 (2026-09-23)
 
 Fixes from the 2026-09-23 review of the 2026-09-22 round.

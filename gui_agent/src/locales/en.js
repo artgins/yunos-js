@@ -443,6 +443,8 @@ const en = {
         "apply restart warning": "The yuno is restarted (kill, run, play) so it re-reads its schema. Every client connected to it is disconnected.",
         "apply timeout":     "The node's agent did not answer; the yuno may be down",
         "the node did not answer": "The node did not answer the request in time; nothing was confirmed",
+        "the connection dropped": "The connection dropped before the node answered; nothing was confirmed",
+        "the connection dropped during the write": "The connection dropped during the write: it may or may not have been done. The schema is read again when the connection is back",
         "schema applied partially": "The schema was applied for some treedbs only; the yuno restarts with them. Refused:",
         "applying": "Applying…",
         "save schema": "Save the schema: publishes the drafts beside the schema in use, applies nothing",
