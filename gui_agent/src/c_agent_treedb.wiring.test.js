@@ -449,19 +449,85 @@ describe("L-3: the apply deadline", () => {
         gobj_send_event(tab, "EV_APPLY_CONFIRMED", {}, tab);
         const reqs = take(is("apply-schema"));
         const a = reqs.find((r) => r.kw.__md_iev__.console_owner === "owner_a");
-        answer(tab, a, 0, [{treedb_name: "ta", result: 0, data: {applied: true}}]);
+        answer(tab, a, 0, [], "apply-schema, 0 treedb(s)");
 
         vi.advanceTimersByTime(29 * 1000);
         expect(gobj_current_state(tab)).toBe("ST_APPLYING");
         expect(shown).toEqual([]);
 
+        /*  Nothing the answers say was applied: no restart, and the
+         *  silent owner is named with what that leaves unknown.  */
         vi.advanceTimersByTime(2 * 1000);
         expect(shown.length).toBe(1);
         const [sentence, step] = shown[0];
-        expect(sentence[1].i18n).toBe("apply timeout");
+        expect(sentence[1].i18n).toBe("apply unanswered, nothing restarted");
         expect(step[2]).toContain("owner_b");
         expect(step[2]).not.toContain("owner_a");
         expect(errors().some((e) => e.includes("owner_b"))).toBe(true);
+        expect(take(is("kill-yuno")).length).toBe(0);
+        expect(take(is("services")).length).toBe(1);   /*  back to discovery  */
+    });
+
+    test("one owner applied, another silent: the restart goes on, the silent one is named", () => {
+        const tab = build("t2b", {});
+        tab.priv.dirty = true;      /*  a write of this tab is waiting for the apply  */
+        gobj_send_event(tab, "EV_APPLY_CONFIRMED", {}, tab);
+        const reqs = take(is("apply-schema"));
+        const a = reqs.find((r) => r.kw.__md_iev__.console_owner === "owner_a");
+        const b = reqs.find((r) => r.kw.__md_iev__.console_owner === "owner_b");
+        answer(tab, a, 0, [{treedb_name: "ta", result: 0, data: {applied: true}}]);
+
+        vi.advanceTimersByTime(31 * 1000);
+
+        /*  ta is a file in use that carries the saved schema: it is read
+         *  by a restart, so the restart is not left for the next
+         *  unrelated one to do in silence.  */
+        expect(gobj_current_state(tab)).toBe("ST_KILLING");
+        const kills = take(is("kill-yuno"));
+        expect(kills.length).toBe(1);
+
+        expect(shown.length).toBe(1);
+        const [sentence, owners] = shown[0];
+        expect(sentence[1].i18n).toBe("apply unanswered, restarting");
+        expect(owners[2]).toContain("owner_b");
+        expect(owners[2]).not.toContain("owner_a");
+        expect(errors().some((e) => e.includes("owner_b"))).toBe(true);
+
+        /*  owner_b's late answer does not move the sequence.  */
+        answer(tab, b, 0, [{treedb_name: "tb", result: 0, data: {applied: true}}]);
+        expect(gobj_current_state(tab)).toBe("ST_KILLING");
+
+        answer(tab, kills[0], 0, []);
+        expect(gobj_current_state(tab)).toBe("ST_STARTING");
+        const [run] = take(is("run-yuno"));
+        answer(tab, run, 0, []);
+        expect(gobj_current_state(tab)).toBe("ST_PLAYING");
+        const [play] = take(is("play-yuno"));
+        answer(tab, play, 0, []);
+
+        /*  Done, and still marked: what owner_b did is not known.  */
+        expect(take(is("services")).length).toBe(1);
+        expect(tab.priv.dirty).toBe(true);
+        expect(shown.length).toBe(1);
+    });
+
+    test("one owner applied A and refused B, another silent: both are said", () => {
+        const tab = build("t2c", {});
+        gobj_send_event(tab, "EV_APPLY_CONFIRMED", {}, tab);
+        const reqs = take(is("apply-schema"));
+        const a = reqs.find((r) => r.kw.__md_iev__.console_owner === "owner_a");
+        answer(tab, a, -1, [
+            {treedb_name: "ta", result: 0, data: {applied: true}},
+            {treedb_name: "tb", result: -1, comment: "the saved schema of 'tb' does not parse",
+             data: {applied: false}}
+        ]);
+        vi.advanceTimersByTime(31 * 1000);
+
+        expect(take(is("kill-yuno")).length).toBe(1);
+        expect(shown.length).toBe(2);
+        expect(shown[0][0][1].i18n).toBe("apply unanswered, restarting");
+        expect(shown[1][0][1].i18n).toBe("schema applied partially");
+        expect(shown[1][1][2]).toContain("tb");
     });
 
     test("the kill step has its own 30 s, from when it is sent", () => {

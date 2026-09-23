@@ -458,6 +458,8 @@ const es = {
         "apply schema": "Aplicar el esquema: reinicia el yuno",
         "apply restart warning": "El yuno se reinicia (kill, run, play) para que relea su esquema. Todo cliente conectado a él se desconecta.",
         "apply timeout":     "El agente del nodo no ha contestado; el yuno puede estar parado",
+        "apply unanswered, nothing restarted": "El agente del nodo no ha contestado a apply-schema de los owners siguientes, así que no se sabe si han aplicado. No se ha reiniciado nada: un schema que hayan aplicado se lee en el próximo reinicio del yuno. Owners:",
+        "apply unanswered, restarting": "El agente del nodo no ha contestado a apply-schema de los owners siguientes, así que no se sabe si han aplicado. El yuno se reinicia por los treedbs que sí se aplicaron, y la pestaña vuelve a leer el nodo después. Owners:",
         "the node did not answer": "El nodo no ha contestado a tiempo; no hay nada confirmado",
         "the connection dropped": "La conexión se ha caído antes de que el nodo contestara; no hay nada confirmado",
         "nothing to save, the draft is the schema in use": "Nada que guardar: el borrador es el esquema en uso. Sus marcas se vuelven a leer del nodo:",

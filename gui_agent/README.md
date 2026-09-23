@@ -313,6 +313,20 @@ timeout of `apply` names the owners that did not answer. It ends by
 re-discovering, which re-mounts the view against the schema the yuno has just read. A write in this
 tab marks the button until the next apply.
 
+**An `apply` timeout decides with the answers that came** (0.22.87). The rule
+is the same as when every owner answers: one treedb applied means restart,
+none applied means no restart. A treedb applied is a file in use that only a
+restart reads, so the restart goes on without the silent owners. Before, the
+sequence stopped and left the applied schema for the next unrelated restart to
+read. The toast names each silent owner and says that its state is unknown:
+
+| Answers that came | What the tab does | Toast key |
+|---|---|---|
+| a treedb applied | kill → run → play; the button stays marked | `apply unanswered, restarting` (plus `schema applied partially` if one was refused) |
+| nothing applied | no restart; back to discovery | `apply unanswered, nothing restarted` |
+
+A late `apply-schema` answer of a silent owner does not move the sequence.
+
 `play=0` is deliberate: with the implicit play, `run-yuno` answers twice and a
 step that answers twice advances the sequence twice.
 

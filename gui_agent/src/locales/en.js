@@ -450,6 +450,8 @@ const en = {
         "apply schema": "Apply the schema: restarts the yuno",
         "apply restart warning": "The yuno is restarted (kill, run, play) so it re-reads its schema. Every client connected to it is disconnected.",
         "apply timeout":     "The node's agent did not answer; the yuno may be down",
+        "apply unanswered, nothing restarted": "The node's agent did not answer apply-schema for the owners below, so whether they applied is not known. Nothing was restarted: a schema they applied is read at the yuno's next restart. Owners:",
+        "apply unanswered, restarting": "The node's agent did not answer apply-schema for the owners below, so whether they applied is not known. The yuno restarts for the treedbs that were applied, and the tab reads the node again after. Owners:",
         "the node did not answer": "The node did not answer the request in time; nothing was confirmed",
         "the connection dropped": "The connection dropped before the node answered; nothing was confirmed",
         "nothing to save, the draft is the schema in use": "Nothing to save: the draft is the schema in use. Its marks are read again from the node:",

@@ -6,6 +6,30 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.60 + gobj-ui ^7.25.13 (2026-09-23)
+
+gui_treedb moves to gobj-ui ^7.25.13. In `C_YUI_TREEDB_TOPICS`, a write cut
+by the drop no longer reads its topic out of session: the view reads it once
+when the transport is in session again. No new locale key; validate-locales:
+OK.
+
+## gui_agent 0.22.87 + gobj-ui ^7.25.13 (2026-09-23)
+
+- **An `apply` timeout decides with the answers that came.** When one owner
+  applied a treedb and another owner did not answer `apply-schema` in 30 s,
+  the sequence stopped with no restart. The applied schema stayed on disk for
+  the next unrelated restart to read. Now the rule is the same as when every
+  owner answers: one treedb applied means restart, so kill → run → play goes
+  on. The toast names each silent owner and says that its state is unknown
+  (`apply unanswered, restarting`). The Apply mark stays after the restart. If
+  none of the answers applied a treedb, there is no restart, and the toast
+  says so and names the silent owners (`apply unanswered, nothing
+  restarted`). A late answer does not move the sequence. Two new locale keys
+  (en, es); validate-locales: OK.
+- gobj-ui 7.25.13: a topic-table write cut by the drop does not ask its topic
+  out of session (*"cannot route 'nodes' -- not in session"*); the reconnect
+  reads it.
+
 ## gui_treedb 0.17.59 + gobj-ui ^7.25.12 (2026-09-23)
 
 gui_treedb moves to gobj-ui ^7.25.12. The fixes of 7.25.12 are all in

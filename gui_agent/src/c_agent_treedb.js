@@ -200,6 +200,7 @@ let PRIVATE_DATA = {
     apply_timer: null,  /*  C_TIMER child: the deadline of the step in flight  */
     apply_step:  "",    /*  the step that deadline is for  */
     apply_owed:  null,  /*  {owner: true}: `apply-schema` answers still owed, named on a timeout  */
+    apply_unknown: false, /*  an owner never answered `apply-schema`: what it did is unknown  */
     modal:       null,  /*  the apply confirmation  */
     owners:      null,  /*  discovered C_TREEDB service names  */
     diff_rows:   null,  /*  differences gathered from every owner  */
@@ -1565,9 +1566,13 @@ function end_apply(gobj, error_comment)
     clear_apply_timer(gobj);
     if(error_comment) {
         yui_shell_show_error(yui_shell_of(gobj), error_comment, {t: t});
-    } else {
+    } else if(!priv.apply_unknown) {
+        /*  Not when an owner never answered `apply-schema`: the restart
+         *  read what it had in place, and whether that was the saved
+         *  schema is not known. The mark stays.  */
         priv.dirty = false;
     }
+    priv.apply_unknown = false;
     priv.notice = "";
     render_apply(gobj);
     start_discovery(gobj);
@@ -2180,6 +2185,7 @@ function ac_apply_confirmed(gobj, event, kw, src)
     priv.apply_applied = [];
     priv.apply_refused = [];
     priv.apply_owed = {};
+    priv.apply_unknown = false;
     for(let owner of priv.owners || []) {
         if(send_apply_step(gobj, "apply", cmd2agent_service(yuno, owner, "apply-schema"), owner) < 0) {
             end_apply(gobj, "not connected to an agent");
@@ -2257,27 +2263,8 @@ function ac_apply_answer(gobj, event, kw, src)
             end_apply(gobj, outcome.error_key || outcome.error);
             return 0;
         }
-        if(outcome.error) {
-            /*  Two halves, so the one that is a sentence keeps its key and
-             *  changes language; the refusals are the node's words.  */
-            yui_shell_show_error(
-                yui_shell_of(gobj),
-                [
-                    ["span", {class: "TREEDB_APPLY_PARTIAL", i18n: "schema applied partially"},
-                        t("schema applied partially")],
-                    ["span", {class: "TREEDB_APPLY_REFUSED",
-                              style: "display:block; white-space:pre-wrap;"},
-                        outcome.error]
-                ],
-                {t: t}
-            );
-        }
-        if(send_apply_step(gobj, "kill", `kill-yuno id="${yuno}"`) < 0) {
-            end_apply(gobj, "not connected to an agent");
-            return 0;
-        }
-        arm_apply_deadline(gobj, "kill");
-        gobj_change_state(gobj, "ST_KILLING");
+        show_apply_refusals(gobj, outcome.error);
+        start_apply_restart(gobj);
         return 0;
     }
 
@@ -2306,6 +2293,47 @@ function ac_apply_answer(gobj, event, kw, src)
     /*  ST_PLAYING: the yuno is up and playing with the schema it just
      *  re-read. Discovery re-mounts the view against it.  */
     end_apply(gobj, "");
+    return 0;
+}
+
+/***************************************************************
+ *  Some treedbs were applied and others refused: the restart goes
+ *  on, and the refused ones are named. Two halves, so the one that
+ *  is a sentence keeps its key and changes language; the refusals
+ *  are the node's words.
+ ***************************************************************/
+function show_apply_refusals(gobj, refusals)
+{
+    if(!refusals) {
+        return;
+    }
+    yui_shell_show_error(
+        yui_shell_of(gobj),
+        [
+            ["span", {class: "TREEDB_APPLY_PARTIAL", i18n: "schema applied partially"},
+                t("schema applied partially")],
+            ["span", {class: "TREEDB_APPLY_REFUSED",
+                      style: "display:block; white-space:pre-wrap;"},
+                refusals]
+        ],
+        {t: t}
+    );
+}
+
+/***************************************************************
+ *  The first step of the restart: a treedb is in place, and a
+ *  restart is what reads it.
+ ***************************************************************/
+function start_apply_restart(gobj)
+{
+    let yuno = gobj_read_str_attr(gobj, "yuno_id");
+
+    if(send_apply_step(gobj, "kill", `kill-yuno id="${yuno}"`) < 0) {
+        end_apply(gobj, "not connected to an agent");
+        return -1;
+    }
+    arm_apply_deadline(gobj, "kill");
+    gobj_change_state(gobj, "ST_KILLING");
     return 0;
 }
 
@@ -2342,6 +2370,50 @@ function ac_apply_timeout(gobj, event, kw, src)
         `${gobj_short_name(gobj)}: the node's agent did not answer '${what}' ` +
         `for '${yuno}'`
     );
+
+    if(step === "apply") {
+        /*
+         *  Some owners answered and some did not. What the answers say is
+         *  decided as when all of them answer (apply_outcome()): a treedb
+         *  applied is a file in use that only a restart reads, so the
+         *  restart goes on -- ending here left it applied and not
+         *  restarted, for the next unrelated restart to pick up in
+         *  silence. What a silent owner did is unknown, and it is said:
+         *  named, with what follows from it.
+         */
+        const outcome = apply_outcome(priv.apply_applied, priv.apply_refused);
+        const owners = ["span", {class: "TREEDB_APPLY_UNANSWERED",
+                                 style: "display:block; white-space:pre-wrap;"},
+            owed.join(", ")];
+        if(!outcome.restart) {
+            if(outcome.error) {
+                owners[2] = `${owed.join(", ")}\n${outcome.error}`;
+            }
+            end_apply(gobj, [
+                ["span", {class: "TREEDB_APPLY_TIMEOUT",
+                          i18n: "apply unanswered, nothing restarted"},
+                    t("apply unanswered, nothing restarted")],
+                owners
+            ]);
+            return 0;
+        }
+        priv.apply_unknown = true;
+        priv.apply_left = 0;    /*  a late answer is not waited for  */
+        yui_shell_show_error(
+            yui_shell_of(gobj),
+            [
+                ["span", {class: "TREEDB_APPLY_TIMEOUT",
+                          i18n: "apply unanswered, restarting"},
+                    t("apply unanswered, restarting")],
+                owners
+            ],
+            {t: t}
+        );
+        show_apply_refusals(gobj, outcome.error);
+        start_apply_restart(gobj);
+        return 0;
+    }
+
     end_apply(gobj, [
         ["span", {class: "TREEDB_APPLY_TIMEOUT", i18n: "apply timeout"}, t("apply timeout")],
         ["span", {class: "TREEDB_APPLY_STEP ml-1"}, `(${what})`]
