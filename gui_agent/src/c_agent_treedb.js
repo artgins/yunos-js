@@ -1184,7 +1184,8 @@ function saved_answered(gobj, owner, kw)
  *  schema and names the topics, `save-schema` diffs it against the
  *  one IN USE and finds none.
  *
- *  The node fixed in C withdraws the saved schema then, and its next
+ *  The node fixed in C (yunetas 1365a7224) withdraws the saved
+ *  schema then -- its row says `withdrawn` -- and its next
  *  `saved-schema` says so. A 7.25.4 node keeps it: its drafts stay
  *  "marked" and apply-schema would install what was reverted. So the
  *  saved schema the save proved stale is remembered here (its
@@ -1201,9 +1202,17 @@ function note_nothing_to_save(gobj, rows)
         if(!name || typeof row.result !== "number" || row.result < 0) {
             continue;
         }
-        if(row.data && typeof row.data.schema_version === "number") {
+        /*  "Nothing to save" is a row with no schema_version on a 7.25.4
+         *  node, and a row saying `withdrawn` (true or false) on a node
+         *  with the C fix -- which carries a schema_version too.  */
+        let d = row.data || {};
+        let withdrawn = (typeof d.withdrawn === "boolean") ? d.withdrawn : null;
+        if(withdrawn === null && typeof d.schema_version === "number") {
             delete priv.reverted[name];     /*  a real save: the saved schema is new  */
             continue;
+        }
+        if(withdrawn === true) {
+            delete priv.reverted[name];     /*  the node removed it itself  */
         }
         let marked = priv.drafts && Array.isArray(priv.drafts[name]) &&
             priv.drafts[name].length > 0;
@@ -1211,12 +1220,15 @@ function note_nothing_to_save(gobj, rows)
             continue;
         }
         priv.save_nothing.push(name);
+        if(withdrawn !== null) {
+            continue;       /*  a node that withdraws: it has no stale saved schema  */
+        }
         let entry = saved_entries(gobj).find((e) => e && e.treedb_name === name);
-        let d = entry && entry.data;
-        if(d && d.saved_schema_version > d.in_use_schema_version) {
+        let saved = entry && entry.data;
+        if(saved && saved.saved_schema_version > saved.in_use_schema_version) {
             priv.reverted[name] = {
-                version: d.saved_schema_version,
-                diff:    JSON.stringify(d.diff || null)
+                version: saved.saved_schema_version,
+                diff:    JSON.stringify(saved.diff || null)
             };
         }
     }

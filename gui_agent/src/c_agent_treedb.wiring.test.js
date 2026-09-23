@@ -500,6 +500,13 @@ describe("M-3: a Save answered only 'nothing to save' while drafts are marked", 
     const NOTHING = {treedb_name: "treedb_x", result: 0,
         comment: "role^yuno: nothing to save, the draft of 'treedb_x' is the schema in use",
         data: {treedb_name: "treedb_x", changes: []}};
+    /*  The same answer from a node with the C fix (1365a7224): it says it
+     *  withdrew the saved schema, and carries a schema_version too.  */
+    const WITHDRAWING = {treedb_name: "treedb_x", result: 0,
+        comment: "role^yuno: the draft of 'treedb_x' is the schema in use: " +
+            "the saved schema_version 5 is withdrawn",
+        data: {treedb_name: "treedb_x", withdrawn: true, schema_version: 5,
+            path: "/x/saved_schemas/treedb_x.treedb_schema.json", changes: []}};
     const SAVED = {treedb_name: "treedb_x", result: 0,
         comment: "role^yuno: saved 'treedb_x', schema_version 5",
         data: {treedb_name: "treedb_x", schema_version: 5, topic_versions: {users: 3}}};
@@ -554,9 +561,11 @@ describe("M-3: a Save answered only 'nothing to save' while drafts are marked", 
         expect(errors().some((e) => e.includes("reverted"))).toBe(true);
     });
 
-    test("fixed C (the saved schema withdrawn): no draft, nothing to apply", () => {
+    test("fixed C: the withdrawal is said as well, and nothing is left to apply", () => {
         const tab = build("n3", {owner_a: [STALE]});
-        save(tab, [NOTHING]);
+        save(tab, [WITHDRAWING]);
+        expect(infos.length).toBe(1);
+        expect(infos[0][1][2]).toContain("treedb_x");
         const editor = rediscover(tab, WITHDRAWN);
 
         expect(editor.got).toEqual([{treedb_x: []}]);

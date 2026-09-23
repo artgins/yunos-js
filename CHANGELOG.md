@@ -58,8 +58,10 @@ Fixes from the independent review of 7.25.4.
   the chip stayed with no explanation, and Apply would install what was
   reverted. The tab now says it ("nothing to save, the draft is the schema
   in use", new i18n key, the treedbs named) and re-discovers. On a node
-  with the C fix the saved schema is withdrawn and the next `saved-schema`
-  says so. On a 7.25.4 node it stays: the tab remembers that saved schema
+  with the C fix (yunetas `1365a7224`) the saved schema is withdrawn -- the
+  row says `withdrawn` and carries a `schema_version`, which is why a row is
+  read as "nothing to save" by `withdrawn` OR by a missing `schema_version`
+  -- and the next `saved-schema` says so. On a 7.25.4 node it stays: the tab remembers that saved schema
   (its version and its `diff`) for the session, shows no draft for it and
   keeps Apply OFF with the reason ("a reverted draft is still saved") until
   a real save of that treedb or a `saved-schema` that shows another one.
