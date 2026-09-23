@@ -6,6 +6,27 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.59 + gobj-ui ^7.25.12 (2026-09-23)
+
+gui_treedb moves to gobj-ui ^7.25.12. The fixes of 7.25.12 are all in
+`C_YUI_SCHEMA_EDITOR`, which this app does not mount; the bump keeps it on the
+current library. No new locale key; validate-locales: OK.
+
+## gui_agent 0.22.86 + gobj-ui ^7.25.12 (2026-09-23)
+
+gobj-ui 7.25.12, fixes of the sixth independent review in the schema editor
+(Schemas workspace): any load that lands pays the reload a refused load owed
+(after a Refresh that landed, the next edit was refused and read the store
+again); a load that fails keeps the import plan and its Import button; a move
+sent by the url or the browser's Back runs the owed reload; the export's C /
+JSON switch goes through the FSM (`EV_EXPORT_VIEW`). No new locale key.
+
+README: the request contract of the treedb adapter is written down (unique
+request ids per page, a session close answers every request in flight, the 60 s
+deadline restarts at the dispatch ack, extra time for `__files__`, late answers
+logged and late successful writes echoed), and the Apply sequence no longer says
+"no timer": each step (apply, kill, run, play) has a 30 s `C_TIMER` deadline.
+
 ## gui_treedb 0.17.58 + gobj-ui ^7.25.11 (2026-09-23)
 
 gui_treedb moves from gobj-ui ^7.25.5 to ^7.25.11. It mounts no schema editor;

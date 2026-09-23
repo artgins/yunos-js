@@ -295,14 +295,22 @@ Three things the adapter is built around, all of them scars:
   does not change under you, so the cost is small; for its own writes the
   adapter echoes the matching node event locally, so the table reflects a save.
 
+**Every request is answered, and on time.** Request ids are unique per page; a
+session close answers every request in flight as failed; the 60 s deadline
+restarts at the dispatch ack, and a write with `__files__` gets extra time for
+its size; a late answer is logged, and a late successful write has its node
+event echoed.
+
 **Applying is restarting.** An edited schema reaches the yuno when it re-reads
-it, so the tab's **Apply** button runs `kill-yuno` → `run-yuno play=0` →
-`play-yuno` on the owning yuno, after a confirmation that names it and says
-that every client connected to it is disconnected. Each of those commands
-answers only when it is DONE — the agent waits for the killed yuno's channel to
-close, and for the launched one to connect back — so the sequence is chained on
-those answers, with no timer and no polling, and ends by re-discovering, which
-re-mounts the view against the schema the yuno has just read. A write in this
+it, so the tab's **Apply** button runs `apply-schema` on each owner, then
+`kill-yuno` → `run-yuno play=0` → `play-yuno` on the owning yuno, after a
+confirmation that names it and says that every client connected to it is
+disconnected. Each of those commands answers only when it is DONE — the agent
+waits for the killed yuno's channel to close, and for the launched one to
+connect back — so the sequence is chained on those answers, with no polling;
+each step (apply, kill, run, play) has its own 30 s `C_TIMER` deadline, and a
+timeout of `apply` names the owners that did not answer. It ends by
+re-discovering, which re-mounts the view against the schema the yuno has just read. A write in this
 tab marks the button until the next apply.
 
 `play=0` is deliberate: with the implicit play, `run-yuno` answers twice and a
