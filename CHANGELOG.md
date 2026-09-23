@@ -6,6 +6,25 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.82 + gobj-ui ^7.25.8 (2026-09-23)
+
+Fixes from the third independent review (after 7.25.7). gui_agent takes
+gobj-ui ^7.25.8, whose schema editor draws its loading screen: a reload
+(Refresh, the reconnect's, a write that turned out done) left the old screen
+clickable, and a click on it -- or the Save of a form left open -- logged
+*"Event NOT DEFINED in state ST_LOADING"* on the console. Also in 7.25.8: a
+load out of session asks nothing (three *"not in session"* ERRORs before), a
+position sent during a write applies after a drop, a late write lights the
+Save, and a repeated toast keeps its own handle and time.
+
+- **gui_agent: new i18n key** *"the schemas are loading: try again when they
+  are in"* (en + es): what the editor answers when a dialog's Save or a
+  confirmation arrives during a load. The dialog stays open.
+
+gui_treedb, wattyzer and the yunovatios GUIs mount no schema editor; the
+toast change reaches them on their next gobj-ui bump and keeps the `{close()}`
+contract.
+
 ## gui_agent 0.22.81 + gobj-ui ^7.25.7 (2026-09-23)
 
 Fixes from the independent review of the 2nd round (after 7.25.4).

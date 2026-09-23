@@ -308,6 +308,7 @@ const en = {
         "edit topic": "Edit topic",
         "delete topic": "Delete topic",
         "loading the schemas": "Loading the schemas",
+        "the schemas are loading: try again when they are in": "The schemas are loading: try again when they are in",
         "this yuno stores no schema": "This yuno stores no schema",
         "not connected": "Not connected",
         "saving": "Saving",

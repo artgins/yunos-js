@@ -312,6 +312,7 @@ const es = {
         "edit topic": "Editar topic",
         "delete topic": "Borrar topic",
         "loading the schemas": "Cargando los esquemas…",
+        "the schemas are loading: try again when they are in": "Los esquemas se están cargando: vuelve a intentarlo cuando estén",
         "this yuno stores no schema": "Este yuno no guarda ningún esquema",
         "not connected": "Sin conexión",
         "saving": "Guardando…",
