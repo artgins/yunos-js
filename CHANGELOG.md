@@ -6,6 +6,30 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.83 + gobj-ui ^7.25.9 (2026-09-23)
+
+Fixes from the fourth independent review (after 7.25.8). gui_agent takes
+gobj-ui ^7.25.9, whose schema editor no longer lets a dialog built on a model
+a reload replaced write anything: 7.25.8 answered a Save during a load with
+*"try again when they are in"*, and trying again wrote the old record over the
+newer one. The load that lands now closes such a dialog and says so. Also in
+7.25.9: a load refused in session (this app's C_AGENT_TREEDB_LINK deadline on a
+slow `nodes`) keeps the model instead of blanking the editor, a late column
+write marks its topic with the list_dict fkey the store answers, a write
+answered with no record owes no second reload and says what it did not send,
+the toolbar hides what needs a treedb when the model no longer has it, and
+every close control and dialog button carries a `title`.
+
+- **gui_agent: i18n keys** (en + es): *"the schemas are loading: wait for
+  them"* replaces *"the schemas are loading: try again when they are in"*;
+  new *"the schemas were read again: open the dialog again"*, *"cannot read
+  the schemas again: the previous ones stay"* and *"the treedb did not
+  describe a write back: the writes after it were not sent"*.
+
+gui_treedb, wattyzer, yunomusica and the yunovatios GUIs mount no schema
+editor; the only change that reaches them is the `title` on the close
+controls of `shell_modals.js`. Each was built against 7.25.9 (not deployed).
+
 ## gui_agent 0.22.82 + gobj-ui ^7.25.8 (2026-09-23)
 
 Fixes from the third independent review (after 7.25.7). gui_agent takes
