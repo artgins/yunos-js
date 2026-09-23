@@ -23,9 +23,14 @@ install_dom_double();
 
 /*  The toasts: what the tab SAYS is asserted on the call.  */
 const shown = [];
+const infos = [];
 vi.mock("@yuneta/gobj-ui/src/shell_modals.js", () => ({
     yui_shell_show_error: (shell, message) => {
         shown.push(message);
+        return {close() {}};
+    },
+    yui_shell_show_info: (shell, message) => {
+        infos.push(message);
         return {close() {}};
     },
     yui_shell_show_modal: () => ({close() {}}),
@@ -143,6 +148,7 @@ beforeEach(() => {
     logged.length = 0;
     sent.length = 0;
     shown.length = 0;
+    infos.length = 0;
     editors.length = 0;
 });
 
@@ -472,5 +478,110 @@ describe("L-3: the apply deadline", () => {
         vi.advanceTimersByTime(11 * 1000);
         expect(shown.length).toBe(1);
         expect(shown[0][1][2]).toContain("kill");
+    });
+});
+
+describe("M-3: a Save answered only 'nothing to save' while drafts are marked", () => {
+
+    /*  treedb_x holds a SAVED schema (v5 over v4 in use), and the draft was
+     *  then reverted to what is in use. saved-schema diffs the draft against
+     *  the SAVED one, so it names `users`; save-schema diffs it against the
+     *  one IN USE, and finds nothing. (M-A of the review, in C.)  */
+    const STALE = {treedb_name: "treedb_x", result: 0, data: {
+        draft_changed: {users: true}, saved: true, master: true, impose_c_schema: false,
+        in_use_schema_version: 4, saved_schema_version: 5, can_apply: true,
+        diff: {"topics`[0]`topic_version": {in_use: 1, saved: 2}}
+    }};
+    /*  A node with the C fix: the save withdrew the saved schema.  */
+    const WITHDRAWN = {treedb_name: "treedb_x", result: 0, data: {
+        draft_changed: {}, saved: false, master: true, impose_c_schema: false,
+        in_use_schema_version: 4, saved_schema_version: 0, can_apply: false, diff: {}
+    }};
+    const NOTHING = {treedb_name: "treedb_x", result: 0,
+        comment: "role^yuno: nothing to save, the draft of 'treedb_x' is the schema in use",
+        data: {treedb_name: "treedb_x", changes: []}};
+    const SAVED = {treedb_name: "treedb_x", result: 0,
+        comment: "role^yuno: saved 'treedb_x', schema_version 5",
+        data: {treedb_name: "treedb_x", schema_version: 5, topic_versions: {users: 3}}};
+
+    function save(tab, rows_a)
+    {
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        for(const req of take(is("save-schema"))) {
+            answer(tab, req, 0, req.kw.__md_iev__.console_owner === "owner_a"? rows_a : []);
+        }
+    }
+
+    function rediscover(tab, row_x)
+    {
+        const [services] = take(is("services"));
+        expect(services).toBeTruthy();
+        answer(tab, services, 0, SERVICES);
+        for(const probe of take(is("treedb-info"))) {
+            answer(tab, probe, 0, {master: true});
+        }
+        for(const req of take(is("saved-schema"))) {
+            answer(tab, req, 0, req.kw.__md_iev__.console_owner === "owner_a"? [row_x] : []);
+        }
+        return editors[editors.length - 1];
+    }
+
+    test("the operator is told, and discovery runs again", () => {
+        const tab = build("n1", {owner_a: [STALE]});
+        expect(editors[0].got).toEqual([{treedb_x: ["users"]}]);
+
+        save(tab, [NOTHING]);
+        expect(infos.length).toBe(1);
+        const [sentence, names] = infos[0];
+        expect(sentence[1].i18n).toBe("nothing to save, the draft is the schema in use");
+        expect(names[2]).toContain("treedb_x");
+        expect(shown).toEqual([]);
+        expect(gobj_current_state(tab)).toBe("ST_DISCOVERING");
+    });
+
+    test("old C (the saved schema stays): no draft marked, and Apply is OFF, said why", () => {
+        const tab = build("n2", {owner_a: [STALE]});
+        expect(tab.priv.$apply.disabled).toBe(false);
+        save(tab, [NOTHING]);
+        const editor = rediscover(tab, STALE);
+
+        expect(editor.got).toEqual([{treedb_x: []}]);
+        expect(tab.priv.$apply.disabled).toBe(true);
+        expect(tab.priv.$apply.getAttribute("data-i18n-title")).toBe("a reverted draft is still saved");
+
+        /*  And the keyboard path is refused too.  */
+        gobj_send_event(tab, "EV_APPLY_CHANGES", {}, tab);
+        expect(errors().some((e) => e.includes("reverted"))).toBe(true);
+    });
+
+    test("fixed C (the saved schema withdrawn): no draft, nothing to apply", () => {
+        const tab = build("n3", {owner_a: [STALE]});
+        save(tab, [NOTHING]);
+        const editor = rediscover(tab, WITHDRAWN);
+
+        expect(editor.got).toEqual([{treedb_x: []}]);
+        expect(tab.priv.$apply.disabled).toBe(true);
+        expect(tab.priv.$apply.getAttribute("data-i18n-title")).toBe("nothing saved to apply");
+        expect(tab.priv.reverted).toEqual({});
+    });
+
+    test("a real save afterwards makes the saved schema applicable again", () => {
+        const tab = build("n4", {owner_a: [STALE]});
+        save(tab, [NOTHING]);
+        rediscover(tab, STALE);
+        expect(tab.priv.$apply.disabled).toBe(true);
+
+        save(tab, [SAVED]);
+        const editor = rediscover(tab, Object.assign({}, STALE,
+            {data: Object.assign({}, STALE.data, {draft_changed: {}})}));
+        expect(editor.got).toEqual([{treedb_x: []}]);
+        expect(tab.priv.$apply.disabled).toBe(false);
+    });
+
+    test("nothing to save with nothing marked: nothing to say", () => {
+        const tab = build("n5", {owner_a: [WITHDRAWN]});
+        save(tab, [NOTHING]);
+        expect(infos).toEqual([]);
+        expect(shown).toEqual([]);
     });
 });

@@ -115,7 +115,11 @@ import {t} from "i18next";
 
 import {yui_node_set_nav_mode} from "@yuneta/gobj-ui/src/c_yui_node.js";
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
-import {yui_shell_show_modal, yui_shell_show_error} from "@yuneta/gobj-ui/src/shell_modals.js";
+import {
+    yui_shell_show_modal,
+    yui_shell_show_error,
+    yui_shell_show_info,
+} from "@yuneta/gobj-ui/src/shell_modals.js";
 
 import {is_agent_yuno, cmd2agent_service, SYSTEM_TREEDB} from "./agent_helpers.js";
 import {owner_apply_outcome, apply_outcome} from "./apply_outcome.js";
@@ -210,6 +214,8 @@ let PRIVATE_DATA = {
     saved_interrupted: false, /*  a close cut a saved-schema round: ask again on the open  */
     save_left:   0,     /*  `save-schema` answers still owed  */
     save_round:  0,     /*  the save in flight, echoed as `save_round`  */
+    save_nothing: null, /*  treedbs the save found nothing to save in while they were marked  */
+    reverted:    null,  /*  {treedb: {version, diff}}: a saved schema the draft was reverted from (see save_answered())  */
     save_errors: null,  /*  what the save answered wrong  */
     apply_left:  0,     /*  `apply-schema` answers still owed  */
     apply_applied: null, /*  treedbs `apply-schema` put in place  */
@@ -252,6 +258,8 @@ function mt_create(gobj)
     priv.diff_left = 0;
     priv.dirty = false;
     priv.apply_owed = {};
+    priv.reverted = {};
+    priv.save_nothing = [];
     priv.apply_timer = gobj_create_pure_child("apply_deadline", "C_TIMER", {}, gobj);
 
     /*
@@ -1005,6 +1013,10 @@ function render_apply(gobj)
     let key = "apply schema";
     if(is_agent_yuno(gobj_read_str_attr(gobj, "yuno_id"))) {
         key = "apply needs a node restart";
+    } else if(entries.some((e) => e.data && e.data.reverted)) {
+        /*  apply-schema goes to every owner and applies every treedb that
+         *  can: it would install the reverted one with the rest.  */
+        key = "a reverted draft is still saved";
     } else if(!applicable) {
         /*  "imposed" only when EVERY treedb is: with one imposed and one
          *  dynamic with nothing saved, the tooltip blamed the binary.  */
@@ -1148,14 +1160,96 @@ function saved_answered(gobj, owner, kw)
     }
     priv.saved_left--;
     if(kw && !(typeof kw.result === "number" && kw.result < 0) && Array.isArray(kw.data)) {
-        priv.saved[owner] = kw.data;
-        priv.drafts_round = drafts_of_saved_answer(kw.data, priv.drafts_round || {});
+        let rows = rows_without_reverted(gobj, kw.data);
+        priv.saved[owner] = rows;
+        priv.drafts_round = drafts_of_saved_answer(rows, priv.drafts_round || {});
     }
     render_apply(gobj);
     if(priv.saved_left === 0) {
         end_saved_round(gobj);
     }
     return 0;
+}
+
+/***************************************************************
+ *  What one owner's `save-schema` rows say, treedb by treedb (M-3
+ *  of the independent review of 7.25.4).
+ *
+ *  A row with no `schema_version` is "nothing to save, the draft is
+ *  the schema in use". When that treedb was MARKED as holding drafts
+ *  the operator pressed Save for something, and was told nothing:
+ *  the marks came back after the re-discovery and nothing said why.
+ *  It is the shape of a draft reverted after a save (M-A of the same
+ *  review, in C): `saved-schema` diffs the draft against the SAVED
+ *  schema and names the topics, `save-schema` diffs it against the
+ *  one IN USE and finds none.
+ *
+ *  The node fixed in C withdraws the saved schema then, and its next
+ *  `saved-schema` says so. A 7.25.4 node keeps it: its drafts stay
+ *  "marked" and apply-schema would install what was reverted. So the
+ *  saved schema the save proved stale is remembered here (its
+ *  version and its `diff`) until a `saved-schema` shows another one
+ *  or a real save of the treedb replaces it (rows_without_reverted()).
+ *  Session memory: a reload of the page forgets it.
+ ***************************************************************/
+function note_nothing_to_save(gobj, rows)
+{
+    let priv = gobj.priv;
+
+    for(let row of rows) {
+        let name = row && row.treedb_name;
+        if(!name || typeof row.result !== "number" || row.result < 0) {
+            continue;
+        }
+        if(row.data && typeof row.data.schema_version === "number") {
+            delete priv.reverted[name];     /*  a real save: the saved schema is new  */
+            continue;
+        }
+        let marked = priv.drafts && Array.isArray(priv.drafts[name]) &&
+            priv.drafts[name].length > 0;
+        if(!marked) {
+            continue;
+        }
+        priv.save_nothing.push(name);
+        let entry = saved_entries(gobj).find((e) => e && e.treedb_name === name);
+        let d = entry && entry.data;
+        if(d && d.saved_schema_version > d.in_use_schema_version) {
+            priv.reverted[name] = {
+                version: d.saved_schema_version,
+                diff:    JSON.stringify(d.diff || null)
+            };
+        }
+    }
+}
+
+/***************************************************************
+ *  The `saved-schema` rows with a saved schema the draft was
+ *  reverted from (note_nothing_to_save()) shown for what it is: no
+ *  draft -- the save proved the draft is the schema in use -- and
+ *  not applicable. A row that shows another saved schema, or none,
+ *  ends the memory: the node withdrew it, or it was saved again.
+ ***************************************************************/
+function rows_without_reverted(gobj, rows)
+{
+    let priv = gobj.priv;
+
+    return rows.map((row) => {
+        let name = row && row.treedb_name;
+        let r = name ? priv.reverted[name] : null;
+        if(!r) {
+            return row;
+        }
+        let d = row.data || {};
+        if(d.saved_schema_version === r.version &&
+                d.saved_schema_version > d.in_use_schema_version &&
+                JSON.stringify(d.diff || null) === r.diff) {
+            return Object.assign({}, row, {
+                data: Object.assign({}, d, {draft_changed: {}, can_apply: false, reverted: true})
+            });
+        }
+        delete priv.reverted[name];
+        return row;
+    });
 }
 
 /***************************************************************
@@ -1206,6 +1300,9 @@ function save_answered(gobj, owner, kw)
         return 0;
     }
     priv.save_left--;
+    if(kw && Array.isArray(kw.data)) {
+        note_nothing_to_save(gobj, kw.data);
+    }
     if(!kw) {
         priv.save_errors.push(`${owner}: ${t("not connected to an agent")}`);
     } else if(typeof kw.result === "number" && kw.result < 0) {
@@ -1223,6 +1320,23 @@ function save_answered(gobj, owner, kw)
         yui_shell_show_error(yui_shell_of(gobj), priv.save_errors.join("\n"), {t: t});
     } else {
         priv.dirty = false;
+    }
+    if(priv.save_nothing.length) {
+        /*  Two halves, so the sentence keeps its key and changes language;
+         *  the names are data.  */
+        log_warning(`${gobj_short_name(gobj)}: nothing to save in ` +
+            `${priv.save_nothing.join(", ")}, marked as drafts`);
+        yui_shell_show_info(
+            yui_shell_of(gobj),
+            [
+                ["span", {class: "TREEDB_SAVE_NOTHING",
+                          i18n: "nothing to save, the draft is the schema in use"},
+                    t("nothing to save, the draft is the schema in use")],
+                ["span", {class: "TREEDB_SAVE_NOTHING_TREEDBS ml-1"},
+                    priv.save_nothing.join(", ")]
+            ],
+            {t: t}
+        );
     }
     render_apply(gobj);
     start_discovery(gobj);
@@ -1787,6 +1901,7 @@ function ac_save_schema(gobj, event, kw, src)
         return -1;
     }
     priv.save_errors = [];
+    priv.save_nothing = [];
     priv.save_left = 0;
     priv.save_round++;
     for(let owner of priv.owners) {
@@ -1854,6 +1969,11 @@ function ac_apply_changes(gobj, event, kw, src)
          *  arrive from a keyboard path. See render_apply().  */
         log_error(`${gobj_short_name(gobj)}: apply refused, the agent is not ` +
             `a managed yuno -- restart it on the node`);
+        return -1;
+    }
+    if(saved_entries(gobj).some((e) => e.data && e.data.reverted)) {
+        log_error(`${gobj_short_name(gobj)}: apply refused, a saved schema was reverted ` +
+            `in the draft and would be installed`);
         return -1;
     }
     if(!saved_entries(gobj).some((e) => e.data && e.data.can_apply)) {

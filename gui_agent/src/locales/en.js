@@ -444,6 +444,8 @@ const en = {
         "apply timeout":     "The node's agent did not answer; the yuno may be down",
         "the node did not answer": "The node did not answer the request in time; nothing was confirmed",
         "the connection dropped": "The connection dropped before the node answered; nothing was confirmed",
+        "nothing to save, the draft is the schema in use": "Nothing to save: the draft is the schema in use. Its marks are read again from the node:",
+        "a reverted draft is still saved": "A saved schema was reverted in the draft, and applying would install it. Save a change of that treedb, or update the node's SDK (a newer one withdraws it)",
         "the connection dropped during the write": "The connection dropped during the write: it may or may not have been done. The schema is read again when the connection is back",
         "schema applied partially": "The schema was applied for some treedbs only; the yuno restarts with them. Refused:",
         "applying": "Applying…",

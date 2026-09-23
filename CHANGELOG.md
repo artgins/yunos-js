@@ -50,6 +50,20 @@ Fixes from the independent review of 7.25.4.
   time enters the FSM as `EV_TIMEOUT`, every step (apply, kill, run, play)
   gets its 30 s from when it is sent, and a timeout of `apply` names the
   owners that did not answer.
+- **gui_agent: a Save answered only "nothing to save" while drafts are
+  marked is said, and handled with both C sides (M-3).** It is the shape of
+  a draft reverted after a save (M-A of the same review, in C):
+  `saved-schema` diffs the draft against the SAVED schema and names the
+  topics, `save-schema` diffs it against the one IN USE and finds nothing --
+  the chip stayed with no explanation, and Apply would install what was
+  reverted. The tab now says it ("nothing to save, the draft is the schema
+  in use", new i18n key, the treedbs named) and re-discovers. On a node
+  with the C fix the saved schema is withdrawn and the next `saved-schema`
+  says so. On a 7.25.4 node it stays: the tab remembers that saved schema
+  (its version and its `diff`) for the session, shows no draft for it and
+  keeps Apply OFF with the reason ("a reverted draft is still saved") until
+  a real save of that treedb or a `saved-schema` that shows another one.
+  A reload of the page forgets it.
 
 ## gui_treedb 0.17.57, gui_agent 0.22.78 + gobj-ui ^7.25.5 (2026-09-23)
 
