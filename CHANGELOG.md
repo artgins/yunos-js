@@ -6,6 +6,19 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.61 + gobj-ui ^7.25.14 (2026-09-23)
+
+gui_treedb moves to gobj-ui ^7.25.14. After a drop, `C_YUI_TREEDB_TOPICS` reads
+every open topic table again once the transport is in session, so a node that
+another writer created, changed or deleted during the drop shows. No new locale
+key; validate-locales: OK.
+
+## gui_agent 0.22.88 + gobj-ui ^7.25.14 (2026-09-23)
+
+gobj-ui 7.25.14: after a drop, the treedb topic tables read every open table
+again once the adapter is in session (7.25.13 read only the topic a cut write
+left). No new locale key; validate-locales: OK.
+
 ## gui_treedb 0.17.60 + gobj-ui ^7.25.13 (2026-09-23)
 
 gui_treedb moves to gobj-ui ^7.25.13. In `C_YUI_TREEDB_TOPICS`, a write cut
