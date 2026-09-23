@@ -6,6 +6,25 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.84 + gobj-ui ^7.25.10 (2026-09-23)
+
+Fixes from the fifth independent review (after 7.25.9). gui_agent takes
+gobj-ui ^7.25.10. In the Schemas workspace, a load this app's
+C_AGENT_TREEDB_LINK refuses on its deadline keeps the model and now READS it
+again on the operator's next action: an edit (a form, a Save, a delete, a
+drag, a confirmation, Check, Export, Import) is refused with *"the schemas
+shown may be out of date: they are read again, try again when they are in"*,
+and a move goes and reads there -- before, the reload waited for a reconnect
+that never came, and a form opened on the kept model could write over a newer
+record. Also: the back arrow of every dialog and the answers of every
+confirmation carry a title and an aria-label, the export's C/JSON switch is two
+named buttons, a Refresh during a load keeps the records shown, a gone import
+plan is said instead of logged as an ERROR, and a confirmation's Yes after a
+reload that found no treedb is refused instead of "NOT DEFINED". New locale
+keys (en/es): `schema as c source`, `schema as json`,
+`the import plan is gone: preview it again`, the two new schema-reload
+messages; `cannot read the schemas again: the previous ones stay` is gone.
+
 ## gui_agent 0.22.83 + gobj-ui ^7.25.9 (2026-09-23)
 
 Fixes from the fourth independent review (after 7.25.8). gui_agent takes
