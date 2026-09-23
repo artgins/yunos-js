@@ -31,6 +31,19 @@ Fixes from the independent review of 7.25.4.
   treedb holds. A late read or refusal is only logged.
 - **gui_agent: a failed dispatch ack re-arms the deadline timer (L-2).** It
   deleted its request and left the timer pointed at a deadline nobody had.
+- **gui_agent: a saved-schema round counts only its own answers (L-1).** A
+  round asked before a Save and answering after the re-discovery that
+  followed it was counted in the new round: its drafts were handed out as
+  the new ones, and the new round's answers found nothing owed. Each
+  `saved-schema` and `save-schema` request carries its round
+  (`saved_round` / `save_round` in `__md_iev__`); another round's answer is
+  logged as a warning and ignored.
+- **gui_agent: the Schemas tab settles its own requests when the session
+  closes.** A Save in flight kept its button off for ever ("a save is still
+  in flight"), a saved-schema round never ended (no editor was told its
+  drafts again), and a comparison kept the differences button off. Now the
+  Save and the comparison end with "the connection dropped", and the
+  saved-schema round is asked again when the session is back.
 
 ## gui_treedb 0.17.57, gui_agent 0.22.78 + gobj-ui ^7.25.5 (2026-09-23)
 

@@ -202,7 +202,10 @@ let PRIVATE_DATA = {
     drafts:      null,  /*  {treedb_name: [topic names]} not saved: the last COMPLETE saved-schema round; null while one is in flight  */
     drafts_round: null, /*  the round in flight, filled answer by answer  */
     saved_left:  0,     /*  `saved-schema` answers still owed  */
+    saved_round: 0,     /*  the saved-schema round in flight, echoed as `saved_round`  */
+    saved_interrupted: false, /*  a close cut a saved-schema round: ask again on the open  */
     save_left:   0,     /*  `save-schema` answers still owed  */
+    save_round:  0,     /*  the save in flight, echoed as `save_round`  */
     save_errors: null,  /*  what the save answered wrong  */
     apply_left:  0,     /*  `apply-schema` answers still owed  */
     apply_applied: null, /*  treedbs `apply-schema` put in place  */
@@ -1038,7 +1041,7 @@ function saved_entries(gobj)
  *  Ask ONE `C_TREEDB` service a schema command for every treedb it
  *  opened (no `treedb_name`: see request_diff() for why).
  ***************************************************************/
-function request_owner(gobj, owner, command, purpose)
+function request_owner(gobj, owner, command, purpose, round_key, round)
 {
     let link = link_service(gobj);
     let node = gobj_read_str_attr(gobj, "node");
@@ -1055,8 +1058,30 @@ function request_owner(gobj, owner, command, purpose)
     msg_iev_write_key(kw_send, "console_node", node);
     msg_iev_write_key(kw_send, "console_yuno", yuno_id);
     msg_iev_write_key(kw_send, "console_owner", owner);
+    if(round_key) {
+        msg_iev_write_key(kw_send, round_key, String(round));
+    }
     agent_link_command(link, "command-agent", kw_send);
     return 0;
+}
+
+/***************************************************************
+ *  Is this answer of the round in flight? A round's answers are
+ *  counted, and one of an EARLIER round -- a saved-schema asked
+ *  before a Save, answering after the re-discovery that followed
+ *  it -- was counted in the next: its drafts were handed out as
+ *  the new ones and the new round's own answers found nothing
+ *  owed (L-1 of the independent review of 7.25.4).
+ ***************************************************************/
+function is_this_round(gobj, kw, round_key, round)
+{
+    if(msg_iev_read_key(kw, round_key) === String(round)) {
+        return true;
+    }
+    log_warning(`${gobj_short_name(gobj)}: '${round_key}' ` +
+        `${msg_iev_read_key(kw, round_key)} answered while round ${round} is the one ` +
+        `in flight: ignored`);
+    return false;
 }
 
 /***************************************************************
@@ -1069,10 +1094,13 @@ function request_saved(gobj)
 
     priv.saved = {};
     priv.saved_left = 0;
+    priv.saved_round++;
+    priv.saved_interrupted = false;
     priv.drafts = null;
     priv.drafts_round = {};
     for(let owner of priv.owners || []) {
-        if(request_owner(gobj, owner, "saved-schema", SAVED_PURPOSE) === 0) {
+        if(request_owner(gobj, owner, "saved-schema", SAVED_PURPOSE,
+                "saved_round", priv.saved_round) === 0) {
             priv.saved_left++;
         }
     }
@@ -1107,6 +1135,9 @@ function saved_answered(gobj, owner, kw)
     let priv = gobj.priv;
 
     if(priv.saved_left <= 0) {
+        return 0;
+    }
+    if(!is_this_round(gobj, kw, "saved_round", priv.saved_round)) {
         return 0;
     }
     priv.saved_left--;
@@ -1163,6 +1194,9 @@ function save_answered(gobj, owner, kw)
     let priv = gobj.priv;
 
     if(priv.save_left <= 0) {
+        return 0;
+    }
+    if(kw && !is_this_round(gobj, kw, "save_round", priv.save_round)) {
         return 0;
     }
     priv.save_left--;
@@ -1473,6 +1507,9 @@ function ac_discover(gobj, event, kw, src)
  ***************************************************************/
 function ac_on_open_ready(gobj, event, kw, src)
 {
+    if(gobj.priv.saved_interrupted) {
+        request_saved(gobj);
+    }
     render_state(gobj);
     return 0;
 }
@@ -1480,10 +1517,37 @@ function ac_on_open_ready(gobj, event, kw, src)
 /***************************************************************
  *  Session down. The tree stays up (a schema already fetched is
  *  still valid and each adapter re-resolves the link on its next
- *  request); a discovery in flight will never be answered.
+ *  request); a discovery in flight will never be answered, and
+ *  neither will this tab's own requests in flight -- which it
+ *  settles now: a Save waited for ever with its button off, a
+ *  saved-schema round never ended (so no editor was told its
+ *  drafts again), and a comparison kept its button off.
  ***************************************************************/
 function ac_on_close(gobj, event, kw, src)
 {
+    let priv = gobj.priv;
+
+    if(priv.save_left > 0) {
+        log_warning(`${gobj_short_name(gobj)}: the session closed with a save in flight`);
+        priv.save_left = 0;
+        priv.save_round++;
+        yui_shell_show_error(yui_shell_of(gobj), "the connection dropped", {t: t});
+    }
+    if(priv.saved_left > 0) {
+        log_warning(`${gobj_short_name(gobj)}: the session closed with a saved-schema ` +
+            `round in flight: asked again on the next open`);
+        priv.saved_left = 0;
+        priv.saved_round++;
+        priv.drafts_round = null;
+        priv.saved_interrupted = true;
+    }
+    if(priv.diff_left > 0) {
+        log_warning(`${gobj_short_name(gobj)}: the session closed with a comparison in flight`);
+        priv.diff_left = 0;
+        render_diff_button(gobj);
+        yui_shell_show_error(yui_shell_of(gobj), "the connection dropped", {t: t});
+    }
+    render_apply(gobj);
     render_state(gobj);
     return 0;
 }
@@ -1712,8 +1776,10 @@ function ac_save_schema(gobj, event, kw, src)
     }
     priv.save_errors = [];
     priv.save_left = 0;
+    priv.save_round++;
     for(let owner of priv.owners) {
-        if(request_owner(gobj, owner, "save-schema", SAVE_PURPOSE) === 0) {
+        if(request_owner(gobj, owner, "save-schema", SAVE_PURPOSE,
+                "save_round", priv.save_round) === 0) {
             priv.save_left++;
         }
     }

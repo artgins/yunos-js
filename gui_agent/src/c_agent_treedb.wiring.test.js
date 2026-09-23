@@ -327,3 +327,102 @@ describe("M2: apply counts treedbs, not owners", () => {
         expect(shown).toEqual(["nothing saved to apply"]);
     });
 });
+
+describe("L-1: a saved-schema round counts only its own answers", () => {
+
+    test("a late answer of an earlier round is not counted in the next one", () => {
+        /*  Round A is sent and not answered.  */
+        const tab = gobj_create("l1", "C_AGENT_TREEDB", {
+            node: NODE, yuno_id: YUNO, yuno_label: "role^yuno",
+            base_route: "/schemas/l1", link_svc: link
+        }, host);
+        gobj_start(tab);
+        const [services] = take(is("services"));
+        answer(tab, services, 0, SERVICES);
+        for(const probe of take(is("treedb-info"))) {
+            answer(tab, probe, 0, {master: true});
+        }
+        const round_a = take(is("saved-schema"));
+        expect(round_a.length).toBe(2);
+
+        /*  A Save, and its re-discovery: round B is sent.  */
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        for(const req of take(is("save-schema"))) {
+            answer(tab, req, 0, []);
+        }
+        const [services2] = take(is("services"));
+        answer(tab, services2, 0, SERVICES);
+        for(const probe of take(is("treedb-info"))) {
+            answer(tab, probe, 0, {master: true});
+        }
+        const round_b = take(is("saved-schema"));
+        expect(round_b.length).toBe(2);
+        const editor = editors[editors.length - 1];
+
+        /*  Round A answers now, with what was true before the Save.  */
+        for(const req of round_a) {
+            answer(tab, req, 0, req.kw.__md_iev__.console_owner === "owner_a"?
+                [{treedb_name: "treedb_x", result: 0, data: {draft_changed: {users: true}}}] : []);
+        }
+        expect(editor.got).toEqual([]);     /*  round B has not answered  */
+
+        for(const req of round_b) {
+            answer(tab, req, 0, req.kw.__md_iev__.console_owner === "owner_a"?
+                [{treedb_name: "treedb_x", result: 0, data: {draft_changed: {}}}] : []);
+        }
+        expect(editor.got).toEqual([{treedb_x: []}]);
+        expect(errors()).toEqual([]);
+    });
+});
+
+describe("the session closes with the tab's own requests in flight", () => {
+
+    test("a Save in flight is answered as failed, and Save works again", () => {
+        const tab = build("c1", {});
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        expect(take(is("save-schema")).length).toBe(2);
+        expect(tab.priv.$save.disabled).toBe(true);
+
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        expect(shown).toEqual(["the connection dropped"]);
+        expect(tab.priv.$save.disabled).toBe(false);
+
+        gobj_send_event(tab, "EV_ON_OPEN", {}, link);
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        expect(take(is("save-schema")).length).toBe(2);
+    });
+
+    test("a comparison in flight is ended, and its button comes back", () => {
+        const tab = build("c3", {});
+        gobj_send_event(tab, "EV_DIFF_SCHEMA", {}, tab);
+        expect(take(is("diff-schema")).length).toBe(2);
+        expect(tab.priv.$diff.disabled).toBe(true);
+
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        expect(tab.priv.$diff.disabled).toBe(false);
+        expect(shown).toEqual(["the connection dropped"]);
+    });
+
+    test("a saved-schema round in flight is asked again when the session is back", () => {
+        const tab = gobj_create("c2", "C_AGENT_TREEDB", {
+            node: NODE, yuno_id: YUNO, yuno_label: "role^yuno",
+            base_route: "/schemas/c2", link_svc: link
+        }, host);
+        gobj_start(tab);
+        const [services] = take(is("services"));
+        answer(tab, services, 0, SERVICES);
+        for(const probe of take(is("treedb-info"))) {
+            answer(tab, probe, 0, {master: true});
+        }
+        expect(take(is("saved-schema")).length).toBe(2);
+
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        gobj_send_event(tab, "EV_ON_OPEN", {}, link);
+        const again = take(is("saved-schema"));
+        expect(again.length).toBe(2);
+        for(const req of again) {
+            answer(tab, req, 0, []);
+        }
+        expect(editors[editors.length - 1].got).toEqual([{}]);
+    });
+});
