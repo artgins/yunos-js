@@ -6,6 +6,30 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.81 + gobj-ui ^7.25.7 (2026-09-23)
+
+Fixes from the independent review of the 2nd round (after 7.25.4).
+gui_agent takes gobj-ui ^7.25.7, whose schema editor no longer empties its
+model when the operator moves during a reload (the HIGH regression of
+7.25.6, deployed in 0.22.80), and which shows one toast per message on
+screen. gui_treedb mounts nothing that changed and stays where it is.
+
+- **gui_agent: `C_AGENT_TREEDB_LINK` numbers its requests once for the page
+  (MEDIUM).** `seq` was a counter per adapter starting at 1, and every
+  adapter on the link hears every answer: with two treedb views mounted an
+  answer went to the wrong view, was dropped as "another tab's", or was read
+  as a LATE answer of a request the other adapter had given up -- which, for
+  a delete, echoed an `EV_TREEDB_NODE_DELETED` that never happened. The
+  counter is module-level now.
+- **gui_agent: a request remembered for its late answer keeps what the echo
+  needs** -- not the view, not the base64 of its `__files__` (up to ~171 MB
+  held for 30 min).
+- **gui_agent: a Save that withdrew the saved schema says so.** A node with
+  the C fix answers `withdrawn: true`; the tab said only "nothing to save",
+  and only when the treedb was marked. New i18n key *"the draft is the
+  schema in use, its saved schema was withdrawn"* (en + es), said marked or
+  not.
+
 ## gui_agent 0.22.80 (2026-09-23)
 
 - **gui_agent: a treedb view hears a session edge AFTER its transport.**
