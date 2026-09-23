@@ -51,8 +51,9 @@
  *      banner says so.
  *      Each command answers ONCE and only when it is done (the agent
  *      counts the channel closing and re-opening), so the sequence needs
- *      neither timer nor polling — and it ends by re-discovering, which
- *      re-mounts the view against the schema the yuno has just re-read.
+ *      no polling -- only a deadline per step, on a C_TIMER child -- and
+ *      it ends by re-discovering, which re-mounts the view against the
+ *      schema the yuno has just re-read.
  *
  *      WHAT IS EDITED HERE IS NOT WHAT C DECLARES, and nothing said so.
  *      A treedb opens from its projection in `__system__`, the projector
@@ -95,6 +96,7 @@ import {
     gobj_read_attr, gobj_read_str_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_create_pure_child,
     gobj_find_service,
+    set_timeout, clear_timeout,
     gobj_subscribe_event, gobj_unsubscribe_event,
     gobj_send_event,
     gobj_start, gobj_stop, gobj_destroy, gobj_is_running,
@@ -191,7 +193,9 @@ let PRIVATE_DATA = {
     tree:        null,  /*  C_YUI_NODE root: one child per treedb  */
     dirty:       false, /*  something was written since the last apply  */
     seg:         null,  /*  subpath of the url under this tab  */
-    apply_timer: null,  /*  deadline of the step in flight  */
+    apply_timer: null,  /*  C_TIMER child: the deadline of the step in flight  */
+    apply_step:  "",    /*  the step that deadline is for  */
+    apply_owed:  null,  /*  {owner: true}: `apply-schema` answers still owed, named on a timeout  */
     modal:       null,  /*  the apply confirmation  */
     owners:      null,  /*  discovered C_TREEDB service names  */
     diff_rows:   null,  /*  differences gathered from every owner  */
@@ -247,6 +251,8 @@ function mt_create(gobj)
     priv.diff_notes = [];
     priv.diff_left = 0;
     priv.dirty = false;
+    priv.apply_owed = {};
+    priv.apply_timer = gobj_create_pure_child("apply_deadline", "C_TIMER", {}, gobj);
 
     /*
      *  CHILD subscription model
@@ -1332,12 +1338,12 @@ function is_ours(gobj, kw)
  *  answers ONCE and only when it is DONE: kill-yuno waits for the
  *  killed yuno's channel to close, run-yuno for the launched one to
  *  connect back (that is why `play=0` — the implicit play would add
- *  a second answer). So the sequence needs no timer and no polling:
- *  every step is driven by the answer of the one before.
+ *  a second answer). So the sequence needs no polling: every step is
+ *  driven by the answer of the one before, and has a deadline
+ *  (arm_apply_deadline()).
  ***************************************************************/
 function send_apply_step(gobj, step, cmd_line, owner)
 {
-    let priv = gobj.priv;
     let node = gobj_read_str_attr(gobj, "node");
     let yuno = gobj_read_str_attr(gobj, "yuno_id");
     let link = link_service(gobj);
@@ -1347,20 +1353,6 @@ function send_apply_step(gobj, step, cmd_line, owner)
         return -1;
     }
 
-    /*  A DEADLINE, which is a real time and not a deferral: an agent
-     *  without the ac_final_count fix drops the answer of these commands
-     *  entirely (see the SDK CHANGELOG), and the first step of the
-     *  sequence is the KILL — waiting in silence there leaves the yuno
-     *  dead with nobody told. */
-    clear_apply_timer(gobj);
-    /*  window.setTimeout, NOT gobj-js's set_timeout(gobj, msec): that one
-     *  drives a C_TIMER gobj, and called browser-style it just logs
-     *  "not GObj TYPE" and arms nothing. Importing it shadows the global,
-     *  which is how this deadline silently did not exist.  */
-    priv.apply_timer = setTimeout(function() {
-        priv.apply_timer = null;
-        gobj_send_event(gobj, "EV_APPLY_TIMEOUT", {step: step}, gobj);
-    }, APPLY_TIMEOUT);
     let kw_send = {agent_id: node, cmd2agent: cmd_line};
     msg_iev_write_key(kw_send, "console_purpose", PURPOSE);
     msg_iev_write_key(kw_send, "console_node", node);
@@ -1374,14 +1366,34 @@ function send_apply_step(gobj, step, cmd_line, owner)
 }
 
 /***************************************************************
+ *  A DEADLINE for the step just sent, which is a real time and not
+ *  a deferral: an agent without the ac_final_count fix drops the
+ *  answer of these commands entirely (see the SDK CHANGELOG), and
+ *  the first step of the sequence is the KILL -- waiting in silence
+ *  there leaves the yuno dead with nobody told.
+ *
+ *  Armed ONCE per step, after every request of it is sent: it was
+ *  re-armed by each owner's `apply-schema`, so the 30 s counted from
+ *  the last one. The C_TIMER child is how a time enters the machine
+ *  (EV_TIMEOUT); it was a window.setTimeout (L-3 of the independent
+ *  review of 7.25.4).
+ ***************************************************************/
+function arm_apply_deadline(gobj, step)
+{
+    let priv = gobj.priv;
+
+    priv.apply_step = step;
+    set_timeout(priv.apply_timer, APPLY_TIMEOUT);
+}
+
+/***************************************************************
  *  Disarm the deadline of the step in flight.
  ***************************************************************/
 function clear_apply_timer(gobj)
 {
     let priv = gobj.priv;
     if(priv.apply_timer) {
-        clearTimeout(priv.apply_timer);
-        priv.apply_timer = null;
+        clear_timeout(priv.apply_timer);
     }
 }
 
@@ -2012,13 +2024,16 @@ function ac_apply_confirmed(gobj, event, kw, src)
     priv.apply_left = 0;
     priv.apply_applied = [];
     priv.apply_refused = [];
+    priv.apply_owed = {};
     for(let owner of priv.owners || []) {
         if(send_apply_step(gobj, "apply", cmd2agent_service(yuno, owner, "apply-schema"), owner) < 0) {
             end_apply(gobj, "not connected to an agent");
             return 0;
         }
         priv.apply_left++;
+        priv.apply_owed[owner] = true;
     }
+    arm_apply_deadline(gobj, "apply");
     gobj_change_state(gobj, "ST_APPLYING");
     render_state(gobj);
     return 0;
@@ -2074,6 +2089,7 @@ function ac_apply_answer(gobj, event, kw, src)
          *  owner_apply_outcome() for how a 7.25.3 node is read.
          */
         let owner = msg_iev_read_key(kw, "console_owner") || "";
+        delete priv.apply_owed[owner];
         let one = owner_apply_outcome(kw, owner);
         priv.apply_applied = priv.apply_applied.concat(one.applied);
         priv.apply_refused = priv.apply_refused.concat(one.refused);
@@ -2105,6 +2121,7 @@ function ac_apply_answer(gobj, event, kw, src)
             end_apply(gobj, "not connected to an agent");
             return 0;
         }
+        arm_apply_deadline(gobj, "kill");
         gobj_change_state(gobj, "ST_KILLING");
         return 0;
     }
@@ -2117,6 +2134,7 @@ function ac_apply_answer(gobj, event, kw, src)
             end_apply(gobj, "not connected to an agent");
             return 0;
         }
+        arm_apply_deadline(gobj, "run");
         gobj_change_state(gobj, "ST_STARTING");
         return 0;
     }
@@ -2125,6 +2143,7 @@ function ac_apply_answer(gobj, event, kw, src)
             end_apply(gobj, "not connected to an agent");
             return 0;
         }
+        arm_apply_deadline(gobj, "play");
         gobj_change_state(gobj, "ST_PLAYING");
         return 0;
     }
@@ -2148,24 +2167,29 @@ function ac_apply_broken(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  The step took too long. The commands answer when they are DONE,
- *  so silence is not slowness: it is an agent that cannot answer
- *  them (see the SDK CHANGELOG on ac_final_count). Say it with the
- *  step named, because after a `kill` the yuno is DOWN.
+ *  The step took too long (EV_TIMEOUT of the apply_deadline
+ *  C_TIMER). The commands answer when they are DONE, so silence is
+ *  not slowness: it is an agent that cannot answer them (see the
+ *  SDK CHANGELOG on ac_final_count). Say it with the step named,
+ *  because after a `kill` the yuno is DOWN -- and, for `apply`, the
+ *  owners that did not answer, because the others did.
  ***************************************************************/
 function ac_apply_timeout(gobj, event, kw, src)
 {
-    let step = (kw && kw.step) || "";
+    let priv = gobj.priv;
+    let step = priv.apply_step || "";
     let yuno = gobj_read_str_attr(gobj, "yuno_label") ||
                gobj_read_str_attr(gobj, "yuno_id");
+    let owed = (step === "apply") ? Object.keys(priv.apply_owed || {}) : [];
+    let what = owed.length ? `${step}: ${owed.join(", ")}` : step;
 
     log_error(
-        `${gobj_short_name(gobj)}: the node's agent did not answer '${step}' ` +
+        `${gobj_short_name(gobj)}: the node's agent did not answer '${what}' ` +
         `for '${yuno}'`
     );
     end_apply(gobj, [
         ["span", {class: "TREEDB_APPLY_TIMEOUT", i18n: "apply timeout"}, t("apply timeout")],
-        ["span", {class: "TREEDB_APPLY_STEP ml-1"}, `(${step})`]
+        ["span", {class: "TREEDB_APPLY_STEP ml-1"}, `(${what})`]
     ]);
     return 0;
 }
@@ -2270,7 +2294,7 @@ function create_gclass(gclass_name)
          *  when it is done — see send_apply_step().  */
         ["ST_APPLYING", [
             ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
-            ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
+            ["EV_TIMEOUT",              ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
             ...dialog_events,
             ...route_events,
@@ -2278,7 +2302,7 @@ function create_gclass(gclass_name)
         ]],
         ["ST_KILLING", [
             ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
-            ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
+            ["EV_TIMEOUT",              ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
             ...dialog_events,
             ...route_events,
@@ -2286,7 +2310,7 @@ function create_gclass(gclass_name)
         ]],
         ["ST_STARTING", [
             ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
-            ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
+            ["EV_TIMEOUT",              ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
             ...dialog_events,
             ...route_events,
@@ -2294,7 +2318,7 @@ function create_gclass(gclass_name)
         ]],
         ["ST_PLAYING", [
             ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
-            ["EV_APPLY_TIMEOUT",        ac_apply_timeout,     null],
+            ["EV_TIMEOUT",              ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
             ...dialog_events,
             ...route_events,
@@ -2314,7 +2338,7 @@ function create_gclass(gclass_name)
         ["EV_APPLY_CHANGES",     0],
         ["EV_APPLY_CONFIRMED",   0],
         ["EV_APPLY_CANCELLED",   0],
-        ["EV_APPLY_TIMEOUT",     0],
+        ["EV_TIMEOUT",           0],
         ["EV_DRAFTS_WANTED",     0],
         ["EV_DISCOVER",          0],
         ["EV_ROUTE_CHANGED",     0],

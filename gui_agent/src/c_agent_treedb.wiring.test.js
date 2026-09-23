@@ -37,6 +37,8 @@ const {
     gobj_start_up, gobj_create_yuno, gobj_create, gobj_create_service,
     gobj_start, gobj_send_event, gobj_current_state, gobj_parent,
     gobj_change_state, gobj_create_pure_child, gobj_write_attr,
+    gobj_gclass_name,
+    register_c_timer,
     set_log_callback,
 } = await import("@yuneta/gobj-js");
 const {register_c_agent_treedb} = await import("./c_agent_treedb.js");
@@ -75,6 +77,7 @@ beforeAll(() => {
     set_log_callback((level, msg) => {
         logged.push({level: String(level), msg: String(msg)});
     });
+    register_c_timer();
 
     gclass_create("C_TEST_HOST", [["EV_ROUTE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT]],
         [["ST_IDLE", []]], {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
@@ -424,5 +427,50 @@ describe("the session closes with the tab's own requests in flight", () => {
             answer(tab, req, 0, []);
         }
         expect(editors[editors.length - 1].got).toEqual([{}]);
+    });
+});
+
+describe("L-3: the apply deadline", () => {
+
+    test("it is a C_TIMER child of the tab, not a window.setTimeout", () => {
+        const tab = build("t1", {});
+        expect(tab.priv.apply_timer).toBeTruthy();
+        expect(gobj_gclass_name(tab.priv.apply_timer)).toBe("C_TIMER");
+    });
+
+    test("an owner that never answers apply-schema is NAMED when the step's 30 s pass", () => {
+        const tab = build("t2", {});
+        gobj_send_event(tab, "EV_APPLY_CONFIRMED", {}, tab);
+        const reqs = take(is("apply-schema"));
+        const a = reqs.find((r) => r.kw.__md_iev__.console_owner === "owner_a");
+        answer(tab, a, 0, [{treedb_name: "ta", result: 0, data: {applied: true}}]);
+
+        vi.advanceTimersByTime(29 * 1000);
+        expect(gobj_current_state(tab)).toBe("ST_APPLYING");
+        expect(shown).toEqual([]);
+
+        vi.advanceTimersByTime(2 * 1000);
+        expect(shown.length).toBe(1);
+        const [sentence, step] = shown[0];
+        expect(sentence[1].i18n).toBe("apply timeout");
+        expect(step[2]).toContain("owner_b");
+        expect(step[2]).not.toContain("owner_a");
+        expect(errors().some((e) => e.includes("owner_b"))).toBe(true);
+    });
+
+    test("the kill step has its own 30 s, from when it is sent", () => {
+        const tab = build("t3", {});
+        gobj_send_event(tab, "EV_APPLY_CONFIRMED", {}, tab);
+        vi.advanceTimersByTime(20 * 1000);
+        for(const r of take(is("apply-schema"))) {
+            answer(tab, r, 0, [{treedb_name: r.kw.__md_iev__.console_owner, result: 0,
+                data: {applied: true}}]);
+        }
+        expect(gobj_current_state(tab)).toBe("ST_KILLING");
+        vi.advanceTimersByTime(20 * 1000);
+        expect(gobj_current_state(tab)).toBe("ST_KILLING");
+        vi.advanceTimersByTime(11 * 1000);
+        expect(shown.length).toBe(1);
+        expect(shown[0][1][2]).toContain("kill");
     });
 });

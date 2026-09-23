@@ -44,6 +44,12 @@ Fixes from the independent review of 7.25.4.
   drafts again), and a comparison kept the differences button off. Now the
   Save and the comparison end with "the connection dropped", and the
   saved-schema round is asked again when the session is back.
+- **gui_agent: the apply deadline is a `C_TIMER` child, armed once per step
+  (L-3).** It was a `window.setTimeout`, outside the machine, and re-armed by
+  each owner's `apply-schema`, so its 30 s counted from the last owner. Now a
+  time enters the FSM as `EV_TIMEOUT`, every step (apply, kill, run, play)
+  gets its 30 s from when it is sent, and a timeout of `apply` names the
+  owners that did not answer.
 
 ## gui_treedb 0.17.57, gui_agent 0.22.78 + gobj-ui ^7.25.5 (2026-09-23)
 
