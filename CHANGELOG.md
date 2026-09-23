@@ -6,6 +6,22 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.80 (2026-09-23)
+
+- **gui_agent: a treedb view hears a session edge AFTER its transport.**
+  `C_AGENT_TREEDB_VIEW` forwarded `EV_ON_OPEN` / `EV_ON_CLOSE` to the views
+  it hosts from inside the link's publication, before the routing adapter
+  -- their transport, subscribed later to the same link -- had heard it. So
+  a view was told "connected" while its transport still said
+  `ST_DISCONNECTED`: with gobj-ui 7.25.6 the schema editor reloads on the
+  reconnect, and the console check of 0.22.79 on artgins.yunetacontrol.com
+  caught the reload refused three times ("cannot route 'nodes' -- not in
+  session"). It happened before 7.25.6 too, whenever the editor's first
+  load had failed. The edge is now forwarded on the next cycle
+  (`EV_TRANSPORT_EDGE`, a posted event), with the link's state at delivery:
+  "connected" arrives with the adapter in session, "disconnected" after the
+  adapter settled what the drop cut.
+
 ## gui_agent 0.22.79 + gobj-ui ^7.25.6 (2026-09-23)
 
 Fixes from the independent review of 7.25.4. gui_agent takes gobj-ui

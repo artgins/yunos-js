@@ -910,16 +910,33 @@ function notify_view_transport(gobj, connected)
  *  The session came up / went down. The view stays mounted either
  *  way — its schema is still valid and the adapter re-resolves the
  *  link on the next request — only its remote-only actions change.
+ *
+ *  Told on the NEXT cycle, not from inside the link's publication:
+ *  the hosted views' transport is the adapter, which hears the same
+ *  edge from the same link AFTER this gclass (it subscribed later).
+ *  Told at once, a view heard "connected" while its transport still
+ *  said ST_DISCONNECTED, and the schema editor's reload on the
+ *  reconnect was refused ("cannot route 'nodes' -- not in session",
+ *  seen live with gobj-ui 7.25.6); and it heard "disconnected"
+ *  before the adapter had settled the requests the drop cut. A
+ *  deferral is not a time, so it is a posted event, and the state
+ *  forwarded is the link's when it is delivered.
  ***************************************************************/
 function ac_on_open(gobj, event, kw, src)
 {
-    notify_view_transport(gobj, true);
+    gobj_post_event(gobj, "EV_TRANSPORT_EDGE", {}, gobj);
     return 0;
 }
 
 function ac_on_close(gobj, event, kw, src)
 {
-    notify_view_transport(gobj, false);
+    gobj_post_event(gobj, "EV_TRANSPORT_EDGE", {}, gobj);
+    return 0;
+}
+
+function ac_transport_edge(gobj, event, kw, src)
+{
+    notify_view_transport(gobj, agent_link_is_connected(gobj.priv.link));
     return 0;
 }
 
@@ -1058,6 +1075,7 @@ function create_gclass(gclass_name)
         ["ST_IDLE", [
             ["EV_ON_OPEN",              ac_on_open,           null],
             ["EV_ON_CLOSE",             ac_on_close,          null],
+            ["EV_TRANSPORT_EDGE",       ac_transport_edge,    null],
             ["EV_ROUTE_CHANGED",        ac_route_changed,     null],
             ["EV_TOPIC_SELECTED",       ac_topic_selected,    null],
             ["EV_OPERATION_MODE_CHANGED", ac_topic_selected,  null],
@@ -1076,6 +1094,7 @@ function create_gclass(gclass_name)
     const event_types = [
         ["EV_ON_OPEN",           0],
         ["EV_ON_CLOSE",          0],
+        ["EV_TRANSPORT_EDGE",    0],
         ["EV_ROUTE_CHANGED",     0],
         ["EV_TOPIC_SELECTED",    0],
         ["EV_OPERATION_MODE_CHANGED", 0],
