@@ -6,9 +6,12 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
-## Unreleased
+## gui_agent 0.22.79 + gobj-ui ^7.25.6 (2026-09-23)
 
-Fixes from the independent review of 7.25.4.
+Fixes from the independent review of 7.25.4. gui_agent takes gobj-ui
+^7.25.6, whose schema editor ends a load or a write the transport drop cut
+and reloads on the reconnect (the other half of M-1). gui_treedb mounts
+nothing that changed and stays at 0.17.57.
 
 - **gui_agent: the session closing ANSWERS every routed treedb request in
   flight (M-1).** `C_AGENT_TREEDB_LINK` wiped its pending requests on
