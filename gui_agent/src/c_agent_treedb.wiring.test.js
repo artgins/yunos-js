@@ -561,11 +561,13 @@ describe("M-3: a Save answered only 'nothing to save' while drafts are marked", 
         expect(errors().some((e) => e.includes("reverted"))).toBe(true);
     });
 
-    test("fixed C: the withdrawal is said as well, and nothing is left to apply", () => {
+    test("fixed C: the WITHDRAWAL is said, not 'nothing to save', and nothing is left to apply", () => {
         const tab = build("n3", {owner_a: [STALE]});
         save(tab, [WITHDRAWING]);
         expect(infos.length).toBe(1);
-        expect(infos[0][1][2]).toContain("treedb_x");
+        const [sentence, names] = infos[0];
+        expect(sentence[1].i18n).toBe("the draft is the schema in use, its saved schema was withdrawn");
+        expect(names[2]).toContain("treedb_x");
         const editor = rediscover(tab, WITHDRAWN);
 
         expect(editor.got).toEqual([{treedb_x: []}]);
@@ -585,6 +587,14 @@ describe("M-3: a Save answered only 'nothing to save' while drafts are marked", 
             {data: Object.assign({}, STALE.data, {draft_changed: {}})}));
         expect(editor.got).toEqual([{treedb_x: []}]);
         expect(tab.priv.$apply.disabled).toBe(false);
+    });
+
+    test("a withdrawal is said even with nothing marked: Apply goes away", () => {
+        const tab = build("n6", {owner_a: [WITHDRAWN]});
+        save(tab, [WITHDRAWING]);
+        expect(infos.length).toBe(1);
+        expect(infos[0][0][1].i18n).toBe("the draft is the schema in use, its saved schema was withdrawn");
+        expect(shown).toEqual([]);
     });
 
     test("nothing to save with nothing marked: nothing to say", () => {

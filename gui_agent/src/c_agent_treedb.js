@@ -215,6 +215,7 @@ let PRIVATE_DATA = {
     save_left:   0,     /*  `save-schema` answers still owed  */
     save_round:  0,     /*  the save in flight, echoed as `save_round`  */
     save_nothing: null, /*  treedbs the save found nothing to save in while they were marked  */
+    save_withdrawn: null, /*  treedbs whose saved schema the save WITHDREW (the draft is the one in use)  */
     reverted:    null,  /*  {treedb: {version, diff}}: a saved schema the draft was reverted from (see save_answered())  */
     save_errors: null,  /*  what the save answered wrong  */
     apply_left:  0,     /*  `apply-schema` answers still owed  */
@@ -260,6 +261,7 @@ function mt_create(gobj)
     priv.apply_owed = {};
     priv.reverted = {};
     priv.save_nothing = [];
+    priv.save_withdrawn = [];
     priv.apply_timer = gobj_create_pure_child("apply_deadline", "C_TIMER", {}, gobj);
 
     /*
@@ -1212,7 +1214,12 @@ function note_nothing_to_save(gobj, rows)
             continue;
         }
         if(withdrawn === true) {
-            delete priv.reverted[name];     /*  the node removed it itself  */
+            /*  The node removed the saved schema itself: that is the news,
+             *  marked or not -- what Apply offered is gone -- and "nothing
+             *  to save" alone hid it.  */
+            delete priv.reverted[name];
+            priv.save_withdrawn.push(name);
+            continue;
         }
         let marked = priv.drafts && Array.isArray(priv.drafts[name]) &&
             priv.drafts[name].length > 0;
@@ -1346,6 +1353,21 @@ function save_answered(gobj, owner, kw)
                     t("nothing to save, the draft is the schema in use")],
                 ["span", {class: "TREEDB_SAVE_NOTHING_TREEDBS ml-1"},
                     priv.save_nothing.join(", ")]
+            ],
+            {t: t}
+        );
+    }
+    if(priv.save_withdrawn.length) {
+        log_warning(`${gobj_short_name(gobj)}: the saved schema of ` +
+            `${priv.save_withdrawn.join(", ")} was withdrawn, the draft is the schema in use`);
+        yui_shell_show_info(
+            yui_shell_of(gobj),
+            [
+                ["span", {class: "TREEDB_SAVE_WITHDRAWN",
+                          i18n: "the draft is the schema in use, its saved schema was withdrawn"},
+                    t("the draft is the schema in use, its saved schema was withdrawn")],
+                ["span", {class: "TREEDB_SAVE_WITHDRAWN_TREEDBS ml-1"},
+                    priv.save_withdrawn.join(", ")]
             ],
             {t: t}
         );
@@ -1914,6 +1936,7 @@ function ac_save_schema(gobj, event, kw, src)
     }
     priv.save_errors = [];
     priv.save_nothing = [];
+    priv.save_withdrawn = [];
     priv.save_left = 0;
     priv.save_round++;
     for(let owner of priv.owners) {

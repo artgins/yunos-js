@@ -453,6 +453,7 @@ const es = {
         "the node did not answer": "El nodo no ha contestado a tiempo; no hay nada confirmado",
         "the connection dropped": "La conexión se ha caído antes de que el nodo contestara; no hay nada confirmado",
         "nothing to save, the draft is the schema in use": "Nada que guardar: el borrador es el esquema en uso. Sus marcas se vuelven a leer del nodo:",
+        "the draft is the schema in use, its saved schema was withdrawn": "Nada que guardar: el borrador es el esquema en uso, así que se ha retirado el esquema guardado que difería de él. No queda nada que aplicar en:",
         "a reverted draft is still saved": "Un esquema guardado se ha revertido en el borrador, y aplicar lo instalaría. Guarda un cambio de ese treedb, o actualiza el SDK del nodo (uno más nuevo lo retira)",
         "the connection dropped during the write": "La conexión se ha caído durante la escritura: puede que se haya hecho o no. El esquema se vuelve a leer al volver la conexión",
         "schema applied partially": "El schema se ha aplicado sólo en parte de los treedbs; el yuno se reinicia con ellos. Rechazado:",
