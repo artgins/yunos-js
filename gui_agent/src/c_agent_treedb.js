@@ -168,6 +168,8 @@ const DIFF_KINDS = {
  *  waiting. Generous: the agent answers each one when it is DONE, and
  *  "done" for a kill is the killed yuno's channel closing.  */
 const APPLY_TIMEOUT = 30 * 1000;
+/*  The deadline of a `save-schema` or `saved-schema` round.  */
+const SCHEMA_ROUND_TIMEOUT = 30 * 1000;
 
 
 /***************************************************************
@@ -213,8 +215,13 @@ let PRIVATE_DATA = {
     saved_left:  0,     /*  `saved-schema` answers still owed  */
     saved_round: 0,     /*  the saved-schema round in flight, echoed as `saved_round` (from __round_seq__)  */
     saved_interrupted: false, /*  a close cut a saved-schema round: ask again on the open  */
+    saved_timer: null,  /*  C_TIMER child: the deadline of the saved-schema round in flight  */
+    saved_owed:  null,  /*  {owner: true}: `saved-schema` answers still owed, named on a timeout  */
     save_left:   0,     /*  `save-schema` answers still owed  */
     save_round:  0,     /*  the save in flight, echoed as `save_round` (from __round_seq__)  */
+    save_timer:  null,  /*  C_TIMER child: the deadline of the save in flight  */
+    save_owed:   null,  /*  {owner: true}: `save-schema` answers still owed, named on a timeout  */
+    save_unanswered: null, /*  owners the save's deadline found silent  */
     save_nothing: null, /*  treedbs the save found nothing to save in while they were marked  */
     save_withdrawn: null, /*  treedbs whose saved schema the save WITHDREW (the draft is the one in use)  */
     reverted:    null,  /*  {treedb: {version, diff}}: a saved schema the draft was reverted from (see save_answered())  */
@@ -270,6 +277,11 @@ function mt_create(gobj)
     priv.save_nothing = [];
     priv.save_withdrawn = [];
     priv.apply_timer = gobj_create_pure_child("apply_deadline", "C_TIMER", {}, gobj);
+    priv.save_timer = gobj_create_pure_child("save_deadline", "C_TIMER", {}, gobj);
+    priv.saved_timer = gobj_create_pure_child("saved_deadline", "C_TIMER", {}, gobj);
+    priv.save_owed = {};
+    priv.saved_owed = {};
+    priv.save_unanswered = [];
 
     /*
      *  CHILD subscription model
@@ -327,6 +339,8 @@ function mt_stop(gobj)
         gobj_unsubscribe_event(host, "EV_ROUTE_CHANGED", {}, gobj);
     }
     clear_apply_timer(gobj);
+    clear_timeout(priv.save_timer);
+    clear_timeout(priv.saved_timer);
     if(priv.tree && gobj_is_running(priv.tree)) {
         gobj_stop(priv.tree);
     }
@@ -1130,13 +1144,20 @@ function request_saved(gobj)
     priv.saved_left = 0;
     priv.saved_round = ++__round_seq__;
     priv.saved_interrupted = false;
+    priv.saved_owed = {};
     priv.drafts = null;
     priv.drafts_round = {};
     for(let owner of priv.owners || []) {
         if(request_owner(gobj, owner, "saved-schema", SAVED_PURPOSE,
                 "saved_round", priv.saved_round) === 0) {
             priv.saved_left++;
+            priv.saved_owed[owner] = true;
         }
+    }
+    if(priv.saved_left > 0) {
+        set_timeout(priv.saved_timer, SCHEMA_ROUND_TIMEOUT);
+    } else {
+        clear_timeout(priv.saved_timer);
     }
     if(priv.saved_left === 0 && (!priv.owners || priv.owners.length === 0)) {
         /*  No owner, no draft: that is an answer too.  */
@@ -1175,6 +1196,7 @@ function saved_answered(gobj, owner, kw)
         return 0;
     }
     priv.saved_left--;
+    delete priv.saved_owed[owner];
     if(kw && !(typeof kw.result === "number" && kw.result < 0) && Array.isArray(kw.data)) {
         let rows = rows_without_reverted(gobj, kw.data);
         priv.saved[owner] = rows;
@@ -1182,6 +1204,7 @@ function saved_answered(gobj, owner, kw)
     }
     render_apply(gobj);
     if(priv.saved_left === 0) {
+        clear_timeout(priv.saved_timer);
         end_saved_round(gobj);
     }
     return 0;
@@ -1331,6 +1354,7 @@ function save_answered(gobj, owner, kw)
         return 0;
     }
     priv.save_left--;
+    delete priv.save_owed[owner];
     if(kw && Array.isArray(kw.data)) {
         note_nothing_to_save(gobj, kw.data);
     }
@@ -1347,9 +1371,38 @@ function save_answered(gobj, owner, kw)
     if(priv.save_left > 0) {
         return 0;
     }
+    return end_save(gobj);
+}
+
+/***************************************************************
+ *  The save is over: every owner answered, or its deadline passed
+ *  (ac_schema_round_timeout()). Either way the node is read
+ *  again, which is what says what was saved.
+ ***************************************************************/
+function end_save(gobj)
+{
+    let priv = gobj.priv;
+
+    clear_timeout(priv.save_timer);
     if(priv.save_errors.length) {
         yui_shell_show_error(yui_shell_of(gobj), priv.save_errors.join("\n"), {t: t});
-    } else {
+    }
+    if(priv.save_unanswered.length) {
+        /*  Two halves, so the sentence keeps its key and changes language;
+         *  the names are data.  */
+        yui_shell_show_error(
+            yui_shell_of(gobj),
+            [
+                ["span", {class: "TREEDB_SAVE_TIMEOUT", i18n: "save unanswered"},
+                    t("save unanswered")],
+                ["span", {class: "TREEDB_SAVE_UNANSWERED",
+                          style: "display:block; white-space:pre-wrap;"},
+                    priv.save_unanswered.join(", ")]
+            ],
+            {t: t}
+        );
+    }
+    if(!priv.save_errors.length && !priv.save_unanswered.length) {
         priv.dirty = false;
     }
     if(priv.save_nothing.length) {
@@ -1690,6 +1743,63 @@ function ac_on_open_ready(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  A save or a saved-schema round took too long (EV_TIMEOUT of
+ *  its C_TIMER child). Each command answers once, when it is done,
+ *  so silence is the node's agent not answering: what is owed is
+ *  settled as failed, the silent owners are NAMED, and the round
+ *  ends as if they had answered nothing.
+ ***************************************************************/
+function ac_schema_round_timeout(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    if(src === priv.save_timer) {
+        if(priv.save_left <= 0) {
+            log_warning(`${gobj_short_name(gobj)}: save deadline with no save in flight`);
+            return 0;
+        }
+        priv.save_unanswered = Object.keys(priv.save_owed || {}).sort();
+        log_error(`${gobj_short_name(gobj)}: the node's agent did not answer 'save-schema' ` +
+            `of ${priv.save_unanswered.join(", ")}`);
+        priv.save_left = 0;
+        priv.save_round = ++__round_seq__;     /*  a late answer is not counted  */
+        priv.save_owed = {};
+        return end_save(gobj);
+    }
+
+    if(src === priv.saved_timer) {
+        if(priv.saved_left <= 0) {
+            log_warning(`${gobj_short_name(gobj)}: saved-schema deadline with no round in flight`);
+            return 0;
+        }
+        let silent = Object.keys(priv.saved_owed || {}).sort();
+        log_error(`${gobj_short_name(gobj)}: the node's agent did not answer 'saved-schema' ` +
+            `of ${silent.join(", ")}`);
+        priv.saved_left = 0;
+        priv.saved_round = ++__round_seq__;
+        priv.saved_owed = {};
+        yui_shell_show_error(
+            yui_shell_of(gobj),
+            [
+                ["span", {class: "TREEDB_SAVED_TIMEOUT", i18n: "saved schemas unanswered"},
+                    t("saved schemas unanswered")],
+                ["span", {class: "TREEDB_SAVED_UNANSWERED",
+                          style: "display:block; white-space:pre-wrap;"},
+                    silent.join(", ")]
+            ],
+            {t: t}
+        );
+        end_saved_round(gobj);
+        render_apply(gobj);
+        return 0;
+    }
+
+    log_error(`${gobj_short_name(gobj)}: ${event} of '${src ? gobj_short_name(src) : ""}' in ` +
+        `${gobj_current_state(gobj)}: no deadline of this tab is armed there`);
+    return -1;
+}
+
+/***************************************************************
  *  Session down. The tree stays up (a schema already fetched is
  *  still valid and each adapter re-resolves the link on its next
  *  request); a discovery in flight will never be answered, and
@@ -1703,9 +1813,14 @@ function ac_on_close(gobj, event, kw, src)
     let priv = gobj.priv;
 
     if(priv.save_left > 0) {
-        log_warning(`${gobj_short_name(gobj)}: the session closed with a save in flight`);
+        /*  It may have landed: what is saved -- what Apply offers, and
+         *  which topics are drafts -- is read again on the next open.  */
+        log_warning(`${gobj_short_name(gobj)}: the session closed with a save in flight: ` +
+            `the saved schemas are read again on the next open`);
         priv.save_left = 0;
         priv.save_round = ++__round_seq__;
+        clear_timeout(priv.save_timer);
+        priv.saved_interrupted = true;
         yui_shell_show_error(yui_shell_of(gobj), "the connection dropped", {t: t});
     }
     if(priv.saved_left > 0) {
@@ -1713,6 +1828,7 @@ function ac_on_close(gobj, event, kw, src)
             `round in flight: asked again on the next open`);
         priv.saved_left = 0;
         priv.saved_round = ++__round_seq__;
+        clear_timeout(priv.saved_timer);
         priv.drafts_round = null;
         priv.saved_interrupted = true;
     }
@@ -1954,18 +2070,25 @@ function ac_save_schema(gobj, event, kw, src)
     priv.save_errors = [];
     priv.save_nothing = [];
     priv.save_withdrawn = [];
+    priv.save_unanswered = [];
+    priv.save_owed = {};
     priv.save_left = 0;
     priv.save_round = ++__round_seq__;
     for(let owner of priv.owners) {
         if(request_owner(gobj, owner, "save-schema", SAVE_PURPOSE,
                 "save_round", priv.save_round) === 0) {
             priv.save_left++;
+            priv.save_owed[owner] = true;
         }
     }
     if(priv.save_left === 0) {
         log_error(`${gobj_short_name(gobj)}: cannot save the schema -- not in session`);
         return -1;
     }
+    /*  Armed once, after every request is sent (as the apply steps):
+     *  Apply waits for the save, so a silent owner kept it off until
+     *  the session dropped or the page was reloaded.  */
+    set_timeout(priv.save_timer, SCHEMA_ROUND_TIMEOUT);
     render_apply(gobj);
     return 0;
 }
@@ -2294,6 +2417,7 @@ function ac_apply_confirmed(gobj, event, kw, src)
     if(priv.saved_left > 0) {
         priv.saved_left = 0;
         priv.saved_round = ++__round_seq__;
+        clear_timeout(priv.saved_timer);
         priv.drafts_round = null;
     }
 
@@ -2487,6 +2611,14 @@ function ac_apply_broken(gobj, event, kw, src)
 function ac_apply_timeout(gobj, event, kw, src)
 {
     let priv = gobj.priv;
+
+    if(src !== priv.apply_timer) {
+        /*  The save and saved-schema rounds are settled before an apply
+         *  starts (ac_apply_confirmed()), and their timers with them.  */
+        log_error(`${gobj_short_name(gobj)}: ${event} of '${src ? gobj_short_name(src) : ""}' ` +
+            `during the apply`);
+        return -1;
+    }
     let step = priv.apply_step || "";
     let yuno = gobj_read_str_attr(gobj, "yuno_label") ||
                gobj_read_str_attr(gobj, "yuno_id");
@@ -2614,6 +2746,7 @@ function create_gclass(gclass_name)
             ["EV_DISCOVER",             ac_discover,          null],
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
+            ["EV_TIMEOUT",              ac_schema_round_timeout, null],
             ...dialog_events_not_ready,
             ...route_events,
             ...view_events
@@ -2623,6 +2756,7 @@ function create_gclass(gclass_name)
             ["EV_DISCOVER",             ac_discover,          null],
             ["EV_ON_CLOSE",             ac_on_close,          "ST_IDLE"],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
+            ["EV_TIMEOUT",              ac_schema_round_timeout, null],
             ...dialog_events_not_ready,
             ...route_events,
             ...view_events
@@ -2632,6 +2766,7 @@ function create_gclass(gclass_name)
             ["EV_DISCOVER",             ac_discover,          null],
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
+            ["EV_TIMEOUT",              ac_schema_round_timeout, null],
             ...dialog_events_not_ready,
             ...route_events,
             ...view_events
@@ -2640,6 +2775,7 @@ function create_gclass(gclass_name)
             ["EV_ON_OPEN",              ac_on_open_ready,     null],
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
+            ["EV_TIMEOUT",              ac_schema_round_timeout, null],
             ["EV_DIFF_SCHEMA",          ac_diff_schema,       null],
             ["EV_SAVE_SCHEMA",          ac_save_schema,       null],
             ["EV_APPLY_CHANGES",        ac_apply_changes,     null],

@@ -372,6 +372,29 @@ gobj_send_event(tab, "EV_APPLY_CHANGES", {}, tab);   // refused, logged; no dial
 // ... the save answers, discovery runs, the saved-schema round lands: Apply on
 ```
 
+**A Save and a `saved-schema` round have a deadline too** (0.22.91). Each
+owner answers once, when it is done, so a silent one used to keep the round
+open until the session dropped or the page was reloaded -- and since Apply
+waits for a Save, Apply with it. Each round has its own 30 s `C_TIMER`
+(`save_deadline`, `saved_deadline`), armed once after every request is sent.
+When it fires, what is owed is settled as failed and the silent owners are
+named in a toast:
+
+| Round | What the tab does | Toast key |
+|---|---|---|
+| `save-schema` | the save ends (Save and Apply come back), the drafts stay marked, the node is read again | `save unanswered` |
+| `saved-schema` | the round ends with what came: Apply stays off for the silent owners, the editor gets the drafts that came | `saved schemas unanswered` |
+
+A **Save cut by the drop** may have landed: the saved schemas (what Apply
+offers, which topics are drafts) are read again when the session is back, as
+for a `saved-schema` round the drop cut (0.22.91).
+
+```js
+gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);   // save_deadline armed: 30 s
+// owner_a answers, owner_b says nothing
+// ... 30 s: toast "save unanswered" + "owner_b"; discovery runs again
+```
+
 The round numbers of `save-schema` and `saved-schema` are counted for the
 page, not per tab (0.22.90), as the adapter's request ids are: a tab opened
 again on the same yuno started at round 1 again and took an answer of the

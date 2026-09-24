@@ -466,6 +466,8 @@ const es = {
         "apply timeout":     "El agente del nodo no ha contestado; el yuno puede estar parado",
         "apply unanswered, nothing restarted": "El agente del nodo no ha contestado a apply-schema de los owners siguientes, así que no se sabe si han aplicado. No se ha reiniciado nada: un schema que hayan aplicado se lee en el próximo reinicio del yuno. Owners:",
         "apply unanswered, restarting": "El agente del nodo no ha contestado a apply-schema de los owners siguientes, así que no se sabe si han aplicado. El yuno se reinicia por los treedbs que sí se aplicaron, y la pestaña vuelve a leer el nodo después. Owners:",
+        "save unanswered": "El agente del nodo no ha contestado a save-schema de los owners siguientes, así que no se sabe si han guardado. Se vuelve a leer el nodo: lo que tenga guardado es lo que ofrece Aplicar. Owners:",
+        "saved schemas unanswered": "El agente del nodo no ha dicho qué tienen guardado los owners siguientes: Aplicar sigue apagado para ellos, y sus borradores no se marcan. Owners:",
         "the node did not answer": "El nodo no ha contestado a tiempo; no hay nada confirmado",
         "the connection dropped": "La conexión se ha caído antes de que el nodo contestara; no hay nada confirmado",
         "nothing to save, the draft is the schema in use": "Nada que guardar: el borrador es el esquema en uso. Sus marcas se vuelven a leer del nodo:",

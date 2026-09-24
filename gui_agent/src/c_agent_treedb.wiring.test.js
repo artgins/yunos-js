@@ -436,6 +436,107 @@ describe("the session closes with the tab's own requests in flight", () => {
     });
 });
 
+describe("a Save cut by the drop", () => {
+
+    /*  It may have landed: what is saved, and so what Apply offers and
+     *  which topics are drafts, is read again when the session is back.  */
+    test("the saved schemas are read again on the next open", () => {
+        const tab = build("d1", {});
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        expect(take(is("save-schema")).length).toBe(2);
+
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        expect(take(is("saved-schema")).length).toBe(0);
+        gobj_send_event(tab, "EV_ON_OPEN", {}, link);
+        expect(take(is("saved-schema")).length).toBe(2);
+        expect(errors()).toEqual([]);
+    });
+});
+
+describe("the deadline of a Save and of a saved-schema round", () => {
+
+    test("both are C_TIMER children of the tab", () => {
+        const tab = build("s0", {});
+        expect(gobj_gclass_name(tab.priv.save_timer)).toBe("C_TIMER");
+        expect(gobj_gclass_name(tab.priv.saved_timer)).toBe("C_TIMER");
+    });
+
+    test("an owner that never answers save-schema is NAMED, and Save and Apply work again", () => {
+        const tab = build("s1", {});
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        const reqs = take(is("save-schema"));
+        expect(reqs.length).toBe(2);
+        const a = reqs.find((r) => r.kw.__md_iev__.console_owner === "owner_a");
+        answer(tab, a, 0, [{treedb_name: "ta", result: 0, data: {schema_version: 5}}]);
+
+        vi.advanceTimersByTime(29 * 1000);
+        expect(tab.priv.save_left).toBe(1);
+        expect(shown).toEqual([]);
+
+        vi.advanceTimersByTime(2 * 1000);
+        expect(tab.priv.save_left).toBe(0);
+        expect(shown.length).toBe(1);
+        const [sentence, owners] = shown[0];
+        expect(sentence[1].i18n).toBe("save unanswered");
+        expect(owners[2]).toContain("owner_b");
+        expect(owners[2]).not.toContain("owner_a");
+        expect(errors().some((e) => e.includes("owner_b"))).toBe(true);
+        /*  Whether it landed is not known: the node is read again.  */
+        expect(take(is("services")).length).toBe(1);
+    });
+
+    test("a Save answered in time leaves no deadline behind", () => {
+        const tab = build("s2", {});
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        for(const r of take(is("save-schema"))) {
+            answer(tab, r, 0, []);
+        }
+        discover(tab, {});
+        vi.advanceTimersByTime(61 * 1000);
+        expect(shown).toEqual([]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("an owner that never answers saved-schema is NAMED, and the round ends", () => {
+        const tab = gobj_create("s3", "C_AGENT_TREEDB", {
+            node: NODE, yuno_id: YUNO, yuno_label: "role^yuno",
+            base_route: "/schemas/s3", link_svc: link
+        }, host);
+        gobj_start(tab);
+        const [services] = take(is("services"));
+        answer(tab, services, 0, SERVICES);
+        for(const probe of take(is("treedb-info"))) {
+            answer(tab, probe, 0, {master: true});
+        }
+        const reqs = take(is("saved-schema"));
+        expect(reqs.length).toBe(2);
+        const a = reqs.find((r) => r.kw.__md_iev__.console_owner === "owner_a");
+        answer(tab, a, 0, []);
+        expect(editors[editors.length - 1].got).toEqual([]);
+
+        vi.advanceTimersByTime(31 * 1000);
+        expect(tab.priv.saved_left).toBe(0);
+        expect(shown.length).toBe(1);
+        const [sentence, owners] = shown[0];
+        expect(sentence[1].i18n).toBe("saved schemas unanswered");
+        expect(owners[2]).toContain("owner_b");
+        expect(owners[2]).not.toContain("owner_a");
+        /*  The editor is told the drafts the round could gather.  */
+        expect(editors[editors.length - 1].got).toEqual([{}]);
+        expect(errors().some((e) => e.includes("owner_b"))).toBe(true);
+    });
+
+    test("a drop settles them: their deadlines do not fire after it", () => {
+        const tab = build("s4", {});
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        take(is("save-schema"));
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        vi.advanceTimersByTime(61 * 1000);
+        expect(shown).toEqual(["the connection dropped"]);
+        expect(errors()).toEqual([]);
+    });
+});
+
 describe("the apply deadline", () => {
 
     test("it is a C_TIMER child of the tab, not a window.setTimeout", () => {

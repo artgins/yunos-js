@@ -6,6 +6,38 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.91, gui_treedb 0.17.64 + gobj-ui ^7.25.17, gobj-js ^7.25.3 (2026-09-24)
+
+- **gui_agent: a Save and a `saved-schema` round have a deadline.** Each owner
+  answers once, when it is done, so a silent one kept the round open until the
+  session dropped or the page was reloaded -- and since 0.22.90 Apply waits for
+  a Save, so Apply stayed off with it. Each round now has its own 30 s
+  `C_TIMER` child (`save_deadline`, `saved_deadline`), like the apply steps.
+  When it fires, what is owed is settled as failed and the silent owners are
+  named: a Save ends (Save and Apply come back, the drafts stay marked, the
+  node is read again; toast key `save unanswered`), a `saved-schema` round
+  ends with what came (Apply stays off for the silent owners; toast key
+  `saved schemas unanswered`).
+- **gui_agent: a Save cut by the drop is followed by a new `saved-schema`
+  read.** It may have landed, and what is saved is what Apply offers and which
+  topics are drafts; the round was asked again on the next open only when a
+  `saved-schema` round was the one cut.
+- **gobj-ui 7.25.17.** In the treedb graph (both yunos), a refused
+  `__graphs__` write reaches the engine through the real transports (it was
+  read from a `record` the answer does not carry: an ERROR was logged and Save
+  was not lit again). In the schema editor (gui_agent), the busy body of a
+  write is `inert` (the keyboard sent row actions `ST_SAVING` does not
+  declare), a write marks the topic of its record rather than the one on
+  screen (an import from the topics screen marked nothing), and the reason a
+  load failed changes language.
+- **gobj-js 7.25.3**: `kw_get_bool()` logs a value that is not a boolean, as
+  C. The only `kw_get_bool()` of these yunos reads `options.create`, a
+  boolean.
+- New locale keys, en and es, gui_agent: `save unanswered`,
+  `saved schemas unanswered`. validate-locales: OK in both yunos.
+- **gui_agent README**: the deadlines of the Save and the `saved-schema`
+  round, with the table of what each timeout does.
+
 ## gui_agent 0.22.90, gui_treedb 0.17.63 + gobj-ui ^7.25.16, gobj-js ^7.25.2 (2026-09-24)
 
 - **gui_agent: Apply waits for a Save in flight.** The Apply button stayed lit
