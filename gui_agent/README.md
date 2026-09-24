@@ -337,8 +337,33 @@ waits for the killed yuno's channel to close, and for the launched one to
 connect back — so the sequence is chained on those answers, with no polling;
 each step (apply, kill, run, play) has its own 30 s `C_TIMER` deadline, and a
 timeout of `apply` names the owners that did not answer. It ends by
-re-discovering, which re-mounts the view against the schema the yuno has just read. A write in this
-tab marks the button until the next apply.
+re-discovering, which re-mounts the view against the schema the yuno has just
+read.
+
+**An edit is a draft; Save publishes it, Apply installs it.** A write of the
+schema (the editor, or a table or graph of `treedb_system_schema`) is a draft
+in `__system__`: it lights **unsaved changes** and paints **Save** in the
+warning colour, and both go out with the next Save that every owner answers,
+or with an Apply. A write in a DATA treedb is not a draft and lights nothing:
+the yuno already uses it (0.22.94). **Apply** is lit by what the node says it
+has SAVED (`saved-schema`, `can_apply`), not by the writes of this tab.
+
+**Save, Differences and Apply work in `ST_READY` only** (0.22.94). The tree of
+a re-discovery -- after every Save, every Apply and every drop -- stays on
+screen while the node is read again, and the three buttons are OFF there (the
+Apply tooltip says `loading`, `applying` or `not connected to an agent`).
+Before, they stayed live and a click answered *"Event NOT DEFINED in state"*.
+The discovery has its own 30 s `C_TIMER` (`discover_deadline`), for `services`
+and then the `treedb-info` of each treedb: when the node's agent is silent,
+the tab goes to `ST_EMPTY` with the notice `discovery unanswered`, and the
+tree of before is taken down -- as it is when a re-discovery answers an error
+(the node's words are the notice) or no treedb.
+
+```js
+gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+// every owner answers: ST_DISCOVERING, the old tree on screen, the 3 buttons off
+// ... 30 s with no `services` answer: ST_EMPTY, notice "discovery unanswered"
+```
 
 **An `apply` timeout decides with the answers that came** (0.22.87). The rule
 is the same as when every owner answers: one treedb applied means restart,
@@ -387,7 +412,11 @@ named in a toast:
 
 A **Save cut by the drop** may have landed: the saved schemas (what Apply
 offers, which topics are drafts) are read again when the session is back, as
-for a `saved-schema` round the drop cut (0.22.91).
+for a `saved-schema` round the drop cut (0.22.91). When every owner answers
+that re-read and it shows no draft, the Save landed, and **unsaved changes**
+goes out (0.22.94). An answer of a round that is over -- its deadline passed,
+or a drop settled it -- is not counted, and is logged as a warning with the
+owner, the round and what it said (0.22.94).
 
 ```js
 gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);   // save_deadline armed: 30 s
@@ -430,10 +459,11 @@ Two decisions worth keeping:
   → cols. It is only the FIRST value — `layout` is `SDF_PERSIST` and loaded
   after the mount kw, so the operator's own choice wins from the second visit.
 
-A write made in the graph marks *Apply* exactly like one made in the table
-(gobj-ui 5.16.0 publishes `EV_RECORD_WRITTEN` from both) — except a save of the
-graph LAYOUT, which lands in the treedb's `__graphs__` topic and is the view's
-own bookkeeping, not a schema change.
+A write made in the graph of `treedb_system_schema` is a draft exactly like one
+made in the table: it lights *unsaved changes* and the Save (gobj-ui publishes
+`EV_RECORD_WRITTEN` from both; since 7.25.19 the table publishes a delete too)
+— except a save of the graph LAYOUT, which lands in the treedb's `__graphs__`
+topic and is the view's own bookkeeping, not a schema change.
 
 **Only the MASTER can edit; a replica opens read-only.** A treedb whose tranger
 this yuno does not master is a replica: the yuno refuses every write on it

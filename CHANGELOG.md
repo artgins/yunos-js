@@ -6,6 +6,58 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.94, gui_treedb 0.17.67 + gobj-js ^7.25.5, gobj-ui ^7.25.19 (2026-09-24)
+
+- **gui_agent: Save, Differences and Apply are off outside `ST_READY`.**
+  Their events are ST_READY's, and the toolbar was shown whenever a tree
+  existed: during every re-discovery (after a Save, an Apply, a drop) the tree
+  of before stays on screen, and each click answered *"Event NOT DEFINED in
+  state"* -- Apply even lit from the old saved schemas. The three buttons are
+  disabled there now; Apply's tooltip says `loading`, `applying` or
+  `not connected to an agent`. (Inherited; much more visible since 0.22.91,
+  whose save deadline ends in a re-discovery.)
+- **gui_agent: a discovery has a deadline.** `services`, and then the
+  `treedb-info` of each treedb, are under one 30 s `C_TIMER`
+  (`discover_deadline`). A node's agent that stays silent used to keep the tab
+  in ST_DISCOVERING for good; now the tab goes to ST_EMPTY with the notice
+  `discovery unanswered` (new key), and an answer after the deadline is
+  logged and builds nothing.
+- **gui_agent: a re-discovery that finds nothing takes the old tree down.**
+  An error answer (the node's words become the notice) or no treedb went to
+  ST_EMPTY with the old views and toolbar still up and the notice hidden.
+  (Inherited.)
+- **gui_agent: a late answer of a `save-schema` or `saved-schema` round is
+  said.** After its deadline (or a drop) it returned before the only check
+  that logs, so a node's `-1 "cannot write ..."` was lost with no trace; it is
+  a warning now with the owner, the round, the result and the comment, as
+  late apply answers are. (New in 0.22.91.)
+- **gui_agent: "unsaved changes" goes out when a Save cut by a drop did
+  land** -- when the `saved-schema` re-read on the reconnect is answered by
+  every owner and shows no draft. (New in 0.22.91.) And a write in a DATA
+  treedb no longer lights it: only `treedb_system_schema` holds drafts
+  (`EV_RECORD_WRITTEN` carries `treedb_name`, which the tab ignored).
+- **gui_agent: the local echo of a delete carries the node the treedb
+  answered** (C's delete-node answers the node deleted), not the record the
+  view sent; a comment said a delete answers nothing.
+- **gui_agent README:** the draft model (an edit is a draft, Save publishes,
+  Apply installs; what lights what) replaces "a write marks the button until
+  the next apply", and the graph paragraph says the same.
+- **gobj-ui 7.25.19** (both yunos): the treedb table publishes a delete to its
+  host and says `created` for its +New (gui_agent's Schemas tab hears a delete
+  made in the table now); the schema editor shows a treedb or topic NAME as it
+  is in its notices (a topic `nodes` was *"Nodos"* in Spanish); an echo of a
+  `__graphs__` record pays a refused write owed on its topic; `C_YUI_NODE` and
+  the topic form declare the events of the children they host.
+- **gobj-js 7.25.5** (both yunos): `kw_get_str()` logs a value that is not a
+  string with or without `KW_REQUIRED`, as C; every read of it in both yunos
+  reads a string (audited).
+- **Locales (both):** `raw json viewer unavailable` (a toast key of the treedb
+  views, passed as a variable, so validate-locales never saw it missing) and
+  `this part cannot be loaded here` (gobj-ui 7.25.19); gui_agent also
+  `discovery unanswered`. validate-locales: OK in both.
+- **Tests:** gui_agent +15 (`c_agent_treedb.wiring.test.js` +14,
+  `c_agent_treedb_link.wiring.test.js` +1), red on 12 against 0.22.93.
+
 ## gui_agent 0.22.93, gui_treedb 0.17.66 + gobj-js ^7.25.4 (2026-09-24)
 
 - **gobj-js 7.25.4.** `kw_get_int()` and `kw_get_real()` answer like the C

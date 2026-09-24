@@ -771,3 +771,240 @@ describe("a Save answered only 'nothing to save' while drafts are marked", () =>
         expect(shown).toEqual([]);
     });
 });
+
+function warnings()
+{
+    return logged.filter((l) => l.level === "warning").map((l) => l.msg);
+}
+
+function not_defined()
+{
+    return logged.filter((l) => /NOT DEFINED/i.test(l.msg)).map((l) => l.msg);
+}
+
+/*  A Save answered by every owner: the tab re-discovers, and the tree
+ *  of before stays on screen while it does.  */
+function save_and_answer(tab)
+{
+    gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+    for(const req of take(is("save-schema"))) {
+        answer(tab, req, 0, []);
+    }
+}
+
+/*  Save, Differences and Apply are declared in ST_READY only, and the
+ *  toolbar was shown whenever a tree existed: during every re-discovery
+ *  (after a Save, after a drop), each click answered "Event NOT DEFINED
+ *  in state". And the discovery had no deadline: a node's agent that
+ *  went silent left the tab in ST_DISCOVERING for good.  */
+describe("the toolbar outside ST_READY, and the deadline of a discovery", () => {
+
+    const APPLICABLE = {owner_a: [{treedb_name: "treedb_x", result: 0,
+        data: {can_apply: true, saved_schema_version: 2, in_use_schema_version: 1, draft_changed: {}}}]};
+
+    test("during the re-discovery after a Save, the three buttons are off", () => {
+        const tab = build("t1", APPLICABLE);
+        expect(tab.priv.$apply.disabled).toBe(false);
+        save_and_answer(tab);
+        expect(gobj_current_state(tab)).toBe("ST_DISCOVERING");
+        expect(tab.priv.tree).toBeTruthy();
+        expect(tab.priv.$save.disabled).toBe(true);
+        expect(tab.priv.$diff.disabled).toBe(true);
+        expect(tab.priv.$apply.disabled).toBe(true);
+        expect(tab.priv.$apply.getAttribute("data-i18n-title")).toBe("loading");
+
+        discover(tab, APPLICABLE);
+        expect(tab.priv.$save.disabled).toBe(false);
+        expect(tab.priv.$diff.disabled).toBe(false);
+        expect(tab.priv.$apply.disabled).toBe(false);
+        expect(not_defined()).toEqual([]);
+    });
+
+    test("a discovery the node never answers ends in ST_EMPTY, and says so", () => {
+        const tab = build("t2", APPLICABLE);
+        save_and_answer(tab);
+        expect(take(is("services")).length).toBe(1);
+
+        vi.advanceTimersByTime(29 * 1000);
+        expect(gobj_current_state(tab)).toBe("ST_DISCOVERING");
+        vi.advanceTimersByTime(2 * 1000);
+        expect(gobj_current_state(tab)).toBe("ST_EMPTY");
+        expect(tab.priv.tree).toBe(null);
+        expect(tab.priv.$notice.classList.contains("is-hidden")).toBe(false);
+        expect(tab.priv.$notice.getAttribute("i18n")).toBe("discovery unanswered");
+        expect(tab.priv.$toolbar.classList.contains("is-hidden")).toBe(true);
+        expect(errors().length).toBe(1);
+        expect(errors()[0]).toContain("did not answer the discovery");
+    });
+
+    test("the probes of a discovery are under the same deadline", () => {
+        const tab = build("t3", APPLICABLE);
+        save_and_answer(tab);
+        const [services] = take(is("services"));
+        answer(tab, services, 0, SERVICES);
+        expect(take(is("treedb-info")).length).toBe(1);
+        vi.advanceTimersByTime(31 * 1000);
+        expect(gobj_current_state(tab)).toBe("ST_EMPTY");
+        expect(errors()[0]).toContain("'treedb-info' of 1 treedb(s) owed");
+    });
+
+    test("a discovery answer after its deadline is said, and builds nothing", () => {
+        const tab = build("t4", APPLICABLE);
+        save_and_answer(tab);
+        const [services] = take(is("services"));
+        vi.advanceTimersByTime(31 * 1000);
+        logged.length = 0;
+        answer(tab, services, 0, SERVICES);
+        expect(gobj_current_state(tab)).toBe("ST_EMPTY");
+        expect(take(is("treedb-info"))).toEqual([]);
+        expect(warnings().some((w) => w.includes("'services' answered with no discovery"))).toBe(true);
+    });
+
+    test("a discovery answered in time leaves no deadline behind", () => {
+        const tab = build("t5", APPLICABLE);
+        vi.advanceTimersByTime(61 * 1000);
+        expect(gobj_current_state(tab)).toBe("ST_READY");
+        expect(errors()).toEqual([]);
+    });
+
+    test("a drop during a discovery disarms its deadline", () => {
+        const tab = build("t6", APPLICABLE);
+        save_and_answer(tab);
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        expect(gobj_current_state(tab)).toBe("ST_IDLE");
+        expect(tab.priv.$save.disabled).toBe(true);
+        vi.advanceTimersByTime(61 * 1000);
+        expect(errors()).toEqual([]);
+        expect(warnings().filter((w) => w.includes("discovery deadline"))).toEqual([]);
+    });
+});
+
+/*  A failed re-discovery went to ST_EMPTY with the tree of before still
+ *  up: its toolbar live (Apply lit from the old saved schemas, a click
+ *  NOT DEFINED in ST_EMPTY) and the notice that says why hidden under it.  */
+describe("a re-discovery that finds nothing takes the old tree down", () => {
+
+    test("an error answer: the tree goes, the notice says the node's words", () => {
+        const tab = build("e1", {});
+        save_and_answer(tab);
+        const [services] = take(is("services"));
+        answer(tab, services, -1, null, "yuno not found");
+        expect(gobj_current_state(tab)).toBe("ST_EMPTY");
+        expect(tab.priv.tree).toBe(null);
+        expect(tab.priv.saved).toBe(null);
+        expect(tab.priv.$notice.classList.contains("is-hidden")).toBe(false);
+        expect(tab.priv.$notice.textContent).toBe("yuno not found");
+        expect(tab.priv.$toolbar.classList.contains("is-hidden")).toBe(true);
+        expect(tab.priv.$apply.disabled).toBe(true);
+    });
+
+    test("no treedb any more: the tree goes too", () => {
+        const tab = build("e2", {});
+        save_and_answer(tab);
+        const [services] = take(is("services"));
+        answer(tab, services, 0, [{gclass: "C_TREEDB", service: "owner_a"}]);
+        expect(gobj_current_state(tab)).toBe("ST_EMPTY");
+        expect(tab.priv.tree).toBe(null);
+        expect(tab.priv.$notice.getAttribute("i18n")).toBe("no treedb in this yuno");
+    });
+});
+
+/*  A save-schema or saved-schema answer that came after its round ended
+ *  (deadline, drop) returned before the only check that logs: the node's
+ *  reason was lost with no trace.  */
+describe("a late answer of a schema round is said", () => {
+
+    test("save-schema answered after its deadline", () => {
+        const tab = build("l1", {});
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        const reqs = take(is("save-schema"));
+        vi.advanceTimersByTime(31 * 1000);
+        logged.length = 0;
+        const b = reqs.find((r) => r.kw.__md_iev__.console_owner === "owner_b");
+        answer(tab, b, -1, null, "cannot write the schema file");
+        const w = warnings().filter((m) => m.includes("'save-schema' of owner_b"));
+        expect(w.length).toBe(1);
+        expect(w[0]).toContain("result -1");
+        expect(w[0]).toContain("cannot write the schema file");
+        expect(w[0]).toContain(`round ${b.kw.__md_iev__.save_round}`);
+    });
+
+    test("saved-schema answered after its deadline", () => {
+        const tab = gobj_create("l2", "C_AGENT_TREEDB", {
+            node: NODE, yuno_id: YUNO, yuno_label: "role^yuno",
+            base_route: "/schemas/l2", link_svc: link
+        }, host);
+        gobj_start(tab);
+        const [services] = take(is("services"));
+        answer(tab, services, 0, SERVICES);
+        for(const probe of take(is("treedb-info"))) {
+            answer(tab, probe, 0, {master: true});
+        }
+        const reqs = take(is("saved-schema"));
+        vi.advanceTimersByTime(31 * 1000);
+        logged.length = 0;
+        answer(tab, reqs[0], 0, []);
+        expect(warnings().some((m) => m.includes("'saved-schema' of") &&
+            m.includes("answered after the round ended"))).toBe(true);
+    });
+});
+
+/*  "Unsaved changes" is the Save's: a write in a DATA treedb lit it, and
+ *  after a Save cut by a drop that DID land, nothing put it out.  */
+describe("unsaved changes", () => {
+
+    test("a write in a data treedb is not a draft", () => {
+        const tab = build("u1", {});
+        gobj_send_event(tab, "EV_RECORD_WRITTEN", {treedb_name: "treedb_data"}, tab);
+        expect(tab.priv.dirty).toBe(false);
+        expect(tab.priv.$pending.classList.contains("is-hidden")).toBe(true);
+
+        gobj_send_event(tab, "EV_RECORD_WRITTEN", {treedb_name: "treedb_system_schema"}, tab);
+        expect(tab.priv.dirty).toBe(true);
+        expect(tab.priv.$pending.classList.contains("is-hidden")).toBe(false);
+    });
+
+    test("a Save cut by the drop that landed: the re-read shows no draft, the mark goes", () => {
+        const tab = build("u2", {});
+        gobj_send_event(tab, "EV_RECORD_WRITTEN", {treedb_name: "treedb_system_schema"}, tab);
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        take(is("save-schema"));
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        expect(tab.priv.dirty).toBe(true);
+
+        gobj_send_event(tab, "EV_ON_OPEN", {}, link);
+        for(const req of take(is("saved-schema"))) {
+            answer(tab, req, 0, req.kw.__md_iev__.console_owner === "owner_a"?
+                [{treedb_name: "treedb_x", result: 0, data: {draft_changed: {}}}] : []);
+        }
+        expect(tab.priv.dirty).toBe(false);
+        expect(tab.priv.$pending.classList.contains("is-hidden")).toBe(true);
+    });
+
+    test("...and one that did NOT land keeps it", () => {
+        const tab = build("u3", {});
+        gobj_send_event(tab, "EV_RECORD_WRITTEN", {treedb_name: "treedb_system_schema"}, tab);
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        take(is("save-schema"));
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        gobj_send_event(tab, "EV_ON_OPEN", {}, link);
+        for(const req of take(is("saved-schema"))) {
+            answer(tab, req, 0, req.kw.__md_iev__.console_owner === "owner_a"?
+                [{treedb_name: "treedb_x", result: 0, data: {draft_changed: {users: true}}}] : []);
+        }
+        expect(tab.priv.dirty).toBe(true);
+    });
+
+    test("a re-read cut short by its deadline proves nothing: the mark stays", () => {
+        const tab = build("u4", {});
+        gobj_send_event(tab, "EV_RECORD_WRITTEN", {treedb_name: "treedb_system_schema"}, tab);
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        take(is("save-schema"));
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        gobj_send_event(tab, "EV_ON_OPEN", {}, link);
+        const reqs = take(is("saved-schema"));
+        answer(tab, reqs[0], 0, []);
+        vi.advanceTimersByTime(31 * 1000);
+        expect(tab.priv.dirty).toBe(true);
+    });
+});

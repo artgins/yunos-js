@@ -640,6 +640,12 @@ const en = {
         "text truncated":                   "Text truncated",
 
 
+        "raw json viewer unavailable": "The raw json viewer is not available in this application",
+
+
+        "this part cannot be loaded here": "This part came truncated and cannot be loaded here",
+
+
         "_xxx":                               "last key — insert new ones above"
     }
 };

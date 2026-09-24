@@ -67,10 +67,13 @@
  *      command says so in the same dialog, per service.
  *
  *      STATES, because each is a different screen and a different set of
- *      legal actions:
+ *      legal actions -- Save, Differences and Apply are ST_READY's, and
+ *      their buttons are OFF in every other state, where the tree of a
+ *      re-discovery (or of an apply) may still be on screen:
  *          ST_IDLE         no yuno picked, or no session yet
- *          ST_DISCOVERING  `services` in flight
- *          ST_EMPTY        the yuno exposes no treedb
+ *          ST_DISCOVERING  `services` in flight, then `treedb-info`
+ *                          (30 s deadline for the whole discovery)
+ *          ST_EMPTY        the yuno exposes no treedb, or discovery failed
  *          ST_READY        a treedb is mounted
  *          ST_APPLYING     apply: waiting for apply-schema
  *          ST_KILLING      apply: waiting for the yuno to die
@@ -170,6 +173,9 @@ const DIFF_KINDS = {
 const APPLY_TIMEOUT = 30 * 1000;
 /*  The deadline of a `save-schema` or `saved-schema` round.  */
 const SCHEMA_ROUND_TIMEOUT = 30 * 1000;
+/*  The deadline of a discovery: `services`, and then the `treedb-info`
+ *  of each treedb it found.  */
+const DISCOVER_TIMEOUT = 30 * 1000;
 
 
 /***************************************************************
@@ -196,6 +202,9 @@ let PRIVATE_DATA = {
 
     treedbs:     null,  /*  discovered C_NODE service names  */
     notice:      "",    /*  explicit text when a key does not say it all  */
+    notice_key:  "",    /*  an i18n key that says why there is no tree (discovery failed)  */
+    discover_timer: null, /*  C_TIMER child: the deadline of the discovery in flight  */
+    saved_after_cut: false, /*  the saved-schema round in flight re-reads what a drop cut  */
     tree:        null,  /*  C_YUI_NODE root: one child per treedb  */
     dirty:       false, /*  something was written since the last apply  */
     seg:         null,  /*  subpath of the url under this tab  */
@@ -279,6 +288,7 @@ function mt_create(gobj)
     priv.apply_timer = gobj_create_pure_child("apply_deadline", "C_TIMER", {}, gobj);
     priv.save_timer = gobj_create_pure_child("save_deadline", "C_TIMER", {}, gobj);
     priv.saved_timer = gobj_create_pure_child("saved_deadline", "C_TIMER", {}, gobj);
+    priv.discover_timer = gobj_create_pure_child("discover_deadline", "C_TIMER", {}, gobj);
     priv.save_owed = {};
     priv.saved_owed = {};
     priv.save_unanswered = [];
@@ -341,6 +351,7 @@ function mt_stop(gobj)
     clear_apply_timer(gobj);
     clear_timeout(priv.save_timer);
     clear_timeout(priv.saved_timer);
+    clear_timeout(priv.discover_timer);
     if(priv.tree && gobj_is_running(priv.tree)) {
         gobj_stop(priv.tree);
     }
@@ -548,9 +559,37 @@ function start_discovery(gobj)
     gobj.priv.drafts = null;
     if(request_treedbs(gobj) === 0) {
         gobj_change_state(gobj, "ST_DISCOVERING");
+        /*  Silence is the node's agent not answering: without a deadline
+         *  the tab stayed in ST_DISCOVERING for good, the tree of before
+         *  (if any) on screen.  */
+        set_timeout(gobj.priv.discover_timer, DISCOVER_TIMEOUT);
         return;
     }
+    clear_timeout(gobj.priv.discover_timer);
     gobj_change_state(gobj, "ST_IDLE");
+}
+
+/***************************************************************
+ *  Discovery answered that there is nothing to mount: the yuno has
+ *  no treedb, or the discovery failed (answered an error, or never
+ *  answered). A tree of before -- a re-discovery follows every Save
+ *  and every Apply -- is what the yuno had THEN: left up, it kept its
+ *  toolbar and hid the notice that says why.
+ ***************************************************************/
+function end_discovery_empty(gobj)
+{
+    let priv = gobj.priv;
+
+    clear_timeout(priv.discover_timer);
+    priv.treedbs = [];
+    priv.owners = [];
+    priv.master_left = 0;
+    priv.saved = null;
+    priv.drafts = null;
+    destroy_tree(gobj);
+    gobj_change_state(gobj, "ST_EMPTY");
+    render_state(gobj);
+    return 0;
 }
 
 /***************************************************************
@@ -1034,7 +1073,13 @@ function render_apply(gobj)
      *  It is restarted on the node (`yuneta_agent --stop` / `--start`).
      */
     let key = "apply schema";
-    if(is_agent_yuno(gobj_read_str_attr(gobj, "yuno_id"))) {
+    let ready = gobj_current_state(gobj) === "ST_READY";
+    if(!ready) {
+        /*  Save, Differences and Apply are ST_READY's events: the tree of
+         *  a re-discovery (or of an apply) stays on screen, and a click
+         *  there answered "Event NOT DEFINED in state".  */
+        key = busy_key(gobj);
+    } else if(is_agent_yuno(gobj_read_str_attr(gobj, "yuno_id"))) {
         key = "apply needs a node restart";
     } else if(priv.save_left > 0) {
         /*  A save in flight changes what Apply would install, and the
@@ -1061,7 +1106,8 @@ function render_apply(gobj)
     priv.$apply.classList.toggle("is-warning", !off);
     priv.$pending.classList.toggle("is-hidden", !priv.dirty);
     if(priv.$save) {
-        priv.$save.disabled = priv.save_left > 0 || !priv.owners || priv.owners.length === 0;
+        priv.$save.disabled = !ready || priv.save_left > 0 ||
+            !priv.owners || priv.owners.length === 0;
         priv.$save.classList.toggle("is-warning", priv.dirty);
     }
     if(priv.$imposed) {
@@ -1113,6 +1159,22 @@ function request_owner(gobj, owner, command, purpose, round_key, round)
 }
 
 /***************************************************************
+ *  An answer of a `save-schema` or `saved-schema` round that is
+ *  over: its deadline passed, or a drop settled it. It is not
+ *  counted, but what the node says is SAID -- the operator was told
+ *  "unanswered", and the node's reason (a -1 "cannot write ...") was
+ *  lost with no trace. Same words as late_apply_answer().
+ ***************************************************************/
+function late_round_answer(gobj, kw, command, owner, round_key)
+{
+    log_warning(`${gobj_short_name(gobj)}: '${command}'${owner ? " of " + owner : ""} ` +
+        `of round ${msg_iev_read_key(kw, round_key) || "?"} answered after the round ` +
+        `ended: ignored (result ${kw ? kw.result : "?"}` +
+        `${kw && kw.comment ? ", " + kw.comment : ""})`);
+    return 0;
+}
+
+/***************************************************************
  *  Is this answer of the round in flight? A round's answers are
  *  counted, and one of an EARLIER round -- a saved-schema asked
  *  before a Save, answering after the re-discovery that followed
@@ -1143,6 +1205,7 @@ function request_saved(gobj)
     priv.saved = {};
     priv.saved_left = 0;
     priv.saved_round = ++__round_seq__;
+    priv.saved_after_cut = priv.saved_interrupted;
     priv.saved_interrupted = false;
     priv.saved_owed = {};
     priv.drafts = null;
@@ -1178,7 +1241,32 @@ function end_saved_round(gobj)
 
     priv.drafts = priv.drafts_round || {};
     priv.drafts_round = null;
+    if(priv.saved_after_cut) {
+        /*  The round re-reads what a drop cut -- a Save, most often --
+         *  and every owner answered it. No draft left anywhere means the
+         *  Save landed: "unsaved changes" was lit by a write that is
+         *  saved now, and nothing else would put it out until another
+         *  Save or an Apply.  */
+        priv.saved_after_cut = false;
+        if(!has_drafts(priv.drafts)) {
+            priv.dirty = false;
+            render_apply(gobj);
+        }
+    }
     push_drafts(gobj);
+}
+
+/***************************************************************
+ *  Does a drafts set name any topic?
+ ***************************************************************/
+function has_drafts(drafts)
+{
+    for(let topics of Object.values(drafts || {})) {
+        if(Array.isArray(topics) && topics.length > 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /***************************************************************
@@ -1190,7 +1278,7 @@ function saved_answered(gobj, owner, kw)
     let priv = gobj.priv;
 
     if(priv.saved_left <= 0) {
-        return 0;
+        return late_round_answer(gobj, kw, "saved-schema", owner, "saved_round");
     }
     if(!is_this_round(gobj, kw, "saved_round", priv.saved_round)) {
         return 0;
@@ -1348,7 +1436,7 @@ function save_answered(gobj, owner, kw)
     let priv = gobj.priv;
 
     if(priv.save_left <= 0) {
-        return 0;
+        return late_round_answer(gobj, kw, "save-schema", owner, "save_round");
     }
     if(kw && !is_this_round(gobj, kw, "save_round", priv.save_round)) {
         return 0;
@@ -1526,13 +1614,34 @@ function render_diff_button(gobj)
     }
     let none = !priv.owners || priv.owners.length === 0;
     let busy = priv.diff_left > 0;
+    let ready = gobj_current_state(gobj) === "ST_READY";
     let key = none? "no schema owner in this yuno": (busy? "comparing": "schema differences");
+    if(!ready && !none && !busy) {
+        key = busy_key(gobj);
+    }
 
-    priv.$diff.disabled = none || busy;
+    priv.$diff.disabled = none || busy || !ready;
     priv.$diff.title = t(key);
     priv.$diff.setAttribute("aria-label", t(key));
     priv.$diff.setAttribute("data-i18n-title", key);
     priv.$diff.setAttribute("data-i18n-aria-label", key);
+}
+
+/***************************************************************
+ *  Why the toolbar is off outside ST_READY, as an i18n key.
+ ***************************************************************/
+function busy_key(gobj)
+{
+    let state = gobj_current_state(gobj);
+
+    if(state === "ST_APPLYING" || state === "ST_KILLING" ||
+            state === "ST_STARTING" || state === "ST_PLAYING") {
+        return "applying";
+    }
+    if(!agent_link_is_connected(link_service(gobj))) {
+        return "not connected to an agent";
+    }
+    return "loading";
 }
 
 /***************************************************************
@@ -1667,6 +1776,11 @@ function render_state(gobj)
         priv.$notice.textContent = priv.notice;
         return;
     }
+    if(priv.notice_key && gobj_current_state(gobj) === "ST_EMPTY") {
+        priv.$notice.setAttribute("i18n", priv.notice_key);
+        priv.$notice.textContent = t(priv.notice_key);
+        return;
+    }
     let state = gobj_current_state(gobj);
     let key;
     if(state === "ST_APPLYING" || state === "ST_KILLING" ||
@@ -1722,6 +1836,7 @@ function ac_on_open(gobj, event, kw, src)
 function ac_discover(gobj, event, kw, src)
 {
     gobj.priv.notice = "";
+    gobj.priv.notice_key = "";
     start_discovery(gobj);
     render_state(gobj);
     return 0;
@@ -1767,6 +1882,19 @@ function ac_schema_round_timeout(gobj, event, kw, src)
         return end_save(gobj);
     }
 
+    if(src === priv.discover_timer) {
+        if(gobj_current_state(gobj) !== "ST_DISCOVERING") {
+            log_warning(`${gobj_short_name(gobj)}: discovery deadline with no discovery in flight`);
+            return 0;
+        }
+        log_error(`${gobj_short_name(gobj)}: the node's agent did not answer the discovery ` +
+            `of yuno '${gobj_read_str_attr(gobj, "yuno_id")}' on '${gobj_read_str_attr(gobj, "node")}'` +
+            `${priv.master_left > 0 ? " ('treedb-info' of " + priv.master_left + " treedb(s) owed)" : ""}`);
+        priv.notice = "";
+        priv.notice_key = "discovery unanswered";
+        return end_discovery_empty(gobj);
+    }
+
     if(src === priv.saved_timer) {
         if(priv.saved_left <= 0) {
             log_warning(`${gobj_short_name(gobj)}: saved-schema deadline with no round in flight`);
@@ -1778,6 +1906,7 @@ function ac_schema_round_timeout(gobj, event, kw, src)
         priv.saved_left = 0;
         priv.saved_round = ++__round_seq__;
         priv.saved_owed = {};
+        priv.saved_after_cut = false;       /*  a partial round proves nothing  */
         yui_shell_show_error(
             yui_shell_of(gobj),
             [
@@ -1832,6 +1961,9 @@ function ac_on_close(gobj, event, kw, src)
         priv.drafts_round = null;
         priv.saved_interrupted = true;
     }
+    /*  A discovery in flight is never answered now: the FSM leaves
+     *  ST_DISCOVERING for ST_IDLE, and the open discovers again.  */
+    clear_timeout(priv.discover_timer);
     if(priv.diff_left > 0) {
         log_warning(`${gobj_short_name(gobj)}: the session closed with a comparison in flight`);
         priv.diff_left = 0;
@@ -1921,23 +2053,30 @@ function ac_mt_command_answer(gobj, event, kw, src)
     if(outer === "command-agent" && !failed) {
         return 0;   /*  dispatch ok: the real answer is still coming  */
     }
-    if(failed) {
-        priv.treedbs = [];
-        priv.owners = [];
-        priv.notice = kw.comment || "";
-        gobj_change_state(gobj, "ST_EMPTY");
-        render_state(gobj);
+    if(gobj_current_state(gobj) !== "ST_DISCOVERING") {
+        /*  Its deadline passed (the tab said "the node did not answer"),
+         *  or a drop ended it: a discovery is only asked from here on,
+         *  by the open or a new tab.  */
+        log_warning(`${gobj_short_name(gobj)}: 'services' answered with no discovery ` +
+            `in flight: ignored (result ${kw.result}${kw.comment ? ", " + kw.comment : ""})`);
         return 0;
+    }
+    if(failed) {
+        priv.notice = kw.comment || "";
+        priv.notice_key = priv.notice ? "" : "discovery unanswered";
+        return end_discovery_empty(gobj);
     }
 
     priv.notice = "";
+    priv.notice_key = "";
     priv.treedbs = treedbs_of(kw.data);
     priv.owners = schema_owners_of(kw.data);
     if(priv.treedbs.length === 0) {
-        gobj_change_state(gobj, "ST_EMPTY");
-        render_state(gobj);
-        return 0;
+        return end_discovery_empty(gobj);
     }
+    /*  The deadline covers the probes too, counted from here: they are
+     *  as much of the discovery as `services` was.  */
+    set_timeout(priv.discover_timer, DISCOVER_TIMEOUT);
 
     /*  Discovery is not done: WHICH of them can be written is part of what
      *  the tree declares, and it has to be known BEFORE the nodes are built
@@ -1969,6 +2108,8 @@ function master_answered(gobj, treedb_name, master)
     if(priv.master_left <= 0) {
         /*  Nothing owed: a late or duplicated answer must not walk into the
          *  build below. Discovery is finished (or was never asked for).  */
+        log_warning(`${gobj_short_name(gobj)}: 'treedb-info' of '${treedb_name}' answered ` +
+            `with no discovery in flight: ignored`);
         return 0;
     }
     if(treedb_name && typeof master === "boolean") {
@@ -1979,14 +2120,14 @@ function master_answered(gobj, treedb_name, master)
         return 0;   /*  still waiting for the others  */
     }
 
+    clear_timeout(priv.discover_timer);
+
     /*  A re-discovery answers a yuno that has just restarted, so the
      *  tree is built from what it says NOW: an old one would keep a
      *  node for a treedb the yuno no longer opens.  */
     destroy_tree(gobj);
     if(build_tree(gobj) < 0) {
-        gobj_change_state(gobj, "ST_EMPTY");
-        render_state(gobj);
-        return 0;   /*  Error already logged (or simply nothing to build)  */
+        return end_discovery_empty(gobj);   /*  Error already logged (or simply nothing to build)  */
     }
     stamp_default_treedb(gobj);
     activate_tree(gobj);
@@ -2037,12 +2178,23 @@ function ac_nav_mode_changed(gobj, event, kw, src)
 
 /***************************************************************
  *  A treedb view of this tab WROTE a record (it sends this up: see
- *  its header). The treedb has it; the yuno that opened the treedb
- *  has not re-read it, so from here on this tab carries a change
- *  nobody has applied. Say so on the button.
+ *  its header). A write in `treedb_system_schema` is a schema DRAFT:
+ *  from here on this tab carries a change nobody has saved, and the
+ *  Save says so ("unsaved changes"). A write in any other treedb is
+ *  DATA: the treedb has it and the yuno is using it, there is nothing
+ *  to save or apply -- and it lit "unsaved changes" all the same.
  ***************************************************************/
 function ac_record_written(gobj, event, kw, src)
 {
+    let treedb_name = (kw && kw.treedb_name) || "";
+
+    if(empty_string(treedb_name)) {
+        log_error(`${gobj_short_name(gobj)}: ${event} names no treedb`);
+        return -1;
+    }
+    if(treedb_name !== SYSTEM_TREEDB) {
+        return 0;       /*  data, not a draft  */
+    }
     gobj.priv.dirty = true;
     render_apply(gobj);
     return 0;

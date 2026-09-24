@@ -553,8 +553,10 @@ function deliver(gobj, pend, kw)
 /***************************************************************
  *  Local echo of the treedb node event that the routed path cannot
  *  carry (see the header). Only for OUR OWN successful writes, and
- *  only what the answer proves: create/update give back the stored
- *  node, delete gives back nothing, so the record we sent is used.
+ *  only what the answer proves: create, update and delete all give
+ *  back the stored node (a delete, the node deleted). An answer that
+ *  carries none -- a node older than that -- echoes the record we
+ *  sent.
  ***************************************************************/
 function echo_node_event(gobj, pend, kw)
 {
@@ -605,7 +607,7 @@ function echo_node_event(gobj, pend, kw)
             break;
         case "delete-node":
             event = "EV_TREEDB_NODE_DELETED";
-            node = pend.record;
+            node = is_object(kw.data) ? kw.data : pend.record;
             break;
         default:
             return;     /*  not a write: nothing to echo  */

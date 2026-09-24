@@ -790,6 +790,9 @@ const en = {
 
 
         /* keep this last so adding new keys above never hits the comma trap */
+        "discovery unanswered": "The node's agent did not answer: which treedbs this yuno has is not known. It is asked again when the connection comes back, or when the tab is opened again",
+        "raw json viewer unavailable": "The raw json viewer is not available in this application",
+        "this part cannot be loaded here": "This part came truncated and cannot be loaded here",
         "_xxx":              "last key — insert new ones above"
     }
 };

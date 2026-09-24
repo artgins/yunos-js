@@ -645,6 +645,12 @@ const es = {
         "text truncated":                   "Texto truncado",
 
 
+        "raw json viewer unavailable": "El visor de json crudo no está disponible en esta aplicación",
+
+
+        "this part cannot be loaded here": "Esta parte llegó truncada y no se puede cargar aquí",
+
+
         "_xxx":                               "last key — insert new ones above"
     }
 };

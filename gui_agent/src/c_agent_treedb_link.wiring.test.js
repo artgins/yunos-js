@@ -386,6 +386,18 @@ describe("a request remembered for its late answer", () => {
         expect(echoes[0].kw.topic_name).toBe("devices");
     });
 
+    /*  C's delete-node answers the node it deleted. The echo took the
+     *  record the view SENT (an id, often) over it, on the belief that a
+     *  delete answers nothing.  */
+    test("a delete answered with the node echoes the node deleted", () => {
+        const a = adapter("r3", {subscriber: table});
+        gobj_command(a, "delete-node", {topic_name: "users", record: {id: "x"}}, table);
+        reply(a, sent[0], "command-yuno", 0, {id: "x", name: "stored", __md_treedb__: {g_rowid: 3}});
+        expect(echoes.length).toBe(1);
+        expect(echoes[0].event).toBe("EV_TREEDB_NODE_DELETED");
+        expect(echoes[0].kw.node).toEqual({id: "x", name: "stored", __md_treedb__: {g_rowid: 3}});
+    });
+
     test("a late delete still echoes the record it named", () => {
         const a = adapter("r2", {subscriber: table});
         gobj_command(a, "delete-node", {topic_name: "users", record: {id: "x", name: "n"}}, table);

@@ -798,6 +798,9 @@ const es = {
 
 
         /* mantener al final — insertar nuevas claves antes */
+        "discovery unanswered": "El agente del nodo no ha contestado: no se sabe qué treedbs tiene este yuno. Se vuelve a preguntar al volver la conexión, o al abrir de nuevo la pestaña",
+        "raw json viewer unavailable": "El visor de json crudo no está disponible en esta aplicación",
+        "this part cannot be loaded here": "Esta parte llegó truncada y no se puede cargar aquí",
         "_xxx":              "última clave — insertar nuevas antes"
     }
 };
