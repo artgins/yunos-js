@@ -6,6 +6,21 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.93, gui_treedb 0.17.66 + gobj-js ^7.25.4 (2026-09-24)
+
+- **gobj-js 7.25.4.** `kw_get_int()` and `kw_get_real()` answer like the C
+  readers: `KW_EXTRACT` takes out only a number (it deleted any value before
+  looking at its type, so a value of another type was lost), a value that is
+  not a number is logged with or without `KW_REQUIRED`, `KW_WILD_NUMBER` reads
+  a boolean, a string or `null`, and `kw_get_int()` truncates with
+  `Math.trunc()` instead of `parseInt()` (which read `1e-7` as 1).
+  `kw_get_str()` with `KW_EXTRACT` takes out only a string.
+- Audited with it: neither yuno calls `kw_get_int()`/`kw_get_real()`, and no
+  code of them passes `KW_EXTRACT` or `KW_WILD_NUMBER` to a typed reader. The
+  library code they mount (gobj-ui) reads only numbers it wrote itself. No
+  code change in the yunos.
+- validate-locales: OK in both yunos; no new key.
+
 ## gui_agent 0.22.92, gui_treedb 0.17.65 + gobj-ui ^7.25.18 (2026-09-24)
 
 - **gobj-ui 7.25.18.** The treedb topics and graph views (both yunos) publish
