@@ -310,6 +310,7 @@ const en = {
         "loading the schemas": "Loading the schemas",
         "the schemas are loading: wait for them": "The schemas are loading: wait for them",
         "the schemas were read again: open the dialog again": "The schemas were read again while this dialog was open: open it again",
+        "the view moved: open the dialog again": "The view moved while this dialog was open: open it again",
         "cannot read the schemas again: the ones shown may be out of date, your next change reads them first": "The schemas could not be read again: the ones shown may be out of date. Your next change reads them first",
         "the schemas shown may be out of date: they are read again, try again when they are in": "The schemas shown may be out of date: they are being read again. Try again when they are in",
         "the import plan is gone: preview it again": "The import plan is gone: preview it again",

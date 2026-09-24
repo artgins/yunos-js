@@ -314,6 +314,7 @@ const es = {
         "loading the schemas": "Cargando los esquemas…",
         "the schemas are loading: wait for them": "Los esquemas se están cargando: espera a que estén",
         "the schemas were read again: open the dialog again": "Los esquemas se han vuelto a leer con este diálogo abierto: ábrelo otra vez",
+        "the view moved: open the dialog again": "La vista ha cambiado con este diálogo abierto: ábrelo otra vez",
         "cannot read the schemas again: the ones shown may be out of date, your next change reads them first": "No se han podido volver a leer los esquemas: los que se muestran pueden estar desfasados. Tu próximo cambio los lee primero",
         "the schemas shown may be out of date: they are read again, try again when they are in": "Los esquemas que se muestran pueden estar desfasados: se están volviendo a leer. Inténtalo otra vez cuando estén",
         "the import plan is gone: preview it again": "El plan de importación ya no está: vuelve a previsualizarlo",

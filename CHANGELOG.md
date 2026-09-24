@@ -6,6 +6,19 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.89, gui_treedb 0.17.62 + gobj-ui ^7.25.15, gobj-js ^7.25.1 (2026-09-24)
+
+- gobj-ui 7.25.15. In the Schemas tab (gui_agent), a move of the url while a
+  dialog of the schema editor is open closes that dialog and says so, and a
+  confirmation answered after such a move does nothing. In the treedb graph
+  (both yunos), a Save of the arrangement that the backend refuses is written
+  again at the next Save.
+- gobj-js 7.25.1: `kw_get_str()` returns its default as given, not as a
+  string. No code of these yunos depended on the old behaviour.
+- New gui_agent locale key, en and es: `the view moved: open the dialog
+  again`. validate-locales: OK in both yunos.
+- Comments and test titles no longer cite review rounds.
+
 ## gui_treedb 0.17.61 + gobj-ui ^7.25.14 (2026-09-23)
 
 gui_treedb moves to gobj-ui ^7.25.14. After a drop, `C_YUI_TREEDB_TOPICS` reads

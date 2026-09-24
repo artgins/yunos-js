@@ -916,8 +916,8 @@ function notify_view_transport(gobj, connected)
  *  edge from the same link AFTER this gclass (it subscribed later).
  *  Told at once, a view heard "connected" while its transport still
  *  said ST_DISCONNECTED, and the schema editor's reload on the
- *  reconnect was refused ("cannot route 'nodes' -- not in session",
- *  seen live with gobj-ui 7.25.6); and it heard "disconnected"
+ *  reconnect was refused ("cannot route 'nodes' -- not in
+ *  session"); and it heard "disconnected"
  *  before the adapter had settled the requests the drop cut. A
  *  deferral is not a time, so it is a posted event, and the state
  *  forwarded is the link's when it is delivered.

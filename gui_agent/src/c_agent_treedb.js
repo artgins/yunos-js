@@ -524,7 +524,7 @@ function start_discovery(gobj)
      *  Save, an Apply or a reconnect, and ends in a saved-schema round
      *  that says what they are now. Until it does, nobody is told the
      *  old ones -- that is how an editor rebuilt after a Save was handed
-     *  the drafts from BEFORE it (M1 of the 2026-09-23 review).  */
+     *  the drafts from BEFORE it.  */
     gobj.priv.drafts = null;
     if(request_treedbs(gobj) === 0) {
         gobj_change_state(gobj, "ST_DISCOVERING");
@@ -1092,7 +1092,7 @@ function request_owner(gobj, owner, command, purpose, round_key, round)
  *  before a Save, answering after the re-discovery that followed
  *  it -- was counted in the next: its drafts were handed out as
  *  the new ones and the new round's own answers found nothing
- *  owed (L-1 of the independent review of 7.25.4).
+ *  owed.
  ***************************************************************/
 function is_this_round(gobj, kw, round_key, round)
 {
@@ -1175,15 +1175,13 @@ function saved_answered(gobj, owner, kw)
 }
 
 /***************************************************************
- *  What one owner's `save-schema` rows say, treedb by treedb (M-3
- *  of the independent review of 7.25.4).
+ *  What one owner's `save-schema` rows say, treedb by treedb.
  *
  *  A row with no `schema_version` is "nothing to save, the draft is
  *  the schema in use". When that treedb was MARKED as holding drafts
  *  the operator pressed Save for something, and was told nothing:
  *  the marks came back after the re-discovery and nothing said why.
- *  It is the shape of a draft reverted after a save (M-A of the same
- *  review, in C): `saved-schema` diffs the draft against the SAVED
+ *  It is the shape of a draft reverted after a save: `saved-schema` diffs the draft against the SAVED
  *  schema and names the topics, `save-schema` diffs it against the
  *  one IN USE and finds none.
  *
@@ -1277,7 +1275,7 @@ function rows_without_reverted(gobj, rows)
  *  draft (EV_DRAFTS, from saved-schema's `draft_changed`): the mark
  *  of a write lived in the editor's session memory only, and a
  *  reload of the page showed no draft while __system__ still
- *  differed (N13 of the 2026-09-22 review).
+ *  differed.
  *  Sent when a saved-schema round completes, and when an editor asks
  *  for it on its creation (EV_DRAFTS_WANTED, from the treedb view)
  *  -- then only if a round is complete: while one is in flight
@@ -1524,8 +1522,7 @@ function send_apply_step(gobj, step, cmd_line, owner)
  *  Armed ONCE per step, after every request of it is sent: it was
  *  re-armed by each owner's `apply-schema`, so the 30 s counted from
  *  the last one. The C_TIMER child is how a time enters the machine
- *  (EV_TIMEOUT); it was a window.setTimeout (L-3 of the independent
- *  review of 7.25.4).
+ *  (EV_TIMEOUT); it was a window.setTimeout.
  ***************************************************************/
 function arm_apply_deadline(gobj, step)
 {
@@ -1747,8 +1744,8 @@ function ac_mt_command_answer(gobj, event, kw, src)
     }
     if(msg_iev_read_key(kw, "apply_step")) {
         /*  A late answer of an apply step whose sequence is over (an owner
-         *  failed, a timeout): read as a discovery answer it emptied the tab
-         *  (a low of the 2026-09-22 review).  */
+         *  failed, a timeout): read as a discovery answer it emptied the
+         *  tab.  */
         return 0;
     }
 
@@ -2245,8 +2242,7 @@ function ac_apply_answer(gobj, event, kw, src)
          *  another was put in place, and 0 when it had none to apply. A
          *  treedb applied is a file in use that already carries the saved
          *  schema, and the restart is what reads it -- so one applied
-         *  means restart, and none applied means no restart (N10 of the
-         *  2026-09-22 review, M2 of the 2026-09-23 one). See
+         *  means restart, and none applied means no restart. See
          *  owner_apply_outcome() for how a 7.25.3 node is read.
          */
         let owner = msg_iev_read_key(kw, "console_owner") || "";

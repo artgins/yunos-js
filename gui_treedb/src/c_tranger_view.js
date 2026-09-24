@@ -3009,7 +3009,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
     refresh_picker_actions(gobj);
     /*  A whole-topic Rows card is not remembered: it indexes rows of every
      *  key it names, and reopening it on every visit paid that for a card
-     *  nobody asked for this time (M22 of the 2026-09-21 review). Open it
+     *  nobody asked for this time. Open it
      *  by hand, or from a shared link.  */
     if(!restoring && !(key === ALL_KEYS && mode === "rows")) {
         persist_view(gobj, card);

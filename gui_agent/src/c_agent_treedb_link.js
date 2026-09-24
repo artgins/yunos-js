@@ -724,8 +724,7 @@ function ac_on_open(gobj, event, kw, src)
  *  The session dropped: every request in flight died with it, so
  *  each one is ANSWERED now, as failed -- wiped without an answer,
  *  a form stayed busy and a schema editor stuck in its load or its
- *  write until the page was reloaded (M-1 of the independent review
- *  of 7.25.4). Nothing is remembered for a late answer: none can
+ *  write until the page was reloaded. Nothing is remembered for a late answer: none can
  *  come through a session that is gone.
  *
  *  The state is already ST_DISCONNECTED here (the framework changes

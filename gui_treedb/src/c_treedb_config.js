@@ -173,8 +173,7 @@ function sanitize_services(list)
  *  the WHOLE found list, keeping the `selected` flag of every
  *  service that survived, and keeping what the scan learned -- its
  *  `master` answer. Rebuilding each service with service / gclass /
- *  selected alone dropped it, so a replica was never known as one
- *  (M35 of the 2026-09-21 treedb review).
+ *  selected alone dropped it, so a replica was never known as one.
  ***************************************************************/
 function treedb_config_merge_scanned(prev_services, found)
 {

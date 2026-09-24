@@ -3,15 +3,15 @@
  *
  *      The Schemas tab (C_AGENT_TREEDB) driven through its FSM on a
  *      document double, with a fake control-center link underneath. What
- *      the 2026-09-23 review found lived in the WIRING, where the helpers'
- *      own tests could not see it:
+ *      is tested here lived in the WIRING, where the helpers' own tests
+ *      could not see it:
  *
- *        M1  after a Save the rebuilt editor was handed the drafts from
- *            BEFORE the Save (EV_DRAFTS_WANTED answered from a merged,
- *            never reset set);
- *        M2  ac_apply_answer counted owners, so one owner applying A and
- *            refusing B skipped the restart, and an owner with nothing to
- *            apply next to a refusal restarted the yuno for nothing.
+ *        - after a Save the rebuilt editor was handed the drafts from
+ *          BEFORE the Save (EV_DRAFTS_WANTED answered from a merged,
+ *          never reset set);
+ *        - ac_apply_answer counted owners, so one owner applying A and
+ *          refusing B skipped the restart, and an owner with nothing to
+ *          apply next to a refusal restarted the yuno for nothing.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -222,7 +222,7 @@ function errors()
     return logged.filter((l) => l.level === "error").map((l) => l.msg);
 }
 
-describe("M1: the drafts after a Save", () => {
+describe("the drafts after a Save", () => {
 
     test("the editor rebuilt after a Save is never handed the drafts from before it", () => {
         const tab = build("m1", {
@@ -267,7 +267,7 @@ describe("M1: the drafts after a Save", () => {
     });
 });
 
-describe("M2: apply counts treedbs, not owners", () => {
+describe("apply counts treedbs, not owners", () => {
 
     function apply(tab)
     {
@@ -337,7 +337,7 @@ describe("M2: apply counts treedbs, not owners", () => {
     });
 });
 
-describe("L-1: a saved-schema round counts only its own answers", () => {
+describe("a saved-schema round counts only its own answers", () => {
 
     test("a late answer of an earlier round is not counted in the next one", () => {
         /*  Round A is sent and not answered.  */
@@ -436,7 +436,7 @@ describe("the session closes with the tab's own requests in flight", () => {
     });
 });
 
-describe("L-3: the apply deadline", () => {
+describe("the apply deadline", () => {
 
     test("it is a C_TIMER child of the tab, not a window.setTimeout", () => {
         const tab = build("t1", {});
@@ -547,12 +547,12 @@ describe("L-3: the apply deadline", () => {
     });
 });
 
-describe("M-3: a Save answered only 'nothing to save' while drafts are marked", () => {
+describe("a Save answered only 'nothing to save' while drafts are marked", () => {
 
     /*  treedb_x holds a SAVED schema (v5 over v4 in use), and the draft was
      *  then reverted to what is in use. saved-schema diffs the draft against
      *  the SAVED one, so it names `users`; save-schema diffs it against the
-     *  one IN USE, and finds nothing. (M-A of the review, in C.)  */
+     *  one IN USE, and finds nothing.  */
     const STALE = {treedb_name: "treedb_x", result: 0, data: {
         draft_changed: {users: true}, saved: true, master: true, impose_c_schema: false,
         in_use_schema_version: 4, saved_schema_version: 5, can_apply: true,

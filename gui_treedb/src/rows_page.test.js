@@ -3,7 +3,7 @@
  *
  *      "Newest first" of a Rows card sent `backward=1` in `open-iterator`
  *      only, and the direction belongs to `get-page`: page 1 was the
- *      OLDEST rows (M20 of the 2026-09-21 treedb review). Every page
+ *      OLDEST rows. Every page
  *      asks for the direction now -- which also works against a backend
  *      that ignores it at the open.
  *
@@ -34,7 +34,7 @@ describe("the kw of get-page", () => {
 /*
  *  A Rows card whose iterator the backend no longer holds -- the backend
  *  restarted, the topic was closed, the key was deleted -- rejected its page
- *  and stayed on the error (M19 of the 2026-09-21 treedb review). These are
+ *  and stayed on the error. These are
  *  the answers that mean "open it again".
  */
 describe("an answer that says the iterator is gone", () => {

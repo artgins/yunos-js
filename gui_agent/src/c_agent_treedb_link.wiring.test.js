@@ -5,7 +5,7 @@
  *      every request a view sends is ANSWERED -- by the node, or by the
  *      deadline when the node's agent never does; and a request it cannot
  *      route is refused in the RETURN, not with a null that reads as
- *      "sent" (a low of the 2026-09-23 review).
+ *      "sent".
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -203,7 +203,7 @@ function errors()
     return logged.filter((l) => l.level === "error").map((l) => l.msg);
 }
 
-describe("M-1: the session closes with requests in flight", () => {
+describe("the session closes with requests in flight", () => {
 
     test("every request in flight is answered as failed, at once", () => {
         const a = adapter("c1");
@@ -231,7 +231,7 @@ describe("M-1: the session closes with requests in flight", () => {
     });
 });
 
-describe("L-2: a failed dispatch ack", () => {
+describe("a failed dispatch ack", () => {
 
     test("it settles its request AND disarms the deadline it no longer needs", () => {
         const a = adapter("f1");
@@ -245,7 +245,7 @@ describe("L-2: a failed dispatch ack", () => {
     });
 });
 
-describe("M-2: the deadline", () => {
+describe("the deadline", () => {
 
     test("it counts from the controlcenter's dispatch ack, not from the queueing", () => {
         const a = adapter("d1");

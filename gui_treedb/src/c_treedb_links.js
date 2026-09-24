@@ -643,7 +643,7 @@ function ac_on_open(gobj, event, kw, src)
         let conn = config ? treedb_config_get_connection(config, conn_id) : null;
         /*  ...or of a connection stored before `master` was kept: a replica
          *  saved by an older release opened with its write buttons until a
-         *  Settings refresh (a low of the 2026-09-22 review). Only a C_NODE
+         *  Settings refresh. Only a C_NODE
          *  is asked `treedb-info`: a C_TRANGER never has a `master`, and
          *  counting it re-ran the whole discovery on every session.  */
         let services = conn? treedb_config_conn_services(conn) : [];

@@ -2,8 +2,7 @@
  *          treedb_info.test.js
  *
  *      "A replica opens without its write buttons" (0.17.36) did
- *      NOTHING, for two reasons, both pinned here (M35 of the
- *      2026-09-21 treedb review):
+ *      NOTHING, for two reasons, both pinned here:
  *
  *      - `treedb-info` went out with `{service}` alone. C_IEVENT_CLI
  *        EXTRACTS `__md_command__` from the kw and that is ALL it puts

@@ -11,7 +11,6 @@
  *          owner whose answer is -1 may already have applied some of its
  *          treedbs, and an owner that answers 0 may have applied none
  *          ("0 treedb(s)": nothing of it was applicable). Counting OWNERS
- *          (N10 of the 2026-09-22 review, then M2 of the 2026-09-23 one)
  *          got both wrong: one refusal next to a success skipped the
  *          restart and left the applied schema on disk for the next
  *          unrelated restart to pick up in silence; an owner with nothing
