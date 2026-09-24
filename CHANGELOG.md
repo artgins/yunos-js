@@ -6,6 +6,21 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.92, gui_treedb 0.17.65 + gobj-ui ^7.25.18 (2026-09-24)
+
+- **gobj-ui 7.25.18.** The treedb topics and graph views (both yunos) publish
+  `EV_RECORD_WRITTEN` with the fields they name: `treedb_name` and `record`
+  were read from the answer's command frame, which carries back only
+  `__md_command__`, so they arrived empty through `C_AGENT_TREEDB_LINK` and
+  `C_IEVENT_CLI` alike. No code of these yunos read them (gui_agent forwards
+  its own treedb name, gui_treedb ignores the event), so nothing changes for
+  the operator; the event now says what it claims.
+- Audited with it: every read of a command frame in gui_agent and gui_treedb
+  (`C_TRANGER_VIEW`'s `req_id`/`purpose`/`topic_name`/`key`/`path`,
+  `C_TREEDB_LINKS`'s `service`, the command name everywhere else) reads only
+  what its request put in `__md_command__`. No code change in the yunos.
+- validate-locales: OK in both yunos; no new key.
+
 ## gui_agent 0.22.91, gui_treedb 0.17.64 + gobj-ui ^7.25.17, gobj-js ^7.25.3 (2026-09-24)
 
 - **gui_agent: a Save and a `saved-schema` round have a deadline.** Each owner
