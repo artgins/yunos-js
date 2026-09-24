@@ -245,7 +245,10 @@ trip per yuno, which is why it runs on EXPAND and only in this workspace; a
 probe that fails or has not answered leaves the row untouched, because
 "could not ask" is not "has none". The tab's states say which
 screen you are on: `ST_IDLE` (no yuno, or no session), `ST_DISCOVERING`,
-`ST_EMPTY`, `ST_READY`.
+`ST_EMPTY`, `ST_READY`, and one state per command of the Apply in flight
+(see *Applying is restarting* below): `ST_APPLYING` (`apply-schema`),
+`ST_KILLING` (`kill-yuno`), `ST_STARTING` (`run-yuno play=0`) and
+`ST_PLAYING` (`play-yuno`).
 
 The piece that makes it work is `C_AGENT_TREEDB_LINK`, a **routing adapter**.
 The library view talks to a "remote yuno" with `gobj_command(...)` and expects
@@ -260,13 +263,17 @@ command-agent agent_id=<node>
 ```
 
 and hands the answer back in the shape the view already understands.
-`C_AGENT_TREEDB` is the tab: it creates the adapter, mounts the view with
-`yui_mount_service_view()` (transport = the adapter), and waits for the session
-before mounting, because the view fetches its schema in `mt_start` and a second
-fetch would build a second set of topic services. The schema editor and the
-record graph hang off the SAME adapter, mounted lazily on the first navigation
-to `edit` / `graph`: a second transport would mean a second answer stream to
-disambiguate.
+`C_AGENT_TREEDB` is the tab: it discovers the treedbs and builds the
+`C_YUI_NODE` tree, and it waits for the session before building it, because a
+view fetches its schema in `mt_start` and a second fetch would build a second
+set of topic services. It mounts no view itself. Each treedb is a child node
+whose viewer, `C_AGENT_TREEDB_VIEW`, creates that treedb's adapter and mounts
+the library view on it with `yui_mount_service_view()` (transport = the
+adapter). The schema editor and the record graph of that treedb hang off the
+SAME adapter, mounted lazily on the first navigation to `edit` / `graph`: a
+second transport would mean a second answer stream to disambiguate. What is
+yuno-wide stays in the tab: discovery, Save, Apply and the pending-changes
+mark; a viewer SENDS a write up to it (`EV_RECORD_WRITTEN`).
 
 Two things the adapter learned from the editor, and both are scars of their own:
 
@@ -301,6 +308,26 @@ restarts at the dispatch ack, and a write with `__files__` gets extra time for
 its size; a late answer is logged, and a late successful write has its node
 event echoed.
 
+A request the adapter settles itself is answered to the view in the shape of
+a refusal from the node, with an i18n KEY as the comment, so the view does
+what it does with any refused request (the form comes back with what was
+typed, a load shows its error):
+
+```js
+// the session closed with the request in flight
+{result: -1, comment: "the connection dropped",   schema: null, data: null}
+// no answer 60 s after the controlcenter's dispatch ack
+{result: -1, comment: "the node did not answer",  schema: null, data: null}
+```
+
+The deadline of a write that carries `__files__` is 60 s plus the time its
+base64 needs at 128 KiB/s (`request_timeout()` in `c_agent_treedb_link.js`):
+
+```js
+// record.__files__ = {photo: {content64: <1 MiB of base64>}, doc: {content64: <3 MiB>}}
+// deadline = 60 s + ceil(4 MiB / 128 KiB/s) = 60 s + 32 s = 92 s
+```
+
 **Applying is restarting.** An edited schema reaches the yuno when it re-reads
 it, so the tab's **Apply** button runs `apply-schema` on each owner, then
 `kill-yuno` → `run-yuno play=0` → `play-yuno` on the owning yuno, after a
@@ -325,7 +352,30 @@ read. The toast names each silent owner and says that its state is unknown:
 | a treedb applied | kill → run → play; the button stays marked | `apply unanswered, restarting` (plus `schema applied partially` if one was refused) |
 | nothing applied | no restart; back to discovery | `apply unanswered, nothing restarted` |
 
-A late `apply-schema` answer of a silent owner does not move the sequence.
+A late `apply-schema` answer of a silent owner does not move the sequence; it
+is logged as a warning, like any answer of a step that is over (0.22.90).
+
+**Apply waits for a Save in flight** (0.22.90). The button is off while a
+`save-schema` is unanswered (tooltip key `apply waits for the save`), and an
+Apply that arrives anyway is refused: confirmed before the save answered, the
+apply took every answer for its own sequence, dropped the save's, and Save
+stayed off for good. The Apply dialog lists the saved schemas it would install,
+so it closes when they are about to change -- a Save, a new `saved-schema`
+round -- and says `the saved schemas changed: open apply again`. Its Apply
+outside `ST_READY` is refused with `the tab is busy: open apply again when it
+is ready`, not with *"Event NOT DEFINED"*. An answer of this tab's other
+requests that lands during the apply is logged, not dropped in silence.
+
+```js
+gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);     // Apply off: "apply waits for the save"
+gobj_send_event(tab, "EV_APPLY_CHANGES", {}, tab);   // refused, logged; no dialog
+// ... the save answers, discovery runs, the saved-schema round lands: Apply on
+```
+
+The round numbers of `save-schema` and `saved-schema` are counted for the
+page, not per tab (0.22.90), as the adapter's request ids are: a tab opened
+again on the same yuno started at round 1 again and took an answer of the
+closed tab's round 1 as its own.
 
 `play=0` is deliberate: with the implicit play, `run-yuno` answers twice and a
 step that answers twice advances the sequence twice.

@@ -211,10 +211,10 @@ let PRIVATE_DATA = {
     drafts:      null,  /*  {treedb_name: [topic names]} not saved: the last COMPLETE saved-schema round; null while one is in flight  */
     drafts_round: null, /*  the round in flight, filled answer by answer  */
     saved_left:  0,     /*  `saved-schema` answers still owed  */
-    saved_round: 0,     /*  the saved-schema round in flight, echoed as `saved_round`  */
+    saved_round: 0,     /*  the saved-schema round in flight, echoed as `saved_round` (from __round_seq__)  */
     saved_interrupted: false, /*  a close cut a saved-schema round: ask again on the open  */
     save_left:   0,     /*  `save-schema` answers still owed  */
-    save_round:  0,     /*  the save in flight, echoed as `save_round`  */
+    save_round:  0,     /*  the save in flight, echoed as `save_round` (from __round_seq__)  */
     save_nothing: null, /*  treedbs the save found nothing to save in while they were marked  */
     save_withdrawn: null, /*  treedbs whose saved schema the save WITHDREW (the draft is the one in use)  */
     reverted:    null,  /*  {treedb: {version, diff}}: a saved schema the draft was reverted from (see save_answered())  */
@@ -233,6 +233,12 @@ let PRIVATE_DATA = {
 };
 
 let __gclass__ = null;
+
+/*  The round numbers of `save-schema` and `saved-schema`, for the whole
+ *  MODULE and not per tab (as __treedb_seq__ in c_agent_treedb_link.js).
+ *  Counted per tab, a tab opened again on the same yuno started at 1
+ *  again, and took the answer of the closed tab's round 1 as its own.  */
+let __round_seq__ = 0;
 
 
 
@@ -1016,6 +1022,12 @@ function render_apply(gobj)
     let key = "apply schema";
     if(is_agent_yuno(gobj_read_str_attr(gobj, "yuno_id"))) {
         key = "apply needs a node restart";
+    } else if(priv.save_left > 0) {
+        /*  A save in flight changes what Apply would install, and the
+         *  apply routes every answer to its own sequence: confirmed
+         *  meanwhile, the save's answers were dropped and Save stayed
+         *  off for good.  */
+        key = "apply waits for the save";
     } else if(entries.some((e) => e.data && e.data.reverted)) {
         /*  apply-schema goes to every owner and applies every treedb that
          *  can: it would install the reverted one with the rest.  */
@@ -1113,9 +1125,10 @@ function request_saved(gobj)
 {
     let priv = gobj.priv;
 
+    close_apply_dialog(gobj, "a new saved-schema round replaces what it listed");
     priv.saved = {};
     priv.saved_left = 0;
-    priv.saved_round++;
+    priv.saved_round = ++__round_seq__;
     priv.saved_interrupted = false;
     priv.drafts = null;
     priv.drafts_round = {};
@@ -1692,14 +1705,14 @@ function ac_on_close(gobj, event, kw, src)
     if(priv.save_left > 0) {
         log_warning(`${gobj_short_name(gobj)}: the session closed with a save in flight`);
         priv.save_left = 0;
-        priv.save_round++;
+        priv.save_round = ++__round_seq__;
         yui_shell_show_error(yui_shell_of(gobj), "the connection dropped", {t: t});
     }
     if(priv.saved_left > 0) {
         log_warning(`${gobj_short_name(gobj)}: the session closed with a saved-schema ` +
             `round in flight: asked again on the next open`);
         priv.saved_left = 0;
-        priv.saved_round++;
+        priv.saved_round = ++__round_seq__;
         priv.drafts_round = null;
         priv.saved_interrupted = true;
     }
@@ -1746,7 +1759,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
         /*  A late answer of an apply step whose sequence is over (an owner
          *  failed, a timeout): read as a discovery answer it emptied the
          *  tab.  */
-        return 0;
+        return late_apply_answer(gobj, kw, "after the apply ended");
     }
 
     if(purpose === SAVE_PURPOSE || purpose === SAVED_PURPOSE) {
@@ -1936,11 +1949,13 @@ function ac_save_schema(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: no C_TREEDB service in this yuno`);
         return -1;
     }
+    /*  What the Apply dialog lists is what the save is about to change.  */
+    close_apply_dialog(gobj, "a save changes what it listed");
     priv.save_errors = [];
     priv.save_nothing = [];
     priv.save_withdrawn = [];
     priv.save_left = 0;
-    priv.save_round++;
+    priv.save_round = ++__round_seq__;
     for(let owner of priv.owners) {
         if(request_owner(gobj, owner, "save-schema", SAVE_PURPOSE,
                 "save_round", priv.save_round) === 0) {
@@ -2011,6 +2026,11 @@ function ac_apply_changes(gobj, event, kw, src)
     if(saved_entries(gobj).some((e) => e.data && e.data.reverted)) {
         log_error(`${gobj_short_name(gobj)}: apply refused, a saved schema was reverted ` +
             `in the draft and would be installed`);
+        return -1;
+    }
+    if(priv.save_left > 0) {
+        /*  The button is off while a save is in flight (render_apply()).  */
+        log_error(`${gobj_short_name(gobj)}: apply refused, a save is in flight`);
         return -1;
     }
     if(!saved_entries(gobj).some((e) => e.data && e.data.can_apply)) {
@@ -2142,6 +2162,98 @@ function ac_schema_checked(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The Apply dialog lists the saved schemas it would install: when
+ *  they are about to change -- a Save, a new saved-schema round --
+ *  it is closed, and that is said. Left up, it listed the changes of
+ *  before, and its Apply ran in whatever state the tab had reached.
+ ***************************************************************/
+function close_apply_dialog(gobj, why)
+{
+    let priv = gobj.priv;
+
+    if(!priv.modal) {
+        return;
+    }
+    priv.modal.close();
+    priv.modal = null;
+    log_warning(`${gobj_short_name(gobj)}: the apply dialog was closed: ${why}`);
+    yui_shell_show_error(yui_shell_of(gobj),
+        "the saved schemas changed: open apply again", {t: t});
+}
+
+/***************************************************************
+ *  The dialog's Apply, heard outside ST_READY: the dialog is closed
+ *  when what it shows changes (close_apply_dialog()), so this is a
+ *  click that raced a state change, or a second one during the
+ *  restart. Refused, and said.
+ ***************************************************************/
+function ac_apply_confirmed_not_ready(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+
+    if(priv.modal) {
+        priv.modal.close();
+        priv.modal = null;
+    }
+    log_warning(`${gobj_short_name(gobj)}: ${event} refused in ${gobj_current_state(gobj)}`);
+    yui_shell_show_error(yui_shell_of(gobj),
+        "the tab is busy: open apply again when it is ready", {t: t});
+    return -1;
+}
+
+/***************************************************************
+ *  An answer of an apply step that is not the one waited for: the
+ *  step it answers is over (its deadline passed, or an owner failed
+ *  and ended the sequence). Nothing is done with it, and that is
+ *  said, as C_AGENT_TREEDB_LINK says a late answer. A dispatch ack
+ *  that did not fail says nothing: the real answer may still come.
+ ***************************************************************/
+function late_apply_answer(gobj, kw, where)
+{
+    let stack = msg_iev_get_stack(gobj, kw, "command_stack", false);
+    let outer = kw_get_str(gobj, stack, "command", "", 0);
+    let failed = (typeof kw.result === "number" && kw.result < 0);
+    let step = msg_iev_read_key(kw, "apply_step") || "";
+    let owner = msg_iev_read_key(kw, "console_owner") || "";
+
+    if(outer === "command-agent" && !failed) {
+        return 0;
+    }
+    log_warning(`${gobj_short_name(gobj)}: '${step}'${owner ? " of " + owner : ""} ` +
+        `answered ${where}: ignored (result ${kw.result}` +
+        `${kw.comment ? ", " + kw.comment : ""})`);
+    return 0;
+}
+
+/***************************************************************
+ *  An answer of THIS tab's other requests (a save, a saved-schema
+ *  round, a comparison, a discovery) that lands while the apply
+ *  runs. The apply routes every answer here, and they were dropped
+ *  with no word.
+ ***************************************************************/
+function answer_during_apply(gobj, kw)
+{
+    let purpose = msg_iev_read_key(kw, "console_purpose");
+    let stack = msg_iev_get_stack(gobj, kw, "command_stack", false);
+    let outer = kw_get_str(gobj, stack, "command", "", 0);
+    let failed = (typeof kw.result === "number" && kw.result < 0);
+
+    if(![PURPOSE, MASTER_PURPOSE, DIFF_PURPOSE, SAVE_PURPOSE, SAVED_PURPOSE].includes(purpose)) {
+        return 0;   /*  another panel's answer  */
+    }
+    if(msg_iev_read_key(kw, "console_node") !== gobj_read_str_attr(gobj, "node") ||
+            msg_iev_read_key(kw, "console_yuno") !== gobj_read_str_attr(gobj, "yuno_id")) {
+        return 0;   /*  another tab's  */
+    }
+    if(outer === "command-agent" && !failed) {
+        return 0;   /*  a dispatch ack  */
+    }
+    log_warning(`${gobj_short_name(gobj)}: a '${purpose}' answer landed during the apply ` +
+        `(${gobj_current_state(gobj)}): ignored`);
+    return 0;
+}
+
+/***************************************************************
  *  Confirmation dismissed.
  ***************************************************************/
 function ac_apply_cancelled(gobj, event, kw, src)
@@ -2161,13 +2273,29 @@ function ac_apply_cancelled(gobj, event, kw, src)
  ***************************************************************/
 function ac_apply_confirmed(gobj, event, kw, src)
 {
-    /*  A comparison in flight is dropped here: while the sequence runs,
-     *  every answer is routed to ac_apply_answer, so its own would never
-     *  arrive and the button would stay off for good.  */
-    gobj.priv.diff_left = 0;
-
     let priv = gobj.priv;
     let yuno = gobj_read_str_attr(gobj, "yuno_id");
+
+    if(priv.save_left > 0) {
+        /*  ac_save_schema() closes the dialog and ac_apply_changes()
+         *  refuses to open one while a save is in flight: this is a
+         *  path that should not exist.  */
+        log_error(`${gobj_short_name(gobj)}: apply refused, a save is in flight`);
+        return -1;
+    }
+
+    /*  A comparison or a saved-schema round in flight is dropped here:
+     *  while the sequence runs, every answer is routed to
+     *  ac_apply_answer, so their own would never arrive and the button
+     *  would stay off for good. A late one is said there
+     *  (answer_during_apply()); the discovery at the end asks the
+     *  saved schemas again.  */
+    priv.diff_left = 0;
+    if(priv.saved_left > 0) {
+        priv.saved_left = 0;
+        priv.saved_round = ++__round_seq__;
+        priv.drafts_round = null;
+    }
 
     if(priv.modal) {
         priv.modal.close();
@@ -2215,10 +2343,13 @@ function ac_apply_answer(gobj, event, kw, src)
     let state = gobj_current_state(gobj);
 
     if(!is_ours(gobj, kw)) {
-        return 0;
+        return answer_during_apply(gobj, kw);
+    }
+    if(!msg_iev_read_key(kw, "apply_step")) {
+        return answer_during_apply(gobj, kw);  /*  a discovery's  */
     }
     if(msg_iev_read_key(kw, "apply_step") !== expected[state]) {
-        return 0;   /*  a late answer of another step (or of a discovery)  */
+        return late_apply_answer(gobj, kw, `after its step, in ${state}`);
     }
 
     let stack = msg_iev_get_stack(gobj, kw, "command_stack", false);
@@ -2466,6 +2597,11 @@ function create_gclass(gclass_name)
     const dialog_events = [
         ["EV_APPLY_CANCELLED",      ac_apply_cancelled,   null]
     ];
+    /*  Its Apply is ST_READY's; anywhere else it is refused and said.  */
+    const dialog_events_not_ready = [
+        ...dialog_events,
+        ["EV_APPLY_CONFIRMED",      ac_apply_confirmed_not_ready, null]
+    ];
     /*  The shell broadcasts to every subscriber, so this arrives in any
      *  state; the action drops what is not this tab's route.  */
     const route_events = [
@@ -2478,7 +2614,7 @@ function create_gclass(gclass_name)
             ["EV_DISCOVER",             ac_discover,          null],
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
-            ...dialog_events,
+            ...dialog_events_not_ready,
             ...route_events,
             ...view_events
         ]],
@@ -2487,7 +2623,7 @@ function create_gclass(gclass_name)
             ["EV_DISCOVER",             ac_discover,          null],
             ["EV_ON_CLOSE",             ac_on_close,          "ST_IDLE"],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
-            ...dialog_events,
+            ...dialog_events_not_ready,
             ...route_events,
             ...view_events
         ]],
@@ -2496,7 +2632,7 @@ function create_gclass(gclass_name)
             ["EV_DISCOVER",             ac_discover,          null],
             ["EV_ON_CLOSE",             ac_on_close,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer, null],
-            ...dialog_events,
+            ...dialog_events_not_ready,
             ...route_events,
             ...view_events
         ]],
@@ -2519,7 +2655,7 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
             ["EV_TIMEOUT",              ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
-            ...dialog_events,
+            ...dialog_events_not_ready,
             ...route_events,
             ...view_events
         ]],
@@ -2527,7 +2663,7 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
             ["EV_TIMEOUT",              ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
-            ...dialog_events,
+            ...dialog_events_not_ready,
             ...route_events,
             ...view_events
         ]],
@@ -2535,7 +2671,7 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
             ["EV_TIMEOUT",              ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
-            ...dialog_events,
+            ...dialog_events_not_ready,
             ...route_events,
             ...view_events
         ]],
@@ -2543,7 +2679,7 @@ function create_gclass(gclass_name)
             ["EV_MT_COMMAND_ANSWER",    ac_apply_answer,      null],
             ["EV_TIMEOUT",              ac_apply_timeout,     null],
             ["EV_ON_CLOSE",             ac_apply_broken,      "ST_IDLE"],
-            ...dialog_events,
+            ...dialog_events_not_ready,
             ...route_events,
             ...view_events
         ]]

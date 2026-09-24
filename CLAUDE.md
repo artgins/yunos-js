@@ -44,20 +44,24 @@ switch language**. Full rule in yunetas' `CLAUDE.md` and in gobj-ui's README
   raise the range in the yuno's `package.json`.
 - To ship: commit on `main` here, **tag the release**, then **bump the
   `yunos/js` submodule pointer in yunetas**.
-- **Releases are tagged, no `v` prefix** — `0.7.0`, the same convention as
-  gobj-js and gobj-ui. Every versioned release the CHANGELOG names has its tag:
-  `0.3.0` … `0.7.0`, the four older ones backfilled on 2026-08-17 onto their own
-  `release(...)` commit (the one that bumped both `package.json` AND closed the
-  heading — verified per tag, not guessed). The one heading without a version,
-  `## 2026-07-08 — shipped with SDK 7.7.2`, predates versioning and has no tag.
-  **Both yunos carry the SAME version**: one `## <version> — <date>` heading in
-  the shared CHANGELOG, and both `package.json` bumped together even when a
-  cycle only touched one of them. It held from 0.3.0 to 0.7.0, **drifted**
-  between 0.7.0 and 0.14.0 (each yuno bumped its own patch as it changed:
-  `gui_agent` reached 0.9.12 and `gui_treedb` 0.13.15, and the entries of that
-  cycle keep the number they were written with), and was restored at **0.14.0**
-  — a number above both. If you bump one yuno mid-cycle, bump the other with
-  it, or the next release has to pick a number above two lines again. Before creating a tag, `git tag -l | grep <version>`:
-  two tags of one version pointing at different commits is a serious error.
+- **The two yunos are on SEPARATE version lines** (since 0.17.x /
+  0.22.x): `gui_agent` and `gui_treedb` each bump their own `package.json`
+  when they change, and only then. A CHANGELOG heading names the yuno(s) and
+  version(s) it ships, and the libraries it moves to:
+  `## gui_agent 0.22.90, gui_treedb 0.17.63 + gobj-ui ^7.25.16 (2026-09-24)`.
+  A release that touches only one yuno names only that one.
+- **Releases are tagged, one tag per yuno version, `<yuno>-<version>`**, no
+  `v` prefix: `gui_agent-0.22.90`, `gui_treedb-0.17.63`, on the commit that
+  bumps that `package.json` and writes its heading. A bare number cannot name
+  two lines. The numeric tags are history: `0.3.0` … `0.7.0` (backfilled on
+  2026-08-17) and `0.14.0` … `0.17.1` are releases of the SHARED line, where
+  both yunos carried one number; `0.17.37` … `0.17.41` were tagged with
+  gui_treedb's number after the lines split (gui_agent was then 0.22.64 …
+  0.22.68). The releases after `0.17.41` and before `gui_agent-0.22.90` /
+  `gui_treedb-0.17.63` were not tagged and are not backfilled: their commits
+  are named by their CHANGELOG headings and by the `yunos/js` pointer of each
+  yunetas commit that bumped it. Before creating a tag,
+  `git tag -l | grep <version>`: two tags of one version pointing at different
+  commits is a serious error.
 - gui_agent deploys are a build + rsync via its `deploy-com.sh` — a commit
   alone does not update the live site.

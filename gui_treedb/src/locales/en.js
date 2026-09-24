@@ -604,6 +604,7 @@ const en = {
 
         "yes": "Yes",
         "no": "No",
+        "ok": "OK",
         "accept": "Accept",
         "are you sure": "Are you sure?",
         "please select some row": "Please select some row",

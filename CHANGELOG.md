@@ -6,6 +6,51 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.90, gui_treedb 0.17.63 + gobj-ui ^7.25.16, gobj-js ^7.25.2 (2026-09-24)
+
+- **gui_agent: Apply waits for a Save in flight.** The Apply button stayed lit
+  while a `save-schema` was unanswered. Confirmed before the save answered,
+  the apply took every answer for its own sequence and dropped the save's, so
+  `save_left` never came back to 0 and Save stayed off for good. Now the button
+  is off while a save is in flight (tooltip key `apply waits for the save`),
+  and an Apply that arrives anyway is refused and logged.
+- **gui_agent: the Apply dialog follows what it shows.** It lists the saved
+  schemas Apply would install. A Save or a new `saved-schema` round now closes
+  it and says `the saved schemas changed: open apply again`; left open, it
+  listed the changes from before the Save. Its Apply outside `ST_READY` is
+  refused and said (`the tab is busy: open apply again when it is ready`); it
+  answered *"Event NOT DEFINED"* in `ST_DISCOVERING`.
+- **gui_agent: no answer is dropped with no word.** A late answer of an apply
+  step (after its deadline, or after the apply ended), and an answer of the
+  tab's other requests that lands during the apply, are logged as warnings.
+- **gui_agent: the `save-schema` and `saved-schema` rounds are counted for the
+  page**, not per tab. A tab opened again on the same yuno started at round 1
+  and could take the answer of the closed tab's round 1 as its own.
+- **gobj-ui 7.25.16.** In the schema editor (gui_agent), a Refresh sent while
+  writes are in flight waits for them, and the Save of a form when a reload is
+  owed opens the form again on the schemas read, with the operator's changes.
+  In the treedb graph (both yunos), a refused `__graphs__` write keeps Save lit
+  until a Save writes it. The shell dialogs' default labels are i18n keys.
+- **gobj-js 7.25.2**: `kw_get_list()`, `kw_get_dict()` and `kw_get_bool()`
+  answer like the C readers. No code of these yunos relied on the old answers
+  (`kw_get_bool` of `options.create` reads a boolean).
+- New locale keys, en and es. gui_agent: `apply waits for the save`,
+  `the saved schemas changed: open apply again`,
+  `the tab is busy: open apply again when it is ready`, and the two of the
+  schema editor
+  (`the schemas shown may be out of date: they are read again, and the form opens again on them with your changes`,
+  `the schemas were read again and what the form was editing is not there any more`).
+  gui_treedb: `ok` (the default label of `yui_shell_confirm_ok()`).
+  validate-locales: OK in both yunos.
+- **gui_agent README**: the tab builds the tree and each treedb's viewer
+  (`C_AGENT_TREEDB_VIEW`) mounts its view; the states list names the four
+  Apply states; the request contract has examples (the `{result: -1,
+  comment}` of a drop or a deadline, the deadline of a `__files__` write).
+- **CLAUDE.md**: the release rules say what is done: two version lines, and a
+  tag per yuno version (`gui_agent-0.22.90`, `gui_treedb-0.17.63`).
+- Tests: `src/c_agent_treedb_apply.wiring.test.js`, red on 13 of 13 against
+  0.22.89.
+
 ## gui_agent 0.22.89, gui_treedb 0.17.62 + gobj-ui ^7.25.15, gobj-js ^7.25.1 (2026-09-24)
 
 - gobj-ui 7.25.15. In the Schemas tab (gui_agent), a move of the url while a

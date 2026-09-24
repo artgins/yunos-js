@@ -609,6 +609,7 @@ const es = {
 
         "yes": "Sí",
         "no": "No",
+        "ok": "Aceptar",
         "accept": "Aceptar",
         "are you sure": "¿Está seguro?",
         "please select some row": "Seleccione alguna fila",
