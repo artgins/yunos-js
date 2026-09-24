@@ -53,7 +53,7 @@ describe("apply_outcome", () => {
         expect(apply_outcome(["ta", "tb"], [])).toEqual({restart: true, error: "", error_key: ""});
     });
 
-    it("one owner applies A and refuses B: restart, and B is named (M2)", () => {
+    it("one owner applies A and refuses B: restart, and B is named", () => {
         /*  Counted by OWNER, that owner's -1 skipped the restart and A was
          *  applied in silence by the next unrelated one.  */
         const o = apply_outcome(["ta"], ["tb: does not parse"]);
@@ -61,7 +61,7 @@ describe("apply_outcome", () => {
         expect(o.error).toBe("tb: does not parse");
     });
 
-    it("an owner with nothing to apply next to a refusal: NO restart (M2)", () => {
+    it("an owner with nothing to apply next to a refusal: NO restart", () => {
         const o = apply_outcome([], ["tb: does not parse"]);
         expect(o.restart).toBe(false);
         expect(o.error).toBe("tb: does not parse");

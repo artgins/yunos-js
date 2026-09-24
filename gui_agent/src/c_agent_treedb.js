@@ -36,7 +36,7 @@
  *      this console — and not the gui_treedb data browser — is where
  *      schema editing lives.
  *
- *      AN EDIT IS A DRAFT (the SDK's M36 design). The editor writes
+ *      AN EDIT IS A DRAFT (since SDK 7.25.0). The editor writes
  *      __system__ and moves no version; SAVE (`save-schema` on every
  *      C_TREEDB of the yuno) publishes the drafts -- the versions of what
  *      changed, written beside the schema file in use, never over it --
