@@ -461,6 +461,7 @@ const es = {
         "dagre top-down": "Dagre arriba-abajo",
         "dagre left-right": "Dagre izq-dcha",
         "no session": "Sin sesión",
+        "the connection dropped": "La conexión se cayó antes de llegar la respuesta",
         "some records were gone before the delete": "Algunos registros ya no existían al confirmar el borrado; no se han borrado",
         "expand loaded": "Expandir lo cargado",
         "collapse all": "Colapsar todo",

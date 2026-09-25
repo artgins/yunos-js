@@ -6,6 +6,26 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.98, gui_treedb 0.17.71 + gobj-ui ^7.25.22 (2026-09-25)
+
+- **Both: gobj-ui ^7.25.22, a raw-json drill in flight when the session drops
+  is answered.** The topics and graph views keep the drilled paths they sent
+  and, on the disconnect edge, answer each one `the connection dropped`: the
+  stub stops showing "loading" and a click after the reconnect asks again.
+  Before, a drill sent just before a drop was never answered and its stub was
+  dead for the life of the viewer. gui_treedb was hit (its `C_TREEDB_VIEW`
+  keeps the same view on a plain reconnect); gui_agent was not, its
+  `C_AGENT_TREEDB_LINK` already answers every routed request on the close,
+  and the view now drops that second answer with a warning instead of
+  showing it twice.
+- **gui_treedb: new i18n key `the connection dropped`** (en, es). gui_agent
+  already had it.
+- This CHANGELOG no longer cites internal review rounds or finding ids: each
+  entry says what changed. The 0.22.96 entry about the console's JSON viewer
+  is corrected: the console was the viewer's subscriber by the CHILD model
+  and did not declare `EV_EXPAND_PATH`, so each click logged *"Event NOT
+  DEFINED in state"*; it was not silent.
+
 ## gui_agent 0.22.97, gui_treedb 0.17.70 + gobj-js ^7.25.8 (2026-09-25)
 
 - **Both: gobj-js ^7.25.8, the publish twin rule (security).** Up to gobj-js
@@ -38,10 +58,12 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   the state as the other two do (`no schema owner in this yuno` when the yuno
   has none). (New in 0.22.95.)
 - **gui_agent: a `__collapsed__` stub in a console answer is answered.** The
-  console hosted its JSON viewer with no subscriber, so a click on a stub
-  (`print-tranger expanded=1` collapses every list and dict above 100 items)
-  published `EV_EXPAND_PATH` to nobody, in silence, and the stub stayed on
-  "loading" and ignored every further click. The console now answers it with
+  console hosted its JSON viewer with no `subscriber`, so by the viewer's
+  CHILD model the console itself (its parent) was the subscriber, and it did
+  not declare `EV_EXPAND_PATH`: a click on a stub (`print-tranger expanded=1`
+  collapses every list and dict above 100 items) logged *"Event NOT DEFINED
+  in state"*, and the stub stayed on "loading" and ignored every further
+  click. The console now answers it with
   the key `this part cannot be loaded here` (`by_design`): the answer came
   whole; type the command again with `path=` to read the part. (Inherited.)
 - **Both: gobj-js ^7.25.7** (`KW_CREATE` over a null or scalar middle segment
@@ -298,8 +320,8 @@ current library. No new locale key; validate-locales: OK.
 
 ## gui_agent 0.22.86 + gobj-ui ^7.25.12 (2026-09-23)
 
-gobj-ui 7.25.12, fixes of the sixth independent review in the schema editor
-(Schemas workspace): any load that lands pays the reload a refused load owed
+gobj-ui 7.25.12, fixes in the schema editor (Schemas
+workspace): any load that lands pays the reload a refused load owed
 (after a Refresh that landed, the next edit was refused and read the store
 again); a load that fails keeps the import plan and its Import button; a move
 sent by the url or the browser's Back runs the owed reload; the export's C /
@@ -331,7 +353,7 @@ reading "Delete" / "Cancel" -- text, title and aria-label. No new locale key.
 
 ## gui_agent 0.22.84 + gobj-ui ^7.25.10 (2026-09-23)
 
-Fixes from the fifth independent review (after 7.25.9). gui_agent takes
+Fixes. gui_agent takes
 gobj-ui ^7.25.10. In the Schemas workspace, a load this app's
 C_AGENT_TREEDB_LINK refuses on its deadline keeps the model and now READS it
 again on the operator's next action: an edit (a form, a Save, a delete, a
@@ -350,7 +372,7 @@ messages; `cannot read the schemas again: the previous ones stay` is gone.
 
 ## gui_agent 0.22.83 + gobj-ui ^7.25.9 (2026-09-23)
 
-Fixes from the fourth independent review (after 7.25.8). gui_agent takes
+Fixes. gui_agent takes
 gobj-ui ^7.25.9, whose schema editor no longer lets a dialog built on a model
 a reload replaced write anything: 7.25.8 answered a Save during a load with
 *"try again when they are in"*, and trying again wrote the old record over the
@@ -374,7 +396,7 @@ controls of `shell_modals.js`. Each was built against 7.25.9 (not deployed).
 
 ## gui_agent 0.22.82 + gobj-ui ^7.25.8 (2026-09-23)
 
-Fixes from the third independent review (after 7.25.7). gui_agent takes
+Fixes. gui_agent takes
 gobj-ui ^7.25.8, whose schema editor draws its loading screen: a reload
 (Refresh, the reconnect's, a write that turned out done) left the old screen
 clickable, and a click on it -- or the Save of a form left open -- logged
@@ -393,14 +415,13 @@ contract.
 
 ## gui_agent 0.22.81 + gobj-ui ^7.25.7 (2026-09-23)
 
-Fixes from the independent review of the 2nd round (after 7.25.4).
+Fixes.
 gui_agent takes gobj-ui ^7.25.7, whose schema editor no longer empties its
 model when the operator moves during a reload (the HIGH regression of
 7.25.6, deployed in 0.22.80), and which shows one toast per message on
 screen. gui_treedb mounts nothing that changed and stays where it is.
 
-- **gui_agent: `C_AGENT_TREEDB_LINK` numbers its requests once for the page
-  (MEDIUM).** `seq` was a counter per adapter starting at 1, and every
+- **gui_agent: `C_AGENT_TREEDB_LINK` numbers its requests once for the page.** `seq` was a counter per adapter starting at 1, and every
   adapter on the link hears every answer: with two treedb views mounted an
   answer went to the wrong view, was dropped as "another tab's", or was read
   as a LATE answer of a request the other adapter had given up -- which, for
@@ -433,20 +454,20 @@ screen. gui_treedb mounts nothing that changed and stays where it is.
 
 ## gui_agent 0.22.79 + gobj-ui ^7.25.6 (2026-09-23)
 
-Fixes from the independent review of 7.25.4. gui_agent takes gobj-ui
+Fixes. gui_agent takes gobj-ui
 ^7.25.6, whose schema editor ends a load or a write the transport drop cut
-and reloads on the reconnect (the other half of M-1). gui_treedb mounts
+and reloads on the reconnect (the other half of the fix below). gui_treedb mounts
 nothing that changed and stays at 0.17.57.
 
 - **gui_agent: the session closing ANSWERS every routed treedb request in
-  flight (M-1).** `C_AGENT_TREEDB_LINK` wiped its pending requests on
+  flight.** `C_AGENT_TREEDB_LINK` wiped its pending requests on
   `EV_ON_CLOSE` without answering them, so a form stayed busy and the schema
   editor stuck in its load or its write until the page was reloaded. Each one
   is now settled at once as failed with "the connection dropped" (new i18n
   key). The adapter's state is already `ST_DISCONNECTED` when the views get
   it, which is how gobj-ui 7.25.6's schema editor reads it as the drop.
 - **gui_agent: the deadline of a routed request is measured fairly, and a
-  late answer is not lost (M-2).** The 60 s started at the queueing and was
+  late answer is not lost.** The 60 s started at the queueing and was
   the same for everything: a big `__files__` upload (up to 128 MB, ~171 MB of
   base64 over two hops) or a slow `nodes` was reported failed and then
   succeeded, and the late answer was dropped in silence -- a repeated +New
@@ -457,9 +478,9 @@ nothing that changed and stays at 0.17.57.
   answer after the deadline is logged as a warning, and when it is a write
   that succeeded its node event is echoed, so the table shows what the
   treedb holds. A late read or refusal is only logged.
-- **gui_agent: a failed dispatch ack re-arms the deadline timer (L-2).** It
+- **gui_agent: a failed dispatch ack re-arms the deadline timer.** It
   deleted its request and left the timer pointed at a deadline nobody had.
-- **gui_agent: a saved-schema round counts only its own answers (L-1).** A
+- **gui_agent: a saved-schema round counts only its own answers.** A
   round asked before a Save and answering after the re-discovery that
   followed it was counted in the new round: its drafts were handed out as
   the new ones, and the new round's answers found nothing owed. Each
@@ -472,15 +493,14 @@ nothing that changed and stays at 0.17.57.
   drafts again), and a comparison kept the differences button off. Now the
   Save and the comparison end with "the connection dropped", and the
   saved-schema round is asked again when the session is back.
-- **gui_agent: the apply deadline is a `C_TIMER` child, armed once per step
-  (L-3).** It was a `window.setTimeout`, outside the machine, and re-armed by
+- **gui_agent: the apply deadline is a `C_TIMER` child, armed once per step.** It was a `window.setTimeout`, outside the machine, and re-armed by
   each owner's `apply-schema`, so its 30 s counted from the last owner. Now a
   time enters the FSM as `EV_TIMEOUT`, every step (apply, kill, run, play)
   gets its 30 s from when it is sent, and a timeout of `apply` names the
   owners that did not answer.
 - **gui_agent: a Save answered only "nothing to save" while drafts are
-  marked is said, and handled with both C sides (M-3).** It is the shape of
-  a draft reverted after a save (M-A of the same review, in C):
+  marked is said, and handled with both C sides.** It is the shape of
+  a draft reverted after a save (fixed in C as well):
   `saved-schema` diffs the draft against the SAVED schema and names the
   topics, `save-schema` diffs it against the one IN USE and finds nothing --
   the chip stayed with no explanation, and Apply would install what was
@@ -497,10 +517,10 @@ nothing that changed and stays at 0.17.57.
 
 ## gui_treedb 0.17.57, gui_agent 0.22.78 + gobj-ui ^7.25.5 (2026-09-23)
 
-Fixes from the 2026-09-23 review of the 2026-09-22 round.
+Fixes.
 
 - **gui_agent: after a Save the schema editor no longer says "unsaved
-  schema changes" again (M1, JS half).** The tab merged every saved-schema
+  schema changes" again (the JS half).** The tab merged every saved-schema
   answer into one set of drafts that was never reset, and the editor rebuilt
   after the Save asked for them (`EV_DRAFTS_WANTED`) before the new round had
   answered, so it was handed the drafts from BEFORE the Save. The set is now
@@ -511,7 +531,7 @@ Fixes from the 2026-09-23 review of the 2026-09-22 round.
   means "differs from the file in use", so a topic saved and not applied
   shows as a draft until the Apply; a newer node diffs against the saved
   schema.)
-- **gui_agent: Apply counts TREEDBS, not owners (M2, JS half).** One owner
+- **gui_agent: Apply counts TREEDBS, not owners (the JS half).** One owner
   that applied A and refused B answered -1, and the tab skipped the restart:
   A was applied in silence by the next unrelated restart. An owner with
   nothing to apply ("0 treedb(s)") next to a refusal restarted the yuno for
@@ -560,7 +580,7 @@ Fixes from the 2026-09-23 review of the 2026-09-22 round.
 
 ## gui_treedb 0.17.55, gui_agent 0.22.77 + gobj-ui ^7.25.4 (2026-09-22)
 
-- **The lows of the 2026-09-22 review.** gui_treedb: a connection stored
+- **Smaller fixes.** gui_treedb: a connection stored
   before `master` was kept (0.17.53) is re-scanned on its first session, so
   a replica opens without its write buttons instead of waiting for a
   Settings refresh; editing the options of a whole-topic Rows card no longer
@@ -574,8 +594,7 @@ Fixes from the 2026-09-23 review of the 2026-09-22 round.
 
 ## gui_agent 0.22.76 + gobj-ui ^7.25.3 (2026-09-22)
 
-- **gui_agent: the Schemas tab tells the editor which topics are drafts (N13
-  of the 2026-09-22 review).** The editor kept the mark of a write in its
+- **gui_agent: the Schemas tab tells the editor which topics are drafts.** The editor kept the mark of a write in its
   session memory only, so a reload of the page showed no draft while
   `__system__` still differed from the file in use. The tab reads
   `draft_changed` off every `saved-schema` answer (gobj-ui's
@@ -587,7 +606,7 @@ Fixes from the 2026-09-23 review of the 2026-09-22 round.
 ## gui_agent 0.22.75 + gobj-ui ^7.25.2 (2026-09-22)
 
 - **gui_agent: an apply that one owner refuses after another applied goes on
-  to the restart (N10 of the 2026-09-22 review).** `apply-schema` is sent to
+  to the restart.** `apply-schema` is sent to
   every owner before the restart, each one replacing its own file in use; a
   refusal ended the sequence, and the owner that had already applied was left
   with the new schema on disk and the old one running -- `saved-schema` then
@@ -617,8 +636,7 @@ on its own, outside the yunetas superproject.
 
 ### Changed
 
-- **The whole-topic Rows card is bounded and not reopened by itself**
-  (M22 of yunetas' 2026-09-21 treedb review). It is no longer remembered, so
+- **The whole-topic Rows card is bounded and not reopened by itself**. It is no longer remembered, so
   a visit to a topic does not reopen it (a card saved by an older release is
   skipped; a shared link still opens it). Its options offer **keys (regex)**,
   filled with `.*`, to read some keys and not all. And a new Rows card starts
@@ -631,8 +649,8 @@ on its own, outside the yunetas superproject.
 ### Changed
 
 - **Schemas tab: an edit is a draft; Save publishes it, Apply puts it in use**
-  (M36 of yunetas' 2026-09-21 treedb review, the owner's design; needs
-  gobj-ui 7.23.196 and an SDK with `save-schema`).
+  (the owner's design; needs gobj-ui 7.23.196 and an SDK with
+  `save-schema`).
   - **Save** (`save-schema` on every C_TREEDB of the yuno) publishes the
     drafts the editor wrote: the versions of what changed, written beside the
     schema file in use, never over it. It re-mounts the view, which is what
@@ -650,21 +668,21 @@ on its own, outside the yunetas superproject.
 
 ### Fixed
 
-Block 4 of the 2026-09-21 treedb review (ids of yunetas' `TODO.md`).
+Fixes of the treedb views.
 
-- **M35 — "a replica opens without its write buttons" (0.17.36) did
+- **"a replica opens without its write buttons" (0.17.36) did
     nothing.** `treedb-info` went out with `{service}` alone, and C_IEVENT_CLI
     hands back only `__md_command__`, so the answer named no service; and had
     it matched, storing the scanned services dropped `master`. The service
     rides in `__md_command__` now (`treedb_info.js`), and
     `treedb_config_merge_scanned()` keeps `master`.
-- **M20 — "newest first" served the oldest page.** It sent `backward` only
+- **"newest first" served the oldest page.** It sent `backward` only
     at `open-iterator`; every `get-page` carries it now (`rows_page.js`).
     Against a backend with the C half of this fix (yunetas after 7.24.1) the
     first page is the newest one for every card; against an older one it is
     for a FILTERED card, and an unfiltered card still gets the oldest page,
     now in reverse order.
-- **M19 — a Rows card whose iterator the backend no longer holds stayed on
+- **A Rows card whose iterator the backend no longer holds stayed on
     the error.** It opens a new iterator once, until a page lands.
 
 ## gui_treedb 0.17.52 — 2026-09-21
@@ -675,7 +693,7 @@ Block 4 of the 2026-09-21 treedb review (ids of yunetas' `TODO.md`).
     every key, the deleted one included, and it stayed open: against yunetas
     7.24.1 its next page was short and kept the old total (and a FILTERED one
     stopped a master C_TRANGER with `exit(0)`); against the fix in yunetas
-    (A5 of the 2026-09-21 review) the backend closes it and answers *"its key
+    the backend closes it and answers *"its key
     was deleted"*. The `delete-key` answer now re-opens that card, so it shows
     the topic as it is.
 
@@ -3892,8 +3910,8 @@ vitest + both builds + the Playwright QA drivers.
   hover-preview, strip edge fades, and the phone-scroll fix that the longer
   strip exposed).
 
-- **fix(gui_treedb, gui_agent): review follow-ups on the tranger/i18n series.**
-  Findings of a full review of the range, each verified in code:
+- **fix(gui_treedb, gui_agent): follow-ups on the tranger/i18n series.**
+  Each one verified in code:
   - **gui_agent: the toolbar language toggle reaches the tables again.**
     91bf3e2 moved Nodes/Stats/Console off their raw `i18next.on` listeners
     and onto the shell's `EV_LANGUAGE_CHANGED`, but only the account view
@@ -5186,7 +5204,7 @@ shell confirm/notification helpers, so both SPAs stop bundling the legacy
   Selecting a Terminal tab now moves keyboard focus straight to the xterm (a
   `MutationObserver` on the view's `is-hidden` flip), so you can type without
   clicking first.
-- **Fixes (review pass).**
+- **Fixes.**
   - **Commands — focus the input on tab select.** Selecting a Commands tab now
     moves keyboard focus straight to `CONSOLE_INPUT` (a `MutationObserver` on
     the view's `is-hidden` flip), so you can type without clicking first — same

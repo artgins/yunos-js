@@ -102,8 +102,10 @@ lazy JSON viewer (`C_YUI_JSON`). An answer can carry `__collapsed__` stubs:
 and dict above 100 items. The answer came whole, and a command in general has
 no path to re-issue, so a click on a stub is answered at once with the key
 `this part cannot be loaded here` (`by_design`, a warning, not an error). To
-read the part, type the command again with its `path` (0.22.96; before, the
-stub stayed on "loading" and ignored every further click):
+read the part, type the command again with its `path` (0.22.96; before, each
+click logged *"Event NOT DEFINED in state"* -- the console was the viewer's
+subscriber and did not declare `EV_EXPAND_PATH` -- and the stub stayed on
+"loading" and ignored every further click):
 
 ```
 command-yuno id=<yuno> service=<treedb> command=print-tranger expanded=1
