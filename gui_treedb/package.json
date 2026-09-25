@@ -1,7 +1,7 @@
 {
   "name": "gui-treedb",
   "private": true,
-  "version": "0.17.69",
+  "version": "0.17.70",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@antv/g6": "^5.1.1",
-    "@yuneta/gobj-js": "^7.25.7",
+    "@yuneta/gobj-js": "^7.25.8",
     "@yuneta/gobj-ui": "^7.25.21",
     "bulma": "^1.0.4",
     "bulma-switch-control": "^1.2.2",

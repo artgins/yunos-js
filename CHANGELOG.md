@@ -6,6 +6,19 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.97, gui_treedb 0.17.70 + gobj-js ^7.25.8 (2026-09-25)
+
+- **Both: gobj-js ^7.25.8, the publish twin rule (security).** Up to gobj-js
+  7.25.7 `gobj_publish_event()` handed every subscriber the same kw and applied
+  each subscription's `__local__`/`__global__` to it, so one subscription
+  changed what every later subscriber and the publisher saw, and the
+  `__filter__` of a later subscription was evaluated on the altered kw. Now a
+  subscription with `__local__`/`__global__` gets its own shallow twin, and
+  `C_IEVENT_CLI` injects an event on a copy instead of writing its ievent stack
+  into the published kw. Neither yuno sets `__global__` or `__local__` in a
+  subscription, so nothing here changes behaviour: this release takes the
+  fixed runtime. No code change in either yuno.
+
 ## gui_agent 0.22.96, gui_treedb 0.17.69 + gobj-js ^7.25.7, gobj-ui ^7.25.21 (2026-09-25)
 
 - **gui_agent: a comparison has a deadline and a round number.** One owner
