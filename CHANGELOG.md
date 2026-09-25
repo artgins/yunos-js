@@ -6,6 +6,37 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.96, gui_treedb 0.17.69 + gobj-js ^7.25.7, gobj-ui ^7.25.21 (2026-09-25)
+
+- **gui_agent: a comparison has a deadline and a round number.** One owner
+  that never answered `diff-schema` kept Differences off ("comparing") for the
+  life of the tab, and a click sent nothing: only a drop brought it back. The
+  comparison now has a 30 s `C_TIMER` (`diff_deadline`) like the Save's: when
+  it fires, the silent owners are named in an error line and at the top of the
+  report (key `differences unanswered`), and the report shows what came. Its
+  requests carry `diff_round`, so an answer of an earlier comparison is not
+  counted in the next one, and an answer after the round ended is logged as a
+  warning instead of dropped in silence. The deadline is cleared by a drop, an
+  Apply and `mt_stop`. (Inherited: the comparison never had one.)
+- **gui_agent: Save says why it is off out of session.** 0.22.95 turned Save,
+  Differences and Apply off out of session and said all three show `not
+  connected to an agent`; Save went off still reading `save schema`, its name
+  set once at build. Its `title`, `aria-label` and both `data-i18n-*` now follow
+  the state as the other two do (`no schema owner in this yuno` when the yuno
+  has none). (New in 0.22.95.)
+- **gui_agent: a `__collapsed__` stub in a console answer is answered.** The
+  console hosted its JSON viewer with no subscriber, so a click on a stub
+  (`print-tranger expanded=1` collapses every list and dict above 100 items)
+  published `EV_EXPAND_PATH` to nobody, in silence, and the stub stayed on
+  "loading" and ignored every further click. The console now answers it with
+  the key `this part cannot be loaded here` (`by_design`): the answer came
+  whole; type the command again with `path=` to read the part. (Inherited.)
+- **Both: gobj-js ^7.25.7** (`KW_CREATE` over a null or scalar middle segment
+  answers the default instead of throwing) **and gobj-ui ^7.25.21** (a drill of
+  the topics/graph raw-json viewer asked out of session, or refused by the
+  transport, is answered instead of leaving its stub on "loading" -- the
+  treedb tab of gui_agent and gui_treedb's treedb view host both).
+
 ## gui_agent 0.22.95, gui_treedb 0.17.68 + gobj-js ^7.25.6, gobj-ui ^7.25.20 (2026-09-25)
 
 - **gui_agent: "unsaved changes" stays after a Save that never landed.** The

@@ -460,6 +460,7 @@ const en = {
         "apply unanswered, restarting": "The node's agent did not answer apply-schema for the owners below, so whether they applied is not known. The yuno restarts for the treedbs that were applied, and the tab reads the node again after. Owners:",
         "save unanswered": "The node's agent did not answer save-schema for the owners below, so whether they saved is not known. The node is read again: what it has saved is what Apply offers. Owners:",
         "saved schemas unanswered": "The node's agent did not say what the owners below have saved: Apply stays off for them, and their drafts are not marked. Owners:",
+        "differences unanswered": "The node's agent did not answer diff-schema for the owners below: the report shows only what the others said. Owners:",
         "the node did not answer": "The node did not answer the request in time; nothing was confirmed",
         "the connection dropped": "The connection dropped before the node answered; nothing was confirmed",
         "nothing to save, the draft is the schema in use": "Nothing to save: the draft is the schema in use. Its marks are read again from the node:",

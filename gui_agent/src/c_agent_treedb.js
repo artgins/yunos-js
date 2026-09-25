@@ -171,7 +171,8 @@ const DIFF_KINDS = {
  *  waiting. Generous: the agent answers each one when it is DONE, and
  *  "done" for a kill is the killed yuno's channel closing.  */
 const APPLY_TIMEOUT = 30 * 1000;
-/*  The deadline of a `save-schema` or `saved-schema` round.  */
+/*  The deadline of a `save-schema`, `saved-schema` or `diff-schema`
+ *  round.  */
 const SCHEMA_ROUND_TIMEOUT = 30 * 1000;
 /*  The deadline of a discovery: `services`, and then the `treedb-info`
  *  of each treedb it found.  */
@@ -217,6 +218,10 @@ let PRIVATE_DATA = {
     diff_rows:   null,  /*  differences gathered from every owner  */
     diff_notes:  null,  /*  what each owner said about them  */
     diff_left:   0,     /*  `diff-schema` answers still owed  */
+    diff_round:  0,     /*  the comparison in flight, echoed as `diff_round` (from __round_seq__)  */
+    diff_timer:  null,  /*  C_TIMER child: the deadline of the comparison in flight  */
+    diff_owed:   null,  /*  {owner: true}: `diff-schema` answers still owed, named on a timeout  */
+    diff_unanswered: null, /*  owners the comparison's deadline found silent  */
     diff_modal:  null,  /*  the differences report  */
     saved:       null,  /*  {owner: [saved-schema answer of each treedb]}  */
     drafts:      null,  /*  {treedb_name: [topic names]} not saved: the last COMPLETE saved-schema round; null while one is in flight  */
@@ -250,7 +255,7 @@ let PRIVATE_DATA = {
 
 let __gclass__ = null;
 
-/*  The round numbers of `save-schema` and `saved-schema`, for the whole
+/*  The round numbers of `save-schema`, `saved-schema` and `diff-schema`, for the whole
  *  MODULE and not per tab (as __treedb_seq__ in c_agent_treedb_link.js).
  *  Counted per tab, a tab opened again on the same yuno started at 1
  *  again, and took the answer of the closed tab's round 1 as its own.  */
@@ -280,6 +285,8 @@ function mt_create(gobj)
     priv.diff_rows = [];
     priv.diff_notes = [];
     priv.diff_left = 0;
+    priv.diff_owed = {};
+    priv.diff_unanswered = [];
     priv.dirty = false;
     priv.apply_owed = {};
     priv.reverted = {};
@@ -289,6 +296,7 @@ function mt_create(gobj)
     priv.save_timer = gobj_create_pure_child("save_deadline", "C_TIMER", {}, gobj);
     priv.saved_timer = gobj_create_pure_child("saved_deadline", "C_TIMER", {}, gobj);
     priv.discover_timer = gobj_create_pure_child("discover_deadline", "C_TIMER", {}, gobj);
+    priv.diff_timer = gobj_create_pure_child("diff_deadline", "C_TIMER", {}, gobj);
     priv.save_owed = {};
     priv.saved_owed = {};
     priv.save_unanswered = [];
@@ -352,6 +360,7 @@ function mt_stop(gobj)
     clear_timeout(priv.save_timer);
     clear_timeout(priv.saved_timer);
     clear_timeout(priv.discover_timer);
+    clear_timeout(priv.diff_timer);
     if(priv.tree && gobj_is_running(priv.tree)) {
         gobj_stop(priv.tree);
     }
@@ -717,6 +726,7 @@ function request_diff(gobj, owner)
     msg_iev_write_key(kw_send, "console_node", node);
     msg_iev_write_key(kw_send, "console_yuno", yuno_id);
     msg_iev_write_key(kw_send, "console_owner", owner);
+    msg_iev_write_key(kw_send, "diff_round", String(gobj.priv.diff_round));
     agent_link_command(link, "command-agent", kw_send);
     return 0;
 }
@@ -731,8 +741,14 @@ function diff_answered(gobj, owner, kw)
     let priv = gobj.priv;
 
     if(priv.diff_left <= 0) {
-        return 0;   /*  a late or duplicated answer: the report is done  */
+        /*  Its deadline passed, a drop or an apply settled it, or it is a
+         *  duplicate: the report is done, but what the node says is said.  */
+        return late_round_answer(gobj, kw, "diff-schema", owner, "diff_round");
     }
+    if(kw && !is_this_round(gobj, kw, "diff_round", priv.diff_round)) {
+        return 0;
+    }
+    delete priv.diff_owed[owner];
     if(!kw) {
         priv.diff_notes.push(`${owner}: ${t("not connected to an agent")}`);
     } else if(typeof kw.result === "number" && kw.result < 0) {
@@ -749,6 +765,19 @@ function diff_answered(gobj, owner, kw)
     if(priv.diff_left > 0) {
         return 0;   /*  still waiting for the others  */
     }
+    return end_diff(gobj);
+}
+
+/***************************************************************
+ *  The comparison is over: every owner answered, or its deadline
+ *  passed (ac_schema_round_timeout()). The report shows what came,
+ *  and names the owners that said nothing.
+ ***************************************************************/
+function end_diff(gobj)
+{
+    let priv = gobj.priv;
+
+    clear_timeout(priv.diff_timer);
     render_diff_button(gobj);
     return show_diff_report(gobj);
 }
@@ -854,8 +883,24 @@ function show_diff_report(gobj)
         );
     }
 
+    /*  Two halves, so the sentence keeps its key and changes language;
+     *  the names are data.  */
+    let $unanswered = null;
+    if(priv.diff_unanswered && priv.diff_unanswered.length) {
+        $unanswered = createElement2(
+            ["div", {class: "TREEDB_DIFF_UNANSWERED notification is-warning is-light is-size-7 mb-3"}, [
+                ["span", {class: "TREEDB_DIFF_UNANSWERED_TEXT", i18n: "differences unanswered"},
+                    t("differences unanswered")],
+                ["span", {class: "TREEDB_DIFF_UNANSWERED_OWNERS",
+                          style: "display:block; white-space:pre-wrap;"},
+                    priv.diff_unanswered.join(", ")]
+            ]]
+        );
+    }
+
     let $content = createElement2(
-        ["div", {class: "TREEDB_DIFF_DIALOG box"}, [$summary, $body]]
+        ["div", {class: "TREEDB_DIFF_DIALOG box"},
+            $unanswered? [$unanswered, $summary, $body]: [$summary, $body]]
     );
 
     priv.diff_modal = yui_shell_show_modal(shell, $content, {
@@ -1108,8 +1153,18 @@ function render_apply(gobj)
     priv.$apply.classList.toggle("is-warning", !off);
     priv.$pending.classList.toggle("is-hidden", !priv.dirty);
     if(priv.$save) {
-        priv.$save.disabled = !ready || priv.save_left > 0 ||
-            !priv.owners || priv.owners.length === 0;
+        let no_owner = !priv.owners || priv.owners.length === 0;
+        let save_key = "save schema";
+        if(no_owner) {
+            save_key = "no schema owner in this yuno";
+        } else if(!ready) {
+            save_key = busy_key(gobj);
+        }
+        priv.$save.disabled = !ready || priv.save_left > 0 || no_owner;
+        priv.$save.title = t(save_key);
+        priv.$save.setAttribute("aria-label", t(save_key));
+        priv.$save.setAttribute("data-i18n-title", save_key);
+        priv.$save.setAttribute("data-i18n-aria-label", save_key);
         priv.$save.classList.toggle("is-warning", priv.dirty);
     }
     if(priv.$imposed) {
@@ -1906,6 +1961,20 @@ function ac_schema_round_timeout(gobj, event, kw, src)
         return end_save(gobj);
     }
 
+    if(src === priv.diff_timer) {
+        if(priv.diff_left <= 0) {
+            log_warning(`${gobj_short_name(gobj)}: diff deadline with no comparison in flight`);
+            return 0;
+        }
+        priv.diff_unanswered = Object.keys(priv.diff_owed || {}).sort();
+        log_error(`${gobj_short_name(gobj)}: the node's agent did not answer 'diff-schema' ` +
+            `of ${priv.diff_unanswered.join(", ")}`);
+        priv.diff_left = 0;
+        priv.diff_round = ++__round_seq__;     /*  a late answer is not counted  */
+        priv.diff_owed = {};
+        return end_diff(gobj);
+    }
+
     if(src === priv.discover_timer) {
         if(gobj_current_state(gobj) !== "ST_DISCOVERING") {
             log_warning(`${gobj_short_name(gobj)}: discovery deadline with no discovery in flight`);
@@ -1991,6 +2060,9 @@ function ac_on_close(gobj, event, kw, src)
     if(priv.diff_left > 0) {
         log_warning(`${gobj_short_name(gobj)}: the session closed with a comparison in flight`);
         priv.diff_left = 0;
+        priv.diff_round = ++__round_seq__;
+        priv.diff_owed = {};
+        clear_timeout(priv.diff_timer);
         render_diff_button(gobj);
         yui_shell_show_error(yui_shell_of(gobj), "the connection dropped", {t: t});
     }
@@ -2296,11 +2368,24 @@ function ac_diff_schema(gobj, event, kw, src)
 
     priv.diff_rows = [];
     priv.diff_notes = [];
+    priv.diff_unanswered = [];
+    priv.diff_round = ++__round_seq__;
+    priv.diff_owed = {};
+    for(let owner of priv.owners) {
+        priv.diff_owed[owner] = true;
+    }
     priv.diff_left = priv.owners.length;
     render_diff_button(gobj);
 
     for(let owner of priv.owners) {
         request_diff(gobj, owner);
+    }
+    /*  Armed once, after every request is sent (as the Save): a silent
+     *  owner kept Differences off, "comparing", for the life of the tab.
+     *  Not armed when every request was settled at once (out of session:
+     *  the report is already up).  */
+    if(priv.diff_left > 0) {
+        set_timeout(priv.diff_timer, SCHEMA_ROUND_TIMEOUT);
     }
     return 0;
 }
@@ -2611,7 +2696,12 @@ function ac_apply_confirmed(gobj, event, kw, src)
      *  would stay off for good. A late one is said there
      *  (answer_during_apply()); the discovery at the end asks the
      *  saved schemas again.  */
-    priv.diff_left = 0;
+    if(priv.diff_left > 0) {
+        priv.diff_left = 0;
+        priv.diff_round = ++__round_seq__;
+        priv.diff_owed = {};
+        clear_timeout(priv.diff_timer);
+    }
     if(priv.saved_left > 0) {
         priv.saved_left = 0;
         priv.saved_round = ++__round_seq__;

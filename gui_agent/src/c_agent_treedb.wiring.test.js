@@ -24,6 +24,7 @@ install_dom_double();
 /*  The toasts: what the tab SAYS is asserted on the call.  */
 const shown = [];
 const infos = [];
+const modals = [];          /*  the content of every dialog the tab opened  */
 vi.mock("@yuneta/gobj-ui/src/shell_modals.js", () => ({
     yui_shell_show_error: (shell, message) => {
         shown.push(message);
@@ -33,8 +34,28 @@ vi.mock("@yuneta/gobj-ui/src/shell_modals.js", () => ({
         infos.push(message);
         return {close() {}};
     },
-    yui_shell_show_modal: () => ({close() {}}),
+    yui_shell_show_modal: (shell, $content) => {
+        modals.push($content);
+        return {close() {}};
+    },
 }));
+
+/*  No shell by default, as before: a test that needs the tab's dialogs
+ *  hands it one. Navigation to it is recorded, not performed.  */
+const test_shell = {shell: null};
+vi.mock("@yuneta/gobj-ui/src/c_yui_shell.js", async (importOriginal) => {
+    const m = await importOriginal();
+    return {
+        ...m,
+        yui_shell_of: (gobj) => test_shell.shell || m.yui_shell_of(gobj),
+        yui_shell_navigate: (shell, route, opts) => {
+            if(shell === test_shell.shell) {
+                return;
+            }
+            return m.yui_shell_navigate(shell, route, opts);
+        },
+    };
+});
 
 const {
     SDATA, SDATA_END, data_type_t, event_flag_t,
@@ -151,10 +172,12 @@ beforeEach(() => {
     sent.length = 0;
     shown.length = 0;
     infos.length = 0;
+    modals.length = 0;
     editors.length = 0;
 });
 
 afterEach(() => {
+    test_shell.shell = null;
     vi.useRealTimers();
 });
 
@@ -1094,12 +1117,20 @@ describe("a drop in ST_READY", () => {
         expect(tab.priv.$apply.disabled).toBe(true);
         expect(tab.priv.$apply.getAttribute("data-i18n-title")).toBe("not connected to an agent");
         expect(tab.priv.$diff.getAttribute("data-i18n-title")).toBe("not connected to an agent");
+        /*  Save too: until 0.22.96 it went off still reading "save
+         *  schema", its name set once at build.  */
+        for(const attr of ["data-i18n-title", "data-i18n-aria-label"]) {
+            expect(tab.priv.$save.getAttribute(attr)).toBe("not connected to an agent");
+        }
 
         gobj_change_state(iev, "ST_SESSION");
         gobj_send_event(tab, "EV_ON_OPEN", {}, link);
         expect(tab.priv.$save.disabled).toBe(false);
         expect(tab.priv.$diff.disabled).toBe(false);
         expect(tab.priv.$apply.disabled).toBe(false);
+        for(const attr of ["data-i18n-title", "data-i18n-aria-label"]) {
+            expect(tab.priv.$save.getAttribute(attr)).toBe("save schema");
+        }
         expect(errors()).toEqual([]);
     });
 
@@ -1126,5 +1157,139 @@ describe("a drop in ST_READY", () => {
         gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
         gobj_send_event(tab, "EV_DIFF_SCHEMA", {}, tab);
         expect(shown).toEqual(["not connected to an agent", "not connected to an agent"]);
+    });
+});
+
+/*
+ *  The comparison had no deadline and no round id (until 0.22.96): one
+ *  owner that never answered diff-schema kept Differences off
+ *  ("comparing") for the life of the tab, a click sent nothing, and only
+ *  a drop brought it back. And an answer of an EARLIER comparison was
+ *  counted in the next one.
+ */
+describe("the deadline of a comparison", () => {
+
+    const ROWS_A = [{kind: "changed", treedb: "ta", topic: "users", col: "name",
+        attr: "header", stored: "Name", from_c: "Full name"}];
+
+    function diff(tab)
+    {
+        gobj_send_event(tab, "EV_DIFF_SCHEMA", {}, tab);
+        const reqs = take(is("diff-schema"));
+        expect(reqs.length).toBe(2);
+        const by_owner = {};
+        for(const r of reqs) {
+            by_owner[r.kw.__md_iev__.console_owner] = r;
+        }
+        return by_owner;
+    }
+
+    function text_of(node)
+    {
+        return node ? String(node.textContent || "") : "";
+    }
+
+    test("it is a C_TIMER child of the tab", () => {
+        const tab = build("x0", {});
+        expect(gobj_gclass_name(tab.priv.diff_timer)).toBe("C_TIMER");
+    });
+
+    test("an owner that never answers is NAMED, and the report shows what came", () => {
+        const tab = build("x1", {});
+        test_shell.shell = {};
+        const reqs = diff(tab);
+        answer(tab, reqs.owner_a, 0, ROWS_A, "owner_a: stored 3, from c 4");
+
+        vi.advanceTimersByTime(29 * 1000);
+        expect(tab.priv.diff_left).toBe(1);
+        expect(tab.priv.$diff.disabled).toBe(true);
+        expect(modals.length).toBe(0);
+
+        vi.advanceTimersByTime(2 * 1000);
+        expect(tab.priv.diff_left).toBe(0);
+        expect(tab.priv.$diff.disabled).toBe(false);
+        expect(errors().filter((e) => e.includes("diff-schema"))).toEqual([
+            expect.stringContaining("owner_b")
+        ]);
+        expect(errors().some((e) => e.includes("diff-schema") && e.includes("owner_a"))).toBe(false);
+
+        expect(modals.length).toBe(1);
+        const $report = modals[0];
+        const $unanswered = $report.querySelector(".TREEDB_DIFF_UNANSWERED");
+        expect($unanswered).toBeTruthy();
+        expect($unanswered.querySelector(".TREEDB_DIFF_UNANSWERED_TEXT")
+            .getAttribute("data-i18n")).toBe("differences unanswered");
+        expect(text_of($unanswered.querySelector(".TREEDB_DIFF_UNANSWERED_OWNERS"))).toBe("owner_b");
+        expect($report.querySelectorAll(".TREEDB_DIFF_ROW").length).toBe(1);
+
+        /*  And Differences asks again.  */
+        diff(tab);
+    });
+
+    test("an answer of an earlier comparison is not counted in the next", () => {
+        const tab = build("x2", {});
+        test_shell.shell = {};
+        const first = diff(tab);
+        vi.advanceTimersByTime(31 * 1000);
+        expect(modals.length).toBe(1);
+
+        const second = diff(tab);
+        expect(second.owner_a.kw.__md_iev__.diff_round).toBeTruthy();
+        expect(second.owner_a.kw.__md_iev__.diff_round)
+            .not.toBe(first.owner_a.kw.__md_iev__.diff_round);
+
+        logged.length = 0;
+        answer(tab, first.owner_b, 0, ROWS_A);
+        expect(tab.priv.diff_left).toBe(2);
+        expect(warnings().filter((w) => w.includes("diff_round")).length).toBe(1);
+
+        answer(tab, second.owner_a, 0, []);
+        answer(tab, second.owner_b, 0, []);
+        expect(tab.priv.diff_left).toBe(0);
+        expect(modals.length).toBe(2);
+        expect(modals[1].querySelectorAll(".TREEDB_DIFF_ROW").length).toBe(0);
+        expect(modals[1].querySelector(".TREEDB_DIFF_UNANSWERED")).toBe(null);
+    });
+
+    test("an answer after the round ended is said, not counted", () => {
+        const tab = build("x3", {});
+        test_shell.shell = {};
+        const reqs = diff(tab);
+        vi.advanceTimersByTime(31 * 1000);
+        logged.length = 0;
+        answer(tab, reqs.owner_b, -1, null, "command not found");
+        const w = warnings().filter((m) => m.includes("'diff-schema' of owner_b"));
+        expect(w.length).toBe(1);
+        expect(w[0]).toContain("answered after the round ended");
+        expect(w[0]).toContain("command not found");
+    });
+
+    test("a comparison answered in time leaves no deadline behind", () => {
+        const tab = build("x4", {});
+        test_shell.shell = {};
+        const reqs = diff(tab);
+        answer(tab, reqs.owner_a, 0, []);
+        answer(tab, reqs.owner_b, 0, []);
+        vi.advanceTimersByTime(61 * 1000);
+        expect(errors()).toEqual([]);
+        expect(modals.length).toBe(1);
+    });
+
+    test("a drop settles it: its deadline does not fire after it", () => {
+        const tab = build("x5", {});
+        diff(tab);
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        vi.advanceTimersByTime(61 * 1000);
+        expect(errors()).toEqual([]);
+    });
+
+    test("an apply settles it: its deadline does not fire during the apply", () => {
+        const APPLICABLE = {owner_a: [{treedb_name: "treedb_x", result: 0,
+            data: {can_apply: true, saved_schema_version: 2, in_use_schema_version: 1, draft_changed: {}}}]};
+        const tab = build("x6", APPLICABLE);
+        diff(tab);
+        gobj_send_event(tab, "EV_APPLY_CONFIRMED", {}, tab);
+        vi.advanceTimersByTime(31 * 1000);
+        expect(errors().filter((e) => e.includes("diff_deadline"))).toEqual([]);
     });
 });

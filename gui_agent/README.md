@@ -96,6 +96,21 @@ The Console targets remote role `controlcenter` / service `controlcenter` and
 wraps each typed line in a `command-agent` (which returns a synchronous dispatch
 ack plus the agent's asynchronous real answer).
 
+A structured answer (a dict, or a list with no table schema) is shown in the
+lazy JSON viewer (`C_YUI_JSON`). An answer can carry `__collapsed__` stubs:
+`print-tranger expanded=1` of a `C_NODE` or a `C_TRANGER` collapses every list
+and dict above 100 items. The answer came whole, and a command in general has
+no path to re-issue, so a click on a stub is answered at once with the key
+`this part cannot be loaded here` (`by_design`, a warning, not an error). To
+read the part, type the command again with its `path` (0.22.96; before, the
+stub stayed on "loading" and ignored every further click):
+
+```
+command-yuno id=<yuno> service=<treedb> command=print-tranger expanded=1
+// a stub at topics`users: "this part cannot be loaded here"
+command-yuno id=<yuno> service=<treedb> command=print-tranger expanded=1 path=topics`users
+```
+
 ## Handing the backends to the TreeDB GUI
 
 The Schemas picker copies the yunos it shows as **gui_treedb connections**
@@ -355,7 +370,8 @@ are OFF there (the Apply tooltip says `loading` or `applying`). Before, they
 stayed live and a click answered *"Event NOT DEFINED in state"*. A **drop**
 starts no re-discovery: the tab stays in `ST_READY` with its tree up, and the
 three buttons are off until the session is back (tooltip `not connected to an
-agent`; 0.22.95 -- in 0.22.94 they stayed live after a drop in `ST_READY`).
+agent`; 0.22.95 -- in 0.22.94 they stayed live after a drop in `ST_READY`; and
+until 0.22.96 Save went off still reading `save schema`, its name set once).
 An Apply confirmed from a dialog left open across the drop is refused BEFORE
 the tree is taken down, and said; before, the tree went down, the first step
 failed to send and the tab fell to `ST_IDLE` for nothing.
@@ -415,6 +431,19 @@ named in a toast:
 |---|---|---|
 | `save-schema` | the save ends (Save and Apply come back), the drafts stay marked, the node is read again | `save unanswered` |
 | `saved-schema` | the round ends with what came: Apply stays off for the silent owners, the editor gets the drafts that came | `saved schemas unanswered` |
+| `diff-schema` | the comparison ends with what came: the report shows the answers that came, Differences comes back | `differences unanswered`, at the top of the report |
+
+The comparison got its deadline (`diff_deadline`) in 0.22.96: before, one
+silent owner kept Differences off, "comparing", for the life of the tab, and a
+click sent nothing. Its answers carry a round number (`diff_round`) like the
+other two rounds, so an answer of an earlier comparison is not counted in the
+next one; an answer after its round ended is logged as a warning.
+
+```js
+gobj_send_event(tab, "EV_DIFF_SCHEMA", {}, tab);   // diff_deadline armed: 30 s
+// owner_a answers, owner_b says nothing
+// ... 30 s: the report opens with owner_a's rows, "differences unanswered" + "owner_b"
+```
 
 A **Save cut by the drop** may have landed: the saved schemas (what Apply
 offers, which topics are drafts) are read again when the session is back, as
@@ -433,8 +462,8 @@ gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);   // save_deadline armed: 30 s
 // ... 30 s: toast "save unanswered" + "owner_b"; discovery runs again
 ```
 
-The round numbers of `save-schema` and `saved-schema` are counted for the
-page, not per tab (0.22.90), as the adapter's request ids are: a tab opened
+The round numbers of `save-schema`, `saved-schema` and `diff-schema` are
+counted for the page, not per tab (0.22.90), as the adapter's request ids are: a tab opened
 again on the same yuno started at round 1 again and took an answer of the
 closed tab's round 1 as its own.
 

@@ -1681,10 +1681,14 @@ function render_table(gobj, schema, data)
  *  Mount the lazy JSON tree viewer (C_YUI_JSON) into CONSOLE_RESPONSE
  *  and feed it the answer.
  *
- *  No `subscriber`: the viewer publishes EV_EXPAND_PATH only for
- *  `kw_collapse()` sentinels, and an agent command answer arrives
- *  whole -- there is no path to re-issue, so there is nothing for us
- *  to answer. With no sentinels it is a plain collapsible tree.
+ *  The viewer publishes EV_EXPAND_PATH for a `kw_collapse()`
+ *  sentinel, and an answer CAN carry them: `print-tranger expanded=1`
+ *  of a C_NODE or a C_TRANGER collapses every list and dict above 100
+ *  items. The answer arrives whole and a command in general has no
+ *  path to re-issue, so the console answers that it cannot
+ *  (ac_json_expand_path()) -- unanswered, the stub stayed on
+ *  "loading" and ignored every further click. With no sentinels it is
+ *  a plain collapsible tree.
  *
  *  No `title` either: the workspace tab already names the answer.
  ***************************************************************/
@@ -1695,7 +1699,9 @@ function render_json_view(gobj, data)
     let jv = gobj_create_service(
         `console-json-${gobj_name(gobj)}`,
         "C_YUI_JSON",
-        {},
+        {
+            subscriber: gobj    /*  publishes EV_EXPAND_PATH to us  */
+        },
         gobj
     );
     if(!jv) {
@@ -2086,6 +2092,25 @@ function answer_display_mode(gobj, kw)
 }
 
 /***************************************************************
+ *  The JSON viewer asks for a `__collapsed__` subtree of the answer
+ *  it shows. The answer came whole: there is nothing to fetch, and it
+ *  is said -- by design, so a warning, and as a KEY, so the stub
+ *  changes language with the app.
+ ***************************************************************/
+function ac_json_expand_path(gobj, event, kw, src)
+{
+    if(!src || gobj_is_destroying(src)) {
+        return 0;   /*  the viewer went with a newer answer  */
+    }
+    gobj_send_event(src, "EV_SUBTREE_ERROR", {
+        path:      kw.path || "",
+        i18n:      "this part cannot be loaded here",
+        by_design: true
+    }, gobj);
+    return 0;
+}
+
+/***************************************************************
  *  Command answer. The shared link re-publishes every answer; only
  *  render our own command-agent results (the node picker handles
  *  list-agents). Filter by the command in the command_stack.
@@ -2273,7 +2298,9 @@ function create_gclass(gclass_name)
             ["EV_INSERT_COMMAND",    ac_insert_command,    null],
             ["EV_ADD_SHORTKEY",      ac_add_shortkey,      null],
             ["EV_REMOVE_HISTORY",    ac_remove_history,    null],
-            ["EV_HISTORY_SORT",      ac_history_sort,      null]
+            ["EV_HISTORY_SORT",      ac_history_sort,      null],
+            /*  from the JSON viewer of an answer  */
+            ["EV_EXPAND_PATH",       ac_json_expand_path,  null]
         ]]
     ];
 
@@ -2303,7 +2330,8 @@ function create_gclass(gclass_name)
         ["EV_INSERT_COMMAND",    0],
         ["EV_ADD_SHORTKEY",      0],
         ["EV_REMOVE_HISTORY",    0],
-        ["EV_HISTORY_SORT",      0]
+        ["EV_HISTORY_SORT",      0],
+        ["EV_EXPAND_PATH",       0]
     ];
 
     __gclass__ = gclass_create(
