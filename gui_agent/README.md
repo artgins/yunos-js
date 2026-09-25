@@ -348,11 +348,17 @@ or with an Apply. A write in a DATA treedb is not a draft and lights nothing:
 the yuno already uses it (0.22.94). **Apply** is lit by what the node says it
 has SAVED (`saved-schema`, `can_apply`), not by the writes of this tab.
 
-**Save, Differences and Apply work in `ST_READY` only** (0.22.94). The tree of
-a re-discovery -- after every Save, every Apply and every drop -- stays on
-screen while the node is read again, and the three buttons are OFF there (the
-Apply tooltip says `loading`, `applying` or `not connected to an agent`).
-Before, they stayed live and a click answered *"Event NOT DEFINED in state"*.
+**Save, Differences and Apply work in `ST_READY` only, and in session**
+(0.22.94, 0.22.95). The tree of a re-discovery -- after every Save and every
+Apply -- stays on screen while the node is read again, and the three buttons
+are OFF there (the Apply tooltip says `loading` or `applying`). Before, they
+stayed live and a click answered *"Event NOT DEFINED in state"*. A **drop**
+starts no re-discovery: the tab stays in `ST_READY` with its tree up, and the
+three buttons are off until the session is back (tooltip `not connected to an
+agent`; 0.22.95 -- in 0.22.94 they stayed live after a drop in `ST_READY`).
+An Apply confirmed from a dialog left open across the drop is refused BEFORE
+the tree is taken down, and said; before, the tree went down, the first step
+failed to send and the tab fell to `ST_IDLE` for nothing.
 The discovery has its own 30 s `C_TIMER` (`discover_deadline`), for `services`
 and then the `treedb-info` of each treedb: when the node's agent is silent,
 the tab goes to `ST_EMPTY` with the notice `discovery unanswered`, and the
@@ -414,7 +420,10 @@ A **Save cut by the drop** may have landed: the saved schemas (what Apply
 offers, which topics are drafts) are read again when the session is back, as
 for a `saved-schema` round the drop cut (0.22.91). When every owner answers
 that re-read and it shows no draft, the Save landed, and **unsaved changes**
-goes out (0.22.94). An answer of a round that is over -- its deadline passed,
+goes out (0.22.94). An owner that REFUSES the re-read (its yuno down or
+restarting on the reconnect), or answers something that is not a list, names
+no draft and proves nothing: the mark stays, and a warning says so (0.22.95;
+in 0.22.94 a round of refusals put it out over a Save that never landed). An answer of a round that is over -- its deadline passed,
 or a drop settled it -- is not counted, and is logged as a warning with the
 owner, the round and what it said (0.22.94).
 

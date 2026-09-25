@@ -1612,7 +1612,7 @@ function request_print_tranger(gobj, path)
         let jv = priv.json_gobj;
         if(path && jv && is_gobj(jv) && !gobj_is_destroying(jv)) {
             gobj_send_event(jv, "EV_SUBTREE_ERROR",
-                {path: path, error: t("no session")}, gobj);
+                {path: path, i18n: "no session"}, gobj);
         }
         return;
     }

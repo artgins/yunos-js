@@ -1073,11 +1073,13 @@ function render_apply(gobj)
      *  It is restarted on the node (`yuneta_agent --stop` / `--start`).
      */
     let key = "apply schema";
-    let ready = gobj_current_state(gobj) === "ST_READY";
+    let ready = toolbar_ready(gobj);
     if(!ready) {
         /*  Save, Differences and Apply are ST_READY's events: the tree of
          *  a re-discovery (or of an apply) stays on screen, and a click
-         *  there answered "Event NOT DEFINED in state".  */
+         *  there answered "Event NOT DEFINED in state". And they need the
+         *  session: a drop in ST_READY stays in ST_READY with the tree
+         *  up, and Apply's Confirm took the tree down and then failed.  */
         key = busy_key(gobj);
     } else if(is_agent_yuno(gobj_read_str_attr(gobj, "yuno_id"))) {
         key = "apply needs a node restart";
@@ -1289,6 +1291,16 @@ function saved_answered(gobj, owner, kw)
         let rows = rows_without_reverted(gobj, kw.data);
         priv.saved[owner] = rows;
         priv.drafts_round = drafts_of_saved_answer(rows, priv.drafts_round || {});
+    } else if(priv.saved_after_cut) {
+        /*  A refusal names no draft, and that is not "no draft": the
+         *  owner may be down or restarting on the reconnect. Taken as
+         *  proof, it put "unsaved changes" out after a Save that never
+         *  landed (before gui_agent 0.22.95). It proves nothing, as a
+         *  round cut short by its deadline proves nothing.  */
+        log_warning(`${gobj_short_name(gobj)}: 'saved-schema' of ${owner} refused ` +
+            `(${kw && kw.comment ? kw.comment : "no list"}): whether the cut Save ` +
+            `landed is not known, "unsaved changes" stays`);
+        priv.saved_after_cut = false;
     }
     render_apply(gobj);
     if(priv.saved_left === 0) {
@@ -1614,7 +1626,7 @@ function render_diff_button(gobj)
     }
     let none = !priv.owners || priv.owners.length === 0;
     let busy = priv.diff_left > 0;
-    let ready = gobj_current_state(gobj) === "ST_READY";
+    let ready = toolbar_ready(gobj);
     let key = none? "no schema owner in this yuno": (busy? "comparing": "schema differences");
     if(!ready && !none && !busy) {
         key = busy_key(gobj);
@@ -1628,7 +1640,19 @@ function render_diff_button(gobj)
 }
 
 /***************************************************************
- *  Why the toolbar is off outside ST_READY, as an i18n key.
+ *  Can Save, Differences and Apply be pressed? They are ST_READY's
+ *  events, and each one sends: in ST_READY with the session down
+ *  (a drop leaves the tree up, see ac_on_close()) they cannot.
+ ***************************************************************/
+function toolbar_ready(gobj)
+{
+    return gobj_current_state(gobj) === "ST_READY" &&
+        agent_link_is_connected(link_service(gobj));
+}
+
+/***************************************************************
+ *  Why the toolbar is off, as an i18n key: outside ST_READY, or
+ *  out of session.
  ***************************************************************/
 function busy_key(gobj)
 {
@@ -2235,6 +2259,7 @@ function ac_save_schema(gobj, event, kw, src)
     }
     if(priv.save_left === 0) {
         log_error(`${gobj_short_name(gobj)}: cannot save the schema -- not in session`);
+        yui_shell_show_error(yui_shell_of(gobj), "not connected to an agent", {t: t});
         return -1;
     }
     /*  Armed once, after every request is sent (as the apply steps):
@@ -2265,6 +2290,7 @@ function ac_diff_schema(gobj, event, kw, src)
     let link = link_service(gobj);
     if(!link || !agent_link_is_connected(link)) {
         log_error(`${gobj_short_name(gobj)}: cannot compare schemas — not in session`);
+        yui_shell_show_error(yui_shell_of(gobj), "not connected to an agent", {t: t});
         return -1;
     }
 
@@ -2310,6 +2336,12 @@ function ac_apply_changes(gobj, event, kw, src)
     }
     if(!saved_entries(gobj).some((e) => e.data && e.data.can_apply)) {
         log_error(`${gobj_short_name(gobj)}: apply refused, nothing saved can be applied`);
+        return -1;
+    }
+    if(!agent_link_is_connected(link_service(gobj))) {
+        /*  The button is off out of session (render_apply()).  */
+        log_warning(`${gobj_short_name(gobj)}: apply refused, not in session`);
+        yui_shell_show_error(yui_shell_of(gobj), "not connected to an agent", {t: t});
         return -1;
     }
     let shell = yui_shell_of(gobj);
@@ -2556,6 +2588,20 @@ function ac_apply_confirmed(gobj, event, kw, src)
          *  refuses to open one while a save is in flight: this is a
          *  path that should not exist.  */
         log_error(`${gobj_short_name(gobj)}: apply refused, a save is in flight`);
+        return -1;
+    }
+
+    /*  The dialog stays open across a drop. Confirmed out of session,
+     *  the tree went down and THEN the first step failed: the tab fell
+     *  to ST_IDLE with nothing sent and the tree gone for nothing. It
+     *  is refused first, while the tree is still up.  */
+    if(!agent_link_is_connected(link_service(gobj))) {
+        if(priv.modal) {
+            priv.modal.close();
+            priv.modal = null;
+        }
+        log_warning(`${gobj_short_name(gobj)}: apply refused, not in session: nothing sent`);
+        yui_shell_show_error(yui_shell_of(gobj), "not connected to an agent", {t: t});
         return -1;
     }
 

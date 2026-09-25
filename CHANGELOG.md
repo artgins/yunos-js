@@ -6,6 +6,37 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.22.95, gui_treedb 0.17.68 + gobj-js ^7.25.6, gobj-ui ^7.25.20 (2026-09-25)
+
+- **gui_agent: "unsaved changes" stays after a Save that never landed.** The
+  `saved-schema` re-read of a Save cut by a drop took an ERROR answer -- the
+  owner yuno down or restarting on the reconnect -- or one that is not a list
+  as "no draft", and with every owner answering that way it put "unsaved
+  changes" out and took the warning colour off Save over a draft that was
+  never saved. A refusal proves nothing, as a round cut short by its deadline
+  proves nothing: the mark stays, and a warning names the owner and its
+  words. (New in 0.22.94.)
+- **gui_agent: Save, Differences and Apply are off out of session.** A drop in
+  `ST_READY` starts no re-discovery -- the tab stays in `ST_READY` with its
+  tree up -- and the three buttons, gated on the state alone, stayed live:
+  Save and Differences only logged "not in session", and Apply opened its
+  dialog, whose Confirm took the tree down, failed to send and left the tab in
+  `ST_IDLE`. They are off now until the session is back (tooltip `not
+  connected to an agent`); an Apply confirmed from a dialog left open across
+  the drop is refused before the tree goes, and Save / Differences out of
+  session say it in a toast. The 0.22.94 entry below said the buttons were off
+  during the re-discovery "after a Save, an Apply, a drop": a drop starts
+  none, and the README now says what happens instead. (Inherited, in
+  functions 0.22.94 changed.)
+- **gui_treedb: the "no session" of a subtree the tranger view cannot load is
+  a key** (gobj-ui 7.25.20's `EV_SUBTREE_ERROR {i18n}`), so the stub changes
+  language with the app.
+- **Both: gobj-js ^7.25.6** (`kw_find_path()` answers as C: a bad kw or a null
+  middle segment gives the reader's default) **and gobj-ui ^7.25.20** (the
+  subtree stub's key and warning, the `__graphs__` refusal of an earlier load
+  ignored, the create echo that marked unsaved graph edits as saved, the schema
+  editor's write out of session).
+
 ## gui_agent 0.22.94, gui_treedb 0.17.67 + gobj-js ^7.25.5, gobj-ui ^7.25.19 (2026-09-24)
 
 - **gui_agent: Save, Differences and Apply are off outside `ST_READY`.**

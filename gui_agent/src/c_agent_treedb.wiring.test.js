@@ -76,6 +76,7 @@ function fake_tree_start(gobj)
 let yuno = null;
 let host = null;
 let link = null;
+let iev = null;
 
 beforeAll(() => {
     gobj_start_up(null, null, null, null, null, null, null);
@@ -86,7 +87,7 @@ beforeAll(() => {
 
     gclass_create("C_TEST_HOST", [["EV_ROUTE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT]],
         [["ST_IDLE", []]], {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
-    gclass_create("C_TEST_IEV", [], [["ST_SESSION", []]],
+    gclass_create("C_TEST_IEV", [], [["ST_SESSION", []], ["ST_DISCONNECTED", []]],
         {mt_command_parser: iev_command_parser}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
     gclass_create(
         "C_TEST_LINK",
@@ -137,13 +138,14 @@ beforeAll(() => {
 
     yuno = gobj_create_yuno("wiring_yuno", "C_TEST_HOST", {});
     gobj_start(yuno);
-    const iev = gobj_create_service("iev", "C_TEST_IEV", {}, yuno);
+    iev = gobj_create_service("iev", "C_TEST_IEV", {}, yuno);
     gobj_change_state(iev, "ST_SESSION");
     link = gobj_create_service("agent_link", "C_TEST_LINK", {iev: iev}, yuno);
     host = gobj_create("host", "C_TEST_HOST", {}, yuno);
 });
 
 beforeEach(() => {
+    gobj_change_state(iev, "ST_SESSION");
     vi.useFakeTimers();
     logged.length = 0;
     sent.length = 0;
@@ -1006,5 +1008,123 @@ describe("unsaved changes", () => {
         answer(tab, reqs[0], 0, []);
         vi.advanceTimersByTime(31 * 1000);
         expect(tab.priv.dirty).toBe(true);
+    });
+});
+
+/*  An ERROR answer to saved-schema names no draft, and that is not "no
+ *  draft". Before gui_agent 0.22.95 the re-read after a cut Save took a
+ *  round of refusals (the owner yuno down or restarting on the reconnect)
+ *  as proof that the Save landed, and put "unsaved changes" out over a
+ *  draft that was never saved.  */
+describe("a re-read of a cut Save that the owners refuse", () => {
+
+    function cut_save(name)
+    {
+        const tab = build(name, {});
+        gobj_send_event(tab, "EV_RECORD_WRITTEN", {treedb_name: "treedb_system_schema"}, tab);
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        take(is("save-schema"));
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+        gobj_send_event(tab, "EV_ON_OPEN", {}, link);
+        logged.length = 0;
+        return tab;
+    }
+
+    test("every owner refuses: the mark stays, and it is said", () => {
+        const tab = cut_save("r1");
+        for(const req of take(is("saved-schema"))) {
+            answer(tab, req, -1, null, "yuno not running");
+        }
+        expect(tab.priv.dirty).toBe(true);
+        expect(tab.priv.$pending.classList.contains("is-hidden")).toBe(false);
+        expect(tab.priv.$save.classList.contains("is-warning")).toBe(true);
+        expect(warnings().filter((w) => /refused/.test(w)).map((w) => w.replace(/^\S+: /, ""))).toEqual([
+            "'saved-schema' of owner_a refused (yuno not running): whether the cut Save " +
+                "landed is not known, \"unsaved changes\" stays"
+        ]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("one refuses, the other lists no draft: the mark stays", () => {
+        const tab = cut_save("r2");
+        for(const req of take(is("saved-schema"))) {
+            if(req.kw.__md_iev__.console_owner === "owner_a") {
+                answer(tab, req, -1, null, "yuno not running");
+            } else {
+                answer(tab, req, 0, []);
+            }
+        }
+        expect(tab.priv.dirty).toBe(true);
+    });
+
+    test("an answer that is not a list proves nothing either", () => {
+        const tab = cut_save("r3");
+        for(const req of take(is("saved-schema"))) {
+            answer(tab, req, 0, {});
+        }
+        expect(tab.priv.dirty).toBe(true);
+    });
+});
+
+/*  A drop in ST_READY leaves the tab in ST_READY with the tree up. Save,
+ *  Differences and Apply were gated on the state alone, so they stayed
+ *  live: Save and Differences only logged "not in session", and Apply
+ *  opened its dialog, whose Confirm took the tree down and then failed
+ *  to send (before gui_agent 0.22.95).  */
+describe("a drop in ST_READY", () => {
+
+    const APPLICABLE = {owner_a: [{treedb_name: "treedb_x", result: 0,
+        data: {can_apply: true, saved_schema_version: 2, in_use_schema_version: 1, draft_changed: {}}}]};
+
+    function drop(tab)
+    {
+        gobj_change_state(iev, "ST_DISCONNECTED");
+        gobj_send_event(tab, "EV_ON_CLOSE", {}, link);
+    }
+
+    test("the three buttons go off, saying why, and come back with the session", () => {
+        const tab = build("d1", APPLICABLE);
+        expect(tab.priv.$apply.disabled).toBe(false);
+
+        drop(tab);
+        expect(gobj_current_state(tab)).toBe("ST_READY");
+        expect(tab.priv.tree).toBeTruthy();
+        expect(tab.priv.$save.disabled).toBe(true);
+        expect(tab.priv.$diff.disabled).toBe(true);
+        expect(tab.priv.$apply.disabled).toBe(true);
+        expect(tab.priv.$apply.getAttribute("data-i18n-title")).toBe("not connected to an agent");
+        expect(tab.priv.$diff.getAttribute("data-i18n-title")).toBe("not connected to an agent");
+
+        gobj_change_state(iev, "ST_SESSION");
+        gobj_send_event(tab, "EV_ON_OPEN", {}, link);
+        expect(tab.priv.$save.disabled).toBe(false);
+        expect(tab.priv.$diff.disabled).toBe(false);
+        expect(tab.priv.$apply.disabled).toBe(false);
+        expect(errors()).toEqual([]);
+    });
+
+    test("an Apply confirmed out of session is refused BEFORE the tree goes", () => {
+        const tab = build("d2", APPLICABLE);
+        const tree = tab.priv.tree;
+        drop(tab);
+        logged.length = 0;
+
+        gobj_send_event(tab, "EV_APPLY_CONFIRMED", {}, tab);
+        expect(gobj_current_state(tab)).toBe("ST_READY");
+        expect(tab.priv.tree).toBe(tree);
+        expect(take(is("apply-schema"))).toEqual([]);
+        expect(shown).toEqual(["not connected to an agent"]);
+        expect(warnings().map((w) => w.replace(/^\S+: /, ""))).toEqual([
+            "apply refused, not in session: nothing sent"
+        ]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("Save and Differences out of session are said, not only logged", () => {
+        const tab = build("d3", APPLICABLE);
+        drop(tab);
+        gobj_send_event(tab, "EV_SAVE_SCHEMA", {}, tab);
+        gobj_send_event(tab, "EV_DIFF_SCHEMA", {}, tab);
+        expect(shown).toEqual(["not connected to an agent", "not connected to an agent"]);
     });
 });
