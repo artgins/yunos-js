@@ -30,10 +30,10 @@
                 "kw": { "title": "commands", "node": "" },
                 "lifecycle": "keep_alive"
             },
-            "/statistics/node": {
+            "/users/node": {
                 "stage": "main",
-                "gclass": "C_AGENT_STATS",
-                "kw": { "title": "statistics", "node": "" },
+                "gclass": "C_AGENT_USERS",
+                "kw": { "title": "users", "node": "", "yuno_id": "" },
                 "lifecycle": "keep_alive"
             },
             "/terminal/node": {
@@ -152,7 +152,7 @@
                 "left":   { "layout": "vertical", "icon_pos": "left", "show_label": true },
                 "bottom": { "layout": "icon-bar", "icon_pos": "top",  "show_label": true }
             },
-            "_items_comment": "Six primary options, all of them WORK — preferences left this level for the avatar menu (/preferences). Users (the fifth) is per YUNO like Schemas: its tree picker marks the yunos that keep users (a C_AUTHZ with its store), and each tab manages one store. The sixth, Monitor, is not per node: it watches the yunos of ONE scenario (an agent + its yunos + how the messages flow), through its own direct link to that agent, so its submenu is one fixed tab. Each workspace declares ONLY its fixed node-picker tab here; the C_APP workspaces controller replaces the submenu at runtime, keeping this picker as tab 0 and appending one closable tab per selected node (per selected YUNO in Statistics, Schemas and Users, whose picker is the C_STATS_NODES tree). Commands/Statistics/Schemas/Users list only agents >= 7.7.0 (min_version); Terminal (PTY backdoor) lists every version.",
+            "_items_comment": "Five primary options, all of them WORK — preferences left this level for the avatar menu (/preferences). Commands and Terminal are per NODE; Schemas and Users per YUNO (their picker is the C_STATS_NODES tree, Schemas marking the yunos with a treedb and Users the ones that keep users). Each of those four declares ONLY its fixed node-picker tab here; the C_APP workspaces controller replaces the submenu at runtime, keeping this picker as tab 0 and appending one closable tab per selected node or yuno. The fifth, Scenarios, has three FIXED tabs: the scenarios the control center keeps (C_SCENARIOS), the tree of yunos (ticking yunos makes a scenario of them, shown as cards — what Statistics was) and the live view of the scenario chosen (C_AGENT_MONITOR). Commands/Schemas/Users list only agents >= 7.7.0 (min_version); Terminal (PTY backdoor) lists every version.",
             "items": [
                 {
                     "id": "commands",
@@ -173,31 +173,6 @@
                                     "stage": "main",
                                     "gclass": "C_NODES",
                                     "kw": { "title": "nodes", "workspace": "commands", "min_version": "7.7.0" },
-                                    "lifecycle": "keep_alive"
-                                }
-                            }
-                        ]
-                    }
-                },
-                {
-                    "id": "statistics",
-                    "name": "statistics",
-                    "icon": "yi-eye",
-                    "tooltip": "live stats from a node's yunos",
-                    "route": "/statistics",
-                    "submenu": {
-                        "render": { "top-sub": "tabs" },
-                        "default": "/statistics/node",
-                        "items": [
-                            {
-                                "id": "picker",
-                                "name": "nodes",
-                                "icon": "yi-cloudversify",
-                                "route": "/statistics/nodes",
-                                "target": {
-                                    "stage": "main",
-                                    "gclass": "C_STATS_NODES",
-                                    "kw": { "title": "nodes", "workspace": "statistics", "min_version": "7.7.0" },
                                     "lifecycle": "keep_alive"
                                 }
                             }
@@ -280,24 +255,48 @@
                     }
                 },
                 {
-                    "id": "monitor",
-                    "name": "monitor",
+                    "id": "scenarios",
+                    "name": "scenarios",
                     "icon": "yi-diagram-project",
-                    "tooltip": "watch the yunos of a test live",
-                    "route": "/monitor",
+                    "tooltip": "scenarios of yunos to watch and to run",
+                    "route": "/scenarios",
                     "submenu": {
                         "render": { "top-sub": "tabs" },
-                        "default": "/monitor/live",
+                        "default": "/scenarios/list",
                         "items": [
+                            {
+                                "id": "list",
+                                "name": "scenarios",
+                                "icon": "yi-table",
+                                "route": "/scenarios/list",
+                                "target": {
+                                    "stage": "main",
+                                    "gclass": "C_SCENARIOS",
+                                    "kw": { "title": "scenarios" },
+                                    "lifecycle": "keep_alive"
+                                }
+                            },
+                            {
+                                "id": "yunos",
+                                "name": "yunos",
+                                "icon": "yi-cloudversify",
+                                "route": "/scenarios/yunos",
+                                "target": {
+                                    "stage": "main",
+                                    "gclass": "C_STATS_NODES",
+                                    "kw": { "title": "nodes", "workspace": "scenarios", "min_version": "7.7.0" },
+                                    "lifecycle": "keep_alive"
+                                }
+                            },
                             {
                                 "id": "live",
                                 "name": "live",
                                 "icon": "yi-diagram-project",
-                                "route": "/monitor/live",
+                                "route": "/scenarios/live",
                                 "target": {
                                     "stage": "main",
                                     "gclass": "C_AGENT_MONITOR",
-                                    "kw": { "title": "monitor" },
+                                    "kw": { "title": "scenario" },
                                     "lifecycle": "keep_alive"
                                 }
                             }

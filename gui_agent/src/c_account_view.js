@@ -6,7 +6,7 @@
  *
  *        - "preference" : the /preferences page — appearance (theme +
  *                         language), navigation shape, command-answer
- *                         display, the stats knobs, the two font sizes
+ *                         display, the two font sizes
  *                         and the shortkeys manager; all apply
  *                         immediately and persist in this browser.
  *        - "about"      : product card (mark, version, tenant/plane,
@@ -67,10 +67,6 @@ import {
     agent_config_set_nav_mode,
     agent_config_get_display_mode,
     agent_config_set_display_mode,
-    agent_config_get_stats_layout,
-    agent_config_set_stats_layout,
-    agent_config_get_stats_refresh,
-    agent_config_set_stats_refresh,
     agent_config_get_shortkeys,
     agent_config_set_shortkey,
     agent_config_remove_shortkey,
@@ -312,34 +308,6 @@ function build_preference(gobj)
         }
     );
 
-    /*  Statistics cards layout: one tab holding all cards (default) vs a
-     *  tab per selected yuno. C_APP rebuilds the Statistics tabs on change.  */
-    let stats_layout = config ? agent_config_get_stats_layout(config) : "single";
-    let stats_layout_seg = segment(
-        [
-            {value: "single", i18n: "stats one tab",      text: "One tab",      icon: "yi-table"},
-            {value: "tabs",   i18n: "stats tab per yuno", text: "Tab per yuno", icon: "yi-eye"}
-        ],
-        stats_layout,
-        function(v) {
-            gobj_send_event(gobj, "EV_SET_STATS_LAYOUT", {value: v}, gobj);
-        }
-    );
-
-    /*  Statistics auto-refresh interval (seconds; 0 = off). A deliberate
-     *  opt-in polling exception, applied live by the open stats views.  */
-    let stats_refresh = config ? agent_config_get_stats_refresh(config) : 2;
-    let $refresh_sel = createElement2(
-        ["select", {class: "PREF_STATS_REFRESH",
-                    "aria-label": t("stats refresh"), "data-i18n-aria-label": "stats refresh"},
-            [0, 1, 2, 5, 10, 30].map((s) => ["option", {value: String(s)}, (s === 0 ? t("off") : `${s} s`)]),
-            {change: (e) => gobj_send_event(gobj, "EV_SET_STATS_REFRESH",
-                {secs: parseInt(e.target.value, 10)}, gobj)}
-        ]
-    );
-    $refresh_sel.value = String(stats_refresh);
-    let stats_refresh_ctrl = ["div", {class: "PREF_SELECT select"}, [$refresh_sel]];
-
     /*  Terminal font size — the shared DEFAULT for every Terminal tab
      *  (same persisted value the tab's A− / A+ buttons drive). A stepper so
      *  Settings matches the toolbar; open tabs pick a change up on their next
@@ -416,8 +384,6 @@ function build_preference(gobj)
                         field("language", "Language", lang_seg),
                         field("navigation", "Navigation", nav_seg),
                         field("display mode", "Command answers", display_seg),
-                        field("statistics layout", "Statistics cards", stats_layout_seg),
-                        field("stats refresh", "Auto-refresh stats", stats_refresh_ctrl),
                         field("terminal font size", "Terminal font size", font_seg),
                         field("console font size", "Console font size", console_font_seg)
                     ]
@@ -768,32 +734,6 @@ function ac_set_nav_mode(gobj, event, kw, src)
     return 0;
 }
 
-function ac_set_stats_layout(gobj, event, kw, src)
-{
-    let config = gobj_find_service("agent_config", false);
-    if(config) {
-        agent_config_set_stats_layout(config, (kw && kw.value) || "single");
-    }
-    render(gobj);
-    return 0;
-}
-
-/***************************************************************
- *  Statistics auto-refresh interval in seconds (0 = off) — the
- *  deliberate polling exception. The open Statistics views re-arm
- *  their timer on the config service's own event.
- ***************************************************************/
-function ac_set_stats_refresh(gobj, event, kw, src)
-{
-    let secs = (kw && kw.secs) || 0;
-    let config = gobj_find_service("agent_config", false);
-    if(config) {
-        agent_config_set_stats_refresh(config, secs);
-    }
-    render(gobj);
-    return 0;
-}
-
 /***************************************************************
  *  The two shared font-size DEFAULTS (Terminal / Commands). Both
  *  steppers send a delta and the setter clamps it; an open tab picks
@@ -880,8 +820,6 @@ function create_gclass(gclass_name)
             ["EV_SET_LANGUAGE",          ac_set_language,          null],
             ["EV_SET_DISPLAY_MODE",      ac_set_display_mode,      null],
             ["EV_SET_NAV_MODE",          ac_set_nav_mode,          null],
-            ["EV_SET_STATS_LAYOUT",      ac_set_stats_layout,      null],
-            ["EV_SET_STATS_REFRESH",     ac_set_stats_refresh,     null],
             ["EV_SET_TTY_FONT_SIZE",     ac_set_tty_font_size,     null],
             ["EV_SET_CONSOLE_FONT_SIZE", ac_set_console_font_size, null],
             ["EV_ADD_SHORTKEY",          ac_add_shortkey,          null],
@@ -898,8 +836,6 @@ function create_gclass(gclass_name)
         ["EV_SET_LANGUAGE",          0],
         ["EV_SET_DISPLAY_MODE",      0],
         ["EV_SET_NAV_MODE",          0],
-        ["EV_SET_STATS_LAYOUT",      0],
-        ["EV_SET_STATS_REFRESH",     0],
         ["EV_SET_TTY_FONT_SIZE",     0],
         ["EV_SET_CONSOLE_FONT_SIZE", 0],
         ["EV_ADD_SHORTKEY",          0],

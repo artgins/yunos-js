@@ -21,6 +21,8 @@ import {
     gobj_publish_event,
 } from "@yuneta/gobj-js";
 
+import {selection_scenario} from "./monitor_helpers.js";
+
 
 /***************************************************************
  *              Constants
@@ -46,13 +48,12 @@ const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,                        null, "Subscriber of output events"),
 SDATA(data_type_t.DTP_STRING,   "active_node",  sdata_flag_t.SDF_PERSIST, "",      "Active node (hostname/UUID from list-agents)"),
 SDATA(data_type_t.DTP_STRING,   "display_mode", sdata_flag_t.SDF_PERSIST, "table", "Command answer display: table | form (JSON tree) | raw (text)"),
-SDATA(data_type_t.DTP_STRING,   "stats_layout", sdata_flag_t.SDF_PERSIST, "single", "Statistics cards layout: single (one tab, all cards) | tabs (a tab per yuno)"),
-SDATA(data_type_t.DTP_INTEGER,  "stats_refresh", sdata_flag_t.SDF_PERSIST, 2,       "Statistics auto-refresh interval in seconds (0 = off)"),
 SDATA(data_type_t.DTP_STRING,   "nav_mode",     sdata_flag_t.SDF_PERSIST, "stack", "How a node tree shows the way in: stack | back | path"),
 SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "{}",  "Selected nodes per workspace: {workspace: [{id, host}, ...]}"),
 SDATA(data_type_t.DTP_JSON,     "active_tabs",  sdata_flag_t.SDF_PERSIST, "{}",    "Last-active node tab per workspace: {workspace: node_id}"),
 SDATA(data_type_t.DTP_JSON,     "cmd_history",  sdata_flag_t.SDF_PERSIST, "[]",    "Global console command history: [cmd,...] most-recent first (shared by all nodes)"),
-SDATA(data_type_t.DTP_DICT,     "monitor_scenario", sdata_flag_t.SDF_PERSIST, "{}", "Monitor: the scenario watched (see monitor_helpers.js), {} = none yet"),
+SDATA(data_type_t.DTP_DICT,     "monitor_scenario", sdata_flag_t.SDF_PERSIST, "{}", "Scenarios: the scenario watched (see monitor_helpers.js), {} = none yet"),
+SDATA(data_type_t.DTP_STRING,   "monitor_source", sdata_flag_t.SDF_PERSIST, "local", "Scenarios: where the scenario watched comes from: local (this browser) | saved (the control center's) | selection (the yunos ticked in the tree)"),
 SDATA(data_type_t.DTP_INTEGER,  "monitor_refresh", sdata_flag_t.SDF_PERSIST, 2,    "Monitor: seconds between two readings of the yunos"),
 SDATA(data_type_t.DTP_INTEGER,  "monitor_window", sdata_flag_t.SDF_PERSIST, 15,    "Monitor: minutes of history kept in the charts"),
 SDATA(data_type_t.DTP_JSON,     "shortkeys",    sdata_flag_t.SDF_PERSIST, JSON.stringify(DEFAULT_SHORTKEYS), "Console command shortkeys {key: template}; $1 $2 … are positional args (ycli parity)"),
@@ -166,63 +167,14 @@ function agent_config_set_display_mode(gobj, mode)
 }
 
 /***************************************************************
- *  Statistics cards layout: "single" (default; one tab holding a card
- *  per selected yuno) or "tabs" (one tab per selected yuno).
+ *  Scenarios settings: the scenario watched (a validated object, or
+ *  null) and where it comes from, the seconds between two readings
+ *  and the minutes of history kept. A node that cannot push the
+ *  readings is polled: the DELIBERATE exception to the no-polling rule
+ *  approved for this view (2026-09-29).
  ***************************************************************/
-function agent_config_get_stats_layout(gobj)
-{
-    let v = gobj_read_attr(gobj, "stats_layout");
-    return (v === "tabs") ? "tabs" : "single";
-}
+const MONITOR_SOURCES = ["local", "saved", "selection"];
 
-/***************************************************************
- *  Set the Statistics layout, persist it, notify (C_APP rebuilds the
- *  Statistics workspace tabs).
- ***************************************************************/
-function agent_config_set_stats_layout(gobj, layout)
-{
-    let v = (layout === "tabs") ? "tabs" : "single";
-    gobj_write_attr(gobj, "stats_layout", v);
-    gobj_save_persistent_attrs(gobj, "stats_layout");
-    gobj_publish_event(gobj, "EV_STATS_LAYOUT_CHANGED", {stats_layout: v});
-}
-
-/***************************************************************
- *  Statistics auto-refresh interval, in SECONDS (0 = off). A
- *  DELIBERATE, opt-in exception to Yuneta's no-polling rule — the live
- *  stats cards re-request on this cadence (default 2 s). See
- *  [[feedback_no_polling_use_events]] and [[feedback_stats_polling_exception]].
- ***************************************************************/
-function agent_config_get_stats_refresh(gobj)
-{
-    let v = parseInt(gobj_read_attr(gobj, "stats_refresh"), 10);
-    if(isNaN(v) || v < 0) {
-        return 2;
-    }
-    return v;
-}
-
-/***************************************************************
- *  Set the stats auto-refresh interval (seconds), persist, notify (open
- *  stats views re-arm their timer).
- ***************************************************************/
-function agent_config_set_stats_refresh(gobj, secs)
-{
-    let v = parseInt(secs, 10);
-    if(isNaN(v) || v < 0) {
-        v = 0;
-    }
-    gobj_write_attr(gobj, "stats_refresh", v);
-    gobj_save_persistent_attrs(gobj, "stats_refresh");
-    gobj_publish_event(gobj, "EV_STATS_REFRESH_CHANGED", {stats_refresh: v});
-}
-
-/***************************************************************
- *  Monitor settings: the scenario (a validated object, or null), the
- *  seconds between two readings and the minutes of history kept. The
- *  readings are the same DELIBERATE polling exception as the
- *  Statistics auto-refresh, until the agent can push them.
- ***************************************************************/
 const MONITOR_REFRESH_CHOICES = [1, 2, 5, 10, 30];
 const MONITOR_WINDOW_CHOICES = [5, 15, 30, 60];
 
@@ -231,23 +183,32 @@ function agent_config_get_monitor(gobj)
     let scenario = gobj_read_attr(gobj, "monitor_scenario");
     let refresh = parseInt(gobj_read_attr(gobj, "monitor_refresh"), 10);
     let window_min = parseInt(gobj_read_attr(gobj, "monitor_window"), 10);
+    let source = gobj_read_attr(gobj, "monitor_source");
     return {
         scenario: (scenario && Array.isArray(scenario.yunos)) ? scenario : null,
+        source:   MONITOR_SOURCES.indexOf(source) >= 0 ? source : "local",
         refresh:  MONITOR_REFRESH_CHOICES.indexOf(refresh) >= 0 ? refresh : 2,
         window:   MONITOR_WINDOW_CHOICES.indexOf(window_min) >= 0 ? window_min : 15
     };
 }
 
 /***************************************************************
- *  Write the given monitor settings ({scenario?, refresh?, window?})
- *  and persist exactly those.
+ *  Write the given settings ({scenario?, source?, refresh?, window?})
+ *  and persist exactly those. A new scenario is published
+ *  (EV_MONITOR_SCENARIO_CHANGED): the list and the tree set it, the
+ *  live view shows it.
  ***************************************************************/
 function agent_config_set_monitor(gobj, patch)
 {
     let names = [];
     if(patch && patch.scenario !== undefined) {
-        gobj_write_attr(gobj, "monitor_scenario", patch.scenario);
+        gobj_write_attr(gobj, "monitor_scenario", patch.scenario || {});
         names.push("monitor_scenario");
+    }
+    if(patch && patch.source !== undefined) {
+        gobj_write_attr(gobj, "monitor_source",
+            MONITOR_SOURCES.indexOf(patch.source) >= 0 ? patch.source : "local");
+        names.push("monitor_source");
     }
     if(patch && patch.refresh !== undefined) {
         gobj_write_attr(gobj, "monitor_refresh", parseInt(patch.refresh, 10));
@@ -259,6 +220,11 @@ function agent_config_set_monitor(gobj, patch)
     }
     if(names.length) {
         gobj_save_persistent_attrs(gobj, names);
+    }
+    if(patch && (patch.scenario !== undefined || patch.source !== undefined)) {
+        gobj_publish_event(gobj, "EV_MONITOR_SCENARIO_CHANGED", {
+            source: gobj_read_attr(gobj, "monitor_source")
+        });
     }
 }
 
@@ -348,7 +314,21 @@ function agent_config_set_selected_nodes(gobj, workspace, list)
     write_selection_map(gobj, map);
     gobj_publish_event(gobj, "EV_SELECTED_NODES_CHANGED",
         {workspace: workspace, selected_nodes: map[workspace]});
+
+    /*  The yunos ticked in the Scenarios tree ARE the scenario watched.
+     *  Here, and not in the live view: that view is created the first time
+     *  it is visited, and the ticks come before.  */
+    if(workspace === SCENARIOS_TREE) {
+        let items = map[workspace].map((it) => {
+            let p = stats_sel_parse(it.id);
+            return {node: p.node, yuno_id: p.yuno_id, label: it.host || p.yuno_id};
+        });
+        agent_config_set_monitor(gobj, {scenario: selection_scenario(items) || {}, source: "selection"});
+    }
 }
+
+/*  The selection bucket of the Scenarios workspace's tree.  */
+const SCENARIOS_TREE = "scenarios";
 
 /***************************************************************
  *  The Statistics workspace selects YUNOS, not nodes. A yuno is
@@ -557,8 +537,7 @@ function create_gclass(gclass_name)
     const event_types = [
         ["EV_ACTIVE_NODE_CHANGED",    event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
         ["EV_SELECTED_NODES_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
-        ["EV_STATS_LAYOUT_CHANGED",   event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
-        ["EV_STATS_REFRESH_CHANGED",  event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
+        ["EV_MONITOR_SCENARIO_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
         ["EV_NAV_MODE_CHANGED",       event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
     ];
 
@@ -597,10 +576,6 @@ export {
     agent_config_set_active_node,
     agent_config_get_display_mode,
     agent_config_set_display_mode,
-    agent_config_get_stats_layout,
-    agent_config_set_stats_layout,
-    agent_config_get_stats_refresh,
-    agent_config_set_stats_refresh,
     agent_config_get_nav_mode,
     agent_config_set_nav_mode,
     agent_config_get_monitor,

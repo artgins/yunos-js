@@ -6,6 +6,36 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.0 (2026-09-29)
+
+- **Scenarios workspace, in place of Monitor and Statistics.** A scenario --
+  yunos watched together, the links of their messages, the commands of their
+  actions -- is now the control center's (`treedb_controlcenter`, SDK
+  7.25.14), not the browser's. Three fixed tabs: **Scenarios**
+  (`C_SCENARIOS`, the ones the control center keeps; a click opens one),
+  **Yunos** (the nodes->yunos tree: ticking yunos watches them as cards --
+  what Statistics was) and **Live** (`C_AGENT_MONITOR`: the graph and the
+  charts, or the cards of every counter, `view.mode`). The scenario watched
+  lives in `C_AGENT_CONFIG` with its source (`saved`, `selection`, `local`)
+  and every tab changes it there (`EV_MONITOR_SCENARIO_CHANGED`).
+- **Actions instead of a test block**: `start`, `pause`, `resume`, `stop`,
+  `report`, each a list of steps to ANY yuno of the scenario (a step with no
+  service goes to the yuno's, as the control center does). A saved scenario is
+  RUN by the control center (`run-scenario`: one step after the other, the run
+  written) and its runs are listed (**Runs**); any other one runs from here.
+  What an action answered, step by step, opens in a dialog -- which is what a
+  Report is for.
+- *New*, *Save* (to the control center, asked first when it would write
+  another name; to the browser when the control center keeps none) and
+  *Delete* (a saved one, with its runs). The old form in browsers -- `name`
+  and a `test` block -- is read and converted.
+- **Statistics removed**, and its two preferences (layout, auto-refresh) with
+  it; `C_AGENT_STATS` is gone. The rail has five workspaces again.
+- **Users**: the workspace's home route `/users/node` (mounted with no yuno)
+  asks nothing -- an empty `agent_id` reaches the FIRST agent of the control
+  center.
+- New i18n keys (en, es) for the Scenarios workspace.
+
 ## gui_agent 0.28.0 (2026-09-29)
 
 - **Users workspace.** The users each yuno lets in, and their roles, managed

@@ -301,6 +301,15 @@ describe("reading a users store", () => {
         expect(gobj_current_state(v)).toBe("ST_NO_USERS");
     });
 
+    test("mounted on the workspace's home route, with no yuno, it asks nothing", () => {
+        /*  An empty agent_id would reach the FIRST agent of the control center.  */
+        const v = gobj_create(`users_${++n_views}`, "C_AGENT_USERS", {node: "", yuno_id: ""}, host);
+        gobj_start(v);
+        expect(sent).toEqual([]);
+        expect(gobj_current_state(v)).toBe("ST_IDLE");
+        expect(errors()).toEqual([]);
+    });
+
     test("the answers of another yuno's tab are not ours", () => {
         const v = new_view();
         const other = JSON.parse(JSON.stringify(sent[0]));

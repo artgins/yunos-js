@@ -5,22 +5,21 @@ built on the **v2 declarative shell** of `@yuneta/gobj-ui`
 (`C_YUI_SHELL` + `C_YUI_NAV`).
 
 It is the modern successor of the old webix "Yuneta CLI"
-(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Six workspaces** in the primary rail,
-and all six are WORK: **Commands** (control-plane CLI to a node's yunos),
-**Statistics** (live `SDF_RSTATS` counters as cards), **Terminal** (an
-interactive xterm.js PTY console), **Schemas** (edit the schemas a yuno
-keeps in its `treedb_system_schema`), **Users** (the users a yuno lets in, and
-their roles — see [Users](#users-who-each-yuno-lets-in)) and **Monitor** (the yunos of one test,
-live, as a graph and two charts — see [Monitor](#monitor-a-test-live-straight-from-its-agent)). The preferences page is not a rail item:
+(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Five workspaces** in the primary rail,
+and all five are WORK: **Commands** (control-plane CLI to a node's yunos),
+**Terminal** (an interactive xterm.js PTY console), **Schemas** (edit the
+schemas a yuno keeps in its `treedb_system_schema`), **Users** (the users a
+yuno lets in, and their roles — see [Users](#users-who-each-yuno-lets-in)) and
+**Scenarios** (yunos watched and run together, live, as a graph and charts or
+as cards of counters — see [Scenarios](#scenarios-yunos-watched-and-run-together)).
+The preferences page is not a rail item:
 it hangs off the toolbar avatar as the route **`/preferences`** (a route, not a
 dialog — linkable, F5-proof, in the site map). **Commands** and **Terminal** share
 one pattern — a flat node-picker tab (`C_NODES`) plus one closable tab per
-selected node. **Statistics**, **Schemas** and **Users** differ: their picker is a
-**nodes→yunos tree** (`C_STATS_NODES`) where you select *yunos*. Statistics
-renders their counters as **cards** (one tab for all cards by default, or a tab
-per yuno — a Preferences toggle); Schemas opens one editor tab per yuno, and
-Users one users tab per yuno.
-Commands/Statistics/Schemas/Users list only agents **≥ 7.7.0**; Terminal works on any
+selected node. **Schemas** and **Users** differ: their picker is a
+**nodes→yunos tree** (`C_STATS_NODES`) where you select *yunos*, and they open
+one tab per yuno. **Scenarios** has three fixed tabs of its own.
+Commands/Schemas/Users list only agents **≥ 7.7.0**; Terminal works on any
 version. Browsing the DATA of an application treedb lives in the separate
 **`gui_treedb`** SPA; what is here is SCHEMA editing, because applying a schema
 change means restarting the owning yuno and that is the agent's job.
@@ -46,7 +45,7 @@ The app ships **no endpoints and no credentials**. The control-center and BFF
 URLs come from the hostname (above); *Preferences → Diagnostics* only
 **displays** the resolved pair, read-only. What the browser persists is the
 operator's own state — theme, language, answer display mode, navigation mode,
-Statistics layout and refresh, selected nodes per workspace, the last-active
+the scenario watched, selected nodes per workspace, the last-active
 tab, the command history and the shortkeys — as **gobj persistent attrs** on
 the `agent_config` service (`db_save/load_persistent_attrs`, wired in
 `src/main.js`, backed by `localStorage`).
@@ -116,68 +115,78 @@ command-yuno id=<yuno> service=<treedb> command=print-tranger expanded=1
 command-yuno id=<yuno> service=<treedb> command=print-tranger expanded=1 path=topics`users
 ```
 
-## Monitor: a test, live, straight from its agent
+## Scenarios: yunos watched, and run, together
 
-The Monitor workspace (`/monitor/live`, `C_AGENT_MONITOR`) watches the yunos of
-ONE test — a stress run, a new deployment — while it happens: a **graph** of
-the yunos in the order the messages flow (left to right), each card with its
-cpu %, its messages per second in and out, its queue when its service reports
-one (`msgs_in_queue`) and what the agent says of it (playing, paused,
-stopped, disabled, not a yuno of this agent); the edges carry the messages per
-second that go through them; and under the graph two **charts** (`C_YUI_UPLOT`):
-messages per second and cpu, over a history window of 5 to 60 minutes.
+A **scenario** is a set of yunos — the ones a test involves, or just the ones
+worth watching together —, how the messages flow between them and the
+commands of its actions. The control center keeps them
+(`treedb_controlcenter`, SDK 7.25.14; see its README), so every operator sees
+the same ones. The workspace (`/scenarios`) has three fixed tabs:
 
-**What it watches is a scenario**, written as JSON in the view (the
-*Scenario* button) and kept in `C_AGENT_CONFIG` (`monitor_scenario`,
-localStorage):
+- **Scenarios** (`C_SCENARIOS`, `/scenarios/list`): the ones the control
+  center keeps (`scenarios`). A click on one opens it in the live view. A
+  control center older than 7.25.14 answers "command not available", and the
+  tab says it keeps none.
+- **Yunos** (`C_STATS_NODES`, `/scenarios/yunos`): the nodes→yunos tree.
+  Ticking yunos makes them the scenario watched, as **cards** with every
+  counter of each — what the Statistics workspace was, before it became a
+  kind of scenario (gui_agent 0.29.0).
+- **Live** (`C_AGENT_MONITOR`, `/scenarios/live`): the scenario watched, as a
+  **graph** of the yunos in the order the messages flow (left to right), each
+  card with its cpu %, its messages per second in and out, its queue when its
+  service reports one (`msgs_in_queue`) and what the agent says of it; the
+  edges carry the messages per second through them; under it two **charts**
+  (`C_YUI_UPLOT`), messages per second and cpu, over 5 to 60 minutes. Or as
+  **cards** (`view.mode`, and a selector in the toolbar).
+
+The scenario watched is kept in `C_AGENT_CONFIG` (`monitor_scenario`) with
+where it came from (`monitor_source`: `saved` in the control center,
+`selection` of the tree, or `local` to this browser). The list, the tree and
+the live view's editor all change it by writing it there
+(`EV_MONITOR_SCENARIO_CHANGED`), and the live view shows whatever is written.
+
+A scenario, as the control center keeps it and as the editor writes it:
 
 ```json
 {
-    "name": "yunovatios stress (controlador)",
-    "agent_url": "wss://agent.yunovatios.es:1993",
-    "yunos": [
-        {"id": "stress", "label": "sim_controllers", "rate": "tx"},
-        {"id": "2120",   "label": "gate_central"},
-        {"id": "5120",   "label": "db_tracks_ce"}
-    ],
-    "links": [["stress", "2120"], ["2120", "5120"]]
-}
-```
-
-**Or through the control center** (0.25.0): instead of `agent_url`, a
-`node` — the scenario's default, and each yuno's own when they are on several
-nodes. `key` names a yuno in `links` and `test` (default: its id), and is
-needed when two nodes carry the same id:
-
-```json
-{
-    "name": "yunovatios stress (both nodes)",
+    "id": "yunovatios-stress",
+    "description": "sim_controllers -> gate_central -> db_tracks_ce, both nodes",
     "node": "yunovatios-controlador",
     "yunos": [
-        {"key": "sim",       "id": "stress", "label": "sim_controllers", "rate": "tx"},
+        {"key": "sim",       "id": "stress", "service": "sim_controllers", "rate": "tx"},
         {"key": "gate_co",   "id": "2120",   "label": "gate_central"},
         {"key": "tracks_co", "id": "5120",   "label": "db_tracks_ce"},
         {"key": "gate_ce",   "id": "2120",   "label": "gate_central", "node": "yunovatios-central"},
         {"key": "tracks_ce", "id": "5120",   "label": "db_tracks_ce", "node": "yunovatios-central"}
     ],
-    "links": [["sim", "gate_co"], ["gate_co", "tracks_co"], ["gate_ce", "tracks_ce"]]
+    "links": [["sim", "gate_co"], ["gate_co", "tracks_co"], ["gate_ce", "tracks_ce"]],
+    "actions": {
+        "start":  [{"yuno": "sim", "command": "set-period period=2000"},
+                   {"yuno": "sim", "command": "set-controllers controllers=10"},
+                   {"yuno": "sim", "command": "resume-generation"}],
+        "pause":  [{"yuno": "sim", "command": "pause-generation"}],
+        "resume": [{"yuno": "sim", "command": "resume-generation"}],
+        "stop":   [{"yuno": "sim", "command": "set-controllers controllers=0"}],
+        "report": [{"yuno": "gate_co", "service": "__yuno__", "command": "view-config"}]
+    },
+    "view": {"mode": "graph"}
 }
 ```
 
-Each command then goes as `command-agent agent_id=<node> cmd2agent=<line>` on
-the console's own control-center link: several nodes at once, no token leaving
-the BFF, and no need for the node's agent to serve a certificate a browser
-trusts. That link is shared with the other workspaces, so the view subscribes
-to it only while it connects or monitors, takes only the answers it tagged,
-and skips the control center's dispatch acks. The graph lays out each group of
-yunos that exchange messages as its own horizontal band.
-
-`id` is the agent's yuno id. `rate` is the direction plotted as the yuno's
-throughput: `rx` (default, what it takes in) or `tx` (what it puts out — a
-generator). An optional `service` names the service whose counters are read;
-the default is the one named as the yuno's role. `links` gives the columns of
-the graph (a yuno sits one column right of the furthest yuno that feeds it).
-The validator (`monitor_helpers.js`) names what is wrong and where.
+`node` is the scenario's default, and a yuno carries its own when they are on
+several nodes; each command then goes as `command-agent agent_id=<node>
+cmd2agent=<line>` on the console's own control-center link: several nodes at
+once, no token leaving the BFF, and no need for the node's agent to serve a
+certificate a browser trusts. `key` names a yuno in `links` and `actions`
+(default: its id), and is needed when two nodes carry the same id. `rate` is
+the direction plotted as the yuno's throughput: `rx` (default) or `tx` (a
+generator). `service` names the service whose counters are read (default: the
+yuno's role), and is the service a step goes to when it names none. `links`
+gives the columns of the graph; each group of yunos that exchange messages is
+laid out as its own horizontal band. The validator (`monitor_helpers.js`)
+applies the rules of the control center's `save-scenario`, and names what is
+wrong and where. The old form kept in browsers before 7.25.14 — a `name`, and
+a `test` block of one yuno — is read and turned into this one.
 
 **With `agent_url` it talks to the agent DIRECTLY**, not through the control center:
 `C_MONITOR_LINK` (named service `monitor_link`) opens its own `C_IEVENT_CLI` to
@@ -221,38 +230,38 @@ no-polling rule approved for this view on 2026-09-29. Either way a periodic
 timer closes each period into a row of the history, only while connected and
 while the tab is the visible one.
 
-**A scenario with a `test` block is a TEST, and gets controls** (0.24.0).
-Each control is a list of commands of ONE yuno — the generator — sent in order
-as `command-yuno id=<yuno> service=<service> command=<command>`; nothing about
-any particular generator is written in the view:
+**Actions** (0.24.0; run by the control center since 0.29.0). A scenario that
+declares actions gets their buttons — **Start**, **Pause**, **Resume**,
+**Stop**, **Report**, one per action declared — and **Restart** whenever it
+can start: stop, every yuno of the scenario asked to zero its counters
+(`stats-yuno stats=__reset__`), the history cleared, start. Each step is
+`command-yuno id=<yuno> [service=<service>] command=<command>`; nothing about
+any particular generator is written in the view. Every control is confirmed
+in a dialog that lists the commands it will send (stop and restart in red),
+and says who runs them:
 
-```json
-"test": {
-    "yuno": "stress",
-    "service": "sim_controllers",
-    "start":  ["set-target target_url=tcps://127.0.0.1:2122 target_server_name=stress.yunovatios.es",
-               "set-period period=2000", "set-controllers controllers=10", "resume-generation"],
-    "pause":  ["pause-generation"],
-    "resume": ["resume-generation"],
-    "stop":   ["set-controllers controllers=0"]
-}
-```
+- a scenario the control center KEEPS is run by it (`run-scenario
+  scenario_id= action=`): the steps one after the other, a step that fails or
+  does not answer ending the run, and the run written (who, when, the answer
+  of every step). **Runs** lists them, newest first.
+- any other one — kept in this browser, the yunos ticked, or a direct one — is
+  run from here: every step sent at once, and no run kept.
 
-The buttons are **Start**, **Pause**, **Resume** and **Stop** — one per list
-declared — and **Restart**, offered whenever the test can start: stop, every
-yuno of the scenario asked to zero its counters (`stats-yuno
-stats=__reset__`), the history cleared, start. Every control is confirmed in a
-dialog that lists the commands it will send (stop and restart in red), and the
-last answer of the generator is shown next to the buttons
-(`sim_controllers^stress: controllers=10`). The controls work only while
-monitoring; a dialog answered after the link dropped sends nothing and says
-so. A command is a name followed by `key=value` parameters without spaces,
-because it travels inside a command line. Two things the controls do not do:
-put the generator back where it was (a `start` that retargets it leaves it
-retargeted — write a `stop` that restores it if that matters), and zero the
-counters of a service that does not honour `__reset__` (the yunovatios yunos
-do not yet; the rates the view shows are not affected). A scenario without
-`test` — production — shows no control at all.
+What the last action answered, step by step, opens in a dialog (the ⓘ next to
+the answer) — for a **Report**, which only asks, that is all it is for. The
+controls work only while monitoring; a dialog answered after the link dropped
+sends nothing and says so. A command is a name followed by `key=value`
+parameters without spaces, because it travels inside a command line. Two
+things the controls do not do: put the generator back where it was (write a
+`stop` that restores it if that matters), and zero the counters of a service
+that does not honour `__reset__`.
+
+**Saving and deleting.** *New* opens the editor with a template; the pencil
+opens it with the scenario watched. *Save* writes it to the control center
+(`save-scenario`), asked first when the name is not the one watched (a
+scenario with that name is replaced); a control center that keeps none makes
+it a scenario of this browser. *Delete* (a saved one only) asks in red and
+takes its runs with it.
 
 **Links proposed from the configs** (0.25.0). While monitoring, the scenario
 editor's *Propose links* asks every yuno for its `view-config` and proposes the
@@ -265,8 +274,8 @@ not answer; the operator reviews and saves. It is a proposal because the
 config is not always what runs — the stress generator's persisted `target_url`
 overrides its config.
 
-What it does not do yet: the Statistics cards still poll (they read every
-counter of a service, not the Monitor's few; see yunetas `TODO.md`).
+What it does not record: the PEAKS of a run (the console measures the rates,
+not the control center).
 
 ## Handing the backends to the TreeDB GUI
 
@@ -810,15 +819,17 @@ view that does not own it — which is exactly what these names exist to prevent
 | `CONSOLE_` (+ `HELP_`, `HISTORY_`) | `C_AGENT_CONSOLE` — the Commands console |
 | `NODES_` | `C_NODES` — the flat node picker |
 | `STATNODES_` | `C_STATS_NODES` — the nodes→yunos tree picker |
-| `STATS_` | `C_AGENT_STATS` — the counter cards |
+| `USERS_` | `C_AGENT_USERS` — the users of one yuno |
+| `SCENARIOS_` | `C_SCENARIOS` — the scenarios of the control center |
+| `MONITOR_` | `C_AGENT_MONITOR` — the live view of a scenario (graph and cards) |
 | `TTY_` | `C_AGENT_TTY` — the terminal |
 | `TREEDB_`, `TREEDB_VIEW_` | `C_AGENT_TREEDB` (the tab) and `C_AGENT_TREEDB_VIEW` |
 | `ACCOUNT_`, `PREF_`, `SK_`, `ABOUT_`, `DIAG_` | `C_ACCOUNT_VIEW` — its four sections |
 
 They are primarily debug aids, but styling them is fine where useful (the
-`.CONSOLE_INPUT_ROW` and `.STATS_CARD` rules in `src/app.css`). Tabulator cells
+`.CONSOLE_INPUT_ROW` and `.MONITOR_CARD` rules in `src/app.css`). Tabulator cells
 are drawn from HTML strings by formatters, so their names live in those strings
-(`NODES_HOST`, `STATNODES_YUNO`, `STATS_VALUE`).
+(`NODES_HOST`, `STATNODES_YUNO`, `USERS_NAME`).
 
 **Button size: the default, or bigger — never `is-small`.** A small control is
 hard to hit, and on a phone it makes the action look like chrome. The one
@@ -858,49 +869,44 @@ command history. Everything that needs a yuno, a shell and a backend is
 ## Roadmap
 
 The phased build-out is **done**: scaffold (shell + nav), the Commands console,
-BFF/OIDC authentication, live Statistics, the PTY Terminal and the Schemas
-editor all ship. What is open:
+BFF/OIDC authentication, the PTY Terminal, the Schemas editor, the Users
+workspace and the Scenarios all ship. What is open:
 
 | Open item | Note |
 |---|---|
 | **Operating yunos from the GUI** | The agent's own job — `kill-yuno` / `run-yuno` / `play-yuno`, binaries, configs, snaps — is reachable only by TYPING into Commands. The one exception is the Schemas tab's *Apply*, which drives the restart itself. A workspace over the existing nodes→yunos tree is the natural home. |
-| **Time-series charts in Statistics** | The Monitor has them; the Statistics cards still show the last value only. |
-| **Statistics *Reset* on app gclasses** | `stats-yuno stats="__reset__"` only lands where the gclass honours it; counters kept in private fields behind `mt_reading` need their own `mt_stats(__reset__)`. Backend work, not a GUI bug. |
+| **Counters *Reset* on app gclasses** | `stats-yuno stats="__reset__"` only lands where the gclass honours it; counters kept in private fields behind `mt_reading` need their own `mt_stats(__reset__)`. Backend work, not a GUI bug. |
+| **The peaks of a scenario run** | The control center records every step of a run, not the rates the console measured while it ran. |
 | **Terminal key bar on iOS / old Android** | Browsers without `interactive-widget=resizes-content` still overlay the on-screen keyboard; the bar needs pinning to `visualViewport` there. |
 
 ## Status
 
-**Live**, restructured into **five primary workspaces** — **Monitor** (the
-yunos of one test, live, straight from their agent: see the section above),
-**Commands**
-(`C_AGENT_CONSOLE`), **Statistics** (`C_STATS_NODES` tree picker +
-`C_AGENT_STATS` cards), **Terminal** (`C_AGENT_TTY`, xterm.js over the agent
-PTY), **Schemas** (`C_STATS_NODES` tree picker + `C_AGENT_TREEDB`, the gobj-ui
-treedb editor over the routing adapter). Preferences left the rail for the
-avatar menu (`/preferences`). **Commands** and **Terminal** share the flat pattern: a
-node-picker tab (`C_NODES`) plus one closable tab per selected node.
-**Statistics** picks **yunos** from a nodes→yunos tree and shows their
-`SDF_RSTATS` counters as **cards** — a single tab holding all cards (default)
-or a tab per yuno (Preferences toggle "Statistics cards"). The cards **auto-refresh**
-(default 2 s, Preferences; a deliberate opt-in exception to Yuneta's no-polling
-rule, visible-tab only) and **highlight** any counter that changed since the last
-refresh. Commands/Statistics require agent **≥ 7.7.0**; Terminal works on any
+**Live**, in **five primary workspaces** — **Commands** (`C_AGENT_CONSOLE`),
+**Terminal** (`C_AGENT_TTY`, xterm.js over the agent PTY), **Schemas**
+(`C_STATS_NODES` tree picker + `C_AGENT_TREEDB`, the gobj-ui treedb editor over
+the routing adapter), **Users** (`C_STATS_NODES` tree picker +
+`C_AGENT_USERS`) and **Scenarios** (`C_SCENARIOS` list, the tree of yunos,
+`C_AGENT_MONITOR` live view: see the section above). Preferences left the rail
+for the avatar menu (`/preferences`). **Commands** and **Terminal** share the
+flat pattern: a node-picker tab (`C_NODES`) plus one closable tab per selected
+node. Commands/Schemas/Users require agent **≥ 7.7.0**; Terminal works on any
 version (needs the `open-console` authz — an admin role). **Schemas** picks
-yunos the same way Statistics does and opens one treedb-editor tab per yuno,
-routed through `C_AGENT_TREEDB_LINK` (see the section above); each tab
-discovers that yuno's treedbs and declares them as a **tree of nodes**
-(`C_YUI_NODE` rooted at the tab's route, one `link` child per treedb whose
-viewer is `C_AGENT_TREEDB_VIEW`), `treedb_system_schema` first; how that depth
-is drawn — stacked strips, a "← yuno", or a breadcrumb — is the operator's
-choice in **Preferences → Navigation** and applies to the open tabs live.
-Selecting a tab focuses
-its input (Commands) / xterm (Terminal); node tabs carry a green/red connection
-dot; the last-active tab is remembered per workspace. Commands and Terminal both
-carry a per-tab **font-size** control (temporary) over a shared default set in
-Preferences. Browsing the DATA of an application treedb is **not** part of this app
-— that is the separate `gui_treedb` SPA; what lives here is schema editing. Time-series charts
-(`C_YUI_UPLOT`) over the live counters are a possible follow-up. See the
-`CHANGELOG.md` (repo root) for the per-cycle detail.
+yunos from the tree and opens one treedb-editor tab per yuno, routed through
+`C_AGENT_TREEDB_LINK` (see the section above); each tab discovers that yuno's
+treedbs and declares them as a **tree of nodes** (`C_YUI_NODE` rooted at the
+tab's route, one `link` child per treedb whose viewer is
+`C_AGENT_TREEDB_VIEW`), `treedb_system_schema` first; how that depth is drawn
+— stacked strips, a "← yuno", or a breadcrumb — is the operator's choice in
+**Preferences → Navigation** and applies to the open tabs live. The counters
+of a set of yunos, which the Statistics workspace showed until 0.29.0, are now
+the **cards** of a scenario: tick the yunos in the Scenarios tree. Selecting a
+tab focuses its input (Commands) / xterm (Terminal); node tabs carry a
+green/red connection dot; the last-active tab is remembered per workspace.
+Commands and Terminal both carry a per-tab **font-size** control (temporary)
+over a shared default set in Preferences. Browsing the DATA of an application
+treedb is **not** part of this app — that is the separate `gui_treedb` SPA;
+what lives here is schema editing. See the `CHANGELOG.md` (repo root) for the
+per-cycle detail.
 
 ## Changes
 

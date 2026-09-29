@@ -397,6 +397,12 @@ function build_dom(gobj)
     );
     $c.appendChild(priv.$notif);
 
+    priv.$pick = createElement2(
+        ["div", {class: "USERS_PICK notification is-light", style: "display:none;",
+                 i18n: "users pick a yuno"}, t("users pick a yuno")]
+    );
+    $c.appendChild(priv.$pick);
+
     refresh_language($c, t);
 }
 
@@ -545,6 +551,12 @@ function render(gobj)
     let no_store = state === "ST_NO_USERS";
 
     priv.$notif.style.display = connected ? "none" : "";
+    let pinned = !!(gobj_read_str_attr(gobj, "node") && gobj_read_str_attr(gobj, "yuno_id"));
+    priv.$pick.style.display = (connected && !pinned) ? "" : "none";
+    if(!pinned) {
+        connected = false;
+        priv.$notif.style.display = "none";
+    }
     priv.$toolbar.style.display = connected ? "" : "none";
     priv.$no_users.style.display = (connected && no_store) ? "" : "none";
     priv.$tablewrap.style.display = (connected && !no_store) ? "" : "none";
@@ -868,6 +880,13 @@ function end_batch(gobj)
 function load(gobj)
 {
     let priv = gobj.priv;
+    /*  The workspace's home route mounts this view with no yuno: it asks
+     *  nothing -- an empty agent_id would reach the FIRST agent of the
+     *  control center, not "none".  */
+    if(!gobj_read_str_attr(gobj, "node") || !gobj_read_str_attr(gobj, "yuno_id")) {
+        render(gobj);
+        return;
+    }
     let stages = [];
     if(!priv.authz) {
         stages.push((g) => [{op: "services", line: line_of(g, "__yuno__", "services")}]);

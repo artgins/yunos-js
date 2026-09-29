@@ -73,13 +73,13 @@ import {register_c_agent_link} from "./c_agent_link.js";
 import {register_c_nodes} from "./c_nodes.js";
 import {register_c_stats_nodes} from "./c_stats_nodes.js";
 import {register_c_agent_console} from "./c_agent_console.js";
-import {register_c_agent_stats} from "./c_agent_stats.js";
 import {register_c_agent_tty} from "./c_agent_tty.js";
 import {register_c_agent_treedb} from "./c_agent_treedb.js";
 import {register_c_agent_treedb_link} from "./c_agent_treedb_link.js";
 import {register_c_agent_treedb_view} from "./c_agent_treedb_view.js";
 import {register_c_monitor_link} from "./c_monitor_link.js";
 import {register_c_agent_monitor} from "./c_agent_monitor.js";
+import {register_c_scenarios} from "./c_scenarios.js";
 import {register_c_agent_users} from "./c_agent_users.js";
 
 import {setup_locale} from "./locales/locales.js";
@@ -158,13 +158,13 @@ function main()
     register_c_nodes();
     register_c_stats_nodes();
     register_c_agent_console();
-    register_c_agent_stats();
     register_c_agent_tty();
     register_c_agent_treedb_link();  // treedb commands routed through the agent
     register_c_agent_treedb_view();  // one treedb: the link node of the Schemas tree
     register_c_agent_treedb();
     register_c_monitor_link();       // direct link to one agent (Monitor)
-    register_c_agent_monitor();      // the Monitor workspace
+    register_c_scenarios();          // the Scenarios workspace: the list
+    register_c_agent_monitor();      // the Scenarios workspace: the live view
     register_c_agent_users();        // the Users workspace
 
     /*------------------------------------------------*

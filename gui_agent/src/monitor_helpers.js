@@ -1,75 +1,74 @@
 /***********************************************************************
  *          monitor_helpers.js
  *
- *      Pure helpers of the Monitor workspace (C_AGENT_MONITOR): the
- *      scenario it watches, the command lines it sends, the links it can
- *      propose from the yunos' configs, the left-to-right layout of its
- *      graph, the message rates and the history window. No DOM, no gobj
- *      -- so each one is tested on its own (monitor_helpers.test.js).
+ *      Pure helpers of the Scenarios workspace (C_AGENT_MONITOR, the live
+ *      view, and C_SCENARIOS, the list): the scenario it watches, the
+ *      command lines it sends, the links it can propose from the yunos'
+ *      configs, the left-to-right layout of its graph, the message rates
+ *      and the history window. No DOM, no gobj -- so each one is tested on
+ *      its own (monitor_helpers.test.js).
  *
- *      A SCENARIO is the set of yunos one test involves and how the
- *      messages flow between them. It says WHERE the yunos are in one of
- *      two ways:
+ *      A SCENARIO is a set of yunos -- the ones a test involves, or just
+ *      the ones worth watching together --, how the messages flow between
+ *      them, and the commands of each action. It is the document the
+ *      control center keeps (`save-scenario`, treedb_controlcenter), and
+ *      the same document is validated here, by the same rules. It says
+ *      WHERE the yunos are in one of two ways:
  *
- *        - `agent_url`: every yuno is on ONE agent, reached directly
- *          (wss://<node>:1993, C_MONITOR_LINK):
- *
- *              {
- *                  "name":      "stress test",
- *                  "agent_url": "wss://agent.example.com:1993",
- *                  "yunos": [
- *                      {"id": "stress", "label": "generator", "rate": "tx"},
- *                      {"id": "2120",   "label": "gate"},
- *                      {"id": "5120",   "label": "store", "service": "db"}
- *                  ],
- *                  "links": [["stress", "2120"], ["2120", "5120"]]
- *              }
- *
- *        - `node`: the yunos are reached through the CONTROL CENTER
- *          (`command-agent agent_id=<node>`), each on the node named by
- *          its own `node` or, by default, the scenario's -- so one
- *          scenario can span several nodes:
+ *        - `node`: through the CONTROL CENTER (`command-agent
+ *          agent_id=<node>`), each yuno on the node named by its own
+ *          `node` or, by default, the scenario's -- so one scenario can
+ *          span several nodes:
  *
  *              {
- *                  "node": "yunovatios-central",
+ *                  "id": "stress-test",
+ *                  "description": "generator -> gate -> store",
+ *                  "node": "my-node",
  *                  "yunos": [
- *                      {"key": "sim", "id": "stress", "node": "yunovatios-controlador", "rate": "tx"},
+ *                      {"key": "sim", "id": "stress", "service": "generator", "rate": "tx"},
  *                      {"key": "gate", "id": "2120"},
- *                      {"key": "tracks", "id": "5120"}
+ *                      {"key": "tracks", "id": "5120", "node": "other-node"}
  *                  ],
- *                  "links": [["sim", "gate"], ["gate", "tracks"]]
+ *                  "links": [["sim", "gate"], ["gate", "tracks"]],
+ *                  "actions": {
+ *                      "start":  [{"yuno": "sim", "command": "set-controllers controllers=10"},
+ *                                 {"yuno": "sim", "command": "resume-generation"}],
+ *                      "stop":   [{"yuno": "sim", "command": "set-controllers controllers=0"}],
+ *                      "report": [{"yuno": "gate", "service": "__yuno__", "command": "view-config"}]
+ *                  },
+ *                  "view": {"mode": "graph"}
  *              }
  *
- *      `id` is the agent's yuno id. `key` names the yuno in `links` and
- *      in `test` (default: its id); it is needed when two nodes carry the
+ *        - `agent_url`: every yuno on ONE agent, reached DIRECTLY
+ *          (wss://<node>:1993, C_MONITOR_LINK). The control center keeps
+ *          it too, but cannot run its actions: the console does.
+ *
+ *      `id` is the agent's yuno id. `key` names the yuno in `links` and in
+ *      `actions` (default: its id); it is needed when two nodes carry the
  *      same id. `rate` says which direction is the yuno's throughput in
- *      the chart: "rx" (default, what it takes in) or "tx" (what it puts
- *      out -- a generator). `service` is the one whose counters are read
- *      (default: the yuno's role, which is what `stats-yuno` asks when no
- *      service is given).
+ *      the chart: "rx" (default) or "tx" (a generator). `service` is the
+ *      one whose counters are read (default: the yuno's role).
  *
- *      An optional `test` block makes it a TEST, and gives the view its
- *      controls. Each control is a list of commands of ONE yuno (the
- *      generator, by its key), sent in order as `command-yuno id=<its id>
- *      service=<service> command=<command>`:
- *
- *              "test": {
- *                  "yuno": "stress", "service": "sim_controllers",
- *                  "start":  ["set-controllers controllers=10", "resume-generation"],
- *                  "pause":  ["pause-generation"],
- *                  "resume": ["resume-generation"],
- *                  "stop":   ["set-controllers controllers=0"]
- *              }
- *
+ *      ACTIONS are `start`, `pause`, `resume`, `stop` and `report`, each a
+ *      list of steps: a yuno (its key), an optional service (default: the
+ *      yuno's `service`), and one command with its `key=value`
+ *      parameters, sent in order as
+ *      `command-yuno id=<its id> [service=<service>] command=<command>`.
  *      Restart is not written: it is stop, the counters of every yuno of
- *      the scenario asked to go to zero, and start. A scenario without
- *      `test` is a production one, and shows no control at all.
+ *      the scenario asked to go to zero, and start. `view.mode` is how the
+ *      live view shows it: "graph" (cards on the flow, and charts) or
+ *      "cards" (every counter of every yuno -- what the Statistics
+ *      workspace was).
+ *
+ *      THE OLD FORM, kept in the browser before the control center kept
+ *      scenarios, is read too: a `name` instead of an `id`, and a `test`
+ *      block of ONE yuno (`{"yuno", "service", "start": [lines], ...}`),
+ *      which becomes the steps of its actions.
  *
  *      Every value that ends up in a command line (ids, services, nodes,
- *      the test's commands) is a NAME -- no spaces -- because every
- *      parameter travels inside the line: `C_IEVENT_CLI` takes a
- *      `kw.service` as the service a command is ADDRESSED to, so nothing
- *      can go in the kw.
+ *      commands) is a NAME -- no spaces -- because every parameter travels
+ *      inside the line: `C_IEVENT_CLI` takes a `kw.service` as the service
+ *      a command is ADDRESSED to, so nothing can go in the kw.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -80,33 +79,38 @@
  *              Constants
  ***************************************************************/
 const SCENARIO_TEMPLATE = {
-    name: "stress test",
-    agent_url: "wss://agent.example.com:1993",
+    id: "stress-test",
+    description: "generator -> gate -> store",
+    node: "my-node",
     yunos: [
-        {id: "stress", label: "generator", rate: "tx"},
-        {id: "2120", label: "gate"},
-        {id: "5120", label: "store"}
+        {key: "sim", id: "stress", service: "generator", label: "generator", rate: "tx"},
+        {key: "gate", id: "2120", label: "gate"},
+        {key: "store", id: "5120", label: "store"}
     ],
-    links: [["stress", "2120"], ["2120", "5120"]],
-    test: {
-        yuno: "stress",
-        service: "generator",
-        start: ["set-controllers controllers=10", "resume-generation"],
-        pause: ["pause-generation"],
-        resume: ["resume-generation"],
-        stop: ["set-controllers controllers=0"]
-    }
+    links: [["sim", "gate"], ["gate", "store"]],
+    actions: {
+        start:  [{yuno: "sim", command: "set-controllers controllers=10"},
+                 {yuno: "sim", command: "resume-generation"}],
+        pause:  [{yuno: "sim", command: "pause-generation"}],
+        resume: [{yuno: "sim", command: "resume-generation"}],
+        stop:   [{yuno: "sim", command: "set-controllers controllers=0"}]
+    },
+    view: {mode: "graph"}
 };
 
 const RATE_DIRECTIONS = ["rx", "tx"];
 
-/*  The controls a test block can declare, in the order they are shown.  */
-const TEST_CONTROLS = ["start", "pause", "resume", "stop"];
+/*  The actions a scenario can declare, in the order they are shown.  */
+const SCENARIO_ACTIONS = ["start", "pause", "resume", "stop", "report"];
+
+const VIEW_MODES = ["graph", "cards"];
 
 /*  A command travels inside a `command-yuno` line: a name, then
  *  key=value parameters whose values carry no space.  */
 const TEST_COMMAND_RE = /^[a-z][\w-]*( [\w.^-]+=\S*)*$/;
 const NAME_RE = /^[\w.^-]+$/;
+/*  A scenario id goes inside a treedb ref: no `^`, no backtick.  */
+const SCENARIO_ID_RE = /^[\w.@-]+$/;
 
 
 /***************************************************************
@@ -117,8 +121,8 @@ const NAME_RE = /^[\w.^-]+$/;
  *  culprit (not translated: it is data).
  *
  *  The scenario that comes out carries `place` ("direct" or
- *  "control_center") and every yuno its `key`, and its `node` when
- *  it is reached through the control center.
+ *  "control_center"), every yuno its `key` (and its `node` when it is
+ *  reached through the control center), and every action its steps.
  ***************************************************************/
 function parse_scenario(text)
 {
@@ -136,14 +140,39 @@ function is_name(v)
     return typeof v === "string" && NAME_RE.test(v.trim());
 }
 
+/***************************************************************
+ *  An id from the name of the old form: lower case, blanks to `-`,
+ *  what cannot go in a ref dropped.
+ ***************************************************************/
+function id_from_name(name)
+{
+    let id = String(name || "").trim().toLowerCase()
+        .replace(/\s+/g, "-").replace(/[^\w.@-]/g, "");
+    return id || "scenario";
+}
+
+function text_of(v)
+{
+    return (typeof v === "string") ? v.trim() : "";
+}
+
 function validate_scenario(raw)
 {
     if(!raw || typeof raw !== "object" || Array.isArray(raw)) {
         return fail("scenario invalid json", "");
     }
+    let id;
+    if(raw.id !== undefined) {
+        if(typeof raw.id !== "string" || !SCENARIO_ID_RE.test(raw.id.trim())) {
+            return fail("scenario bad id", String(raw.id));
+        }
+        id = raw.id.trim();
+    } else {
+        id = id_from_name(raw.name);
+    }
     let url = raw.agent_url;
-    let has_url = url !== undefined;
-    let has_node = raw.node !== undefined;
+    let has_url = url !== undefined && url !== "";
+    let has_node = raw.node !== undefined && raw.node !== "";
     if(has_url && (typeof url !== "string" || !/^wss?:\/\/[^\s]+$/.test(url))) {
         return fail("scenario needs agent url", String(url));
     }
@@ -162,51 +191,11 @@ function validate_scenario(raw)
     let yunos = [];
     let seen = {};
     for(let y of raw.yunos) {
-        if(!y || typeof y !== "object" || !is_name(y.id)) {
-            return fail("scenario yuno needs id", JSON.stringify(y));
+        let r = validate_yuno(y, place, default_node, seen);
+        if(!r.ok) {
+            return r;
         }
-        let id = y.id.trim();
-        if(y.key !== undefined && !is_name(y.key)) {
-            return fail("scenario yuno needs id", JSON.stringify(y));
-        }
-        let key = y.key !== undefined ? y.key.trim() : id;
-        if(seen[key]) {
-            return fail("scenario duplicate yuno", key);
-        }
-        seen[key] = true;
-        let rate = y.rate === undefined ? "rx" : y.rate;
-        if(RATE_DIRECTIONS.indexOf(rate) < 0) {
-            return fail("scenario bad rate", key);
-        }
-        if(y.service !== undefined && !(y.service === "" || is_name(y.service))) {
-            return fail("scenario bad service", key);
-        }
-        let node = "";
-        if(y.node !== undefined) {
-            if(place === "direct") {
-                return fail("scenario agent url or node", key);
-            }
-            if(!is_name(y.node)) {
-                return fail("scenario bad node", key);
-            }
-            node = y.node.trim();
-        } else {
-            node = default_node;
-        }
-        if(place === "control_center" && !node) {
-            return fail("scenario needs a place", key);
-        }
-        let yuno = {
-            key: key,
-            id: id,
-            label: (typeof y.label === "string" && y.label.trim()) ? y.label.trim() : key,
-            rate: rate,
-            service: (y.service || "").trim()
-        };
-        if(node) {
-            yuno.node = node;
-        }
-        yunos.push(yuno);
+        yunos.push(r.yuno);
     }
 
     let links = [];
@@ -221,39 +210,140 @@ function validate_scenario(raw)
         links.push([l[0], l[1]]);
     }
 
-    let test = null;
+    let raw_actions = raw.actions;
     if(raw.test !== undefined) {
-        let r = validate_test(raw.test, yunos, place, default_node);
-        if(!r.ok) {
-            return r;
+        if(raw_actions !== undefined) {
+            return fail("scenario bad test", "test + actions");
         }
-        test = r.test;
+        let c = actions_from_test(raw.test, yunos, place, default_node, seen);
+        if(!c.ok) {
+            return c;
+        }
+        raw_actions = c.actions;
+    }
+    let actions = {};
+    if(raw_actions !== undefined) {
+        if(!raw_actions || typeof raw_actions !== "object" || Array.isArray(raw_actions)) {
+            return fail("scenario bad action", JSON.stringify(raw_actions));
+        }
+        for(let a of Object.keys(raw_actions)) {
+            if(SCENARIO_ACTIONS.indexOf(a) < 0) {
+                return fail("scenario bad action", a);
+            }
+            let steps = raw_actions[a];
+            if(!Array.isArray(steps) || steps.length === 0) {
+                return fail("scenario bad action", a);
+            }
+            let out = [];
+            for(let st of steps) {
+                if(!st || typeof st !== "object" || !seen[st.yuno]) {
+                    return fail("scenario bad step", `${a}: ${JSON.stringify(st)}`);
+                }
+                if(st.service !== undefined && !(st.service === "" || is_name(st.service))) {
+                    return fail("scenario bad step", `${a}: ${JSON.stringify(st)}`);
+                }
+                let line = typeof st.command === "string" ? st.command.trim().replace(/\s+/g, " ") : "";
+                if(!TEST_COMMAND_RE.test(line)) {
+                    return fail("scenario bad test command", `${a}: ${JSON.stringify(st.command)}`);
+                }
+                let step = {yuno: st.yuno, command: line};
+                if(st.service) {
+                    step.service = st.service.trim();
+                }
+                out.push(step);
+            }
+            actions[a] = out;
+        }
+    }
+
+    let mode = "graph";
+    if(raw.view !== undefined) {
+        if(!raw.view || typeof raw.view !== "object" || Array.isArray(raw.view)) {
+            return fail("scenario bad view", JSON.stringify(raw.view));
+        }
+        if(raw.view.mode !== undefined) {
+            if(VIEW_MODES.indexOf(raw.view.mode) < 0) {
+                return fail("scenario bad view", String(raw.view.mode));
+            }
+            mode = raw.view.mode;
+        }
     }
 
     let scenario = {
-        name: (typeof raw.name === "string" && raw.name.trim()) ? raw.name.trim() : "",
+        id: id,
+        description: text_of(raw.description) || text_of(raw.name),
+        group: text_of(raw.group),
         place: place,
         yunos: yunos,
-        links: links
+        links: links,
+        actions: actions,
+        view: {mode: mode}
     };
     if(place === "direct") {
         scenario.agent_url = url;
     } else if(default_node) {
         scenario.node = default_node;
     }
-    if(test) {
-        scenario.test = test;
-    }
     return {ok: true, scenario: scenario};
 }
 
+function validate_yuno(y, place, default_node, seen)
+{
+    if(!y || typeof y !== "object" || !is_name(y.id)) {
+        return fail("scenario yuno needs id", JSON.stringify(y));
+    }
+    let id = y.id.trim();
+    if(y.key !== undefined && !is_name(y.key)) {
+        return fail("scenario yuno needs id", JSON.stringify(y));
+    }
+    let key = y.key !== undefined ? y.key.trim() : id;
+    if(seen[key]) {
+        return fail("scenario duplicate yuno", key);
+    }
+    seen[key] = true;
+    let rate = (y.rate === undefined || y.rate === "") ? "rx" : y.rate;
+    if(RATE_DIRECTIONS.indexOf(rate) < 0) {
+        return fail("scenario bad rate", key);
+    }
+    if(y.service !== undefined && !(y.service === "" || is_name(y.service))) {
+        return fail("scenario bad service", key);
+    }
+    let node = "";
+    if(y.node !== undefined && y.node !== "") {
+        if(place === "direct") {
+            return fail("scenario agent url or node", key);
+        }
+        if(!is_name(y.node)) {
+            return fail("scenario bad node", key);
+        }
+        node = y.node.trim();
+    } else {
+        node = default_node;
+    }
+    if(place === "control_center" && !node) {
+        return fail("scenario needs a place", key);
+    }
+    let yuno = {
+        key: key,
+        id: id,
+        label: (typeof y.label === "string" && y.label.trim()) ? y.label.trim() : key,
+        rate: rate,
+        service: (y.service || "").trim()
+    };
+    if(node) {
+        yuno.node = node;
+    }
+    return {ok: true, yuno: yuno};
+}
+
 /***************************************************************
- *  The test's `yuno` is the KEY of a yuno of the scenario, which
- *  gives its id and its node. On a direct scenario it may also be a
- *  yuno of the agent that is not drawn (a generator left out of the
- *  graph); through the control center it then needs a `node`.
+ *  The old `test` block -- the lists of commands of ONE yuno -- as
+ *  the steps of the actions. Its yuno is a key of the scenario; on a
+ *  direct scenario it could be a yuno of the agent that was not drawn,
+ *  and then it is added to the yunos (actions name yunos of the
+ *  scenario, nothing else).
  ***************************************************************/
-function validate_test(raw, yunos, place, default_node)
+function actions_from_test(raw, yunos, place, default_node, seen)
 {
     if(!raw || typeof raw !== "object" || Array.isArray(raw)) {
         return fail("scenario bad test", JSON.stringify(raw));
@@ -265,76 +355,149 @@ function validate_test(raw, yunos, place, default_node)
     if(!(service === "" || is_name(service))) {
         return fail("scenario bad test", "service");
     }
-    if(raw.node !== undefined && (place === "direct" || !is_name(raw.node))) {
-        return fail("scenario bad test", "node");
+    let key = raw.yuno.trim();
+    if(!seen[key]) {
+        let r = validate_yuno({key: key, id: key, rate: "tx", node: raw.node},
+            place, default_node, seen);
+        if(!r.ok) {
+            return r;
+        }
+        yunos.push(r.yuno);
     }
-    let yuno_key = raw.yuno.trim();
-    let drawn = yunos.find((y) => y.key === yuno_key);
-    let id = drawn ? drawn.id : yuno_key;
-    let node = raw.node !== undefined ? raw.node.trim() : (drawn ? (drawn.node || "") : default_node);
-    if(place === "control_center" && !node) {
-        return fail("scenario needs a place", `test ${yuno_key}`);
-    }
-    let test = {yuno: yuno_key, id: id, service: service.trim()};
-    if(node) {
-        test.node = node;
-    }
+    let actions = {};
     let any = false;
-    for(let c of TEST_CONTROLS) {
-        if(raw[c] === undefined) {
+    for(let a of ["start", "pause", "resume", "stop"]) {
+        if(raw[a] === undefined) {
             continue;
         }
-        if(!Array.isArray(raw[c]) || raw[c].length === 0) {
-            return fail("scenario bad test", c);
+        if(!Array.isArray(raw[a]) || raw[a].length === 0) {
+            return fail("scenario bad test", a);
         }
-        let list = [];
-        for(let cmd of raw[c]) {
-            let line = typeof cmd === "string" ? cmd.trim().replace(/\s+/g, " ") : "";
-            if(!TEST_COMMAND_RE.test(line)) {
-                return fail("scenario bad test command", `${c}: ${JSON.stringify(cmd)}`);
+        actions[a] = raw[a].map((cmd) => {
+            let step = {yuno: key, command: cmd};
+            if(service) {
+                step.service = service.trim();
             }
-            list.push(line);
-        }
-        test[c] = list;
+            return step;
+        });
         any = true;
     }
     if(!any) {
-        return fail("scenario bad test", TEST_CONTROLS.join("/"));
+        return fail("scenario bad test", "start/pause/resume/stop");
     }
-    return {ok: true, test: test};
+    return {ok: true, actions: actions};
 }
 
 /***************************************************************
- *  The controls a test offers, in order: its declared lists, plus
- *  restart whenever it can start.
+ *  The document the control center keeps (`save-scenario`): what
+ *  was written, without what the validation derived (`place`).
  ***************************************************************/
-function test_controls(test)
+function scenario_document(scenario)
 {
-    if(!test) {
-        return [];
+    let doc = {
+        id: scenario.id,
+        description: scenario.description || "",
+        group: scenario.group || "",
+        yunos: scenario.yunos.map((y) => {
+            let out = {key: y.key, id: y.id, label: y.label, rate: y.rate};
+            if(y.service) {
+                out.service = y.service;
+            }
+            if(y.node && y.node !== scenario.node) {
+                out.node = y.node;
+            }
+            return out;
+        }),
+        links: scenario.links.map((l) => [l[0], l[1]]),
+        actions: JSON.parse(JSON.stringify(scenario.actions || {})),
+        view: {mode: (scenario.view && scenario.view.mode) || "graph"}
+    };
+    if(scenario.place === "direct") {
+        doc.agent_url = scenario.agent_url;
+    } else if(scenario.node) {
+        doc.node = scenario.node;
     }
-    let out = TEST_CONTROLS.filter((c) => Array.isArray(test[c]));
-    if(test.start) {
+    return doc;
+}
+
+/***************************************************************
+ *  The controls a scenario offers, in order: its declared actions,
+ *  plus restart whenever it can start.
+ ***************************************************************/
+function scenario_controls(scenario)
+{
+    let actions = (scenario && scenario.actions) || {};
+    let out = SCENARIO_ACTIONS.filter((a) => Array.isArray(actions[a]) && actions[a].length);
+    if(actions.start && actions.start.length) {
         out.push("restart");
     }
     return out;
 }
 
 /***************************************************************
- *  The agent command lines one control sends, in order. Restart's
- *  resets are not here: they go to every yuno of the scenario.
+ *  The steps of one action, resolved to the line each one sends and
+ *  the node it goes to: [{key, node, line}]. Restart's resets are not
+ *  here: they go to every yuno of the scenario.
  ***************************************************************/
-function test_command_lines(test, control)
+function action_steps(scenario, action)
 {
-    let lists = control === "restart" ? [test.stop || [], test.start || []] : [test[control] || []];
-    let head = `command-yuno id=${test.id}` + (test.service ? ` service=${test.service}` : "");
+    let names = action === "restart" ? ["stop", "start"] : [action];
     let out = [];
-    for(let list of lists) {
-        for(let cmd of list) {
-            out.push(`${head} command=${cmd}`);
+    for(let a of names) {
+        for(let st of ((scenario.actions || {})[a] || [])) {
+            let y = scenario.yunos.find((x) => x.key === st.yuno);
+            if(!y) {
+                continue;
+            }
+            /*  A step with no service goes to the yuno's own (the one
+             *  its counters are read from), as the control center does.  */
+            let service = st.service || y.service || "";
+            out.push({
+                key: y.key,
+                node: y.node || "",
+                line: `command-yuno id=${y.id}` + (service ? ` service=${service}` : "") +
+                      ` command=${st.command}`
+            });
         }
     }
     return out;
+}
+
+/***************************************************************
+ *  A scenario of the yunos ticked in the tree: [{node, yuno_id,
+ *  label}], each on its node, shown as cards.
+ ***************************************************************/
+function selection_scenario(items)
+{
+    let yunos = [];
+    let seen = {};
+    for(let it of (items || [])) {
+        if(!it || !it.node || !it.yuno_id) {
+            continue;
+        }
+        let key = `${it.node}.${it.yuno_id}`.replace(/[^\w.^-]/g, "_");
+        if(seen[key]) {
+            continue;
+        }
+        seen[key] = true;
+        yunos.push({key: key, id: String(it.yuno_id), node: it.node,
+                    label: it.label || String(it.yuno_id)});
+    }
+    if(!yunos.length) {
+        return null;
+    }
+    let r = validate_scenario({id: "selection", yunos: yunos, view: {mode: "cards"}});
+    return r.ok ? r.scenario : null;
+}
+
+/***************************************************************
+ *  Does this failed answer say the control center does not know the
+ *  command? One older than 7.25.14 keeps no scenario: the console then
+ *  keeps the one it watches in the browser (command_parser.c's words).
+ ***************************************************************/
+function cc_lacks_command(comment)
+{
+    return /command not available/i.test(String(comment || ""));
 }
 
 /***************************************************************
@@ -715,8 +878,12 @@ function fmt_rate(v)
 
 export {
     SCENARIO_TEMPLATE,
-    test_controls,
-    test_command_lines,
+    SCENARIO_ACTIONS,
+    scenario_controls,
+    action_steps,
+    scenario_document,
+    selection_scenario,
+    cc_lacks_command,
     lines,
     scenario_nodes,
     config_endpoints,

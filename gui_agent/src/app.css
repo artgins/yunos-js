@@ -41,60 +41,62 @@
 }
 
 /* ====================================================================
- *  Statistics cards: a counter value that changed since the previous
- *  auto-refresh is accented (amber, bold) for that one cycle and reverts
- *  to normal when it settles — no animation (transient effects are off by
- *  house preference). Theme-aware.
+ *  Scenario cards (C_AGENT_MONITOR, view "cards"): every counter of a
+ *  yuno, one card each -- what the Statistics workspace showed.
+ *
+ *  THE COUNTERS TABLE NEVER GETS WIDER THAN ITS CARD. A stat value can
+ *  be a PATH -- `devices_database`, `commands_database` -- and a path
+ *  has no spaces: one unbreakable word that sets the table's minimum
+ *  width. It grew past the card, the overflow was clipped, and on a
+ *  phone every short NUMBER (right-aligned, so in the clipped part)
+ *  disappeared while the names and paths stayed. `table-layout: fixed`
+ *  makes the columns obey the card, and `overflow-wrap: anywhere` lets
+ *  a path wrap rather than push.
  * ==================================================================== */
-.STATS_CARD .stats-changed {
-    color: #c76b1f;
-    font-weight: 700;
+.MONITOR_CARDS {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-start;
 }
-@media (prefers-color-scheme: dark) {
-    .STATS_CARD .stats-changed {
-        color: #f0a35e;
-    }
+.MONITOR_CARDS .MONITOR_CARD {
+    width: 20rem;
+    max-width: 100%;
+    margin-bottom: 0;
 }
-:root[data-theme="light"] .STATS_CARD .stats-changed {
-    color: #c76b1f;
+.MONITOR_CARD_HEAD {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
 }
-:root[data-theme="dark"] .STATS_CARD .stats-changed {
-    color: #f0a35e;
+.MONITOR_CARD_ROW {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin: 0.35rem 0;
 }
-
-/* ====================================================================
- *  THE COUNTERS TABLE NEVER GETS WIDER THAN ITS CARD.
- *
- *  A stat value can be a PATH -- `devices_database`,
- *  `commands_database` -- and a path has no spaces: it is one
- *  unbreakable word, so it sets the table's minimum width. The table
- *  then grew past the 20rem card, `.STATS_TABLE`'s `overflow:auto`
- *  clipped what stuck out, and the value column ended up mostly beyond
- *  the right edge.
- *
- *  On a phone that reads as "the counters have no values", and it is
- *  worse than it looks: a value cell is `has-text-right`, so a short
- *  NUMBER sits at the far right of that column -- the part that is
- *  clipped -- while a long path fills the cell from its left and shows
- *  its first characters. Names and paths visible, every number gone.
- *
- *  `table-layout: fixed` makes the columns obey the container instead of
- *  the content, and `overflow-wrap: anywhere` lets a path wrap rather
- *  than push. Wrapping over three lines is the honest way to show a
- *  value that does not fit; hiding it is not.
- * ==================================================================== */
-.STATS_CARD .STATS_COUNTERS {
+.MONITOR_CARD .MONITOR_CARD_COUNTERS {
     table-layout: fixed;
     width: 100%;
 }
-
-.STATS_CARD .STATS_NAME {
+.MONITOR_CARD .MONITOR_CARD_COUNTER_NAME {
     width: 50%;
     overflow-wrap: anywhere;
 }
-
-.STATS_CARD .STATS_VALUE {
+.MONITOR_CARD .MONITOR_CARD_COUNTER_VALUE {
     overflow-wrap: anywhere;
+}
+
+/*  The scenarios list wraps its long names instead of cutting them.  */
+.SCENARIOS_TABLE .tabulator-cell.SCENARIOS_CELL_WRAP {
+    white-space: normal;
+    text-overflow: clip;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+.SCENARIOS_TABLE .tabulator-row .tabulator-cell.SCENARIOS_CELL_WRAP {
+    height: auto !important;
 }
 
 /* ====================================================================
@@ -129,7 +131,7 @@
 }
 
 /* ====================================================================
- *  Nodes tree (C_STATS_NODES: the Statistics and Schemas picker).
+ *  Nodes tree (C_STATS_NODES: the Schemas, Users and Scenarios picker).
  *  Tabulator cells are nowrap + ellipsis, which on a phone cuts the
  *  status in half ("Running Read o..."). These two columns wrap instead
  *  — the column carries `variableHeight`, so the row grows to fit.

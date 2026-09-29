@@ -8,8 +8,11 @@ import {describe, it, expect} from "vitest";
 
 import {
     SCENARIO_TEMPLATE,
-    test_controls,
-    test_command_lines,
+    scenario_controls,
+    action_steps,
+    scenario_document,
+    selection_scenario,
+    cc_lacks_command,
     lines,
     scenario_nodes,
     config_endpoints,
@@ -28,11 +31,26 @@ describe("parse_scenario", () => {
     it("accepts the template and fills the defaults", () => {
         let r = parse_scenario(JSON.stringify(SCENARIO_TEMPLATE));
         expect(r.ok).toBe(true);
+        expect(r.scenario.id).toBe("stress-test");
+        expect(r.scenario.place).toBe("control_center");
         expect(r.scenario.yunos.map((y) => y.id)).toEqual(["stress", "2120", "5120"]);
         expect(r.scenario.yunos[0].rate).toBe("tx");
         expect(r.scenario.yunos[1].rate).toBe("rx");
         expect(r.scenario.yunos[1].service).toBe("");
-        expect(r.scenario.links).toEqual([["stress", "2120"], ["2120", "5120"]]);
+        expect(r.scenario.yunos.every((y) => y.node === "my-node")).toBe(true);
+        expect(r.scenario.links).toEqual([["sim", "gate"], ["gate", "store"]]);
+        expect(r.scenario.view).toEqual({mode: "graph"});
+    });
+
+    it("refuses an id that cannot go in a ref, and a bad view", () => {
+        expect(parse_scenario('{"id":"a^b","node":"n","yunos":[{"id":"a"}]}').error.key)
+            .toBe("scenario bad id");
+        expect(parse_scenario('{"id":"a b","node":"n","yunos":[{"id":"a"}]}').error.key)
+            .toBe("scenario bad id");
+        expect(parse_scenario('{"node":"n","yunos":[{"id":"a"}],"view":{"mode":"pie"}}').error.key)
+            .toBe("scenario bad view");
+        expect(parse_scenario('{"node":"n","yunos":[{"id":"a"}],"view":{"mode":"cards"}}').scenario.view)
+            .toEqual({mode: "cards"});
     });
 
     it("uses the id as the label when there is none", () => {
@@ -167,51 +185,155 @@ describe("small helpers", () => {
 });
 
 
-describe("test block", () => {
-    const base = {agent_url: "wss://h:1993", yunos: [{id: "g"}, {id: "s"}]};
-    const with_test = (test) => parse_scenario(JSON.stringify(Object.assign({}, base, {test})));
+describe("actions", () => {
+    const base = {node: "n", yunos: [{key: "g", id: "7"}, {key: "s", id: "8", node: "m"}]};
+    const with_actions = (actions) => parse_scenario(JSON.stringify(Object.assign({}, base, {actions})));
 
-    it("is optional, and a scenario without it has no control", () => {
+    it("are optional, and a scenario without them has no control", () => {
         let r = parse_scenario(JSON.stringify(base));
         expect(r.ok).toBe(true);
-        expect(r.scenario.test).toBe(undefined);
-        expect(test_controls(r.scenario.test)).toEqual([]);
+        expect(r.scenario.actions).toEqual({});
+        expect(scenario_controls(r.scenario)).toEqual([]);
     });
 
-    it("keeps the declared lists and offers restart when it can start", () => {
-        let r = with_test({yuno: "g", service: "sim", start: ["set-controllers controllers=10"],
-                           stop: ["set-controllers   controllers=0"]});
+    it("keep their steps, in the order of the actions, and offer restart when it can start", () => {
+        let r = with_actions({
+            stop:   [{yuno: "g", command: "set-controllers   controllers=0"}],
+            report: [{yuno: "s", service: "__yuno__", command: "view-config"}],
+            start:  [{yuno: "g", service: "sim", command: "a x=1"}, {yuno: "s", command: "b"}]
+        });
         expect(r.ok).toBe(true);
-        expect(r.scenario.test.stop).toEqual(["set-controllers controllers=0"]);
-        expect(test_controls(r.scenario.test)).toEqual(["start", "stop", "restart"]);
+        expect(r.scenario.actions.stop).toEqual([{yuno: "g", command: "set-controllers controllers=0"}]);
+        expect(scenario_controls(r.scenario)).toEqual(["start", "stop", "report", "restart"]);
     });
 
-    it("builds the command-yuno lines, restart being stop then start", () => {
-        let t = with_test({yuno: "g", service: "sim", start: ["a x=1", "b"], stop: ["c"]}).scenario.test;
-        expect(test_command_lines(t, "start")).toEqual([
-            "command-yuno id=g service=sim command=a x=1",
-            "command-yuno id=g service=sim command=b"
+    it("resolve each step to its node and its line, restart being stop then start", () => {
+        let sc = with_actions({
+            start: [{yuno: "g", service: "sim", command: "a x=1"}, {yuno: "s", command: "b"}],
+            stop:  [{yuno: "g", command: "c"}]
+        }).scenario;
+        expect(action_steps(sc, "start")).toEqual([
+            {key: "g", node: "n", line: "command-yuno id=7 service=sim command=a x=1"},
+            {key: "s", node: "m", line: "command-yuno id=8 command=b"}
         ]);
-        expect(test_command_lines(t, "restart").map((l) => l.split("command=")[1])).toEqual(["c", "a x=1", "b"]);
-        let t2 = with_test({yuno: "g", pause: ["p"]}).scenario.test;
-        expect(test_command_lines(t2, "pause")).toEqual(["command-yuno id=g command=p"]);
+        expect(action_steps(sc, "restart").map((st) => st.line.split("command=")[1]))
+            .toEqual(["c", "a x=1", "b"]);
     });
 
-    it("names what is wrong", () => {
+    it("name what is wrong", () => {
+        expect(with_actions([]).error.key).toBe("scenario bad action");
+        expect(with_actions({boom: [{yuno: "g", command: "a"}]}).error.key).toBe("scenario bad action");
+        expect(with_actions({stop: []}).error.key).toBe("scenario bad action");
+        expect(with_actions({stop: [{yuno: "x", command: "a"}]}).error.key).toBe("scenario bad step");
+        expect(with_actions({stop: [{yuno: "g", service: "a b", command: "a"}]}).error.key)
+            .toBe("scenario bad step");
+        expect(with_actions({stop: [{yuno: "g", command: "a b"}]}).error.key).toBe("scenario bad test command");
+        expect(with_actions({stop: [{yuno: "g", command: "a x=1 y=two words"}]}).error.key)
+            .toBe("scenario bad test command");
+    });
+});
+
+
+describe("the old form", () => {
+    it("a name becomes the id, and the test block the steps of the actions", () => {
+        let r = parse_scenario(JSON.stringify({
+            name: "Stress test (central)",
+            node: "c",
+            yunos: [{id: "stress", rate: "tx"}, {id: "2120"}],
+            test: {yuno: "stress", service: "sim_controllers",
+                   start: ["set-controllers controllers=10", "resume-generation"],
+                   stop: ["set-controllers controllers=0"]}
+        }));
+        expect(r.ok).toBe(true);
+        expect(r.scenario.id).toBe("stress-test-central");
+        expect(r.scenario.description).toBe("Stress test (central)");
+        expect(r.scenario.actions.start).toEqual([
+            {yuno: "stress", service: "sim_controllers", command: "set-controllers controllers=10"},
+            {yuno: "stress", service: "sim_controllers", command: "resume-generation"}
+        ]);
+        expect(scenario_controls(r.scenario)).toEqual(["start", "stop", "restart"]);
+    });
+
+    it("a test yuno that was not drawn is added to the yunos", () => {
+        let r = parse_scenario('{"agent_url":"wss://h:1993","yunos":[{"id":"a"}],' +
+            '"test":{"yuno":"gen","stop":["s"]}}');
+        expect(r.ok).toBe(true);
+        expect(r.scenario.yunos.map((y) => y.key)).toEqual(["a", "gen"]);
+        expect(action_steps(r.scenario, "stop")).toEqual(
+            [{key: "gen", node: "", line: "command-yuno id=gen command=s"}]);
+    });
+
+    it("refuses a test block that says nothing, or both forms at once", () => {
+        const base = {node: "n", yunos: [{id: "g"}]};
+        const with_test = (test) => parse_scenario(JSON.stringify(Object.assign({}, base, {test})));
         expect(with_test([]).error.key).toBe("scenario bad test");
         expect(with_test({start: ["a"]}).error.key).toBe("scenario bad test");
         expect(with_test({yuno: "g"}).error.key).toBe("scenario bad test");
         expect(with_test({yuno: "g", stop: []}).error.key).toBe("scenario bad test");
-        expect(with_test({yuno: "g", stop: ["a b"]}).error.key).toBe("scenario bad test command");
-        expect(with_test({yuno: "g", stop: ["a x=1 y=two words"]}).error.key).toBe("scenario bad test command");
         expect(with_test({yuno: "g", service: "a b", stop: ["a"]}).error.key).toBe("scenario bad test");
+        expect(parse_scenario(JSON.stringify(Object.assign({}, base, {
+            test: {yuno: "g", stop: ["a"]}, actions: {stop: [{yuno: "g", command: "a"}]}
+        }))).error.key).toBe("scenario bad test");
+    });
+});
+
+
+describe("the document the control center keeps", () => {
+    it("is what was written, without what the validation derived", () => {
+        let sc = parse_scenario(JSON.stringify(SCENARIO_TEMPLATE)).scenario;
+        let doc = scenario_document(sc);
+        expect(doc.place).toBe(undefined);
+        expect(doc.node).toBe("my-node");
+        expect(doc.yunos[0]).toEqual({key: "sim", id: "stress", label: "generator", rate: "tx",
+                                      service: "generator"});
+        expect(doc.yunos[1].node).toBe(undefined);
+        /*  and it validates back to the same scenario  */
+        expect(parse_scenario(JSON.stringify(doc)).scenario).toEqual(sc);
+    });
+
+    it("keeps the url of a direct one, and the node of a yuno that is elsewhere", () => {
+        let sc = parse_scenario('{"id":"d","agent_url":"wss://h:1993","yunos":[{"id":"a"}]}').scenario;
+        expect(scenario_document(sc).agent_url).toBe("wss://h:1993");
+        let sc2 = parse_scenario('{"node":"n","yunos":[{"id":"a"},{"id":"b","node":"m"}]}').scenario;
+        expect(scenario_document(sc2).yunos.map((y) => y.node)).toEqual([undefined, "m"]);
+    });
+});
+
+
+describe("a control center that keeps no scenario", () => {
+    it("is told by the parser's words, not by any failure", () => {
+        expect(cc_lacks_command("controlcenter^artgins.com: command not available: 'scenarios'. Try 'help' command.")).toBe(true);
+        expect(cc_lacks_command("controlcenter^test: scenario not found: 'x'")).toBe(false);
+        expect(cc_lacks_command(undefined)).toBe(false);
+    });
+});
+
+
+describe("the yunos ticked in the tree", () => {
+    it("make a scenario of cards, each yuno on its node", () => {
+        let sc = selection_scenario([
+            {node: "wattyzer", yuno_id: "1620", label: "db_history^1620"},
+            {node: "local", yuno_id: "1620"},
+            {node: "local", yuno_id: "1620"}
+        ]);
+        expect(sc.id).toBe("selection");
+        expect(sc.view.mode).toBe("cards");
+        expect(sc.yunos.map((y) => [y.key, y.id, y.node, y.label])).toEqual([
+            ["wattyzer.1620", "1620", "wattyzer", "db_history^1620"],
+            ["local.1620", "1620", "local", "1620"]
+        ]);
+    });
+
+    it("make none of nothing", () => {
+        expect(selection_scenario([])).toBe(null);
+        expect(selection_scenario([{node: "", yuno_id: "1"}])).toBe(null);
     });
 });
 
 
 describe("where the yunos are", () => {
     it("a direct scenario keeps its url and no node", () => {
-        let r = parse_scenario(JSON.stringify(SCENARIO_TEMPLATE));
+        let r = parse_scenario('{"agent_url":"wss://h:1993","yunos":[{"id":"stress"}]}');
         expect(r.scenario.place).toBe("direct");
         expect(r.scenario.yunos[0].node).toBe(undefined);
         expect(r.scenario.yunos[0].key).toBe("stress");
@@ -234,9 +356,8 @@ describe("where the yunos are", () => {
         expect(r.scenario.yunos.map((y) => `${y.key}@${y.node}`)).toEqual(
             ["sim@controlador", "gate@central", "gate_co@controlador"]);
         expect(scenario_nodes(r.scenario)).toEqual(["controlador", "central"]);
-        expect(r.scenario.test).toMatchObject({yuno: "sim", id: "stress", node: "controlador"});
-        expect(test_command_lines(r.scenario.test, "stop")).toEqual(
-            ["command-yuno id=stress service=sim_controllers command=set-controllers controllers=0"]);
+        expect(action_steps(r.scenario, "stop")).toEqual([{key: "sim", node: "controlador",
+            line: "command-yuno id=stress service=sim_controllers command=set-controllers controllers=0"}]);
     });
 
     it("refuses a scenario that says both, or neither", () => {

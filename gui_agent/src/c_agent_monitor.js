@@ -1,16 +1,30 @@
 /***********************************************************************
  *          c_agent_monitor.js
  *
- *      C_AGENT_MONITOR — the Monitor workspace: the yunos of one test,
- *      live. A GRAPH of the yunos in the order the messages flow (left to
- *      right), each card with its cpu %, its messages per second in and
- *      out, its queue when it has one and what the agent says of it
- *      (playing, paused, stopped...); and under it two CHARTS, messages
- *      per second and cpu, over a window of history.
+ *      C_AGENT_MONITOR — the live view of the Scenarios workspace: the
+ *      yunos of one scenario, live. Two ways to show them (`view.mode`
+ *      of the scenario, switchable here):
+ *        - GRAPH: the yunos in the order the messages flow (left to
+ *          right), each card with its cpu %, its messages per second in
+ *          and out, its queue when it has one and what the agent says of
+ *          it (playing, paused, stopped...); and under it two CHARTS,
+ *          messages per second and cpu, over a window of history.
+ *        - CARDS: every counter of every yuno, one card each -- what the
+ *          Statistics workspace was before it became a kind of scenario.
  *
  *      What it watches is a SCENARIO (monitor_helpers.js): where the
- *      yunos are, the yunos, and the links between them. It is written
- *      as JSON in the view itself and kept in C_AGENT_CONFIG.
+ *      yunos are, the yunos, the links between them and the commands of
+ *      its actions. The one watched is kept in C_AGENT_CONFIG
+ *      (`monitor_scenario`) with where it came from (`monitor_source`):
+ *        - "saved": one the CONTROL CENTER keeps, opened from the list
+ *          (C_SCENARIOS) or saved from here (`save-scenario`);
+ *        - "selection": the yunos ticked in the tree tab, as cards
+ *          (C_AGENT_CONFIG turns the ticks into it);
+ *        - "local": written here and kept in this browser only -- a
+ *          control center older than 7.25.14 keeps none.
+ *      This view follows that setting (EV_MONITOR_SCENARIO_CHANGED):
+ *      the list, the tree and its own editor all change the scenario by
+ *      writing it there, and the view adopts whatever is written.
  *
  *      TRANSPORT, one of two, chosen by the scenario:
  *        - `agent_url`: the agent of the node under test DIRECTLY
@@ -64,16 +78,19 @@
  *      counters and a monotonic clock. The chart plots, per yuno, the
  *      direction the scenario names as its throughput (`rate`).
  *
- *      TEST CONTROLS. A scenario with a `test` block is a test, and the
- *      view shows its controls: start, pause, resume, stop -- each a list
- *      of commands of the generator, sent as `command-yuno` in order --
- *      and restart (stop, every yuno asked to zero its counters with
- *      `stats-yuno stats=__reset__` -- only a service that honours the
- *      reset does it -- the history cleared, start). Each
- *      asks for confirmation first and shows the commands it will send;
- *      stop and restart in red. Only in ST_MONITORING: a control confirmed
- *      after the link went down is refused, not queued. A scenario
- *      without `test` (production) shows none.
+ *      ACTIONS. A scenario that declares actions gets their controls:
+ *      start, pause, resume, stop, report -- each a list of steps, a
+ *      command to one yuno of the scenario -- and restart (stop, every
+ *      yuno asked to zero its counters with `stats-yuno stats=__reset__`
+ *      -- only a service that honours the reset does it -- the history
+ *      cleared, start). Each asks for confirmation first and shows the
+ *      commands it will send; stop and restart in red. Only in
+ *      ST_MONITORING: a control confirmed after the link went down is
+ *      refused, not queued. A scenario the control center keeps is RUN
+ *      by the control center (`run-scenario`): the steps one after the
+ *      other, and the run written with the answer of every step, which
+ *      the Runs button lists. Any other one is run from here, every step
+ *      sent at once. What a `report` answers is shown in a dialog.
  *
  *      States:
  *          ST_DISCONNECTED  no link (no scenario, or the user left).
@@ -115,12 +132,13 @@ import {
     kw_get_str,
 } from "@yuneta/gobj-js";
 
-import {t} from "i18next";
+import i18next, {t} from "i18next";
 
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {
     yui_shell_confirm_yesno,
     yui_shell_confirm_danger,
+    yui_shell_show_modal,
 } from "@yuneta/gobj-ui/src/shell_modals.js";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
@@ -130,10 +148,13 @@ import {
     MONITOR_REFRESH_CHOICES,
     MONITOR_WINDOW_CHOICES,
 } from "./c_agent_config.js";
+import {esc, fmt_value} from "./agent_helpers.js";
 import {
     SCENARIO_TEMPLATE,
-    test_controls,
-    test_command_lines,
+    scenario_controls,
+    action_steps,
+    scenario_document,
+    cc_lacks_command,
     lines,
     scenario_nodes,
     derive_links,
@@ -163,8 +184,14 @@ const CONTROL_ICONS = {
     pause:   "yi-pause",
     resume:  "yi-forward-step",
     stop:    "yi-square",
+    report:  "yi-circle-info",
     restart: "yi-arrows-rotate"
 };
+
+/*  The kinds of the requests this view makes of the control center
+ *  itself (not of an agent): answered in any state.  */
+const CC_KINDS = ["cc_save", "cc_delete", "cc_runs", "cc_run"];
+
 const DANGEROUS_CONTROLS = ["stop", "restart"];
 
 /***************************************************************
@@ -172,7 +199,7 @@ const DANGEROUS_CONTROLS = ["stop", "restart"];
  ***************************************************************/
 const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,  null,       "Subscriber of output events"),
-SDATA(data_type_t.DTP_STRING,   "title",        0,  "monitor",  "View title (i18n key)"),
+SDATA(data_type_t.DTP_STRING,   "title",        0,  "scenario", "View title (i18n key)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",   0,  null,       "Root HTMLElement"),
 SDATA(data_type_t.DTP_POINTER,  "link_svc",     0,  null,       "C_MONITOR_LINK service (direct)"),
 SDATA(data_type_t.DTP_POINTER,  "cc_link_svc",  0,  null,       "C_AGENT_LINK service (control center)"),
@@ -183,6 +210,12 @@ SDATA_END()
 let PRIVATE_DATA = {
     gobj_timer:     null,
     scenario:       null,   /*  validated scenario, or null  */
+    source:         "local", /*  where it comes from: local | saved | selection  */
+    view_mode:      "graph", /*  graph | cards: the scenario's, switchable here  */
+    cc_scenarios:   null,   /*  the control center keeps scenarios: true / false / null (not known)  */
+    cc_run:         null,   /*  a run of the control center in flight: {control, phase}  */
+    stats_cards:    {},     /*  yuno key -> element refs of its card in cards mode  */
+    pending_save:   null,   /*  the scenario a save-scenario in flight writes  */
     model:          {},     /*  yuno key -> live figures (see new_model)  */
     rows:           [],     /*  history rows {tm, "cpu:<key>", "rate:<key>"}  */
     last_tick:      0,      /*  performance.now() of the previous reading  */
@@ -243,11 +276,13 @@ function mt_create(gobj)
     let config = gobj_find_service("agent_config", true);
     gobj_write_attr(gobj, "config_svc", config);
 
-    let settings = config ? agent_config_get_monitor(config) : {scenario: null};
+    let settings = config ? agent_config_get_monitor(config) : {scenario: null, source: "local"};
     if(settings.scenario) {
         let r = validate_scenario(settings.scenario);
         if(r.ok) {
             priv.scenario = r.scenario;
+            priv.source = settings.source;
+            priv.view_mode = r.scenario.view.mode;
         } else {
             log_warning(`${gobj_short_name(gobj)}: the saved scenario is not valid ` +
                 `(${r.error.key} ${r.error.detail}), ignored`);
@@ -279,6 +314,19 @@ function mt_start(gobj)
         gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
 
+    /*  What the list, the tree and the editor write is what this view
+     *  shows; and the answers of the control center's own commands
+     *  (save, delete, runs, run) come on the console's link whatever the
+     *  scenario's transport, so that one is listened to always.  */
+    let config = gobj_read_attr(gobj, "config_svc");
+    if(config) {
+        gobj_subscribe_event(config, "EV_MONITOR_SCENARIO_CHANGED", {}, gobj);
+    }
+    let cc_link = gobj_read_attr(gobj, "cc_link_svc");
+    if(cc_link) {
+        gobj_subscribe_event(cc_link, "EV_MT_COMMAND_ANSWER", {}, gobj);
+    }
+
     /*  A dashboard shows: with a scenario, connect at once.  */
     if(priv.scenario) {
         gobj_send_event(gobj, "EV_CONNECT", {}, gobj);
@@ -300,6 +348,14 @@ function mt_stop(gobj)
     let shell = yui_shell_of(gobj);
     if(shell) {
         gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
+    let config = gobj_read_attr(gobj, "config_svc");
+    if(config) {
+        gobj_unsubscribe_event(config, "EV_MONITOR_SCENARIO_CHANGED", {}, gobj);
+    }
+    let cc_link = gobj_read_attr(gobj, "cc_link_svc");
+    if(cc_link) {
+        gobj_unsubscribe_event(cc_link, "EV_MT_COMMAND_ANSWER", {}, gobj);
     }
     /*  The charts are hosted children: retire them here, not in
      *  mt_destroy (the framework destroys children first).  */
@@ -387,6 +443,7 @@ function build_dom(gobj)
     let settings = config ? agent_config_get_monitor(config) : {refresh: 2, window: 15};
 
     priv.$name = createElement2(["span", {class: "MONITOR_NAME has-text-weight-semibold"}, ""]);
+    priv.$source = createElement2(["span", {class: "MONITOR_SOURCE tag is-light"}, ""]);
     priv.$state = createElement2(["span", {class: "MONITOR_STATE tag"}, ""]);
     priv.$connect = tool_button("MONITOR_CONNECT is-primary", "yi-plug", "monitor connect",
         "EV_CONNECT", gobj, true);
@@ -400,17 +457,38 @@ function build_dom(gobj)
         "EV_CLEAR_HISTORY", gobj, false);
     priv.$edit = tool_button("MONITOR_EDIT", "yi-pen", "monitor scenario",
         "EV_EDIT_SCENARIO", gobj, true);
+    priv.$new = tool_button("MONITOR_NEW", "yi-plus", "scenario new",
+        "EV_NEW_SCENARIO", gobj, false);
+    priv.$runs = tool_button("MONITOR_RUNS", "yi-calendar-days", "scenario runs",
+        "EV_SHOW_RUNS", gobj, false);
+    priv.$delete = tool_button("MONITOR_DELETE is-danger is-outlined", "yi-trash", "scenario delete",
+        "EV_DELETE_SCENARIO", gobj, false);
+    /*  An <option> is text: it carries its key, and its value stays
+     *  explicit, or a translated option would name a mode that is not.  */
+    priv.$mode = createElement2(
+        ["select", {class: "MONITOR_MODE",
+                    title: t("scenario view"), "data-i18n-title": "scenario view",
+                    "aria-label": t("scenario view"), "data-i18n-aria-label": "scenario view"},
+            [["option", {value: "graph", i18n: "scenario view graph"}, t("scenario view graph")],
+             ["option", {value: "cards", i18n: "scenario view cards"}, t("scenario view cards")]],
+            {change: (e) => gobj_send_event(gobj, "EV_SET_VIEW_MODE", {mode: e.target.value}, gobj)}]
+    );
+    priv.$mode.value = priv.view_mode;
 
     let $toolbar = createElement2(
         ["div", {class: "MONITOR_TOOLBAR"}, [
-            ["div", {class: "MONITOR_TITLE"}, [priv.$name, priv.$state]],
+            ["div", {class: "MONITOR_TITLE"}, [priv.$name, priv.$source, priv.$state]],
             ["div", {class: "MONITOR_TOOLS"}, [
                 priv.$connect,
                 priv.$disconnect,
+                ["div", {class: "select"}, [priv.$mode]],
                 ["div", {class: "select"}, [priv.$refresh]],
                 ["div", {class: "select"}, [priv.$window]],
                 priv.$clear,
-                priv.$edit
+                priv.$edit,
+                priv.$new,
+                priv.$runs,
+                priv.$delete
             ]]
         ]]
     );
@@ -434,14 +512,17 @@ function build_dom(gobj)
 
     /*  Test controls: filled from the scenario's test block.  */
     priv.$test_buttons = createElement2(["div", {class: "MONITOR_TEST_BUTTONS"}, []]);
+    priv.$control_details = tool_button("MONITOR_CONTROL_DETAILS", "yi-circle-info",
+        "scenario action answers", "EV_SHOW_OUTPUT", gobj, false);
     priv.$control = createElement2(["span", {class: "MONITOR_CONTROL is-size-7"}, [
         ["span", {class: "MONITOR_CONTROL_NAME has-text-weight-semibold"}, ""],
-        ["span", {class: "MONITOR_CONTROL_TEXT is-family-monospace"}, ""]
+        ["span", {class: "MONITOR_CONTROL_TEXT is-family-monospace"}, ""],
+        priv.$control_details
     ]]);
     priv.$test = createElement2(
         ["div", {class: "MONITOR_TEST"}, [
-            ["span", {class: "MONITOR_TEST_LABEL tag is-warning is-light", i18n: "monitor test"},
-                t("monitor test")],
+            ["span", {class: "MONITOR_TEST_LABEL tag is-warning is-light", i18n: "scenario actions"},
+                t("scenario actions")],
             priv.$test_buttons,
             priv.$control
         ]]
@@ -489,11 +570,12 @@ function build_dom(gobj)
 
     priv.$empty = createElement2(
         ["div", {class: "MONITOR_EMPTY notification is-light"}, [
-            ["p", {i18n: "monitor no scenario"}, t("monitor no scenario")]
+            ["p", {i18n: "scenario none watched"}, t("scenario none watched")]
         ]]
     );
 
     priv.$graph = createElement2(["div", {class: "MONITOR_GRAPH"}, []]);
+    priv.$cards = createElement2(["div", {class: "MONITOR_CARDS"}, []]);
 
     priv.$rate_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
     priv.$cpu_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
@@ -518,6 +600,7 @@ function build_dom(gobj)
     $c.appendChild(priv.$editor);
     $c.appendChild(priv.$empty);
     $c.appendChild(priv.$graph);
+    $c.appendChild(priv.$cards);
     $c.appendChild(priv.$charts);
 }
 
@@ -533,6 +616,7 @@ function new_model()
         rx:         null,
         tx:         null,
         queue:      null,
+        data:       null,       /*  the service stats, whole (cards mode)  */
         app_t:      0,
         prev_rx:    null,
         prev_tx:    null,
@@ -724,6 +808,7 @@ function build_graph(gobj)
 function paint_card(gobj, id)
 {
     let priv = gobj.priv;
+    paint_stats_card(gobj, id);
     let c = priv.cards[id];
     let m = priv.model[id];
     if(!c || !m) {
@@ -788,13 +873,23 @@ function render_status(gobj)
     priv.$state.textContent = t(state_key);
 
     let has = !!priv.scenario;
-    if(has && priv.scenario.name) {
+    if(has) {
         priv.$name.removeAttribute("data-i18n");
-        priv.$name.textContent = priv.scenario.name;
+        priv.$name.textContent = priv.scenario.id;
+        priv.$name.setAttribute("title", priv.scenario.description || priv.scenario.id);
     } else {
-        priv.$name.setAttribute("data-i18n", "monitor");
-        priv.$name.textContent = t("monitor");
+        priv.$name.setAttribute("data-i18n", "scenario");
+        priv.$name.textContent = t("scenario");
+        priv.$name.removeAttribute("title");
     }
+    let source_key = `scenario source ${priv.source}`;
+    priv.$source.setAttribute("data-i18n", source_key);
+    priv.$source.textContent = t(source_key);
+    show(priv.$source, has);
+    let saved = has && priv.source === "saved";
+    show(priv.$runs, saved);
+    show(priv.$delete, saved);
+    priv.$mode.value = priv.view_mode;
     let $via = priv.$url.querySelector(".MONITOR_URL_VIA");
     let $where = priv.$url.querySelector(".MONITOR_URL_WHERE");
     if(has && priv.scenario.place === "control_center") {
@@ -830,8 +925,10 @@ function render_status(gobj)
     render_control(gobj);
     show(priv.$editor, priv.editing);
     show(priv.$empty, !has && !priv.editing);
-    show(priv.$graph, has);
-    show(priv.$charts, has);
+    let cards = priv.view_mode === "cards";
+    show(priv.$graph, has && !cards);
+    show(priv.$charts, has && !cards);
+    show(priv.$cards, has && cards);
 }
 
 /***************************************************************
@@ -842,8 +939,7 @@ function build_test_controls(gobj)
     let priv = gobj.priv;
     clear_node(priv.$test_buttons);
     priv.control_buttons = {};
-    let test = priv.scenario ? priv.scenario.test : null;
-    for(let control of test_controls(test)) {
+    for(let control of scenario_controls(priv.scenario)) {
         let key = `monitor ${control}`;
         let danger = DANGEROUS_CONTROLS.indexOf(control) >= 0;
         let $btn = createElement2(
@@ -880,6 +976,9 @@ function render_control(gobj)
         if(c.not_sent) {
             $text.setAttribute("data-i18n", "monitor control not sent");
             $text.textContent = t("monitor control not sent");
+        } else if(c.running) {
+            $text.setAttribute("data-i18n", "scenario run in flight");
+            $text.textContent = t("scenario run in flight");
         } else {
             $text.removeAttribute("data-i18n");
             $text.textContent = c.text || "";
@@ -891,6 +990,7 @@ function render_control(gobj)
     }
     priv.$control.classList.toggle("has-text-danger", !!(c && !c.ok));
     show(priv.$control, !!c);
+    show(priv.$control_details, !!(c && c.outputs && c.outputs.length));
     show(priv.$test, Object.keys(priv.control_buttons).length > 0);
 }
 
@@ -898,6 +998,7 @@ function render_all(gobj)
 {
     build_test_controls(gobj);
     build_graph(gobj);
+    build_cards(gobj);
     paint_all_cards(gobj);
     render_status(gobj);
 }
@@ -939,8 +1040,9 @@ function send_request(gobj, line, kind, key, node, md)
 const LINK_EVENTS = {
     direct: ["EV_ON_OPEN", "EV_ON_CLOSE", "EV_ON_OPEN_ERROR", "EV_LINK_FAILED",
              "EV_MT_COMMAND_ANSWER", "EV_MT_STATS_ANSWER", "EV_YUNO_STATS"],
+    /*  Its EV_MT_COMMAND_ANSWER is listened to always (mt_create).  */
     control_center: ["EV_ON_OPEN", "EV_ON_CLOSE", "EV_ON_OPEN_ERROR",
-                     "EV_MT_COMMAND_ANSWER", "EV_MT_STATS_ANSWER", "EV_YUNO_STATS"]
+                     "EV_MT_STATS_ANSWER", "EV_YUNO_STATS"]
 };
 
 function watch_link(gobj, place)
@@ -1053,25 +1155,49 @@ function poll_requests(gobj, only_node)
 function control_plan(gobj, control)
 {
     let priv = gobj.priv;
-    let test = priv.scenario.test;
     let plan = [];
-    let add_lines = (c) => {
-        for(let line of test_command_lines(test, c)) {
-            plan.push({line: line, node: test.node || "", kind: "control", key: test.yuno});
+    let add_steps = (a) => {
+        for(let st of action_steps(priv.scenario, a)) {
+            plan.push({line: st.line, node: st.node, kind: "control", key: st.key});
         }
     };
     if(control === "restart") {
-        if(test.stop) {
-            add_lines("stop");
-        }
+        add_steps("stop");
         for(let y of priv.scenario.yunos) {
             plan.push({line: lines.reset(y), node: y.node || "", kind: "app", key: y.key});
         }
-        add_lines("start");
+        add_steps("start");
     } else {
-        add_lines(control);
+        add_steps(control);
     }
     return plan;
+}
+
+/***************************************************************
+ *  A scenario the control center keeps is RUN by it: the steps one
+ *  after the other, and the run written. Any other runs from here.
+ ***************************************************************/
+function run_by_control_center(gobj)
+{
+    let priv = gobj.priv;
+    return !!priv.scenario && priv.source === "saved" && priv.cc_scenarios !== false &&
+           priv.scenario.place === "control_center";
+}
+
+/***************************************************************
+ *  A request to the control center itself, on the console's link.
+ ***************************************************************/
+function cc_request(gobj, command, kw, kind, md)
+{
+    let link = gobj_read_attr(gobj, "cc_link_svc");
+    if(!link || !agent_link_is_connected(link)) {
+        return -1;
+    }
+    msg_iev_write_key(kw, "monitor_kind", kind);
+    for(let k of Object.keys(md || {})) {
+        msg_iev_write_key(kw, k, md[k]);
+    }
+    return agent_link_command(link, command, kw);
 }
 
 /***************************************************************
@@ -1209,11 +1335,11 @@ function render_propose(gobj, done)
     show(priv.$propose_status, !!key);
 }
 
-function open_editor(gobj)
+function open_editor(gobj, fresh)
 {
     let priv = gobj.priv;
     priv.editing = true;
-    let base = priv.scenario || SCENARIO_TEMPLATE;
+    let base = (!fresh && priv.scenario) ? scenario_document(priv.scenario) : SCENARIO_TEMPLATE;
     priv.$text.value = JSON.stringify(base, null, 4);
     set_edit_error(gobj, null);
     render_propose(gobj, null);
@@ -1234,6 +1360,321 @@ function set_edit_error(gobj, error)
         $et.textContent = "";
         $ed.textContent = "";
     }
+}
+
+
+
+
+/***************************************************************
+ *  CARDS mode: one card per yuno with every counter of its service
+ *  -- what the Statistics workspace showed. Built with the scenario,
+ *  painted with each reading.
+ ***************************************************************/
+function build_cards(gobj)
+{
+    let priv = gobj.priv;
+    clear_node(priv.$cards);
+    priv.stats_cards = {};
+    if(!priv.scenario) {
+        return;
+    }
+    for(let y of priv.scenario.yunos) {
+        let $state = createElement2(["span", {class: "MONITOR_CARD_STATE tag is-light"}, ""]);
+        let $cpu = createElement2(["span", {class: "MONITOR_CARD_CPU is-family-monospace"}, ""]);
+        let $body = createElement2(["div", {class: "MONITOR_CARD_BODY"}, ""]);
+        let $err = createElement2(["p", {class: "MONITOR_CARD_ERROR has-text-danger is-size-7"}, ""]);
+        let $card = createElement2(
+            ["div", {class: "MONITOR_CARD box"}, [
+                ["div", {class: "MONITOR_CARD_HEAD"}, [
+                    ["span", {class: "MONITOR_CARD_LABEL has-text-weight-bold"}, y.label],
+                    ["span", {class: "MONITOR_CARD_ID is-family-monospace has-text-grey"},
+                        y.node ? `${y.node} · ${y.id}` : y.id]
+                ]],
+                ["div", {class: "MONITOR_CARD_ROW"}, [
+                    $state,
+                    ["span", {class: "MONITOR_CARD_KEY", i18n: "monitor cpu"}, t("monitor cpu")],
+                    $cpu
+                ]],
+                $body,
+                $err
+            ]]
+        );
+        priv.$cards.appendChild($card);
+        priv.stats_cards[y.key] = {$state, $cpu, $body, $err};
+    }
+}
+
+function paint_stats_card(gobj, key)
+{
+    let priv = gobj.priv;
+    let c = priv.stats_cards[key];
+    let m = priv.model[key];
+    if(!c || !m) {
+        return;
+    }
+    let state_key = `monitor yuno ${m.run}`;
+    c.$state.setAttribute("data-i18n", state_key);
+    c.$state.textContent = t(state_key);
+    c.$cpu.textContent = typeof m.cpu === "number" ? `${m.cpu} %` : "–";
+
+    let data = m.data;
+    if(data && typeof data === "object" && !Array.isArray(data) && Object.keys(data).length) {
+        let trs = Object.keys(data).map((k) =>
+            `<tr class="MONITOR_CARD_COUNTER"><td class="MONITOR_CARD_COUNTER_NAME">${esc(k)}</td>` +
+            `<td class="MONITOR_CARD_COUNTER_VALUE has-text-right is-family-monospace">` +
+            `${esc(fmt_value(data[k]))}</td></tr>`).join("");
+        c.$body.innerHTML = `<table class="MONITOR_CARD_COUNTERS table is-fullwidth is-narrow is-size-7">` +
+            `<tbody>${trs}</tbody></table>`;
+    } else {
+        c.$body.innerHTML = `<p class="MONITOR_CARD_EMPTY has-text-grey is-size-7">` +
+            `${esc(t("no statistics"))}</p>`;
+    }
+    let err = m.errors.cpu || m.errors.app;
+    if(err && err.key) {
+        c.$err.setAttribute("data-i18n", err.key);
+        c.$err.textContent = t(err.key);
+    } else {
+        c.$err.removeAttribute("data-i18n");
+        c.$err.textContent = (err && err.text) || "";
+    }
+}
+
+/***************************************************************
+ *  Show the scenario C_AGENT_CONFIG holds: the list, the tree and
+ *  the editor all write it there, and this is the one place it is
+ *  taken from. A new place (agent, or the control center) means a
+ *  new connection; the same one keeps its session and only the yunos
+ *  change.
+ ***************************************************************/
+function adopt_scenario(gobj)
+{
+    let priv = gobj.priv;
+    let config = gobj_read_attr(gobj, "config_svc");
+    let settings = config ? agent_config_get_monitor(config) : {scenario: null, source: "local"};
+    let next = null;
+    if(settings.scenario) {
+        let r = validate_scenario(settings.scenario);
+        if(r.ok) {
+            next = r.scenario;
+        } else {
+            log_warning(`${gobj_short_name(gobj)}: the scenario to show is not valid ` +
+                `(${r.error.key} ${r.error.detail}), ignored`);
+        }
+    }
+    let st = gobj_current_state(gobj);
+    let old_where = priv.scenario ? `${priv.scenario.place}|${priv.scenario.agent_url || ""}` : "";
+    if(st === "ST_MONITORING" && priv.scenario) {
+        send_unwatch(gobj);
+    }
+    priv.scenario = next;
+    priv.source = settings.source;
+    priv.view_mode = next ? next.view.mode : "graph";
+    priv.control = null;
+    priv.editing = false;
+    reset_model(gobj);
+    gobj_start_charts(gobj);
+    render_all(gobj);
+
+    if(!next) {
+        if(st !== "ST_DISCONNECTED") {
+            gobj_send_event(gobj, "EV_DISCONNECT", {}, gobj);
+        }
+        return;
+    }
+    let new_where = `${next.place}|${next.agent_url || ""}`;
+    if(st === "ST_DISCONNECTED" || new_where !== old_where) {
+        gobj_send_event(gobj, "EV_CONNECT", {}, gobj);
+    } else if(st === "ST_MONITORING") {
+        send_watch(gobj);
+        poll_tick(gobj);
+    }
+}
+
+/***************************************************************
+ *  A document in a dialog, as indented json.
+ ***************************************************************/
+function show_json_dialog(gobj, logical, title_key, prefix, value)
+{
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell to show '${title_key}'`);
+        return;
+    }
+    let $content = createElement2(
+        ["div", {class: `${logical} box`}, [
+            ["pre", {class: `${logical}_JSON is-size-7`, style: "white-space:pre-wrap;"},
+                JSON.stringify(value, null, 4)]
+        ]]
+    );
+    yui_shell_show_modal(shell, $content, {
+        dialog: true, wide: true, logical_class: logical,
+        title: title_key, title_prefix: prefix, t: t
+    });
+}
+
+/***************************************************************
+ *  The runs of the scenario, newest first: when, what, who, how it
+ *  went, and the answer of every step.
+ ***************************************************************/
+function show_runs_dialog(gobj, runs)
+{
+    let priv = gobj.priv;
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell to show the runs`);
+        return;
+    }
+    let rows = (Array.isArray(runs) ? runs : []).map((r) => {
+        let ok = typeof r.result === "number" && r.result >= 0;
+        let steps = (Array.isArray(r.steps) ? r.steps : []).map((st) =>
+            `${st.yuno || ""}: ${st.command || ""} → ${typeof st.result === "number" ? st.result : "–"}` +
+            (st.comment ? ` ${st.comment}` : "")).join("\n");
+        return ["tr", {class: "MONITOR_RUN"}, [
+            ["td", {class: "MONITOR_RUN_WHEN is-family-monospace"},
+                r.started_at ? new Date(r.started_at * 1000).toLocaleString(i18next.language || undefined) : ""],
+            ["td", {class: "MONITOR_RUN_ACTION", i18n: `monitor ${r.action}`}, t(`monitor ${r.action}`)],
+            ["td", {class: "MONITOR_RUN_USER"}, r.username || ""],
+            ["td", {class: `MONITOR_RUN_RESULT ${ok ? "has-text-success" : "has-text-danger"}`,
+                    i18n: ok ? "scenario run ok" : "scenario run failed"},
+                t(ok ? "scenario run ok" : "scenario run failed")],
+            ["td", {class: "MONITOR_RUN_STEPS is-family-monospace is-size-7",
+                    style: "white-space:pre-wrap;"}, steps]
+        ]];
+    });
+    let $content = createElement2(
+        ["div", {class: "MONITOR_RUNS box"}, rows.length ? [
+            ["div", {class: "table-container"}, [
+                ["table", {class: "MONITOR_RUNS_TABLE table is-fullwidth is-narrow is-size-7"}, [
+                    ["thead", {}, [["tr", {}, [
+                        ["th", {i18n: "scenario run when"}, t("scenario run when")],
+                        ["th", {i18n: "scenario run action"}, t("scenario run action")],
+                        ["th", {i18n: "user"}, t("user")],
+                        ["th", {i18n: "status"}, t("status")],
+                        ["th", {i18n: "scenario run steps"}, t("scenario run steps")]
+                    ]]]],
+                    ["tbody", {}, rows]
+                ]]
+            ]]
+        ] : [["p", {class: "has-text-grey", i18n: "scenario no runs"}, t("scenario no runs")]]]
+    );
+    yui_shell_show_modal(shell, $content, {
+        dialog: true, wide: true, logical_class: "MONITOR_RUNS_DIALOG",
+        title: "scenario runs", title_prefix: priv.scenario ? priv.scenario.id : "", t: t
+    });
+}
+
+/***************************************************************
+ *  The answer of a request made of the control center itself: save,
+ *  delete, runs, or a run of an action. Answered in any state.
+ ***************************************************************/
+function cc_answer(gobj, a, kw)
+{
+    let priv = gobj.priv;
+    let failed = typeof kw.result === "number" && kw.result < 0;
+    let lacks = failed && cc_lacks_command(kw.comment);
+    if(lacks) {
+        priv.cc_scenarios = false;
+    } else if(!failed) {
+        priv.cc_scenarios = true;
+    }
+    let config = gobj_read_attr(gobj, "config_svc");
+
+    if(a.kind === "cc_save") {
+        let pending = priv.pending_save;
+        priv.pending_save = null;
+        if(!pending) {
+            log_warning(`${gobj_short_name(gobj)}: answer of a save no longer waited for`);
+            return 0;
+        }
+        if(lacks) {
+            /*  This control center keeps no scenario: in the browser, then.  */
+            agent_config_set_monitor(config, {scenario: pending, source: "local"});
+            set_error(gobj, "scenario kept in this browser", "");
+            return 0;
+        }
+        if(failed) {
+            set_edit_error(gobj, {key: "scenario not saved", detail: kw.comment || ""});
+            return 0;
+        }
+        let doc = Array.isArray(kw.data) && kw.data[0] ? kw.data[0] : null;
+        let r = doc ? validate_scenario(doc) : {ok: false};
+        agent_config_set_monitor(config, {scenario: r.ok ? r.scenario : pending, source: "saved"});
+        return 0;
+    }
+    if(a.kind === "cc_delete") {
+        if(failed) {
+            set_error(gobj, "scenario not deleted", kw.comment || "");
+            return 0;
+        }
+        agent_config_set_monitor(config, {scenario: {}, source: "local"});
+        return 0;
+    }
+    if(a.kind === "cc_runs") {
+        if(failed) {
+            set_error(gobj, "scenario runs not read", kw.comment || "");
+            return 0;
+        }
+        show_runs_dialog(gobj, kw.data);
+        return 0;
+    }
+    if(a.kind === "cc_run") {
+        return cc_run_answer(gobj, kw, failed);
+    }
+    log_warning(`${gobj_short_name(gobj)}: control-center answer of no request (${a.kind})`);
+    return 0;
+}
+
+/***************************************************************
+ *  The control center ran an action (or the stop half of a restart):
+ *  the answer is the run, with every step's.
+ ***************************************************************/
+function cc_run_answer(gobj, kw, failed)
+{
+    let priv = gobj.priv;
+    let c = priv.control;
+    let control = msg_iev_read_key(kw, "monitor_control");
+    let phase = msg_iev_read_key(kw, "monitor_phase");
+    if(!c || c.control !== control) {
+        log_warning(`${gobj_short_name(gobj)}: answer of a run no longer shown (${control})`);
+        return 0;
+    }
+    let run = Array.isArray(kw.data) && kw.data[0] ? kw.data[0] : null;
+    for(let st of ((run && Array.isArray(run.steps)) ? run.steps : [])) {
+        c.outputs.push({yuno: st.yuno, line: st.line, result: st.result,
+                        comment: st.comment, data: st.data});
+    }
+    if(failed) {
+        c.running = false;
+        c.ok = false;
+        c.text = kw.comment || t("monitor no answer");
+        log_warning(`${gobj_short_name(gobj)}: run of '${control}' failed: ${c.text}`);
+        render_status(gobj);
+        return 0;
+    }
+    if(control === "restart" && phase === "stop") {
+        /*  Stopped: the counters to zero and the history cleared here,
+         *  then the control center starts it.  */
+        if(gobj_current_state(gobj) === "ST_MONITORING") {
+            for(let y of priv.scenario.yunos) {
+                send_request(gobj, lines.reset(y), "app", y.key, y.node || "");
+            }
+        }
+        priv.rows = [];
+        gobj_start_charts(gobj);
+        c.text = kw.comment || "";
+        if(cc_request(gobj, "run-scenario", {scenario_id: priv.scenario.id, action: "start"}, "cc_run",
+                {monitor_control: "restart", monitor_phase: "start"}) < 0) {
+            c.running = false;
+            c.not_sent = true;
+        }
+        render_status(gobj);
+        return 0;
+    }
+    c.running = false;
+    c.ok = true;
+    c.text = kw.comment || "";
+    render_status(gobj);
+    return 0;
 }
 
 
@@ -1397,6 +1838,7 @@ function apply_reading(gobj, id, kind, result, comment, data_)
         m.tx = tx.rate;
         m.prev_tx = tx.prev;
         m.queue = typeof data.msgs_in_queue === "number" ? data.msgs_in_queue : null;
+        m.data = data;
         m.app_t = now;
     }
     paint_card(gobj, id);
@@ -1415,6 +1857,14 @@ function ac_mt_command_answer(gobj, event, kw, src)
     let kind = a.kind;
     if(!kind) {
         return 0;   /*  another workspace's answer, on the shared link  */
+    }
+    if(CC_KINDS.indexOf(kind) >= 0) {
+        return cc_answer(gobj, a, kw);
+    }
+    if(gobj_current_state(gobj) !== "ST_MONITORING" || !priv.scenario) {
+        /*  A reading or a control asked before the session ended (or the
+         *  scenario changed): its answer has no card to go to any more.  */
+        return 0;
     }
     let failed = typeof kw.result === "number" && kw.result < 0;
     if(a.ack && !failed) {
@@ -1485,6 +1935,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
             log_warning(`${gobj_short_name(gobj)}: answer of a control no longer shown (${control})`);
             return 0;
         }
+        c.outputs.push({yuno: a.key, result: kw.result, comment: kw.comment, data: kw.data});
         if(failed) {
             c.ok = false;
             c.text = kw.comment || t("monitor no answer");
@@ -1603,8 +2054,12 @@ function ac_cancel_edit(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Save the scenario written in the editor. A new agent means a new
- *  link; the same agent keeps its session and only the yunos change.
+ *  Save the scenario written in the editor: in the control center
+ *  when it keeps scenarios, asked first when it would write a
+ *  scenario other than the one watched (one of that name is
+ *  replaced); in this browser when it keeps none. Whatever is saved
+ *  is written to C_AGENT_CONFIG, and shown from there
+ *  (adopt_scenario).
  ***************************************************************/
 function ac_save_scenario(gobj, event, kw, src)
 {
@@ -1619,24 +2074,153 @@ function ac_save_scenario(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: no config service, cannot save the scenario`);
         return -1;
     }
-    let old_where = priv.scenario
-        ? `${priv.scenario.place}|${priv.scenario.agent_url || ""}` : "";
-    priv.scenario = r.scenario;
-    agent_config_set_monitor(config, {scenario: r.scenario});
-    priv.editing = false;
-
-    reset_model(gobj);
-    gobj_start_charts(gobj);
-    render_all(gobj);
-
-    let st = gobj_current_state(gobj);
-    let new_where = `${r.scenario.place}|${r.scenario.agent_url || ""}`;
-    if(st === "ST_DISCONNECTED" || new_where !== old_where) {
-        gobj_send_event(gobj, "EV_CONNECT", {}, gobj);
-    } else if(st === "ST_MONITORING") {
-        send_watch(gobj);
-        poll_tick(gobj);
+    if(priv.cc_scenarios === false) {
+        agent_config_set_monitor(config, {scenario: r.scenario, source: "local"});
+        return 0;
     }
+    let same = priv.source === "saved" && priv.scenario && priv.scenario.id === r.scenario.id;
+    if(same) {
+        return send_save(gobj, r.scenario);
+    }
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell to confirm the save`);
+        return -1;
+    }
+    let $msg = createElement2(
+        ["div", {class: "MONITOR_CONFIRM_SAVE"}, [
+            ["p", {i18n: "scenario confirm save as"}, t("scenario confirm save as")],
+            ["p", {class: "has-text-weight-semibold mt-2 is-family-monospace"}, r.scenario.id]
+        ]]
+    );
+    let text = kw.text;
+    yui_shell_confirm_yesno(shell, $msg, {
+        t: t, logical_class: "MONITOR_CONFIRM_SAVE_DIALOG", yes_label: "save", no_label: "cancel"
+    }).then((yes) => {
+        if(yes) {
+            gobj_send_event(gobj, "EV_SAVE_CONFIRMED", {text: text}, gobj);
+        }
+    });
+    return 0;
+}
+
+function ac_save_confirmed(gobj, event, kw, src)
+{
+    let r = parse_scenario((kw && kw.text) || "");
+    if(!r.ok) {
+        set_edit_error(gobj, r.error);
+        return -1;
+    }
+    return send_save(gobj, r.scenario);
+}
+
+function send_save(gobj, scenario)
+{
+    let priv = gobj.priv;
+    priv.pending_save = scenario;
+    if(cc_request(gobj, "save-scenario", {scenario: scenario_document(scenario)}, "cc_save") < 0) {
+        priv.pending_save = null;
+        set_edit_error(gobj, {key: "not connected to an agent", detail: ""});
+        return -1;
+    }
+    set_edit_error(gobj, null);
+    return 0;
+}
+
+function ac_new_scenario(gobj, event, kw, src)
+{
+    open_editor(gobj, true);
+    return 0;
+}
+
+/***************************************************************
+ *  Delete the scenario watched from the control center: asked in
+ *  red first, its runs go with it.
+ ***************************************************************/
+function ac_delete_scenario(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let shell = yui_shell_of(gobj);
+    if(!priv.scenario || priv.source !== "saved" || !shell) {
+        log_error(`${gobj_short_name(gobj)}: EV_DELETE_SCENARIO with no saved scenario shown`);
+        return -1;
+    }
+    let id = priv.scenario.id;
+    let $msg = createElement2(
+        ["div", {class: "MONITOR_CONFIRM_DELETE"}, [
+            ["p", {i18n: "scenario confirm delete"}, t("scenario confirm delete")],
+            ["p", {class: "has-text-weight-semibold mt-2 is-family-monospace"}, id]
+        ]]
+    );
+    yui_shell_confirm_danger(shell, $msg, {
+        t: t, logical_class: "MONITOR_CONFIRM_DELETE_DIALOG",
+        confirm_label: "scenario delete", cancel_label: "cancel"
+    }).then((yes) => {
+        if(yes) {
+            gobj_send_event(gobj, "EV_DELETE_CONFIRMED", {scenario_id: id}, gobj);
+        }
+    });
+    return 0;
+}
+
+function ac_delete_confirmed(gobj, event, kw, src)
+{
+    if(cc_request(gobj, "delete-scenario", {scenario_id: kw.scenario_id}, "cc_delete") < 0) {
+        set_error(gobj, "not connected to an agent", "");
+    }
+    return 0;
+}
+
+function ac_show_runs(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(!priv.scenario || priv.source !== "saved") {
+        log_error(`${gobj_short_name(gobj)}: EV_SHOW_RUNS with no saved scenario shown`);
+        return -1;
+    }
+    if(cc_request(gobj, "scenario-runs", {scenario_id: priv.scenario.id}, "cc_runs") < 0) {
+        set_error(gobj, "not connected to an agent", "");
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  What the last action answered, step by step -- a report is
+ *  worth nothing more than this.
+ ***************************************************************/
+function ac_show_output(gobj, event, kw, src)
+{
+    let c = gobj.priv.control;
+    if(!c || !c.outputs || !c.outputs.length) {
+        log_error(`${gobj_short_name(gobj)}: EV_SHOW_OUTPUT with no answer to show`);
+        return -1;
+    }
+    show_json_dialog(gobj, "MONITOR_OUTPUT_DIALOG", `monitor ${c.control}`,
+        gobj.priv.scenario ? gobj.priv.scenario.id : "", c.outputs);
+    return 0;
+}
+
+function ac_set_view_mode(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let mode = kw && kw.mode;
+    if(mode !== "graph" && mode !== "cards") {
+        log_error(`${gobj_short_name(gobj)}: EV_SET_VIEW_MODE of no mode: '${mode}'`);
+        return -1;
+    }
+    priv.view_mode = mode;
+    render_status(gobj);
+    paint_all_cards(gobj);
+    load_charts(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The scenario watched changed in C_AGENT_CONFIG: show it.
+ ***************************************************************/
+function ac_scenario_changed(gobj, event, kw, src)
+{
+    adopt_scenario(gobj);
     return 0;
 }
 
@@ -1667,7 +2251,7 @@ function ac_test_control(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     let control = (kw && kw.control) || "";
-    if(!priv.scenario || !priv.scenario.test || test_controls(priv.scenario.test).indexOf(control) < 0) {
+    if(!priv.scenario || scenario_controls(priv.scenario).indexOf(control) < 0) {
         log_error(`${gobj_short_name(gobj)}: EV_TEST_CONTROL of no control of this test: '${control}'`);
         return -1;
     }
@@ -1677,10 +2261,12 @@ function ac_test_control(gobj, event, kw, src)
         return -1;
     }
     let plan_lines = control_plan(gobj, control).map((p) => (p.node ? `[${p.node}] ` : "") + p.line);
+    let who = run_by_control_center(gobj) ? "scenario run by the control center" : "scenario run from here";
     let $msg = createElement2(
         ["div", {class: "MONITOR_CONFIRM"}, [
             ["p", {class: "MONITOR_CONFIRM_TEXT", i18n: `monitor confirm ${control}`},
                 t(`monitor confirm ${control}`)],
+            ["p", {class: "MONITOR_CONFIRM_WHO is-size-7 has-text-grey mt-2", i18n: who}, t(who)],
             ["p", {class: "MONITOR_CONFIRM_LIST_TITLE is-size-7 has-text-weight-semibold mt-3",
                    i18n: "monitor commands that will run"}, t("monitor commands that will run")],
             ["pre", {class: "MONITOR_CONFIRM_COMMANDS is-size-7 has-text-left"}, plan_lines.join("\n")]
@@ -1706,8 +2292,20 @@ function ac_test_confirmed(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     let control = kw.control;
+    if(run_by_control_center(gobj)) {
+        priv.control = {control: control, ok: true, text: "", outputs: [], running: true};
+        let action = control === "restart" ? "stop" : control;
+        let sent = cc_request(gobj, "run-scenario", {scenario_id: priv.scenario.id, action: action},
+            "cc_run", {monitor_control: control, monitor_phase: action});
+        if(sent < 0) {
+            priv.control.running = false;
+            priv.control.not_sent = true;
+        }
+        render_status(gobj);
+        return 0;
+    }
     let plan = control_plan(gobj, control);
-    priv.control = {control: control, ok: true, text: ""};
+    priv.control = {control: control, ok: true, text: "", outputs: []};
     if(control === "restart") {
         priv.rows = [];
         gobj_start_charts(gobj);
@@ -1727,7 +2325,7 @@ function ac_test_confirmed(gobj, event, kw, src)
 function ac_test_not_sent(gobj, event, kw, src)
 {
     log_warning(`${gobj_short_name(gobj)}: control '${kw.control}' confirmed out of session, not sent`);
-    gobj.priv.control = {control: kw.control, ok: false, text: "", not_sent: true};
+    gobj.priv.control = {control: kw.control, ok: false, text: "", not_sent: true, outputs: []};
     render_status(gobj);
     return 0;
 }
@@ -1783,6 +2381,17 @@ function create_gclass(gclass_name)
         ["EV_EDIT_SCENARIO",        ac_edit_scenario,       null],
         ["EV_CANCEL_EDIT",          ac_cancel_edit,         null],
         ["EV_SAVE_SCENARIO",        ac_save_scenario,       null],
+        ["EV_SAVE_CONFIRMED",       ac_save_confirmed,      null],
+        ["EV_NEW_SCENARIO",         ac_new_scenario,        null],
+        ["EV_DELETE_SCENARIO",      ac_delete_scenario,     null],
+        ["EV_DELETE_CONFIRMED",     ac_delete_confirmed,    null],
+        ["EV_SHOW_RUNS",            ac_show_runs,           null],
+        ["EV_SHOW_OUTPUT",          ac_show_output,         null],
+        ["EV_SET_VIEW_MODE",        ac_set_view_mode,       null],
+        ["EV_MONITOR_SCENARIO_CHANGED", ac_scenario_changed, null],
+        /*  the control center's answers come in any state (cc_answer);
+         *  a reading's only matters while monitoring  */
+        ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,   null],
         ["EV_LANGUAGE_CHANGED",     ac_language_changed,    null]
     ];
     const states = [
@@ -1805,7 +2414,6 @@ function create_gclass(gclass_name)
             ["EV_DISCONNECT",           ac_disconnect,          "ST_DISCONNECTED"],
             ["EV_ON_CLOSE",             ac_on_close_drop,       "ST_CONNECTING"],
             ["EV_MT_STATS_ANSWER",      ac_mt_stats_answer,     null],
-            ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,   null],
             ["EV_TIMEOUT_PERIODIC",     ac_timeout_periodic,    null],
             ["EV_YUNO_STATS",           ac_yuno_stats,          null],
             ["EV_TEST_CONTROL",         ac_test_control,        null],
@@ -1839,7 +2447,15 @@ function create_gclass(gclass_name)
         ["EV_TEST_CONTROL",         0],
         ["EV_TEST_CONFIRMED",       0],
         ["EV_PROPOSE_LINKS",        0],
-        ["EV_YUNO_STATS",           0]
+        ["EV_YUNO_STATS",           0],
+        ["EV_SAVE_CONFIRMED",       0],
+        ["EV_NEW_SCENARIO",         0],
+        ["EV_DELETE_SCENARIO",      0],
+        ["EV_DELETE_CONFIRMED",     0],
+        ["EV_SHOW_RUNS",            0],
+        ["EV_SHOW_OUTPUT",          0],
+        ["EV_SET_VIEW_MODE",        0],
+        ["EV_MONITOR_SCENARIO_CHANGED", 0]
     ];
 
     __gclass__ = gclass_create(
