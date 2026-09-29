@@ -18,7 +18,10 @@
  *      Saving, deleting and running are the live view's: it is where a
  *      scenario is edited and watched. This tab reads the list again
  *      whenever the scenario watched changes (EV_MONITOR_SCENARIO_CHANGED),
- *      which is what a save or a delete there does, and on Refresh.
+ *      which is what a save or a delete there does; whenever it is SHOWN,
+ *      so the runs counted are the ones made since, here or by another
+ *      operator (a visit is the operator asking -- not a poll); and on
+ *      Refresh.
  *
  *      STATES:
  *          ST_IDLE         no session.
@@ -104,6 +107,7 @@ function mt_create(gobj)
     priv.docs = {};         /*  scenario id -> the document the control center keeps  */
     priv.rows = [];
     priv.error = "";        /*  the comment of the last failed read  */
+    priv.visible = true;    /*  the shell hides a keep_alive tab with is-hidden  */
 
     /*
      *  CHILD subscription model
@@ -147,6 +151,8 @@ function mt_start(gobj)
     if(shell) {
         gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
+    watch_visibility(gobj);
+
     let link = gobj_read_attr(gobj, "link_svc");
     if(link && agent_link_is_connected(link)) {
         request_list(gobj);
@@ -158,6 +164,11 @@ function mt_start(gobj)
  ***************************************************************/
 function mt_stop(gobj)
 {
+    let priv = gobj.priv;
+    if(priv.vis_obs) {
+        priv.vis_obs.disconnect();
+        priv.vis_obs = null;
+    }
     let shell = yui_shell_of(gobj);
     if(shell) {
         gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
@@ -425,6 +436,26 @@ function render(gobj)
     priv.$error.style.display = priv.error ? "" : "none";
 }
 
+/***************************************************************
+ *  The shell shows and hides a keep_alive tab by toggling `is-hidden`
+ *  on its container. The observer only turns that flip into an event.
+ ***************************************************************/
+function watch_visibility(gobj)
+{
+    let priv = gobj.priv;
+    let $c = gobj_read_attr(gobj, "$container");
+    if(!$c || typeof MutationObserver === "undefined") {
+        return;
+    }
+    priv.vis_obs = new MutationObserver(function() {
+        let vis = !$c.classList.contains("is-hidden");
+        if(vis !== priv.visible) {
+            gobj_send_event(gobj, "EV_VISIBILITY", {visible: vis}, gobj);
+        }
+    });
+    priv.vis_obs.observe($c, {attributes: true, attributeFilter: ["class"]});
+}
+
 function request_list(gobj)
 {
     let link = gobj_read_attr(gobj, "link_svc");
@@ -464,6 +495,21 @@ function ac_on_close(gobj, event, kw, src)
 function ac_refresh(gobj, event, kw, src)
 {
     request_list(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The tab is shown or hidden. Shown, the list is read again: what
+ *  it counts may have moved while it was not looked at.
+ ***************************************************************/
+function ac_visibility(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    priv.visible = !!(kw && kw.visible);
+    let st = gobj_current_state(gobj);
+    if(priv.visible && (st === "ST_READY" || st === "ST_UNSUPPORTED")) {
+        request_list(gobj);
+    }
     return 0;
 }
 
@@ -598,6 +644,7 @@ function create_gclass(gclass_name)
     const always = [
         ["EV_MT_COMMAND_ANSWER",        ac_mt_command_answer,   null],
         ["EV_MONITOR_SCENARIO_CHANGED", ac_scenario_changed,    null],
+        ["EV_VISIBILITY",               ac_visibility,          null],
         ["EV_LANGUAGE_CHANGED",         ac_language_changed,    null]
     ];
 
@@ -633,7 +680,8 @@ function create_gclass(gclass_name)
         ["EV_MONITOR_SCENARIO_CHANGED", 0],
         ["EV_LANGUAGE_CHANGED",         0],
         ["EV_REFRESH",                  0],
-        ["EV_OPEN_SCENARIO",            0]
+        ["EV_OPEN_SCENARIO",            0],
+        ["EV_VISIBILITY",               0]
     ];
 
     __gclass__ = gclass_create(

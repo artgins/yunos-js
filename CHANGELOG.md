@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.1 (2026-09-29)
+
+- **The scenarios list reads itself again whenever its tab is shown**, so the
+  runs it counts are the ones made since -- from the live view, or by another
+  operator. It only did on a save or a delete, so a run left the count stale
+  until Refresh. Being shown is the operator asking, not a poll: nothing is
+  asked while the tab is hidden.
+
 ## gui_agent 0.29.0 (2026-09-29)
 
 - **Scenarios workspace, in place of Monitor and Statistics.** A scenario --

@@ -240,6 +240,25 @@ describe("the list of the control center's scenarios", () => {
         expect(errors()).toEqual([]);
     });
 
+    test("shown again, it reads the list again: the runs counted may have moved", () => {
+        const list = new_list();
+        answer(list, find("scenarios")[0], {data: [Object.assign({}, SAVED, {runs: [{size: 1}]})]});
+        expect(gobj_read_attr(list, "tabulator").data[0].runs).toBe(1);
+        sent.length = 0;
+        gobj_send_event(list, "EV_VISIBILITY", {visible: false}, list);
+        expect(find("scenarios").length).toBe(0);
+        gobj_send_event(list, "EV_VISIBILITY", {visible: true}, list);
+        expect(find("scenarios").length).toBe(1);
+        answer(list, find("scenarios")[0], {data: [Object.assign({}, SAVED, {runs: [{size: 2}]})]});
+        expect(gobj_read_attr(list, "tabulator").data[0].runs).toBe(2);
+        /*  while a read is in flight, being shown asks nothing more  */
+        gobj_send_event(list, "EV_VISIBILITY", {visible: false}, list);
+        gobj_send_event(list, "EV_REFRESH", {}, list);
+        gobj_send_event(list, "EV_VISIBILITY", {visible: true}, list);
+        expect(find("scenarios").length).toBe(2);
+        expect(errors()).toEqual([]);
+    });
+
     test("a control center that keeps no scenario is said, not failed", () => {
         const list = new_list();
         answer(list, find("scenarios")[0], {result: -1,
