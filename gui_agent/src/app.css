@@ -148,6 +148,18 @@
 .STATNODES_TABLE .tabulator-row .tabulator-cell.STATNODES_CELL_WRAP {
     height: auto !important;
 }
+/*  The users table (C_AGENT_USERS) wraps the same way: a username is an
+ *  e-mail address, one long word, and on a phone it cut the status beside
+ *  it to "Habilita…". It breaks anywhere rather than push the status out.  */
+.USERS_TABLE .tabulator-cell.USERS_CELL_WRAP {
+    white-space: normal;
+    text-overflow: clip;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+.USERS_TABLE .tabulator-row .tabulator-cell.USERS_CELL_WRAP {
+    height: auto !important;
+}
 /*  The yunos this node has open, beside its host name. It wraps with the
  *  name and never pushes it out: the name is the identity, this is the
  *  answer to "what do I have open here". */

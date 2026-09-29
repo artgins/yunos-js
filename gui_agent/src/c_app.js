@@ -396,7 +396,12 @@ const WORKSPACES = {
     /*  Schemas edits a yuno's `treedb_system_schema` — the treedb that holds
      *  its schemas as data — through the routing adapter (C_AGENT_TREEDB).  */
     schemas:    {min_version: "7.7.0", tab_gclass: "C_AGENT_TREEDB", unit: "yuno",
-                 treedb_check: true, routed: true}
+                 treedb_check: true, routed: true},
+    /*  Users manages the users a yuno's C_AUTHZ keeps -- each node's agent,
+     *  each control center: a store per yuno, so a tab per yuno, from the
+     *  same tree picker, asked whether each yuno keeps users.  */
+    users:      {min_version: "7.7.0", tab_gclass: "C_AGENT_USERS", unit: "yuno",
+                 authz_check: true}
 };
 
 /*  Reserved tab id for the Statistics "single" layout: one tab holding a
@@ -544,6 +549,9 @@ function workspace_picker_item(ws)
      *  FAILED"), so C_NODES must not be handed it — not even as false.  */
     if(spec.treedb_check) {
         kw.with_treedb_check = true;
+    }
+    if(spec.authz_check) {
+        kw.with_authz_check = true;
     }
     return {
         id:       "picker",

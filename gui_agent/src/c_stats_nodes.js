@@ -72,6 +72,7 @@ import {
     stats_sel_id,
     stats_sel_parse,
 } from "./c_agent_config.js";
+import {AUTHZ_TREEDB, authz_service_of} from "./users_helpers.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
 import {
     yui_copy_table_json,
@@ -122,6 +123,7 @@ SDATA(data_type_t.DTP_STRING,   "title",       0,  "nodes",    "View title (i18n
 SDATA(data_type_t.DTP_STRING,   "workspace",   0,  "statistics", "Owning workspace (selection bucket)"),
 SDATA(data_type_t.DTP_STRING,   "min_version", 0,  "",         "Only list nodes with version >= this (empty = all)"),
 SDATA(data_type_t.DTP_BOOLEAN,  "with_treedb_check", 0, false,  "On expanding a node, ask each of its yunos whether it exposes a treedb (Schemas picker)"),
+SDATA(data_type_t.DTP_BOOLEAN,  "with_authz_check", 0, false,   "On expanding a node, ask each of its yunos whether it keeps users (Users picker)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,       "Root HTMLElement"),
 SDATA(data_type_t.DTP_POINTER,  "tabulator",   0,  null,       "Tabulator instance"),
 SDATA(data_type_t.DTP_POINTER,  "link_svc",    0,  null,       "C_AGENT_LINK service"),
@@ -153,7 +155,9 @@ function mt_create(gobj)
     priv.gobj_timer = gobj_create_pure_child(gobj_name(gobj), "C_TIMER", {}, gobj);
     priv.nodes = [];              /*  parsed list-agents (node rows)  */
     priv.yunos = {};              /*  node id -> [yuno rows] (loaded)  */
-    priv.treedbs = {};            /*  sel id -> true|false (undefined = not asked)  */
+    /*  sel id -> true|false (undefined = not asked): the yuno has what this
+     *  workspace opens -- a treedb (Schemas) or a users store (Users).  */
+    priv.treedbs = {};
     priv.services = {};           /*  sel id -> the `services` answer, verbatim  */
     priv.conns_scan = null;       /*  the ytreedb export in flight (see ac_copy_conns)  */
     priv.masters = {};            /*  sel id -> {total, master, answered} of its treedbs  */
@@ -283,7 +287,7 @@ function is_yuno_selected(gobj, node, yuno_id)
 function selectable_yunos(gobj, node)
 {
     let rows = gobj.priv.yunos[node] || [];
-    return rows.filter((y) => y && !has_no_treedb(gobj, y));
+    return rows.filter((y) => y && !has_nothing_to_open(gobj, y));
 }
 
 /***************************************************************
@@ -341,7 +345,7 @@ function build_tree(gobj)
                  *  that is already SELECTED stays visible whatever the probe
                  *  says: it has an open tab, and a tab whose row vanished
                  *  from the picker cannot be unchecked.  */
-                if(has_no_treedb(gobj, y) && !is_yuno_selected(gobj, y.node, y.yuno_id)) {
+                if(has_nothing_to_open(gobj, y) && !is_yuno_selected(gobj, y.node, y.yuno_id)) {
                     continue;
                 }
                 children.push(y);
@@ -543,13 +547,31 @@ function build_dom(gobj)
 }
 
 /***************************************************************
- *  True only when this picker ASKED and the yuno answered that it
- *  exposes no treedb. Not asked, in flight, or a failed probe are
- *  all "unknown", and unknown never marks a row.
+ *  What this picker asks each yuno before offering it: "treedb" in
+ *  Schemas (does it expose a treedb?), "authz" in Users (does it keep
+ *  users?), "" in Statistics (nothing: every running yuno has stats).
+ *  One question per picker, and both are answered by the same
+ *  `services` probe.
  ***************************************************************/
-function has_no_treedb(gobj, row)
+function probe_kind(gobj)
 {
-    if(!gobj_read_bool_attr(gobj, "with_treedb_check")) {
+    if(gobj_read_bool_attr(gobj, "with_treedb_check")) {
+        return "treedb";
+    }
+    if(gobj_read_bool_attr(gobj, "with_authz_check")) {
+        return "authz";
+    }
+    return "";
+}
+
+/***************************************************************
+ *  True only when this picker ASKED and the yuno answered that it
+ *  has nothing this workspace opens. Not asked, in flight, or a
+ *  failed probe are all "unknown", and unknown never marks a row.
+ ***************************************************************/
+function has_nothing_to_open(gobj, row)
+{
+    if(!probe_kind(gobj)) {
         return false;
     }
     return gobj.priv.treedbs[stats_sel_id(row.node, row.yuno_id)] === false;
@@ -572,8 +594,9 @@ function make_columns(gobj)
             return `<span class="STATNODES_YUNO${cls}">${esc(r.label)}</span>`;
         }
         if(r._type === "empty") {
+            let none_key = probe_kind(gobj) === "authz" ? "no yuno with users" : "no yuno with a treedb";
             return `<span class="STATNODES_EMPTY has-text-grey is-size-7">` +
-                `${esc(t("no yuno with a treedb"))}</span>`;
+                `${esc(t(none_key))}</span>`;
         }
         /*  Which of this node's yunos are open. The tab strip says it for
          *  the ACTIVE tab only, and the checkbox that says it here is on a
@@ -604,9 +627,10 @@ function make_columns(gobj)
              *  that is what the operator needs to see BEFORE opening a
              *  tab for it. Unknown (not probed, or the probe failed)
              *  keeps the running badge — silence is not a "no".  */
-            if(has_no_treedb(gobj, r)) {
+            if(has_nothing_to_open(gobj, r)) {
+                let no_key = probe_kind(gobj) === "authz" ? "no users in this yuno" : "no treedb in this yuno";
                 return `<span class="STATNODES_INFO has-text-grey is-size-7">` +
-                    `${esc(t("no treedb in this yuno"))}</span>`;
+                    `${esc(t(no_key))}</span>`;
             }
             /*  running/stopped, plus what the operator is really asking in
              *  this workspace: can I EDIT here? Only the master of a treedb
@@ -680,7 +704,7 @@ function make_columns(gobj)
         let checked = is_yuno_selected(gobj, r.node, r.yuno_id) ? " checked" : "";
         /*  Not selectable when it has nothing to open. Kept in the list
          *  (it IS a yuno of the node) but with the checkbox off.  */
-        let disabled = (has_no_treedb(gobj, r) && !checked) ? " disabled" : "";
+        let disabled = (has_nothing_to_open(gobj, r) && !checked) ? " disabled" : "";
         return `<input type="checkbox" class="STATNODES_SEL node-sel"` +
             `${checked}${disabled} aria-label="${escapeHtml(t("open stats tab"))}">`;
     }
@@ -695,7 +719,7 @@ function make_columns(gobj)
         if(r._type !== "yuno") {
             return;
         }
-        if(has_no_treedb(gobj, r) && !is_yuno_selected(gobj, r.node, r.yuno_id)) {
+        if(has_nothing_to_open(gobj, r) && !is_yuno_selected(gobj, r.node, r.yuno_id)) {
             return;     /*  the cell is clickable even where the input is not  */
         }
         let config = gobj_read_attr(gobj, "config_svc");
@@ -784,7 +808,7 @@ function create_table(gobj)
     table.on("dataTreeRowExpanded", function(row) {
         let r = row.getData();
         if(r && r._type === "node") {
-            probe_node_treedbs(gobj, node_id(r));
+            probe_node_services(gobj, node_id(r));
         }
         render_fold(gobj);
     });
@@ -989,18 +1013,19 @@ function master_state(gobj, row)
 }
 
 /***************************************************************
- *  Ask ONE yuno which services it runs, to learn whether it exposes
- *  any treedb (a `C_NODE` service). Only the Schemas picker does
- *  this, and only for the node the operator EXPANDS: it is one round
- *  trip per yuno, and a node holds a dozen.
+ *  Ask ONE yuno which services it runs, to learn whether it has what
+ *  this workspace opens: a treedb (a `C_NODE` service, Schemas) or a
+ *  users store (a `C_AUTHZ` with its `treedb_authzs`, Users). Only
+ *  those two pickers do this, and only for the node the operator
+ *  EXPANDS: it is one round trip per yuno, and a node holds a dozen.
  ***************************************************************/
-function probe_treedbs(gobj, node, yuno_id)
+function probe_yuno_services(gobj, node, yuno_id)
 {
     let priv = gobj.priv;
     let link = gobj_read_attr(gobj, "link_svc");
     let key = stats_sel_id(node, yuno_id);
 
-    if(!gobj_read_bool_attr(gobj, "with_treedb_check")) {
+    if(!probe_kind(gobj)) {
         return;
     }
     if(key in priv.treedbs) {
@@ -1024,12 +1049,12 @@ function probe_treedbs(gobj, node, yuno_id)
 /***************************************************************
  *  Probe every yuno of a node (on expand).
  ***************************************************************/
-function probe_node_treedbs(gobj, node)
+function probe_node_services(gobj, node)
 {
     let priv = gobj.priv;
     let rows = priv.yunos[node] || [];
     for(let r of rows) {
-        probe_treedbs(gobj, node, r.yuno_id);
+        probe_yuno_services(gobj, node, r.yuno_id);
     }
 }
 
@@ -1071,16 +1096,17 @@ function set_node_yunos(gobj, node, data)
     /*
      *  The node's own AGENT, first. It never appears in `list-yunos` --
      *  it is the daemon that ANSWERS it, not one of the yunos it manages
-     *  -- and yet it runs the same kind of services, its treedbs
-     *  included. Only the Schemas picker offers it: this is the one
-     *  workspace that has something to do with a treedb, and the row is
-     *  addressed with the agent's own `command-agent` from here on.
+     *  -- and yet it runs the same kind of services, its treedbs and
+     *  its users included. Only the Schemas and Users pickers offer it:
+     *  they are the workspaces that have something to do with a treedb
+     *  or a users store, and the row is addressed with the agent's own
+     *  `command-agent` from here on.
      *
      *  On the .ovh plane the agent this reaches IS yuneta_agent22, so
      *  the same row shows that one with no extra code (deploy.js maps
      *  the host to its control center).
      */
-    if(gobj_read_bool_attr(gobj, "with_treedb_check")) {
+    if(probe_kind(gobj)) {
         let agent = priv.nodes.find((n) => node_id(n) === node);
         let agent_role = (agent && agent.role) || "yuneta_agent";
         rows.unshift({
@@ -1101,15 +1127,17 @@ function set_node_yunos(gobj, node, data)
 }
 
 /***************************************************************
- *  Record whether a yuno exposes any treedb, from its `services`
- *  answer: the `C_NODE` services ARE its treedbs.
+ *  Record whether a yuno has what this workspace opens, from its
+ *  `services` answer: the `C_NODE` services ARE its treedbs, and its
+ *  users are there when a C_AUTHZ runs with its `treedb_authzs`
+ *  (authz_service_of()).
  *
  *  A FAILED answer is left unknown on purpose — "we could not ask"
  *  is not "it has none", and marking a row on a permission error or
  *  a dropped link would send the operator looking for a treedb that
  *  is there.
  ***************************************************************/
-function set_yuno_treedbs(gobj, node, yuno_id, data, result)
+function set_yuno_services(gobj, node, yuno_id, data, result)
 {
     let priv = gobj.priv;
     let key = stats_sel_id(node, yuno_id);
@@ -1121,9 +1149,14 @@ function set_yuno_treedbs(gobj, node, yuno_id, data, result)
     }
     let names = [];
     if(Array.isArray(data)) {
-        names = data.filter((sv) => sv && sv.gclass === "C_NODE")
-            .map((sv) => sv.service)
-            .filter((x) => typeof x === "string" && x.length > 0);
+        if(probe_kind(gobj) === "authz") {
+            /*  The one treedb whose master matters here: the users store.  */
+            names = authz_service_of(data) ? [AUTHZ_TREEDB] : [];
+        } else {
+            names = data.filter((sv) => sv && sv.gclass === "C_NODE")
+                .map((sv) => sv.service)
+                .filter((x) => typeof x === "string" && x.length > 0);
+        }
         /*  The whole answer, not just the count. This probe already asks
          *  every yuno what services it runs, which is exactly the list a
          *  treedb connection needs — it used to be thrown away one line
@@ -1140,7 +1173,7 @@ function set_yuno_treedbs(gobj, node, yuno_id, data, result)
      *  there, which is why the row used to stay, greyed, saying so. Rebuild
      *  instead — the posted EV_RENDER_TREE collapses the flurry of per-yuno
      *  answers into ONE setData.  */
-    if(count === 0 && gobj_read_bool_attr(gobj, "with_treedb_check")) {
+    if(count === 0 && probe_kind(gobj)) {
         schedule_render(gobj);
         conns_probe_answered(gobj);
         return;
@@ -1202,7 +1235,7 @@ function ac_render_tree(gobj, event, kw, src)
              *  and re-open it.
              *
              *  Re-expanding fires `dataTreeRowExpanded` again, which is
-             *  harmless: probe_node_treedbs() is idempotent per yuno.  */
+             *  harmless: probe_node_services() is idempotent per yuno.  */
             let open = {};
             table.getRows().forEach(function(row) {
                 let d = row.getData();
@@ -1567,7 +1600,7 @@ function conns_busy(gobj, busy)
  *  True while any candidate of the running scan is still waiting for
  *  its `services` answer.
  *
- *  In flight is the key PRESENT and undefined, the mark probe_treedbs()
+ *  In flight is the key PRESENT and undefined, the mark probe_yuno_services()
  *  leaves. A probe that FAILED deletes its key, and a deleted key is not
  *  waiting: nothing else is going to arrive for it.
  ***************************************************************/
@@ -1721,11 +1754,11 @@ function ac_copy_conns(gobj, event, kw, src)
     priv.conns_scan = scan;
     conns_busy(gobj, true);
 
-    /*  probe_treedbs() is idempotent per yuno and marks the key in flight,
+    /*  probe_yuno_services() is idempotent per yuno and marks the key in flight,
      *  so a probe already travelling is simply waited for.  */
     for(let key of Object.keys(scan.candidates)) {
         let row = scan.candidates[key];
-        probe_treedbs(gobj, row.node, row.yuno_id);
+        probe_yuno_services(gobj, row.node, row.yuno_id);
     }
 
     if(!conns_probes_in_flight(gobj)) {
@@ -1906,7 +1939,7 @@ function shown_selectable_yunos(gobj)
             continue;
         }
         for(let y of node._children) {
-            if(y && y._type === "yuno" && !has_no_treedb(gobj, y)) {
+            if(y && y._type === "yuno" && !has_nothing_to_open(gobj, y)) {
                 out.push(y);
             }
         }
@@ -2035,7 +2068,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
             let node = msg_iev_read_key(kw, "console_node") || "";
             let yuno_id = msg_iev_read_key(kw, "console_yuno") || "";
             if(node && yuno_id) {
-                set_yuno_treedbs(gobj, node, yuno_id, kw.data, kw.result);
+                set_yuno_services(gobj, node, yuno_id, kw.data, kw.result);
             }
         }
         return 0;

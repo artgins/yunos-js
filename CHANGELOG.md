@@ -6,6 +6,32 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.28.0 (2026-09-29)
+
+- **Users workspace.** The users each yuno lets in, and their roles, managed
+  from the console: every yuno that authenticates keeps its own store (each
+  node's agent, each control center -- 1996 and 1997 are two), so the picker
+  is the nodes->yunos tree, and a tab (`C_AGENT_USERS`) manages one store.
+  The picker asks each yuno whether it keeps users (a `C_AUTHZ` with its
+  `treedb_authzs`) and whether it is the master of them; a read-only replica
+  is marked, and its tab turns the writes off. A tab lists the users (roles,
+  enabled, protected, sessions, created); a row opens its sheet (roles as
+  checkboxes, Save roles, Disable/Enable, Delete), and *New user* creates one.
+  Every write is a `C_AUTHZ` command over the agent (`create-user`,
+  `enable-user`, `disable-user`, `delete-user` with `force` when the user
+  holds roles), confirmed first when it drops sessions or deletes. A role is
+  a `link-nodes` / `unlink-nodes` on `treedb_authzs`, never
+  `update-user role=`, whose autolink replaces every role the user holds by
+  that one. Verified live on the two control centers (read) and, with a test
+  user created and deleted, on a local managed yuno (every action) and on the
+  local agent, where the role link is refused -- the operator has no role in
+  that agent's store, and `link-nodes` checks `update` on its own.
+- `C_STATS_NODES` takes `with_authz_check`: the same `services` probe that
+  finds treedbs for Schemas finds users stores for Users (`probe_kind()`).
+- New i18n keys (en, es): `users`, `new user`, `create user`, `delete user`,
+  `enable user`, `disable user`, `save roles`, `roles`, `sessions`, `created`,
+  and the rest of the Users workspace.
+
 ## gui_agent 0.27.0 (2026-09-29)
 
 - **Monitor: pushed through the control center too, per node.** The watch is

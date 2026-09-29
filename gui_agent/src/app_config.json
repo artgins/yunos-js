@@ -152,7 +152,7 @@
                 "left":   { "layout": "vertical", "icon_pos": "left", "show_label": true },
                 "bottom": { "layout": "icon-bar", "icon_pos": "top",  "show_label": true }
             },
-            "_items_comment": "Five primary options, all of them WORK — preferences left this level for the avatar menu (/preferences). The fifth, Monitor, is not per node: it watches the yunos of ONE scenario (an agent + its yunos + how the messages flow), through its own direct link to that agent, so its submenu is one fixed tab. Each workspace declares ONLY its fixed node-picker tab here; the C_APP workspaces controller replaces the submenu at runtime, keeping this picker as tab 0 and appending one closable tab per selected node (per selected YUNO in Statistics and Schemas, whose picker is the C_STATS_NODES tree). Commands/Statistics/Schemas list only agents >= 7.7.0 (min_version); Terminal (PTY backdoor) lists every version.",
+            "_items_comment": "Six primary options, all of them WORK — preferences left this level for the avatar menu (/preferences). Users (the fifth) is per YUNO like Schemas: its tree picker marks the yunos that keep users (a C_AUTHZ with its store), and each tab manages one store. The sixth, Monitor, is not per node: it watches the yunos of ONE scenario (an agent + its yunos + how the messages flow), through its own direct link to that agent, so its submenu is one fixed tab. Each workspace declares ONLY its fixed node-picker tab here; the C_APP workspaces controller replaces the submenu at runtime, keeping this picker as tab 0 and appending one closable tab per selected node (per selected YUNO in Statistics, Schemas and Users, whose picker is the C_STATS_NODES tree). Commands/Statistics/Schemas/Users list only agents >= 7.7.0 (min_version); Terminal (PTY backdoor) lists every version.",
             "items": [
                 {
                     "id": "commands",
@@ -248,6 +248,31 @@
                                     "stage": "main",
                                     "gclass": "C_STATS_NODES",
                                     "kw": { "title": "nodes", "workspace": "schemas", "min_version": "7.7.0", "with_treedb_check": true },
+                                    "lifecycle": "keep_alive"
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "id": "users",
+                    "name": "users",
+                    "icon": "yi-user",
+                    "tooltip": "manage the users a yuno lets in",
+                    "route": "/users",
+                    "submenu": {
+                        "render": { "top-sub": "tabs" },
+                        "default": "/users/node",
+                        "items": [
+                            {
+                                "id": "picker",
+                                "name": "nodes",
+                                "icon": "yi-cloudversify",
+                                "route": "/users/nodes",
+                                "target": {
+                                    "stage": "main",
+                                    "gclass": "C_STATS_NODES",
+                                    "kw": { "title": "nodes", "workspace": "users", "min_version": "7.7.0", "with_authz_check": true },
                                     "lifecycle": "keep_alive"
                                 }
                             }

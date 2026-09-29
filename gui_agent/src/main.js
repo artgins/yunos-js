@@ -80,6 +80,7 @@ import {register_c_agent_treedb_link} from "./c_agent_treedb_link.js";
 import {register_c_agent_treedb_view} from "./c_agent_treedb_view.js";
 import {register_c_monitor_link} from "./c_monitor_link.js";
 import {register_c_agent_monitor} from "./c_agent_monitor.js";
+import {register_c_agent_users} from "./c_agent_users.js";
 
 import {setup_locale} from "./locales/locales.js";
 import {apply_theme, current_theme} from "./theme.js";
@@ -164,6 +165,7 @@ function main()
     register_c_agent_treedb();
     register_c_monitor_link();       // direct link to one agent (Monitor)
     register_c_agent_monitor();      // the Monitor workspace
+    register_c_agent_users();        // the Users workspace
 
     /*------------------------------------------------*
      *          Start yuneta

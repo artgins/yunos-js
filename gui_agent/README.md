@@ -5,20 +5,22 @@ built on the **v2 declarative shell** of `@yuneta/gobj-ui`
 (`C_YUI_SHELL` + `C_YUI_NAV`).
 
 It is the modern successor of the old webix "Yuneta CLI"
-(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Five workspaces** in the primary rail,
-and all five are WORK: **Commands** (control-plane CLI to a node's yunos),
+(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Six workspaces** in the primary rail,
+and all six are WORK: **Commands** (control-plane CLI to a node's yunos),
 **Statistics** (live `SDF_RSTATS` counters as cards), **Terminal** (an
 interactive xterm.js PTY console), **Schemas** (edit the schemas a yuno
-keeps in its `treedb_system_schema`) and **Monitor** (the yunos of one test,
+keeps in its `treedb_system_schema`), **Users** (the users a yuno lets in, and
+their roles — see [Users](#users-who-each-yuno-lets-in)) and **Monitor** (the yunos of one test,
 live, as a graph and two charts — see [Monitor](#monitor-a-test-live-straight-from-its-agent)). The preferences page is not a rail item:
 it hangs off the toolbar avatar as the route **`/preferences`** (a route, not a
 dialog — linkable, F5-proof, in the site map). **Commands** and **Terminal** share
 one pattern — a flat node-picker tab (`C_NODES`) plus one closable tab per
-selected node. **Statistics** and **Schemas** differ: their picker is a
+selected node. **Statistics**, **Schemas** and **Users** differ: their picker is a
 **nodes→yunos tree** (`C_STATS_NODES`) where you select *yunos*. Statistics
 renders their counters as **cards** (one tab for all cards by default, or a tab
-per yuno — a Preferences toggle); Schemas opens one editor tab per yuno.
-Commands/Statistics/Schemas list only agents **≥ 7.7.0**; Terminal works on any
+per yuno — a Preferences toggle); Schemas opens one editor tab per yuno, and
+Users one users tab per yuno.
+Commands/Statistics/Schemas/Users list only agents **≥ 7.7.0**; Terminal works on any
 version. Browsing the DATA of an application treedb lives in the separate
 **`gui_treedb`** SPA; what is here is SCHEMA editing, because applying a schema
 change means restarting the owning yuno and that is the agent's job.
@@ -699,6 +701,66 @@ shell matches and the site map lists), while the card/landing templates are
 **hrefs** and must carry the `#` — without it the anchor leaves the SPA on
 click. And the mount stamps its treedb into the URL with `push: false`: nobody
 navigated there, so it must not become a Back entry.
+
+## Users: who each yuno lets in
+
+Every yuno that authenticates keeps its own users, in its `C_AUTHZ` service,
+which stores them in a treedb it opens as `treedb_authzs`: each node's agent,
+and each control center — the two planes of the company server are two yunos,
+`controlcenter` 1996 and 1997, with a store each. So **Users** is a per-yuno
+workspace like Schemas: its picker is the same nodes→yunos tree, asked of each
+yuno (on expanding its node) whether it keeps users — a `C_AUTHZ` **and** its
+`treedb_authzs` among its `services`; a `C_AUTHZ` without its store ("No authz
+db, authz only to local access") has nothing to list — and whether it is the
+**master** of that store (`treedb-info`). A yuno that reads another's store is a
+**read-only replica**: the picker says so, and its tab turns every write
+control off and says where users are written. The node's agent is a row too.
+
+The identities themselves live in the IdP. What is written here is which of
+them this yuno lets in, and with which roles.
+
+A tab (`C_AGENT_USERS`) is a table of the users: roles, enabled or not,
+protected (an immutable user seeded by the configuration), open sessions,
+when it was created. A click on a row opens its **sheet**: its roles as
+checkboxes, *Save roles*, *Disable*/*Enable*, *Delete*. *New user* asks a
+username, its roles and whether to create it disabled. Every write is a
+command of `C_AUTHZ` over the agent, never a raw treedb write, because
+`C_AUTHZ` does more than write — disabling or deleting a user drops its live
+sessions:
+
+| Action | Sent to the yuno |
+|---|---|
+| read | `users`, `roles` (service `authz`), `treedb-info` (`treedb_authzs`) |
+| create | `create-user username=<u> disabled=<bool>`, then one `link-nodes` per role |
+| enable / disable | `enable-user` / `disable-user username=<u>` (disable is confirmed first) |
+| delete | `delete-user username=<u>`, `force=1` when it holds roles (confirmed in red, naming them) |
+| give / take a role | `link-nodes` / `unlink-nodes parent_ref=roles^<role>^users child_ref=users^<u>` on `treedb_authzs` |
+
+**A role is a link, never `update-user role=`.** `update-user` writes the user
+with autolink, and autolink REPLACES every link of the columns the record
+names: `update-user role=owner` leaves the user with `owner` and nothing else.
+So a role is given and taken one link at a time, and a user is created without
+roles and linked afterwards.
+
+**Who is checked.** The commands arrive at the yuno as the logged-in user of
+the console, and two checks apply. `create-user` & co. are `SDF_AUTHZ_X`,
+checked only when the yuno has `enable_command_authz` — off by default (see
+`YUNO_AUTH.md` §4.5) — so today anyone the control center lets run
+`command-agent` can run them, on any node. `link-nodes` is a `C_NODE` command with its OWN check (`update` on
+`treedb_authzs`), always on: a console user who has no role in that store gets
+*"No permission to 'update'"*, which the tab shows as the answer. That is why
+a role can be given in a control center where the operator is root, and not
+in a node's agent that does not know them.
+
+Requests go in **batches** of stages under one 30 s deadline (a stage's
+commands together, the next only after every one answered; a write that fails
+ends its batch there), and the store is read again after every write. The
+answer of each command — in the backend's own words, naming the yuno — is
+shown above the table. States: `ST_IDLE` (no session), `ST_LOADING`,
+`ST_READY` (the only one that takes a write), `ST_WRITING`, `ST_NO_USERS`. A
+row opened while the store is being read or written opens its sheet
+read-only; a dialog answered when the tab is not READY sends nothing and says
+so.
 
 ## Every action crosses the FSM
 
