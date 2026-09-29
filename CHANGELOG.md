@@ -6,6 +6,15 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.2, gui_treedb 0.17.73 + tabulator-tables ^6.6.0 (2026-09-29)
+
+- **Tabulator 6.6.0.** A minor release, additive for these apps: a fill
+  handle for range selection (opt-in, `selectableRangeFill`; neither app
+  selects ranges), `initialValue` when entering edit mode (the `input` and
+  `textarea` editors read `editorParams.initialValue`, and `editorParams`
+  defaults to `{}`, so an editor with no params is unchanged), and a Bootstrap
+  5 theme border (not used). One copy per app, gobj-ui's included.
+
 ## gui_agent 0.29.1 (2026-09-29)
 
 - **The scenarios list reads itself again whenever its tab is shown**, so the
