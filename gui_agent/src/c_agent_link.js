@@ -300,6 +300,15 @@ function ac_tty_data(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The readings a node's agent pushes for a watch-yuno-stats (the
+ *  Monitor), relayed by the control center like the PTY mirror.
+ ***************************************************************/
+function ac_yuno_stats(gobj, event, kw, src)
+{
+    return bubble(gobj, "EV_YUNO_STATS", kw);
+}
+
+/***************************************************************
  *  Active agent or login changed: re-open the link.
  ***************************************************************/
 function ac_reopen(gobj, event, kw, src)
@@ -352,6 +361,7 @@ function create_gclass(gclass_name)
             ["EV_TTY_OPEN",          ac_tty_open,          null],
             ["EV_TTY_CLOSE",         ac_tty_close,         null],
             ["EV_TTY_DATA",          ac_tty_data,          null],
+            ["EV_YUNO_STATS",        ac_yuno_stats,        null],
             ["EV_REOPEN",            ac_reopen,            null]
         ]]
     ];
@@ -376,6 +386,7 @@ function create_gclass(gclass_name)
         ["EV_TTY_OPEN",          answer],
         ["EV_TTY_CLOSE",         answer],
         ["EV_TTY_DATA",          answer],
+        ["EV_YUNO_STATS",        answer],
         ["EV_REOPEN",            0]
     ];
 

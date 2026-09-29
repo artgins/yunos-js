@@ -39,20 +39,24 @@
  *      the text being edited and nothing else: the operator reads them
  *      and saves, or not.
  *
- *      PUSHED, OR POLLED. Talking to an agent directly, the view asks it
- *      for a `watch-yuno-stats` (the yunos, the period) and the agent
- *      SENDS the readings as EV_YUNO_STATS -- state, cpu and service
- *      stats of each yuno -- every `monitor_refresh` seconds, until the
- *      session ends or the view asks it to stop (a hidden tab does). An
- *      agent that does not know the command (older than 7.25.13) answers
- *      it with an error and the view falls back to POLLING: per tick a
- *      `list-yunos` and two `stats-yuno` per yuno, the DELIBERATE
- *      exception to the no-polling rule approved for this view on
- *      2026-09-29. Through the control center it always polls, until the
- *      control center relays EV_YUNO_STATS. Either way a periodic C_TIMER
- *      closes each period into a row of the history (and, polling, sends
- *      the requests); it runs only in ST_MONITORING and while this tab is
- *      the visible one.
+ *      PUSHED, OR POLLED -- per node. The view asks each agent for a
+ *      `watch-yuno-stats` (its yunos, the period) and the agent SENDS the
+ *      readings as EV_YUNO_STATS -- state, cpu and service stats of each
+ *      yuno -- every `monitor_refresh` seconds, until the session ends,
+ *      the view asks it to stop (a hidden tab does) or the watch is not
+ *      renewed within its ttl (the view renews it every ttl/3: behind a
+ *      control center the agent never sees the browser leave). Through
+ *      the control center the events come back relayed by it. An agent
+ *      that does not know the command (older than 7.25.13), or a control
+ *      center that does not relay the event, answers the watch with an
+ *      error and the view POLLS that node: per tick a `list-yunos` and
+ *      two `stats-yuno` per yuno, the DELIBERATE exception to the
+ *      no-polling rule approved for this view on 2026-09-29. Either way a
+ *      periodic C_TIMER closes each period into a row of the history
+ *      (and sends the requests of the polled nodes); it runs only in
+ *      ST_MONITORING and while this tab is the visible one. Each pushed
+ *      event names its node by the `monitor_node` the watch was tagged
+ *      with, which the agent keeps in the route it sends along.
  *
  *      RATES. A yuno's own `rxMsgsec`/`txMsgsec` is used when its service
  *      reports one (an application service computes it on its own
@@ -193,7 +197,9 @@ let PRIVATE_DATA = {
     control:        null,   /*  last control: {control, ok, text}  */
     control_buttons: {},    /*  control -> its button  */
     watching:       null,   /*  the link whose events reach this view  */
-    push:           null,   /*  the agent pushes the readings: null = asked, not answered yet  */
+    push:           {},     /*  node -> the agent pushes: null = asked, not answered yet  */
+    watch_renew_ms: 20000,  /*  renew a watch this often (ttl / 3 of the agent's answer)  */
+    watch_sent_at:  0,      /*  performance.now() of the last watch sent  */
     discovery:      null,   /*  {pending: {key: true}, configs: {key: config}, failed: [key]}  */
 };
 
@@ -934,7 +940,7 @@ const LINK_EVENTS = {
     direct: ["EV_ON_OPEN", "EV_ON_CLOSE", "EV_ON_OPEN_ERROR", "EV_LINK_FAILED",
              "EV_MT_COMMAND_ANSWER", "EV_MT_STATS_ANSWER", "EV_YUNO_STATS"],
     control_center: ["EV_ON_OPEN", "EV_ON_CLOSE", "EV_ON_OPEN_ERROR",
-                     "EV_MT_COMMAND_ANSWER", "EV_MT_STATS_ANSWER"]
+                     "EV_MT_COMMAND_ANSWER", "EV_MT_STATS_ANSWER", "EV_YUNO_STATS"]
 };
 
 function watch_link(gobj, place)
@@ -1011,15 +1017,31 @@ function poll_tick(gobj)
     }
     priv.last_tick = now;
 
-    if(priv.push !== false) {
-        return;     /*  pushed by the agent, or still asking whether it can  */
+    if(now - priv.watch_sent_at > priv.watch_renew_ms) {
+        send_watch(gobj);
     }
+    poll_requests(gobj, null);
+}
+
+/***************************************************************
+ *  The requests of the nodes that do not push (all of them when
+ *  `only_node` is null).
+ ***************************************************************/
+function poll_requests(gobj, only_node)
+{
+    let priv = gobj.priv;
     for(let node of scenario_nodes(priv.scenario)) {
+        if(priv.push[node] !== false || (only_node !== null && node !== only_node)) {
+            continue;
+        }
         send_request(gobj, lines.yunos(), "yunos", "", node);
-    }
-    for(let y of priv.scenario.yunos) {
-        send_request(gobj, lines.cpu(y), "cpu", y.key, y.node);
-        send_request(gobj, lines.app(y), "app", y.key, y.node);
+        for(let y of priv.scenario.yunos) {
+            if((y.node || "") !== node) {
+                continue;
+            }
+            send_request(gobj, lines.cpu(y), "cpu", y.key, y.node);
+            send_request(gobj, lines.app(y), "app", y.key, y.node);
+        }
     }
 }
 
@@ -1053,7 +1075,7 @@ function control_plan(gobj, control)
 }
 
 /***************************************************************
- *  Ask the agent to push the readings (direct link only), or to stop.
+ *  Ask each agent to push the readings of its yunos, or to stop.
  ***************************************************************/
 function refresh_ms(gobj)
 {
@@ -1064,19 +1086,24 @@ function refresh_ms(gobj)
 function send_watch(gobj)
 {
     let priv = gobj.priv;
-    if(priv.scenario.place !== "direct" || priv.push === false) {
-        return;
+    priv.watch_sent_at = performance.now();
+    for(let node of scenario_nodes(priv.scenario)) {
+        if(priv.push[node] === false) {
+            continue;
+        }
+        let yunos = priv.scenario.yunos.filter((y) => (y.node || "") === node);
+        send_request(gobj, lines.watch(yunos, refresh_ms(gobj)), "watch", "", node);
     }
-    send_request(gobj, lines.watch(priv.scenario.yunos, refresh_ms(gobj)), "watch", "", "");
 }
 
 function send_unwatch(gobj)
 {
     let priv = gobj.priv;
-    if(priv.scenario.place !== "direct" || priv.push !== true) {
-        return;
+    for(let node of scenario_nodes(priv.scenario)) {
+        if(priv.push[node] === true) {
+            send_request(gobj, lines.unwatch(), "watch", "", node);
+        }
     }
-    send_request(gobj, lines.unwatch(), "watch", "", "");
 }
 
 function arm_poll(gobj)
@@ -1275,9 +1302,12 @@ function ac_on_open(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     set_error(gobj, null);
-    /*  Directly, first ask the agent to push; through the control
-     *  center there is nothing to ask yet, poll.  */
-    priv.push = priv.scenario.place === "direct" ? null : false;
+    /*  First ask every agent to push; a node whose watch is refused is
+     *  polled from then on.  */
+    priv.push = {};
+    for(let node of scenario_nodes(priv.scenario)) {
+        priv.push[node] = null;
+    }
     arm_poll(gobj);
     if(priv.visible) {
         send_watch(gobj);
@@ -1415,15 +1445,20 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return discovery_answer(gobj, a.key, failed ? null : kw.data);
     }
     if(kind === "watch") {
+        let node = a.node;
         if(failed) {
-            if(priv.push !== false) {
-                log_warning(`${gobj_short_name(gobj)}: the agent does not push the stats ` +
+            if(priv.push[node] !== false) {
+                log_warning(`${gobj_short_name(gobj)}: ${node || "the agent"} does not push the stats ` +
                     `(${kw.comment || "no comment"}), polling them`);
-                priv.push = false;
-                poll_tick(gobj);
+                priv.push[node] = false;
+                poll_requests(gobj, node);
             }
         } else {
-            priv.push = true;
+            priv.push[node] = true;
+            let ttl = kw.data && typeof kw.data.ttl === "number" ? kw.data.ttl : 0;
+            if(ttl > 0) {
+                priv.watch_renew_ms = Math.max(1000, Math.floor(ttl / 3));
+            }
         }
         return 0;
     }
@@ -1471,10 +1506,15 @@ function ac_mt_command_answer(gobj, event, kw, src)
 function ac_yuno_stats(gobj, event, kw, src)
 {
     let priv = gobj.priv;
+    if(msg_iev_read_key(kw, "monitor_kind") !== "watch") {
+        log_warning(`${gobj_short_name(gobj)}: pushed reading of no watch of this view`);
+        return 0;
+    }
+    let node = msg_iev_read_key(kw, "monitor_node") || "";
     let d = (kw && kw.data) || {};
     let hit = false;
     for(let y of priv.scenario.yunos) {
-        if(y.id !== d.yuno_id) {
+        if(y.id !== d.yuno_id || (y.node || "") !== node) {
             continue;
         }
         if(d.kind === "state") {

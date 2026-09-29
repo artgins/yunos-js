@@ -6,6 +6,19 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.27.0 (2026-09-29)
+
+- **Monitor: pushed through the control center too, per node.** The watch is
+  asked of every node of the scenario (through `command-agent` when the
+  scenario says `node`), and `C_AGENT_LINK` re-publishes the `EV_YUNO_STATS`
+  the control center relays; each event is matched to its node by the
+  `monitor_node` the watch was tagged with. A node that refuses the watch --
+  an agent older than the command, or a control center that does not relay
+  the event -- is polled, the others keep being pushed. The watch is renewed
+  every third of the `ttl` the agent answers. Verified with yunovatios' two
+  nodes through the new control center: the controller pushed at ≈500 msg/s,
+  the central (older agent) was polled.
+
 ## gui_agent 0.26.0 (2026-09-29)
 
 - **Monitor: the readings pushed by the agent.** On a direct link the view
