@@ -8,18 +8,36 @@
  *      (playing, paused, stopped...); and under it two CHARTS, messages
  *      per second and cpu, over a window of history.
  *
- *      What it watches is a SCENARIO (monitor_helpers.js): the agent to
- *      talk to and the yunos, with the links between them. It is written
+ *      What it watches is a SCENARIO (monitor_helpers.js): where the
+ *      yunos are, the yunos, and the links between them. It is written
  *      as JSON in the view itself and kept in C_AGENT_CONFIG.
  *
- *      TRANSPORT. The agent of the node under test, DIRECTLY
- *      (C_MONITOR_LINK, wss://<node>:1993), not through the control
- *      center. Each reading is a `list-yunos` plus, per yuno, two
+ *      TRANSPORT, one of two, chosen by the scenario:
+ *        - `agent_url`: the agent of the node under test DIRECTLY
+ *          (C_MONITOR_LINK, wss://<node>:1993): one hop, one node.
+ *        - `node`: through the CONTROL CENTER, on the console's own link
+ *          (C_AGENT_LINK), each command wrapped in `command-agent
+ *          agent_id=<node>` -- so one scenario can span several nodes, and
+ *          no token has to leave the BFF. That link is SHARED with the
+ *          other workspaces: the view subscribes to it only while it
+ *          connects or monitors, lets through only the answers it tagged,
+ *          and skips the control center's dispatch acks (a frame whose
+ *          command is `command-agent`), acting on one only when the
+ *          dispatch itself failed.
+ *      Each reading is a `list-yunos` per node plus, per yuno, two
  *      `stats-yuno`: `service=__yuno__` for its cpu (computed by the yuno
- *      itself every second) and the default service -- the one named as
- *      the role -- for its message counters. Every request is tagged in
- *      __md_iev__ (monitor_kind, monitor_yuno), which the agent echoes,
- *      so each answer finds its card.
+ *      itself every second) and its own service for its message counters.
+ *      Every parameter travels IN the command line (monitor_helpers.js
+ *      says why), and every request is tagged in __md_iev__
+ *      (monitor_kind, monitor_yuno = the yuno's key, monitor_node), which
+ *      the agent and the control center echo, so each answer finds its
+ *      card.
+ *
+ *      LINKS PROPOSED. While monitoring, the scenario editor can ask every
+ *      yuno for its `view-config` and propose the `links` from what they
+ *      listen on and connect to (derive_links). It rewrites the links of
+ *      the text being edited and nothing else: the operator reads them
+ *      and saves, or not.
  *
  *      POLLING. The readings repeat every `monitor_refresh` seconds: the
  *      same DELIBERATE exception to the no-polling rule as the Statistics
@@ -81,6 +99,8 @@ import {
     refresh_language,
     msg_iev_write_key,
     msg_iev_read_key,
+    msg_iev_get_stack,
+    kw_get_str,
 } from "@yuneta/gobj-js";
 
 import {t} from "i18next";
@@ -91,6 +111,7 @@ import {
     yui_shell_confirm_danger,
 } from "@yuneta/gobj-ui/src/shell_modals.js";
 
+import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
 import {
     agent_config_get_monitor,
     agent_config_set_monitor,
@@ -101,6 +122,9 @@ import {
     SCENARIO_TEMPLATE,
     test_controls,
     test_command_lines,
+    lines,
+    scenario_nodes,
+    derive_links,
     parse_scenario,
     validate_scenario,
     layout_graph,
@@ -117,7 +141,7 @@ import {
 const GCLASS_NAME = "C_AGENT_MONITOR";
 
 const CARD_W = 208;
-const CARD_H = 132;
+const CARD_H = 148;
 const CHART_H = 220;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -138,7 +162,8 @@ const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,  null,       "Subscriber of output events"),
 SDATA(data_type_t.DTP_STRING,   "title",        0,  "monitor",  "View title (i18n key)"),
 SDATA(data_type_t.DTP_POINTER,  "$container",   0,  null,       "Root HTMLElement"),
-SDATA(data_type_t.DTP_POINTER,  "link_svc",     0,  null,       "C_MONITOR_LINK service"),
+SDATA(data_type_t.DTP_POINTER,  "link_svc",     0,  null,       "C_MONITOR_LINK service (direct)"),
+SDATA(data_type_t.DTP_POINTER,  "cc_link_svc",  0,  null,       "C_AGENT_LINK service (control center)"),
 SDATA(data_type_t.DTP_POINTER,  "config_svc",   0,  null,       "C_AGENT_CONFIG service"),
 SDATA_END()
 ];
@@ -146,8 +171,8 @@ SDATA_END()
 let PRIVATE_DATA = {
     gobj_timer:     null,
     scenario:       null,   /*  validated scenario, or null  */
-    model:          {},     /*  yuno id -> live figures (see new_model)  */
-    rows:           [],     /*  history rows {tm, "cpu:<id>", "rate:<id>"}  */
+    model:          {},     /*  yuno key -> live figures (see new_model)  */
+    rows:           [],     /*  history rows {tm, "cpu:<key>", "rate:<key>"}  */
     last_tick:      0,      /*  performance.now() of the previous reading  */
     last_update:    0,      /*  Date.now() of the last answer  */
     error:          null,   /*  {key, detail} shown in the status line  */
@@ -155,10 +180,12 @@ let PRIVATE_DATA = {
     editing:        false,
     rate_chart:     null,
     cpu_chart:      null,
-    cards:          {},     /*  yuno id -> element refs of its card  */
+    cards:          {},     /*  yuno key -> element refs of its card  */
     edge_labels:    [],     /*  [{from, to, $text}]  */
     control:        null,   /*  last control: {control, ok, text}  */
     control_buttons: {},    /*  control -> its button  */
+    watching:       null,   /*  the link whose events reach this view  */
+    discovery:      null,   /*  {pending: {key: true}, configs: {key: config}, failed: [key]}  */
 };
 
 let __gclass__ = null;
@@ -194,16 +221,10 @@ function mt_create(gobj)
     }
     gobj_subscribe_event(gobj, null, {}, subscriber);
 
-    let link = gobj_find_service("monitor_link", true);
-    gobj_write_attr(gobj, "link_svc", link);
-    if(link) {
-        gobj_subscribe_event(link, "EV_ON_OPEN", {}, gobj);
-        gobj_subscribe_event(link, "EV_ON_CLOSE", {}, gobj);
-        gobj_subscribe_event(link, "EV_ON_OPEN_ERROR", {}, gobj);
-        gobj_subscribe_event(link, "EV_LINK_FAILED", {}, gobj);
-        gobj_subscribe_event(link, "EV_MT_COMMAND_ANSWER", {}, gobj);
-        gobj_subscribe_event(link, "EV_MT_STATS_ANSWER", {}, gobj);
-    }
+    /*  The two transports. Neither is subscribed here: the one the
+     *  scenario uses is, while connecting or monitoring (watch_link).  */
+    gobj_write_attr(gobj, "link_svc", gobj_find_service("monitor_link", true));
+    gobj_write_attr(gobj, "cc_link_svc", gobj_find_service("agent_link", true));
     let config = gobj_find_service("agent_config", true);
     gobj_write_attr(gobj, "config_svc", config);
 
@@ -256,6 +277,7 @@ function mt_stop(gobj)
 {
     let priv = gobj.priv;
     clear_timeout(priv.gobj_timer);
+    watch_link(gobj, null);
     if(priv.vis_obs) {
         priv.vis_obs.disconnect();
         priv.vis_obs = null;
@@ -378,7 +400,10 @@ function build_dom(gobj)
         ]]
     );
 
-    priv.$url = createElement2(["span", {class: "MONITOR_URL is-family-monospace"}, ""]);
+    priv.$url = createElement2(["span", {class: "MONITOR_URL"}, [
+        ["span", {class: "MONITOR_URL_VIA"}, ""],
+        ["span", {class: "MONITOR_URL_WHERE is-family-monospace"}, ""]
+    ]]);
     priv.$updated = createElement2(["span", {class: "MONITOR_UPDATED"}, [
         ["span", {i18n: "monitor updated"}, t("monitor updated")],
         ["span", {class: "MONITOR_UPDATED_TIME is-family-monospace"}, ""]
@@ -430,13 +455,20 @@ function build_dom(gobj)
     );
     let $cancel = tool_button("MONITOR_SCENARIO_CANCEL", "yi-xmark", "cancel",
         "EV_CANCEL_EDIT", gobj, true);
+    priv.$propose = tool_button("MONITOR_PROPOSE_LINKS", "yi-link", "monitor propose links",
+        "EV_PROPOSE_LINKS", gobj, true);
+    priv.$propose_status = createElement2(["p", {class: "MONITOR_PROPOSE_STATUS is-size-7"}, [
+        ["span", {class: "MONITOR_PROPOSE_TEXT"}, ""],
+        ["span", {class: "MONITOR_PROPOSE_DETAIL is-family-monospace"}, ""]
+    ]]);
     priv.$editor = createElement2(
         ["div", {class: "MONITOR_EDITOR box"}, [
             ["p", {class: "MONITOR_EDITOR_HELP is-size-7 mb-2", i18n: "monitor scenario help"},
                 t("monitor scenario help")],
             priv.$text,
             priv.$edit_error,
-            ["div", {class: "MONITOR_EDITOR_ACTIONS buttons is-right mt-2"}, [$cancel, $save]]
+            priv.$propose_status,
+            ["div", {class: "MONITOR_EDITOR_ACTIONS buttons is-right mt-2"}, [priv.$propose, $cancel, $save]]
         ]]
     );
 
@@ -501,7 +533,7 @@ function reset_model(gobj)
     priv.last_tick = 0;
     if(priv.scenario) {
         for(let y of priv.scenario.yunos) {
-            priv.model[y.id] = new_model();
+            priv.model[y.key] = new_model();
         }
     }
 }
@@ -546,7 +578,7 @@ function gobj_start_charts(gobj)
             scales:     from_zero
         }, gobj);
         for(let y of priv.scenario.yunos) {
-            gobj_send_event(chart, "EV_ADD_SERIE", {id: prefix + y.id, label: y.label}, gobj);
+            gobj_send_event(chart, "EV_ADD_SERIE", {id: prefix + y.key, label: y.label}, gobj);
         }
         return chart;
     };
@@ -581,7 +613,7 @@ function build_graph(gobj)
     if(!priv.scenario) {
         return;
     }
-    let ids = priv.scenario.yunos.map((y) => y.id);
+    let ids = priv.scenario.yunos.map((y) => y.key);
     let g = layout_graph(ids, priv.scenario.links, {card_w: CARD_W, card_h: CARD_H});
 
     let $canvas = createElement2(["div", {class: "MONITOR_GRAPH_CANVAS",
@@ -625,7 +657,7 @@ function build_graph(gobj)
     $canvas.appendChild(svg);
 
     for(let y of priv.scenario.yunos) {
-        let pos = g.nodes[y.id];
+        let pos = g.nodes[y.key];
         let $dot = createElement2(["span", {class: "MONITOR_NODE_STATE"}, ""]);
         let $cpu = createElement2(["span", {class: "MONITOR_NODE_CPU_VALUE is-family-monospace"}, ""]);
         let $bar = createElement2(["span", {class: "MONITOR_NODE_CPU_FILL"}, ""]);
@@ -645,6 +677,8 @@ function build_graph(gobj)
                     ["span", {class: "MONITOR_NODE_LABEL has-text-weight-bold"}, y.label],
                     ["span", {class: "MONITOR_NODE_ID is-family-monospace"}, y.id]
                 ]],
+                ["div", {class: "MONITOR_NODE_WHERE is-family-monospace" + (y.node ? "" : " is-hidden")},
+                    y.node || ""],
                 ["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_CPU"}, [
                     ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor cpu"}, t("monitor cpu")],
                     ["span", {class: "MONITOR_NODE_CPU_BAR"}, [$bar]],
@@ -663,7 +697,7 @@ function build_graph(gobj)
             ]]
         );
         $canvas.appendChild($card);
-        priv.cards[y.id] = {$card, $dot, $cpu, $bar, $rx, $tx, $q, $qrow, $err};
+        priv.cards[y.key] = {$card, $dot, $cpu, $bar, $rx, $tx, $q, $qrow, $err};
     }
     priv.$graph.appendChild($canvas);
 }
@@ -746,7 +780,18 @@ function render_status(gobj)
         priv.$name.setAttribute("data-i18n", "monitor");
         priv.$name.textContent = t("monitor");
     }
-    priv.$url.textContent = has ? priv.scenario.agent_url : "";
+    let $via = priv.$url.querySelector(".MONITOR_URL_VIA");
+    let $where = priv.$url.querySelector(".MONITOR_URL_WHERE");
+    if(has && priv.scenario.place === "control_center") {
+        $via.setAttribute("data-i18n", "monitor via control center");
+        $via.textContent = t("monitor via control center");
+        $where.textContent = scenario_nodes(priv.scenario).join(", ");
+    } else {
+        $via.removeAttribute("data-i18n");
+        $via.textContent = "";
+        $where.textContent = has ? priv.scenario.agent_url : "";
+    }
+    priv.$propose.disabled = st !== "ST_MONITORING";
 
     show(priv.$connect, has && st === "ST_DISCONNECTED");
     show(priv.$disconnect, st !== "ST_DISCONNECTED");
@@ -851,12 +896,80 @@ function set_error(gobj, key, detail)
 /***************************************************************
  *  Readings.
  ***************************************************************/
-function send_request(gobj, command, kw, kind, yuno_id)
+function send_request(gobj, line, kind, key, node, md)
 {
-    let link = gobj_read_attr(gobj, "link_svc");
+    let kw = {};
     msg_iev_write_key(kw, "monitor_kind", kind);
-    msg_iev_write_key(kw, "monitor_yuno", yuno_id || "");
-    gobj_send_event(link, "EV_SEND_COMMAND", {command: command, kw: kw}, gobj);
+    msg_iev_write_key(kw, "monitor_yuno", key || "");
+    msg_iev_write_key(kw, "monitor_node", node || "");
+    for(let k of Object.keys(md || {})) {
+        msg_iev_write_key(kw, k, md[k]);
+    }
+    if(gobj.priv.scenario.place === "control_center") {
+        kw.agent_id = node;
+        kw.cmd2agent = line;
+        agent_link_command(gobj_read_attr(gobj, "cc_link_svc"), "command-agent", kw);
+    } else {
+        gobj_send_event(gobj_read_attr(gobj, "link_svc"), "EV_SEND_COMMAND",
+            {command: line, kw: kw}, gobj);
+    }
+}
+
+/***************************************************************
+ *  Subscribe the view to one link's events (null: to none). Only
+ *  the transport the scenario uses reaches it, and only while it
+ *  connects or monitors: C_AGENT_LINK is shared with every other
+ *  workspace.
+ ***************************************************************/
+const LINK_EVENTS = {
+    direct: ["EV_ON_OPEN", "EV_ON_CLOSE", "EV_ON_OPEN_ERROR", "EV_LINK_FAILED",
+             "EV_MT_COMMAND_ANSWER", "EV_MT_STATS_ANSWER"],
+    control_center: ["EV_ON_OPEN", "EV_ON_CLOSE", "EV_ON_OPEN_ERROR",
+                     "EV_MT_COMMAND_ANSWER", "EV_MT_STATS_ANSWER"]
+};
+
+function watch_link(gobj, place)
+{
+    let priv = gobj.priv;
+    if(priv.watching) {
+        for(let ev of LINK_EVENTS[priv.watching.place]) {
+            gobj_unsubscribe_event(priv.watching.link, ev, {}, gobj);
+        }
+        priv.watching = null;
+    }
+    if(!place) {
+        return;
+    }
+    let link = gobj_read_attr(gobj, place === "control_center" ? "cc_link_svc" : "link_svc");
+    if(!link) {
+        log_error(`${gobj_short_name(gobj)}: no link service for '${place}'`);
+        return;
+    }
+    for(let ev of LINK_EVENTS[place]) {
+        gobj_subscribe_event(link, ev, {}, gobj);
+    }
+    priv.watching = {place: place, link: link};
+}
+
+/***************************************************************
+ *  What an answer is: ours or not, and a control-center dispatch
+ *  ack or the real thing. Answers {kind, key, node, ack}; kind "" =
+ *  not ours (another workspace's, on the shared link).
+ ***************************************************************/
+function answer_of(gobj, kw)
+{
+    let kind = msg_iev_read_key(kw, "monitor_kind") || "";
+    let ack = false;
+    if(kind && gobj.priv.scenario && gobj.priv.scenario.place === "control_center") {
+        let stk = msg_iev_get_stack(gobj, kw, "command_stack", false);
+        ack = kw_get_str(gobj, stk, "command", "", 0) === "command-agent";
+    }
+    return {
+        kind: kind,
+        key: msg_iev_read_key(kw, "monitor_yuno") || "",
+        node: msg_iev_read_key(kw, "monitor_node") || "",
+        ack: ack
+    };
 }
 
 /***************************************************************
@@ -871,12 +984,12 @@ function poll_tick(gobj)
     if(priv.last_tick > 0) {
         let row = {tm: Date.now() / 1000};
         for(let y of priv.scenario.yunos) {
-            let m = priv.model[y.id];
+            let m = priv.model[y.key];
             let fresh_cpu = m.cpu_t > priv.last_tick;
             let fresh_app = m.app_t > priv.last_tick;
             let rate = y.rate === "tx" ? m.tx : m.rx;
-            row["cpu:" + y.id] = (fresh_cpu && typeof m.cpu === "number") ? m.cpu : null;
-            row["rate:" + y.id] = (fresh_app && typeof rate === "number") ? Math.round(rate) : null;
+            row["cpu:" + y.key] = (fresh_cpu && typeof m.cpu === "number") ? m.cpu : null;
+            row["rate:" + y.key] = (fresh_app && typeof rate === "number") ? Math.round(rate) : null;
         }
         priv.rows.push(row);
         let config = gobj_read_attr(gobj, "config_svc");
@@ -886,15 +999,12 @@ function poll_tick(gobj)
     }
     priv.last_tick = now;
 
-    /*  `service` goes IN the command line, never in the kw: C_IEVENT_CLI
-     *  takes kw.service as the service the command is ADDRESSED to, so
-     *  the agent's `stats-yuno` would go to the agent's own __yuno__.
-     *  The agent's parser merges the line into the kw, the line winning.  */
-    send_request(gobj, "list-yunos", {}, "yunos", "");
+    for(let node of scenario_nodes(priv.scenario)) {
+        send_request(gobj, lines.yunos(), "yunos", "", node);
+    }
     for(let y of priv.scenario.yunos) {
-        send_request(gobj, "stats-yuno service=__yuno__", {id: y.id}, "cpu", y.id);
-        let command = y.service ? `stats-yuno service=${y.service}` : "stats-yuno";
-        send_request(gobj, command, {id: y.id}, "app", y.id);
+        send_request(gobj, lines.cpu(y), "cpu", y.key, y.node);
+        send_request(gobj, lines.app(y), "app", y.key, y.node);
     }
 }
 
@@ -910,7 +1020,7 @@ function control_plan(gobj, control)
     let plan = [];
     let add_lines = (c) => {
         for(let line of test_command_lines(test, c)) {
-            plan.push({command: line, kw: {}, kind: "control", yuno: control});
+            plan.push({line: line, node: test.node || "", kind: "control", key: test.yuno});
         }
     };
     if(control === "restart") {
@@ -918,8 +1028,7 @@ function control_plan(gobj, control)
             add_lines("stop");
         }
         for(let y of priv.scenario.yunos) {
-            plan.push({command: "stats-yuno stats=__reset__", kw: {id: y.id},
-                       kind: "app", yuno: y.id, preview: `stats-yuno id=${y.id} stats=__reset__`});
+            plan.push({line: lines.reset(y), node: y.node || "", kind: "app", key: y.key});
         }
         add_lines("start");
     } else {
@@ -960,6 +1069,77 @@ function watch_visibility(gobj)
     priv.vis_obs.observe($c, {attributes: true, attributeFilter: ["class"]});
 }
 
+/***************************************************************
+ *  Links proposed: ask every yuno of the saved scenario for its
+ *  config; when the last one has answered, derive the links and
+ *  write them into the text being edited.
+ ***************************************************************/
+function discovery_answer(gobj, key, config)
+{
+    let priv = gobj.priv;
+    let d = priv.discovery;
+    if(!d || !d.pending[key]) {
+        log_warning(`${gobj_short_name(gobj)}: config answer of no proposal (${key})`);
+        return 0;
+    }
+    delete d.pending[key];
+    if(config && typeof config === "object") {
+        d.configs[key] = config;
+    } else {
+        d.failed.push(key);
+    }
+    if(Object.keys(d.pending).length) {
+        render_propose(gobj);
+        return 0;
+    }
+    priv.discovery = null;
+
+    let entries = priv.scenario.yunos
+        .filter((y) => d.configs[y.key])
+        .map((y) => ({key: y.key, node: y.node || "", config: d.configs[y.key]}));
+    let links = derive_links(entries);
+
+    let edited;
+    try {
+        edited = JSON.parse(priv.$text.value);
+    } catch(e) {
+        set_edit_error(gobj, {key: "scenario invalid json", detail: e.message});
+        return 0;
+    }
+    let keys = (Array.isArray(edited.yunos) ? edited.yunos : [])
+        .map((y) => (y && (y.key || y.id)) || "");
+    edited.links = links.filter(([a, b]) => keys.indexOf(a) >= 0 && keys.indexOf(b) >= 0);
+    priv.$text.value = JSON.stringify(edited, null, 4);
+    d.done = {count: edited.links.length, failed: d.failed};
+    render_propose(gobj, d.done);
+    return 0;
+}
+
+function render_propose(gobj, done)
+{
+    let priv = gobj.priv;
+    let $text = priv.$propose_status.querySelector(".MONITOR_PROPOSE_TEXT");
+    let $detail = priv.$propose_status.querySelector(".MONITOR_PROPOSE_DETAIL");
+    let key = "";
+    let detail = "";
+    if(priv.discovery) {
+        key = "monitor proposing links";
+        detail = `${Object.keys(priv.discovery.pending).length}`;
+    } else if(done) {
+        key = done.failed.length ? "monitor links proposed with gaps" : "monitor links proposed";
+        detail = done.failed.length ? `${done.count} · ${done.failed.join(", ")}` : `${done.count}`;
+    }
+    if(key) {
+        $text.setAttribute("data-i18n", key);
+        $text.textContent = t(key);
+    } else {
+        $text.removeAttribute("data-i18n");
+        $text.textContent = "";
+    }
+    $detail.textContent = detail ? ` ${detail}` : "";
+    show(priv.$propose_status, !!key);
+}
+
 function open_editor(gobj)
 {
     let priv = gobj.priv;
@@ -967,6 +1147,7 @@ function open_editor(gobj)
     let base = priv.scenario || SCENARIO_TEMPLATE;
     priv.$text.value = JSON.stringify(base, null, 4);
     set_edit_error(gobj, null);
+    render_propose(gobj, null);
     render_status(gobj);
 }
 
@@ -1008,16 +1189,42 @@ function ac_connect(gobj, event, kw, src)
         return -1;
     }
     set_error(gobj, null);
-    gobj_send_event(gobj_read_attr(gobj, "link_svc"), "EV_CONNECT",
-        {url: priv.scenario.agent_url}, gobj);
+    clear_timeout(priv.gobj_timer);
+    priv.last_tick = 0;
+
+    /*  Stop listening BEFORE the direct link drops the session it had:
+     *  that close was asked for, it is not a drop.  */
+    let was_direct = priv.watching && priv.watching.place === "direct";
+    watch_link(gobj, null);
+    let mlink = gobj_read_attr(gobj, "link_svc");
+    if(priv.scenario.place === "direct") {
+        gobj_send_event(mlink, "EV_CONNECT", {url: priv.scenario.agent_url}, gobj);
+        watch_link(gobj, "direct");
+    } else {
+        if(was_direct) {
+            gobj_send_event(mlink, "EV_DISCONNECT", {}, gobj);
+        }
+        watch_link(gobj, "control_center");
+        /*  The control center's link is the console's own: when it is
+         *  already in session there is nothing to wait for.  */
+        if(agent_link_is_connected(gobj_read_attr(gobj, "cc_link_svc"))) {
+            gobj_send_event(gobj, "EV_ON_OPEN", {}, gobj);
+        }
+    }
     render_status(gobj);
     return 0;
 }
 
 function ac_disconnect(gobj, event, kw, src)
 {
-    clear_timeout(gobj.priv.gobj_timer);
-    gobj_send_event(gobj_read_attr(gobj, "link_svc"), "EV_DISCONNECT", {}, gobj);
+    let priv = gobj.priv;
+    clear_timeout(priv.gobj_timer);
+    let was_direct = priv.watching && priv.watching.place === "direct";
+    watch_link(gobj, null);
+    if(was_direct) {
+        gobj_send_event(gobj_read_attr(gobj, "link_svc"), "EV_DISCONNECT", {}, gobj);
+    }
+    priv.discovery = null;
     render_status(gobj);
     return 0;
 }
@@ -1039,16 +1246,7 @@ function ac_on_close_drop(gobj, event, kw, src)
 {
     clear_timeout(gobj.priv.gobj_timer);
     gobj.priv.last_tick = 0;
-    render_status(gobj);
-    return 0;
-}
-
-/***************************************************************
- *  The close of the session we left on purpose (disconnect, or a
- *  new agent url): only the status changes.
- ***************************************************************/
-function ac_on_close_left(gobj, event, kw, src)
-{
+    gobj.priv.discovery = null;
     render_status(gobj);
     return 0;
 }
@@ -1079,8 +1277,12 @@ function ac_timeout_periodic(gobj, event, kw, src)
 function ac_mt_stats_answer(gobj, event, kw, src)
 {
     let priv = gobj.priv;
-    let kind = msg_iev_read_key(kw, "monitor_kind");
-    let id = msg_iev_read_key(kw, "monitor_yuno");
+    let a = answer_of(gobj, kw);
+    if(!a.kind) {
+        return 0;   /*  another workspace's answer, on the shared link  */
+    }
+    let id = a.key;
+    let kind = a.kind;
     let m = priv.model[id];
     if(!m || (kind !== "cpu" && kind !== "app")) {
         log_warning(`${gobj_short_name(gobj)}: stats answer of no reading (${kind}, ${id})`);
@@ -1121,10 +1323,18 @@ function ac_mt_stats_answer(gobj, event, kw, src)
 function ac_mt_command_answer(gobj, event, kw, src)
 {
     let priv = gobj.priv;
-    let kind = msg_iev_read_key(kw, "monitor_kind");
+    let a = answer_of(gobj, kw);
+    let kind = a.kind;
+    if(!kind) {
+        return 0;   /*  another workspace's answer, on the shared link  */
+    }
+    let failed = typeof kw.result === "number" && kw.result < 0;
+    if(a.ack && !failed) {
+        return 0;   /*  the control center dispatched it; the answer follows  */
+    }
     if(kind === "yunos") {
-        if(typeof kw.result === "number" && kw.result < 0) {
-            set_error(gobj, "monitor no answer", kw.comment || "list-yunos");
+        if(failed) {
+            set_error(gobj, "monitor no answer", kw.comment || `list-yunos ${a.node}`);
             return 0;
         }
         let rows = Array.isArray(kw.data) ? kw.data : [];
@@ -1134,14 +1344,20 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 by_id[String(r.id)] = r;
             }
         });
-        for(let id of Object.keys(priv.model)) {
-            priv.model[id].run = yuno_run_state(by_id[id]);
-            paint_card(gobj, id);
+        for(let y of priv.scenario.yunos) {
+            if((y.node || "") !== a.node) {
+                continue;
+            }
+            priv.model[y.key].run = yuno_run_state(by_id[y.id]);
+            paint_card(gobj, y.key);
         }
         return 0;
     }
+    if(kind === "config") {
+        return discovery_answer(gobj, a.key, failed ? null : kw.data);
+    }
     if(kind === "cpu" || kind === "app") {
-        let id = msg_iev_read_key(kw, "monitor_yuno");
+        let id = a.key;
         let m = priv.model[id];
         if(m && typeof kw.result === "number" && kw.result < 0) {
             m.errors[kind] = kw.comment ? {text: kw.comment} : {key: "monitor no answer"};
@@ -1163,7 +1379,6 @@ function ac_mt_command_answer(gobj, event, kw, src)
             log_warning(`${gobj_short_name(gobj)}: answer of a control no longer shown (${control})`);
             return 0;
         }
-        let failed = typeof kw.result === "number" && kw.result < 0;
         if(failed) {
             c.ok = false;
             c.text = kw.comment || t("monitor no answer");
@@ -1260,7 +1475,8 @@ function ac_save_scenario(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: no config service, cannot save the scenario`);
         return -1;
     }
-    let old_url = priv.scenario ? priv.scenario.agent_url : "";
+    let old_where = priv.scenario
+        ? `${priv.scenario.place}|${priv.scenario.agent_url || ""}` : "";
     priv.scenario = r.scenario;
     agent_config_set_monitor(config, {scenario: r.scenario});
     priv.editing = false;
@@ -1270,11 +1486,30 @@ function ac_save_scenario(gobj, event, kw, src)
     render_all(gobj);
 
     let st = gobj_current_state(gobj);
-    if(st === "ST_DISCONNECTED" || r.scenario.agent_url !== old_url) {
+    let new_where = `${r.scenario.place}|${r.scenario.agent_url || ""}`;
+    if(st === "ST_DISCONNECTED" || new_where !== old_where) {
         gobj_send_event(gobj, "EV_CONNECT", {}, gobj);
     } else if(st === "ST_MONITORING") {
         poll_tick(gobj);
     }
+    return 0;
+}
+
+/***************************************************************
+ *  Propose the links of the scenario being monitored from the
+ *  configs of its yunos. A new request forgets the one before it.
+ ***************************************************************/
+function ac_propose_links(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    priv.discovery = {pending: {}, configs: {}, failed: []};
+    for(let y of priv.scenario.yunos) {
+        priv.discovery.pending[y.key] = true;
+    }
+    for(let y of priv.scenario.yunos) {
+        send_request(gobj, lines.config(y), "config", y.key, y.node);
+    }
+    render_propose(gobj);
     return 0;
 }
 
@@ -1296,14 +1531,14 @@ function ac_test_control(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: no shell to confirm the control '${control}'`);
         return -1;
     }
-    let lines = control_plan(gobj, control).map((p) => p.preview || p.command);
+    let plan_lines = control_plan(gobj, control).map((p) => (p.node ? `[${p.node}] ` : "") + p.line);
     let $msg = createElement2(
         ["div", {class: "MONITOR_CONFIRM"}, [
             ["p", {class: "MONITOR_CONFIRM_TEXT", i18n: `monitor confirm ${control}`},
                 t(`monitor confirm ${control}`)],
             ["p", {class: "MONITOR_CONFIRM_LIST_TITLE is-size-7 has-text-weight-semibold mt-3",
                    i18n: "monitor commands that will run"}, t("monitor commands that will run")],
-            ["pre", {class: "MONITOR_CONFIRM_COMMANDS is-size-7 has-text-left"}, lines.join("\n")]
+            ["pre", {class: "MONITOR_CONFIRM_COMMANDS is-size-7 has-text-left"}, plan_lines.join("\n")]
         ]]
     );
     let label = `monitor ${control}`;
@@ -1333,11 +1568,8 @@ function ac_test_confirmed(gobj, event, kw, src)
         gobj_start_charts(gobj);
     }
     for(let p of plan) {
-        let kw_send = Object.assign({}, p.kw);
-        if(p.kind === "control") {
-            msg_iev_write_key(kw_send, "monitor_control", control);
-        }
-        send_request(gobj, p.command, kw_send, p.kind, p.yuno);
+        send_request(gobj, p.line, p.kind, p.key, p.node,
+            p.kind === "control" ? {monitor_control: control} : null);
     }
     render_status(gobj);
     return 0;
@@ -1395,8 +1627,8 @@ function create_gclass(gclass_name)
 
     /*---------------------------------------------*
      *          States
-     *  The state changes BEFORE the action runs: the close of a
-     *  session we leave on purpose arrives in the state we go to.
+     *  EV_ON_CLOSE is a DROP, and exists only while monitoring: the
+     *  view stops listening to a link before it leaves it on purpose.
      *---------------------------------------------*/
     const common = [
         ["EV_VISIBILITY",           ac_visibility,          null],
@@ -1411,7 +1643,6 @@ function create_gclass(gclass_name)
     const states = [
         ["ST_DISCONNECTED", [
             ["EV_CONNECT",              ac_connect,             "ST_CONNECTING"],
-            ["EV_ON_CLOSE",             ac_on_close_left,       null],
             ["EV_TEST_CONFIRMED",       ac_test_not_sent,       null],
             ...common
         ]],
@@ -1419,7 +1650,6 @@ function create_gclass(gclass_name)
             ["EV_CONNECT",              ac_connect,             null],
             ["EV_DISCONNECT",           ac_disconnect,          "ST_DISCONNECTED"],
             ["EV_ON_OPEN",              ac_on_open,             "ST_MONITORING"],
-            ["EV_ON_CLOSE",             ac_on_close_left,       null],
             ["EV_ON_OPEN_ERROR",        ac_on_open_error,       null],
             ["EV_LINK_FAILED",          ac_link_failed,         "ST_DISCONNECTED"],
             ["EV_TEST_CONFIRMED",       ac_test_not_sent,       null],
@@ -1434,6 +1664,7 @@ function create_gclass(gclass_name)
             ["EV_TIMEOUT_PERIODIC",     ac_timeout_periodic,    null],
             ["EV_TEST_CONTROL",         ac_test_control,        null],
             ["EV_TEST_CONFIRMED",       ac_test_confirmed,      null],
+            ["EV_PROPOSE_LINKS",        ac_propose_links,       null],
             ...common
         ]]
     ];
@@ -1460,7 +1691,8 @@ function create_gclass(gclass_name)
         ["EV_SAVE_SCENARIO",        0],
         ["EV_LANGUAGE_CHANGED",     0],
         ["EV_TEST_CONTROL",         0],
-        ["EV_TEST_CONFIRMED",       0]
+        ["EV_TEST_CONFIRMED",       0],
+        ["EV_PROPOSE_LINKS",        0]
     ];
 
     __gclass__ = gclass_create(

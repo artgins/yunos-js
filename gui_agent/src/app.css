@@ -448,3 +448,20 @@
     white-space: pre-wrap;
     word-break: break-all;
 }
+
+.MONITOR_NODE_WHERE {
+    font-size: 0.7rem;
+    color: var(--bulma-text-weak);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: -0.15rem;
+}
+
+.MONITOR_URL_VIA:not(:empty) {
+    margin-right: 0.35em;
+}
+
+.MONITOR_PROPOSE_DETAIL {
+    margin-left: 0.35em;
+}

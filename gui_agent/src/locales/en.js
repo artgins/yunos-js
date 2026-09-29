@@ -801,7 +801,7 @@ const en = {
         "monitor clear history": "Clear the history",
         "monitor scenario": "Scenario",
         "monitor scenario json": "Scenario, as JSON",
-        "monitor scenario help": "The agent to talk to (agent_url, its wss:// port 1993) and the yunos to watch, by the id the agent gives them. links says where the messages go, left to right; rate says which direction is the throughput of a yuno in the chart: rx, what it takes in (default), or tx, what it puts out.",
+        "monitor scenario help": "Where the yunos are: agent_url, one agent reached directly (its wss:// port 1993), or node, through the control center (a node per yuno if they are on several). Then the yunos, by the id the agent gives them (key names one when two nodes carry the same id). links says where the messages go, left to right, and Propose links reads them from the yunos' configs while monitoring; rate says which direction is the throughput of a yuno in the chart: rx, what it takes in (default), or tx, what it puts out. A test block adds the controls of a test.",
         "monitor no scenario": "No scenario yet: say which agent and which of its yunos to watch.",
         "monitor updated": "Updated",
         "monitor monitoring": "Monitoring",
@@ -848,6 +848,14 @@ const en = {
         "monitor control not sent": "not sent: the agent is not connected",
         "scenario bad test": "The test block is not valid, at:",
         "scenario bad test command": "A test command must be a name followed by key=value parameters without spaces:",
+        "monitor via control center": "Through the control center:",
+        "monitor propose links": "Propose links",
+        "monitor proposing links": "Asking the yunos for their configs, left:",
+        "monitor links proposed": "Links proposed from the configs, review them and save:",
+        "monitor links proposed with gaps": "Links proposed; these yunos did not give their config:",
+        "scenario bad node": "A node must be a name (no spaces):",
+        "scenario agent url or node": "Say agent_url (direct) or node (through the control center), not both:",
+        "scenario needs a place": "Say where this yuno is: agent_url (direct) or a node (through the control center):",
 
         /* keep this last so adding new keys above never hits the comma trap */
         "discovery unanswered": "The node's agent did not answer: which treedbs this yuno has is not known. It is asked again when the connection comes back, or when the tab is opened again",

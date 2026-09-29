@@ -10,6 +10,10 @@ import {
     SCENARIO_TEMPLATE,
     test_controls,
     test_command_lines,
+    lines,
+    scenario_nodes,
+    config_endpoints,
+    derive_links,
     parse_scenario,
     layout_graph,
     pick_rate,
@@ -40,7 +44,7 @@ describe("parse_scenario", () => {
 
     it("names what is wrong", () => {
         expect(parse_scenario("{").error.key).toBe("scenario invalid json");
-        expect(parse_scenario('{"yunos":[{"id":"a"}]}').error.key).toBe("scenario needs agent url");
+        expect(parse_scenario('{"yunos":[{"id":"a"}]}').error.key).toBe("scenario needs a place");
         expect(parse_scenario('{"agent_url":"https://h","yunos":[{"id":"a"}]}').error.key)
             .toBe("scenario needs agent url");
         expect(parse_scenario('{"agent_url":"wss://h","yunos":[]}').error.key).toBe("scenario needs yunos");
@@ -81,6 +85,17 @@ describe("layout_graph", () => {
         expect(g.nodes.s1.y).toBe(0);
         expect(g.nodes.s2.y).toBe(60);
         expect(g.nodes.gate.y).toBe(30);
+    });
+
+    it("stacks independent chains as bands, not interleaved", () => {
+        let g = layout_graph(["sim", "gate_co", "tracks_co", "gate_ce", "tracks_ce"],
+            [["sim", "gate_co"], ["gate_co", "tracks_co"], ["gate_ce", "tracks_ce"]], O);
+        expect([g.nodes.sim.layer, g.nodes.gate_co.layer, g.nodes.tracks_co.layer]).toEqual([0, 1, 2]);
+        expect([g.nodes.gate_ce.layer, g.nodes.tracks_ce.layer]).toEqual([0, 1]);
+        expect(g.nodes.sim.y).toBe(g.nodes.tracks_co.y);
+        expect(g.nodes.gate_ce.y).toBeGreaterThan(g.nodes.sim.y + O.card_h);
+        expect(g.nodes.gate_ce.y).toBe(g.nodes.tracks_ce.y);
+        expect(g.width).toBe(340);
     });
 
     it("does not hang on a cycle", () => {
@@ -190,5 +205,112 @@ describe("test block", () => {
         expect(with_test({yuno: "g", stop: ["a b"]}).error.key).toBe("scenario bad test command");
         expect(with_test({yuno: "g", stop: ["a x=1 y=two words"]}).error.key).toBe("scenario bad test command");
         expect(with_test({yuno: "g", service: "a b", stop: ["a"]}).error.key).toBe("scenario bad test");
+    });
+});
+
+
+describe("where the yunos are", () => {
+    it("a direct scenario keeps its url and no node", () => {
+        let r = parse_scenario(JSON.stringify(SCENARIO_TEMPLATE));
+        expect(r.scenario.place).toBe("direct");
+        expect(r.scenario.yunos[0].node).toBe(undefined);
+        expect(r.scenario.yunos[0].key).toBe("stress");
+        expect(scenario_nodes(r.scenario)).toEqual([""]);
+    });
+
+    it("a control-center scenario gives every yuno a node and a key", () => {
+        let r = parse_scenario(JSON.stringify({
+            node: "central",
+            yunos: [
+                {key: "sim", id: "stress", node: "controlador", rate: "tx"},
+                {key: "gate", id: "2120"},
+                {key: "gate_co", id: "2120", node: "controlador"}
+            ],
+            links: [["sim", "gate"]],
+            test: {yuno: "sim", service: "sim_controllers", stop: ["set-controllers controllers=0"]}
+        }));
+        expect(r.ok).toBe(true);
+        expect(r.scenario.place).toBe("control_center");
+        expect(r.scenario.yunos.map((y) => `${y.key}@${y.node}`)).toEqual(
+            ["sim@controlador", "gate@central", "gate_co@controlador"]);
+        expect(scenario_nodes(r.scenario)).toEqual(["controlador", "central"]);
+        expect(r.scenario.test).toMatchObject({yuno: "sim", id: "stress", node: "controlador"});
+        expect(test_command_lines(r.scenario.test, "stop")).toEqual(
+            ["command-yuno id=stress service=sim_controllers command=set-controllers controllers=0"]);
+    });
+
+    it("refuses a scenario that says both, or neither", () => {
+        expect(parse_scenario('{"agent_url":"wss://h:1993","node":"n","yunos":[{"id":"a"}]}').error.key)
+            .toBe("scenario agent url or node");
+        expect(parse_scenario('{"agent_url":"wss://h:1993","yunos":[{"id":"a","node":"n"}]}').error.key)
+            .toBe("scenario agent url or node");
+        expect(parse_scenario('{"yunos":[{"id":"a","node":"n"},{"id":"b"}]}').error)
+            .toEqual({key: "scenario needs a place", detail: "b"});
+        expect(parse_scenario('{"node":"a b","yunos":[{"id":"a"}]}').error.key).toBe("scenario bad node");
+        expect(parse_scenario('{"node":"n","yunos":[{"id":"a"},{"id":"a"}]}').error.key)
+            .toBe("scenario duplicate yuno");
+        expect(parse_scenario('{"node":"n","yunos":[{"id":"a b"}]}').error.key).toBe("scenario yuno needs id");
+        expect(parse_scenario('{"node":"n","yunos":[{"id":"a"}],"test":{"yuno":"x","stop":["s"],"node":"m"}}').ok)
+            .toBe(true);
+    });
+
+    it("writes every parameter in the line", () => {
+        let y = {id: "2120", service: ""};
+        expect(lines.cpu(y)).toBe("stats-yuno id=2120 service=__yuno__");
+        expect(lines.app(y)).toBe("stats-yuno id=2120");
+        expect(lines.app({id: "5", service: "db"})).toBe("stats-yuno id=5 service=db");
+        expect(lines.reset({id: "5", service: "db"})).toBe("stats-yuno id=5 service=db stats=__reset__");
+        expect(lines.config(y)).toBe("command-yuno id=2120 service=__yuno__ command=view-config");
+    });
+});
+
+
+describe("links from the configs", () => {
+    /*  The shapes of the real view-config of yunovatios' stress yunos.  */
+    const gate = {
+        environment: {daemon_log_handlers: {to_udp: {url: "udp://127.0.0.1:1992"}}},
+        global: {
+            "__top_side__.__json_config_variables__": {"__url__": "ws://127.0.0.1:11102"},
+            "__input_side__.__json_config_variables__": {
+                "__input_mqtt_url__": "tcp://0.0.0.0:2120",
+                "__input_mqtts_url__": "tcps://0.0.0.0:2122"
+            },
+            "__output_side__.__json_config_variables__": {"__output_url__": "tcp://127.0.0.1:5120"}
+        },
+        services: [{children: [{kw: {url: "(^^__output_url__^^)"}}]}, {kw: {url: "ws://127.0.0.1:1991"}}]
+    };
+    const tracks = {
+        global: {"__input_side__.__json_config_variables__": {"__input_url__": "tcp://127.0.0.1:5120"}},
+        services: [{kw: {url: "ws://127.0.0.1:11100"}}]
+    };
+    const sim_local = {global: {"sim_controllers.target_url": "tcps://127.0.0.1:2122"},
+                       services: [{target_url: "tcps://127.0.0.1:2122"}]};
+    const sim_remote = {global: {"sim_controllers.target_url": "tcps://central.example.com:2122"}};
+
+    it("reads what a yuno listens on and what it connects to", () => {
+        let e = config_endpoints(gate);
+        expect(e.listen.map((x) => x.port).sort()).toEqual([2120, 2122]);
+        expect(e.connect).toEqual([{host: "127.0.0.1", port: 5120}]);
+    });
+
+    it("proposes the chain of one node", () => {
+        expect(derive_links([
+            {key: "stress", config: sim_local},
+            {key: "2120", config: gate},
+            {key: "5120", config: tracks}
+        ])).toEqual([["stress", "2120"], ["2120", "5120"]]);
+    });
+
+    it("looks for a local address on the same node only, and for a host on any node", () => {
+        let entries = [
+            {key: "sim_local", node: "ctl", config: sim_local},
+            {key: "sim_remote", node: "ctl", config: sim_remote},
+            {key: "gate_ce", node: "central", config: gate},
+            {key: "tracks_ce", node: "central", config: tracks}
+        ];
+        expect(derive_links(entries)).toEqual([
+            ["sim_remote", "gate_ce"],
+            ["gate_ce", "tracks_ce"]
+        ]);
     });
 });

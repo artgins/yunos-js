@@ -6,6 +6,33 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.25.0 (2026-09-29)
+
+- **Monitor through the control center.** A scenario can say `node` instead
+  of `agent_url`: every command goes as `command-agent agent_id=<node>` on the
+  console's own control-center link, so one scenario spans several nodes (a
+  `node` per yuno), no token leaves the BFF, and the node's agent needs no
+  certificate a browser trusts. A yuno's `key` names it in `links` and `test`
+  when two nodes carry the same id. The view subscribes to the shared link
+  only while it connects or monitors, lets through only its tagged answers and
+  skips the dispatch acks. Verified with five yunos on yunovatios' two nodes,
+  and a start/stop of the stress test through the control center at 500
+  msg/s.
+- **Links proposed from the configs.** *Propose links* in the scenario editor
+  reads every yuno's `view-config` and proposes A → B when A connects to a
+  port B listens on (`__input*_url__`/`__top*_url__` vs
+  `__output*_url__`/`target_url`; local addresses on the same node). It
+  rewrites only the text being edited. On the stress yunos it proposed exactly
+  the three real links.
+- **The graph stacks independent chains as bands** instead of interleaving
+  their columns.
+- Every parameter of a reading now travels in the command line, for both
+  transports (`stats-yuno id=… service=…`).
+- New i18n keys (en, es): `monitor via control center`, the four `monitor
+  propos*` / `monitor links proposed*` keys, `scenario bad node`, `scenario
+  agent url or node`, `scenario needs a place`; `monitor scenario help`
+  rewritten.
+
 ## gui_agent 0.24.0 (2026-09-29)
 
 - **Monitor: test controls.** A scenario with a `test` block gets Start,

@@ -142,6 +142,34 @@ localStorage):
 }
 ```
 
+**Or through the control center** (0.25.0): instead of `agent_url`, a
+`node` — the scenario's default, and each yuno's own when they are on several
+nodes. `key` names a yuno in `links` and `test` (default: its id), and is
+needed when two nodes carry the same id:
+
+```json
+{
+    "name": "yunovatios stress (both nodes)",
+    "node": "yunovatios-controlador",
+    "yunos": [
+        {"key": "sim",       "id": "stress", "label": "sim_controllers", "rate": "tx"},
+        {"key": "gate_co",   "id": "2120",   "label": "gate_central"},
+        {"key": "tracks_co", "id": "5120",   "label": "db_tracks_ce"},
+        {"key": "gate_ce",   "id": "2120",   "label": "gate_central", "node": "yunovatios-central"},
+        {"key": "tracks_ce", "id": "5120",   "label": "db_tracks_ce", "node": "yunovatios-central"}
+    ],
+    "links": [["sim", "gate_co"], ["gate_co", "tracks_co"], ["gate_ce", "tracks_ce"]]
+}
+```
+
+Each command then goes as `command-agent agent_id=<node> cmd2agent=<line>` on
+the console's own control-center link: several nodes at once, no token leaving
+the BFF, and no need for the node's agent to serve a certificate a browser
+trusts. That link is shared with the other workspaces, so the view subscribes
+to it only while it connects or monitors, takes only the answers it tagged,
+and skips the control center's dispatch acks. The graph lays out each group of
+yunos that exchange messages as its own horizontal band.
+
 `id` is the agent's yuno id. `rate` is the direction plotted as the yuno's
 throughput: `rx` (default, what it takes in) or `tx` (what it puts out — a
 generator). An optional `service` names the service whose counters are read;
@@ -149,7 +177,7 @@ the default is the one named as the yuno's role. `links` gives the columns of
 the graph (a yuno sits one column right of the furthest yuno that feeds it).
 The validator (`monitor_helpers.js`) names what is wrong and where.
 
-**It talks to the agent DIRECTLY**, not through the control center:
+**With `agent_url` it talks to the agent DIRECTLY**, not through the control center:
 `C_MONITOR_LINK` (named service `monitor_link`) opens its own `C_IEVENT_CLI` to
 `agent_url` (remote role `yuneta_agent`, service `agent`). The console's
 session is the BFF's httpOnly cookie, which never reaches another host, so the
@@ -214,9 +242,19 @@ counters of a service that does not honour `__reset__` (the yunovatios yunos
 do not yet; the rates the view shows are not affected). A scenario without
 `test` — production — shows no control at all.
 
-What it does not do yet: reach several agents at once or derive the graph
-from the yunos' configs (phase 3, through the control center), and receive
-the stats pushed instead of polling them.
+**Links proposed from the configs** (0.25.0). While monitoring, the scenario
+editor's *Propose links* asks every yuno for its `view-config` and proposes the
+`links`: A → B when A connects to a port B listens on, reading the naming
+convention of the yuno configs (listen `__input*_url__` / `__top*_url__`,
+connect `__output*_url__` / `target_url`). A connection to a local address is
+looked for on the same node, any other host on every node, by port. It
+rewrites only the links of the text being edited, and says which yunos did
+not answer; the operator reviews and saves. It is a proposal because the
+config is not always what runs — the stress generator's persisted `target_url`
+overrides its config.
+
+What it does not do yet: receive the stats PUSHED instead of polling them
+(SDK work, see yunetas `TODO.md`).
 
 ## Handing the backends to the TreeDB GUI
 
@@ -754,7 +792,6 @@ editor all ship. What is open:
 | Open item | Note |
 |---|---|
 | **Operating yunos from the GUI** | The agent's own job — `kill-yuno` / `run-yuno` / `play-yuno`, binaries, configs, snaps — is reachable only by TYPING into Commands. The one exception is the Schemas tab's *Apply*, which drives the restart itself. A workspace over the existing nodes→yunos tree is the natural home. |
-| **Monitor: many agents, derived graph** | Several agents at once through the control center, and the graph derived from the yunos' configs instead of written by hand. |
 | **Monitor: push instead of polling** | The agent publishing the stats to a subscriber (SDK work). |
 | **Time-series charts in Statistics** | The Monitor has them; the Statistics cards still show the last value only. |
 | **Statistics *Reset* on app gclasses** | `stats-yuno stats="__reset__"` only lands where the gclass honours it; counters kept in private fields behind `mt_reading` need their own `mt_stats(__reset__)`. Backend work, not a GUI bug. |
