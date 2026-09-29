@@ -195,3 +195,228 @@
     padding: 0.35rem 0.25rem 0;
     flex: 0 0 auto;
 }
+
+/*
+ *  Monitor workspace (C_AGENT_MONITOR). The graph is a canvas of
+ *  absolutely placed cards over an SVG of edges; it scrolls inside its
+ *  own box, so a wide scenario never makes the page scroll sideways.
+ *  Colours come from Bulma's variables, so the dark scheme follows.
+ */
+.MONITOR_VIEW {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    height: 100%;
+    overflow: auto;
+    padding: 0.75rem;
+}
+
+.MONITOR_TOOLBAR {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.MONITOR_TITLE {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.MONITOR_NAME {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.MONITOR_TOOLS {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.MONITOR_STATUS {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    color: var(--bulma-text-weak);
+}
+
+.MONITOR_UPDATED_TIME,
+.MONITOR_ERROR_DETAIL,
+.MONITOR_SCENARIO_ERROR_DETAIL {
+    margin-left: 0.35em;
+}
+
+.MONITOR_GRAPH {
+    overflow: auto;
+    max-width: 100%;
+    flex: 0 0 auto;
+}
+
+.MONITOR_GRAPH_CANVAS {
+    position: relative;
+}
+
+.MONITOR_EDGES {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+}
+
+.MONITOR_EDGE {
+    fill: none;
+    stroke: var(--bulma-border);
+    stroke-width: 2;
+}
+
+.MONITOR_EDGE_TIP {
+    fill: var(--bulma-border);
+}
+
+.MONITOR_EDGE_LABEL {
+    fill: var(--bulma-text);
+    font-size: 0.75rem;
+    font-family: var(--bulma-family-code);
+}
+
+.MONITOR_NODE {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.5rem 0.65rem;
+    border-left: 4px solid var(--bulma-border);
+    font-size: 0.8rem;
+    overflow: hidden;
+}
+
+.MONITOR_NODE--cpu-low {
+    border-left-color: var(--bulma-success);
+}
+
+.MONITOR_NODE--cpu-mid {
+    border-left-color: var(--bulma-warning);
+}
+
+.MONITOR_NODE--cpu-high {
+    border-left-color: var(--bulma-danger);
+}
+
+.MONITOR_NODE_HEAD {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    margin-bottom: 0.15rem;
+}
+
+.MONITOR_NODE_LABEL {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.MONITOR_NODE_ID {
+    color: var(--bulma-text-weak);
+}
+
+.MONITOR_NODE_STATE {
+    flex: 0 0 auto;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    background: var(--bulma-border);
+}
+
+.MONITOR_NODE_STATE--playing {
+    background: var(--bulma-success);
+}
+
+.MONITOR_NODE_STATE--paused {
+    background: var(--bulma-warning);
+}
+
+.MONITOR_NODE_STATE--stopped,
+.MONITOR_NODE_STATE--missing {
+    background: var(--bulma-danger);
+}
+
+.MONITOR_NODE_ROW {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.MONITOR_NODE_KEY {
+    flex: 0 0 3.6rem;
+    color: var(--bulma-text-weak);
+}
+
+.MONITOR_NODE_ROW > .is-family-monospace {
+    margin-left: auto;
+}
+
+.MONITOR_NODE_CPU_BAR {
+    flex: 1 1 auto;
+    height: 0.4rem;
+    border-radius: 0.2rem;
+    background: var(--bulma-background);
+    overflow: hidden;
+}
+
+.MONITOR_NODE_CPU_FILL {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--bulma-success);
+}
+
+.MONITOR_NODE--cpu-mid .MONITOR_NODE_CPU_FILL {
+    background: var(--bulma-warning);
+}
+
+.MONITOR_NODE--cpu-high .MONITOR_NODE_CPU_FILL {
+    background: var(--bulma-danger);
+}
+
+.MONITOR_NODE_ERROR {
+    font-size: 0.7rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.MONITOR_CHARTS {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.MONITOR_CHART {
+    margin-bottom: 0 !important;
+    min-width: 0;
+}
+
+.MONITOR_CHART_TITLE {
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 0.35rem;
+}
+
+@media screen and (min-width: 1216px) {
+    .MONITOR_CHARTS {
+        flex-direction: row;
+    }
+
+    .MONITOR_CHART {
+        flex: 1 1 0;
+    }
+}

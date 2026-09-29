@@ -1,0 +1,1257 @@
+/***********************************************************************
+ *          c_agent_monitor.js
+ *
+ *      C_AGENT_MONITOR — the Monitor workspace: the yunos of one test,
+ *      live. A GRAPH of the yunos in the order the messages flow (left to
+ *      right), each card with its cpu %, its messages per second in and
+ *      out, its queue when it has one and what the agent says of it
+ *      (playing, paused, stopped...); and under it two CHARTS, messages
+ *      per second and cpu, over a window of history.
+ *
+ *      What it watches is a SCENARIO (monitor_helpers.js): the agent to
+ *      talk to and the yunos, with the links between them. It is written
+ *      as JSON in the view itself and kept in C_AGENT_CONFIG.
+ *
+ *      TRANSPORT. The agent of the node under test, DIRECTLY
+ *      (C_MONITOR_LINK, wss://<node>:1993), not through the control
+ *      center. Each reading is a `list-yunos` plus, per yuno, two
+ *      `stats-yuno`: `service=__yuno__` for its cpu (computed by the yuno
+ *      itself every second) and the default service -- the one named as
+ *      the role -- for its message counters. Every request is tagged in
+ *      __md_iev__ (monitor_kind, monitor_yuno), which the agent echoes,
+ *      so each answer finds its card.
+ *
+ *      POLLING. The readings repeat every `monitor_refresh` seconds: the
+ *      same DELIBERATE exception to the no-polling rule as the Statistics
+ *      auto-refresh, approved for this view on 2026-09-29, until the
+ *      agent can publish the stats to a subscriber. A periodic C_TIMER,
+ *      so each tick is EV_TIMEOUT_PERIODIC in the machine trace; it runs
+ *      only in ST_MONITORING and only while this tab is the visible one.
+ *
+ *      RATES. A yuno's own `rxMsgsec`/`txMsgsec` is used when its service
+ *      reports one (an application service computes it on its own
+ *      timer); otherwise the rate comes from the `rxMsgs`/`txMsgs`
+ *      counters and a monotonic clock. The chart plots, per yuno, the
+ *      direction the scenario names as its throughput (`rate`).
+ *
+ *      States:
+ *          ST_DISCONNECTED  no link (no scenario, or the user left).
+ *          ST_CONNECTING    the link is being made, or is retrying.
+ *          ST_MONITORING    in session: readings on the clock.
+ *
+ *          Copyright (c) 2026, ArtGins.
+ *          All Rights Reserved.
+ ***********************************************************************/
+import {
+    SDATA,
+    SDATA_END,
+    data_type_t,
+    gclass_create,
+    log_error,
+    log_warning,
+    gobj_parent,
+    gobj_name,
+    gobj_short_name,
+    gobj_read_attr,
+    gobj_read_pointer_attr,
+    gobj_write_attr,
+    gobj_subscribe_event,
+    gobj_unsubscribe_event,
+    gobj_send_event,
+    gobj_create_pure_child,
+    gobj_find_service,
+    gobj_current_state,
+    gobj_destroy,
+    gobj_is_running,
+    gobj_stop,
+    set_timeout_periodic,
+    clear_timeout,
+    createElement2,
+    refresh_language,
+    msg_iev_write_key,
+    msg_iev_read_key,
+} from "@yuneta/gobj-js";
+
+import {t} from "i18next";
+
+import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+
+import {
+    agent_config_get_monitor,
+    agent_config_set_monitor,
+    MONITOR_REFRESH_CHOICES,
+    MONITOR_WINDOW_CHOICES,
+} from "./c_agent_config.js";
+import {
+    SCENARIO_TEMPLATE,
+    parse_scenario,
+    validate_scenario,
+    layout_graph,
+    pick_rate,
+    prune_history,
+    cpu_level,
+    yuno_run_state,
+    fmt_rate,
+} from "./monitor_helpers.js";
+
+/***************************************************************
+ *              Constants
+ ***************************************************************/
+const GCLASS_NAME = "C_AGENT_MONITOR";
+
+const CARD_W = 208;
+const CARD_H = 132;
+const CHART_H = 220;
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/***************************************************************
+ *              Data
+ ***************************************************************/
+const attrs_table = [
+SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,  null,       "Subscriber of output events"),
+SDATA(data_type_t.DTP_STRING,   "title",        0,  "monitor",  "View title (i18n key)"),
+SDATA(data_type_t.DTP_POINTER,  "$container",   0,  null,       "Root HTMLElement"),
+SDATA(data_type_t.DTP_POINTER,  "link_svc",     0,  null,       "C_MONITOR_LINK service"),
+SDATA(data_type_t.DTP_POINTER,  "config_svc",   0,  null,       "C_AGENT_CONFIG service"),
+SDATA_END()
+];
+
+let PRIVATE_DATA = {
+    gobj_timer:     null,
+    scenario:       null,   /*  validated scenario, or null  */
+    model:          {},     /*  yuno id -> live figures (see new_model)  */
+    rows:           [],     /*  history rows {tm, "cpu:<id>", "rate:<id>"}  */
+    last_tick:      0,      /*  performance.now() of the previous reading  */
+    last_update:    0,      /*  Date.now() of the last answer  */
+    error:          null,   /*  {key, detail} shown in the status line  */
+    visible:        true,
+    editing:        false,
+    rate_chart:     null,
+    cpu_chart:      null,
+    cards:          {},     /*  yuno id -> element refs of its card  */
+    edge_labels:    [],     /*  [{from, to, $text}]  */
+};
+
+let __gclass__ = null;
+
+
+
+
+                    /******************************
+                     *      Framework Methods
+                     ******************************/
+
+
+
+
+/***************************************************************
+ *          Framework Method: Create
+ ***************************************************************/
+function mt_create(gobj)
+{
+    let priv = gobj.priv;
+
+    /*
+     *  Create children
+     */
+    priv.gobj_timer = gobj_create_pure_child(gobj_name(gobj), "C_TIMER", {}, gobj);
+
+    /*
+     *  CHILD subscription model
+     */
+    let subscriber = gobj_read_pointer_attr(gobj, "subscriber");
+    if(!subscriber) {
+        subscriber = gobj_parent(gobj);
+    }
+    gobj_subscribe_event(gobj, null, {}, subscriber);
+
+    let link = gobj_find_service("monitor_link", true);
+    gobj_write_attr(gobj, "link_svc", link);
+    if(link) {
+        gobj_subscribe_event(link, "EV_ON_OPEN", {}, gobj);
+        gobj_subscribe_event(link, "EV_ON_CLOSE", {}, gobj);
+        gobj_subscribe_event(link, "EV_ON_OPEN_ERROR", {}, gobj);
+        gobj_subscribe_event(link, "EV_LINK_FAILED", {}, gobj);
+        gobj_subscribe_event(link, "EV_MT_COMMAND_ANSWER", {}, gobj);
+        gobj_subscribe_event(link, "EV_MT_STATS_ANSWER", {}, gobj);
+    }
+    let config = gobj_find_service("agent_config", true);
+    gobj_write_attr(gobj, "config_svc", config);
+
+    let settings = config ? agent_config_get_monitor(config) : {scenario: null};
+    if(settings.scenario) {
+        let r = validate_scenario(settings.scenario);
+        if(r.ok) {
+            priv.scenario = r.scenario;
+        } else {
+            log_warning(`${gobj_short_name(gobj)}: the saved scenario is not valid ` +
+                `(${r.error.key} ${r.error.detail}), ignored`);
+        }
+    }
+
+    reset_model(gobj);
+
+    let $c = createElement2(
+        ["div", {class: `${GCLASS_NAME} MONITOR_VIEW view-card`}, []]
+    );
+    gobj_write_attr(gobj, "$container", $c);
+    build_dom(gobj);
+}
+
+/***************************************************************
+ *          Framework Method: Start
+ ***************************************************************/
+function mt_start(gobj)
+{
+    let priv = gobj.priv;
+
+    gobj_start_charts(gobj);
+    render_all(gobj);
+    watch_visibility(gobj);
+
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
+
+    /*  A dashboard shows: with a scenario, connect at once.  */
+    if(priv.scenario) {
+        gobj_send_event(gobj, "EV_CONNECT", {}, gobj);
+    }
+}
+
+/***************************************************************
+ *          Framework Method: Stop
+ ***************************************************************/
+function mt_stop(gobj)
+{
+    let priv = gobj.priv;
+    clear_timeout(priv.gobj_timer);
+    if(priv.vis_obs) {
+        priv.vis_obs.disconnect();
+        priv.vis_obs = null;
+    }
+    let shell = yui_shell_of(gobj);
+    if(shell) {
+        gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
+    /*  The charts are hosted children: retire them here, not in
+     *  mt_destroy (the framework destroys children first).  */
+    destroy_charts(gobj);
+}
+
+/***************************************************************
+ *          Framework Method: Destroy
+ ***************************************************************/
+function mt_destroy(gobj)
+{
+    let $c = gobj_read_attr(gobj, "$container");
+    if($c && $c.parentNode) {
+        $c.parentNode.removeChild($c);
+    }
+    gobj_write_attr(gobj, "$container", null);
+}
+
+
+
+
+                    /***************************
+                     *      Local Methods
+                     ***************************/
+
+
+
+
+function clear_node($n)
+{
+    while($n && $n.firstChild) {
+        $n.removeChild($n.firstChild);
+    }
+}
+
+function show($el, on)
+{
+    if($el) {
+        $el.classList.toggle("is-hidden", !on);
+    }
+}
+
+/***************************************************************
+ *  A control: its visible label hides on a phone, the title and
+ *  aria-label name it everywhere.
+ ***************************************************************/
+function tool_button(cls, icon, key, event, gobj, with_label)
+{
+    let children = [["span", {class: "icon"}, [["i", {class: icon}]]]];
+    if(with_label) {
+        children.push(["span", {class: "is-hidden-mobile", i18n: key}, t(key)]);
+    }
+    return createElement2(
+        ["button", {class: `${cls} button`, type: "button",
+                    title: t(key), "data-i18n-title": key,
+                    "aria-label": t(key), "data-i18n-aria-label": key},
+            children,
+            {click: () => gobj_send_event(gobj, event, {}, gobj)}]
+    );
+}
+
+function tool_select(cls, key, choices, unit, value, event, gobj)
+{
+    let $sel = createElement2(
+        ["select", {class: cls,
+                    title: t(key), "data-i18n-title": key,
+                    "aria-label": t(key), "data-i18n-aria-label": key},
+            choices.map((v) => ["option", {value: String(v)}, `${v} ${unit}`]),
+            {change: (e) => gobj_send_event(gobj, event,
+                {value: parseInt(e.target.value, 10)}, gobj)}]
+    );
+    $sel.value = String(value);
+    return $sel;
+}
+
+/***************************************************************
+ *  The static skeleton: toolbar, status line, scenario editor,
+ *  empty notice, graph and the two chart blocks.
+ ***************************************************************/
+function build_dom(gobj)
+{
+    let priv = gobj.priv;
+    let $c = gobj_read_attr(gobj, "$container");
+    let config = gobj_read_attr(gobj, "config_svc");
+    let settings = config ? agent_config_get_monitor(config) : {refresh: 2, window: 15};
+
+    priv.$name = createElement2(["span", {class: "MONITOR_NAME has-text-weight-semibold"}, ""]);
+    priv.$state = createElement2(["span", {class: "MONITOR_STATE tag"}, ""]);
+    priv.$connect = tool_button("MONITOR_CONNECT is-primary", "yi-plug", "monitor connect",
+        "EV_CONNECT", gobj, true);
+    priv.$disconnect = tool_button("MONITOR_DISCONNECT", "yi-plug-slash", "monitor disconnect",
+        "EV_DISCONNECT", gobj, true);
+    priv.$refresh = tool_select("MONITOR_REFRESH", "monitor refresh",
+        MONITOR_REFRESH_CHOICES, "s", settings.refresh, "EV_SET_REFRESH", gobj);
+    priv.$window = tool_select("MONITOR_WINDOW", "monitor window",
+        MONITOR_WINDOW_CHOICES, "min", settings.window, "EV_SET_WINDOW", gobj);
+    priv.$clear = tool_button("MONITOR_CLEAR", "yi-broom", "monitor clear history",
+        "EV_CLEAR_HISTORY", gobj, false);
+    priv.$edit = tool_button("MONITOR_EDIT", "yi-pen", "monitor scenario",
+        "EV_EDIT_SCENARIO", gobj, true);
+
+    let $toolbar = createElement2(
+        ["div", {class: "MONITOR_TOOLBAR"}, [
+            ["div", {class: "MONITOR_TITLE"}, [priv.$name, priv.$state]],
+            ["div", {class: "MONITOR_TOOLS"}, [
+                priv.$connect,
+                priv.$disconnect,
+                ["div", {class: "select"}, [priv.$refresh]],
+                ["div", {class: "select"}, [priv.$window]],
+                priv.$clear,
+                priv.$edit
+            ]]
+        ]]
+    );
+
+    priv.$url = createElement2(["span", {class: "MONITOR_URL is-family-monospace"}, ""]);
+    priv.$updated = createElement2(["span", {class: "MONITOR_UPDATED"}, [
+        ["span", {i18n: "monitor updated"}, t("monitor updated")],
+        ["span", {class: "MONITOR_UPDATED_TIME is-family-monospace"}, ""]
+    ]]);
+    priv.$updated_time = priv.$updated.querySelector(".MONITOR_UPDATED_TIME");
+    priv.$error = createElement2(["span", {class: "MONITOR_ERROR has-text-danger"}, [
+        ["span", {class: "MONITOR_ERROR_TEXT"}, ""],
+        ["span", {class: "MONITOR_ERROR_DETAIL is-family-monospace"}, ""]
+    ]]);
+    let $status = createElement2(
+        ["div", {class: "MONITOR_STATUS is-size-7"}, [priv.$url, priv.$updated, priv.$error]]
+    );
+
+    /*  Scenario editor.  */
+    priv.$text = createElement2(
+        ["textarea", {class: "MONITOR_SCENARIO_TEXT textarea is-family-monospace is-size-7",
+                      rows: 14, spellcheck: "false",
+                      title: t("monitor scenario json"), "data-i18n-title": "monitor scenario json",
+                      "aria-label": t("monitor scenario json"),
+                      "data-i18n-aria-label": "monitor scenario json"}, ""]
+    );
+    priv.$edit_error = createElement2(["p", {class: "MONITOR_SCENARIO_ERROR has-text-danger is-size-7"}, [
+        ["span", {class: "MONITOR_SCENARIO_ERROR_TEXT"}, ""],
+        ["span", {class: "MONITOR_SCENARIO_ERROR_DETAIL is-family-monospace"}, ""]
+    ]]);
+    let $save = createElement2(
+        ["button", {class: "MONITOR_SCENARIO_SAVE button is-primary", type: "button",
+                    title: t("save"), "data-i18n-title": "save",
+                    "aria-label": t("save"), "data-i18n-aria-label": "save"},
+            [["span", {class: "icon"}, [["i", {class: "yi-floppy-disk"}]]],
+             ["span", {i18n: "save"}, t("save")]],
+            {click: () => gobj_send_event(gobj, "EV_SAVE_SCENARIO",
+                {text: priv.$text.value}, gobj)}]
+    );
+    let $cancel = tool_button("MONITOR_SCENARIO_CANCEL", "yi-xmark", "cancel",
+        "EV_CANCEL_EDIT", gobj, true);
+    priv.$editor = createElement2(
+        ["div", {class: "MONITOR_EDITOR box"}, [
+            ["p", {class: "MONITOR_EDITOR_HELP is-size-7 mb-2", i18n: "monitor scenario help"},
+                t("monitor scenario help")],
+            priv.$text,
+            priv.$edit_error,
+            ["div", {class: "MONITOR_EDITOR_ACTIONS buttons is-right mt-2"}, [$cancel, $save]]
+        ]]
+    );
+
+    priv.$empty = createElement2(
+        ["div", {class: "MONITOR_EMPTY notification is-light"}, [
+            ["p", {i18n: "monitor no scenario"}, t("monitor no scenario")]
+        ]]
+    );
+
+    priv.$graph = createElement2(["div", {class: "MONITOR_GRAPH"}, []]);
+
+    priv.$rate_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
+    priv.$cpu_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
+    priv.$charts = createElement2(
+        ["div", {class: "MONITOR_CHARTS"}, [
+            ["div", {class: "MONITOR_CHART MONITOR_CHART_RATE box"}, [
+                ["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor messages per second"},
+                    t("monitor messages per second")],
+                priv.$rate_box
+            ]],
+            ["div", {class: "MONITOR_CHART MONITOR_CHART_CPU box"}, [
+                ["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor cpu of one core"},
+                    t("monitor cpu of one core")],
+                priv.$cpu_box
+            ]]
+        ]]
+    );
+
+    $c.appendChild($toolbar);
+    $c.appendChild($status);
+    $c.appendChild(priv.$editor);
+    $c.appendChild(priv.$empty);
+    $c.appendChild(priv.$graph);
+    $c.appendChild(priv.$charts);
+}
+
+/***************************************************************
+ *  The live figures of one yuno.
+ ***************************************************************/
+function new_model()
+{
+    return {
+        run:        "unknown",  /*  yuno_run_state()  */
+        cpu:        null,
+        cpu_t:      0,          /*  performance.now() of the answer  */
+        rx:         null,
+        tx:         null,
+        queue:      null,
+        app_t:      0,
+        prev_rx:    null,
+        prev_tx:    null,
+        errors:     {cpu: null, app: null}  /*  {key} or {text} per reading kind  */
+    };
+}
+
+function reset_model(gobj)
+{
+    let priv = gobj.priv;
+    priv.model = {};
+    priv.rows = [];
+    priv.last_tick = 0;
+    if(priv.scenario) {
+        for(let y of priv.scenario.yunos) {
+            priv.model[y.id] = new_model();
+        }
+    }
+}
+
+/***************************************************************
+ *  The charts: one series per yuno, rebuilt with the scenario.
+ ***************************************************************/
+function destroy_charts(gobj)
+{
+    let priv = gobj.priv;
+    for(let k of ["rate_chart", "cpu_chart"]) {
+        let ch = priv[k];
+        if(ch) {
+            priv[k] = null;
+            if(gobj_is_running(ch)) {
+                gobj_stop(ch);
+            }
+            gobj_destroy(ch);
+        }
+    }
+    clear_node(priv.$rate_box);
+    clear_node(priv.$cpu_box);
+}
+
+function gobj_start_charts(gobj)
+{
+    let priv = gobj.priv;
+    destroy_charts(gobj);
+    if(!priv.scenario) {
+        return;
+    }
+    /*  Both charts start at zero: a rate or a cpu drawn from its own
+     *  minimum turns a flat line into a cliff.  */
+    let from_zero = {y: {range: (u, min, max) => [0, max > 0 ? max * 1.1 : 1]}};
+    let make = (name, $box, prefix) => {
+        let $host = createElement2(["div", {class: "MONITOR_CHART_HOST"}, []]);
+        $box.appendChild($host);
+        let chart = gobj_create_pure_child(name, "C_YUI_UPLOT", {
+            $container: $host,
+            width:      600,
+            height:     CHART_H,
+            scales:     from_zero
+        }, gobj);
+        for(let y of priv.scenario.yunos) {
+            gobj_send_event(chart, "EV_ADD_SERIE", {id: prefix + y.id, label: y.label}, gobj);
+        }
+        return chart;
+    };
+    priv.rate_chart = make("rate_chart", priv.$rate_box, "rate:");
+    priv.cpu_chart = make("cpu_chart", priv.$cpu_box, "cpu:");
+    load_charts(gobj);
+}
+
+function load_charts(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.rows.length) {
+        return;
+    }
+    if(priv.rate_chart) {
+        gobj_send_event(priv.rate_chart, "EV_LOAD_DATA", priv.rows, gobj);
+    }
+    if(priv.cpu_chart) {
+        gobj_send_event(priv.cpu_chart, "EV_LOAD_DATA", priv.rows, gobj);
+    }
+}
+
+/***************************************************************
+ *  The graph: SVG edges under absolutely placed HTML cards.
+ ***************************************************************/
+function build_graph(gobj)
+{
+    let priv = gobj.priv;
+    clear_node(priv.$graph);
+    priv.cards = {};
+    priv.edge_labels = [];
+    if(!priv.scenario) {
+        return;
+    }
+    let ids = priv.scenario.yunos.map((y) => y.id);
+    let g = layout_graph(ids, priv.scenario.links, {card_w: CARD_W, card_h: CARD_H});
+
+    let $canvas = createElement2(["div", {class: "MONITOR_GRAPH_CANVAS",
+        style: `width:${g.width}px; height:${g.height}px;`}, []]);
+
+    let svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("class", "MONITOR_EDGES");
+    svg.setAttribute("width", String(g.width));
+    svg.setAttribute("height", String(g.height));
+    let marker_id = `monitor-arrow-${gobj_name(gobj)}`.replace(/[^\w-]/g, "_");
+    let defs = document.createElementNS(SVG_NS, "defs");
+    let marker = document.createElementNS(SVG_NS, "marker");
+    marker.setAttribute("id", marker_id);
+    marker.setAttribute("viewBox", "0 0 10 10");
+    marker.setAttribute("refX", "10");
+    marker.setAttribute("refY", "5");
+    marker.setAttribute("markerWidth", "8");
+    marker.setAttribute("markerHeight", "8");
+    marker.setAttribute("orient", "auto-start-reverse");
+    let tip = document.createElementNS(SVG_NS, "path");
+    tip.setAttribute("d", "M0,0 L10,5 L0,10 z");
+    tip.setAttribute("class", "MONITOR_EDGE_TIP");
+    marker.appendChild(tip);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    for(let e of g.edges) {
+        let path = document.createElementNS(SVG_NS, "path");
+        path.setAttribute("class", "MONITOR_EDGE");
+        path.setAttribute("d", e.d);
+        path.setAttribute("marker-end", `url(#${marker_id})`);
+        svg.appendChild(path);
+        let text = document.createElementNS(SVG_NS, "text");
+        text.setAttribute("class", "MONITOR_EDGE_LABEL");
+        text.setAttribute("x", String(e.mx));
+        text.setAttribute("y", String(e.my - 6));
+        text.setAttribute("text-anchor", "middle");
+        svg.appendChild(text);
+        priv.edge_labels.push({from: e.from, to: e.to, $text: text});
+    }
+    $canvas.appendChild(svg);
+
+    for(let y of priv.scenario.yunos) {
+        let pos = g.nodes[y.id];
+        let $dot = createElement2(["span", {class: "MONITOR_NODE_STATE"}, ""]);
+        let $cpu = createElement2(["span", {class: "MONITOR_NODE_CPU_VALUE is-family-monospace"}, ""]);
+        let $bar = createElement2(["span", {class: "MONITOR_NODE_CPU_FILL"}, ""]);
+        let $rx = createElement2(["span", {class: "MONITOR_NODE_RX_VALUE is-family-monospace"}, ""]);
+        let $tx = createElement2(["span", {class: "MONITOR_NODE_TX_VALUE is-family-monospace"}, ""]);
+        let $q = createElement2(["span", {class: "MONITOR_NODE_QUEUE_VALUE is-family-monospace"}, ""]);
+        let $qrow = createElement2(["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_QUEUE"}, [
+            ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor queue"}, t("monitor queue")],
+            $q
+        ]]);
+        let $err = createElement2(["div", {class: "MONITOR_NODE_ERROR has-text-danger"}, ""]);
+        let $card = createElement2(
+            ["div", {class: "MONITOR_NODE card",
+                     style: `left:${pos.x}px; top:${pos.y}px; width:${CARD_W}px; height:${CARD_H}px;`}, [
+                ["div", {class: "MONITOR_NODE_HEAD"}, [
+                    $dot,
+                    ["span", {class: "MONITOR_NODE_LABEL has-text-weight-bold"}, y.label],
+                    ["span", {class: "MONITOR_NODE_ID is-family-monospace"}, y.id]
+                ]],
+                ["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_CPU"}, [
+                    ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor cpu"}, t("monitor cpu")],
+                    ["span", {class: "MONITOR_NODE_CPU_BAR"}, [$bar]],
+                    $cpu
+                ]],
+                ["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_RX"}, [
+                    ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor in"}, t("monitor in")],
+                    $rx
+                ]],
+                ["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_TX"}, [
+                    ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor out"}, t("monitor out")],
+                    $tx
+                ]],
+                $qrow,
+                $err
+            ]]
+        );
+        $canvas.appendChild($card);
+        priv.cards[y.id] = {$card, $dot, $cpu, $bar, $rx, $tx, $q, $qrow, $err};
+    }
+    priv.$graph.appendChild($canvas);
+}
+
+/***************************************************************
+ *  Paint one card (and the labels of its outgoing edges) from its
+ *  model. Text only: the card is never rebuilt, so nothing flickers.
+ ***************************************************************/
+function paint_card(gobj, id)
+{
+    let priv = gobj.priv;
+    let c = priv.cards[id];
+    let m = priv.model[id];
+    if(!c || !m) {
+        return;
+    }
+    let level = cpu_level(m.cpu);
+    c.$card.className = `MONITOR_NODE card MONITOR_NODE--cpu-${level} MONITOR_NODE--${m.run}`;
+    let state_key = `monitor yuno ${m.run}`;
+    c.$dot.className = `MONITOR_NODE_STATE MONITOR_NODE_STATE--${m.run}`;
+    c.$dot.setAttribute("title", t(state_key));
+    c.$dot.setAttribute("data-i18n-title", state_key);
+    c.$dot.setAttribute("aria-label", t(state_key));
+    c.$dot.setAttribute("data-i18n-aria-label", state_key);
+    c.$dot.setAttribute("role", "img");
+
+    c.$cpu.textContent = typeof m.cpu === "number" ? `${m.cpu} %` : "–";
+    c.$bar.style.width = `${typeof m.cpu === "number" ? Math.max(0, Math.min(100, m.cpu)) : 0}%`;
+    c.$rx.textContent = fmt_rate(m.rx);
+    c.$tx.textContent = fmt_rate(m.tx);
+    show(c.$qrow, typeof m.queue === "number");
+    c.$q.textContent = typeof m.queue === "number" ? String(m.queue) : "";
+    let err = m.errors.cpu || m.errors.app;
+    if(err && err.key) {
+        c.$err.setAttribute("data-i18n", err.key);
+        c.$err.textContent = t(err.key);
+    } else {
+        c.$err.removeAttribute("data-i18n");
+        c.$err.textContent = (err && err.text) || "";
+    }
+
+    for(let el of priv.edge_labels) {
+        if(el.from === id || el.to === id) {
+            let src = priv.model[el.from];
+            let dst = priv.model[el.to];
+            let v = (src && typeof src.tx === "number") ? src.tx
+                  : (dst && typeof dst.rx === "number") ? dst.rx : null;
+            el.$text.textContent = v === null ? "" : `${fmt_rate(v)}/s`;
+        }
+    }
+}
+
+function paint_all_cards(gobj)
+{
+    for(let id of Object.keys(gobj.priv.model)) {
+        paint_card(gobj, id);
+    }
+}
+
+/***************************************************************
+ *  Toolbar, status line and what is shown for the current state.
+ ***************************************************************/
+function render_status(gobj)
+{
+    let priv = gobj.priv;
+    let st = gobj_current_state(gobj);
+    let state_key = st === "ST_MONITORING" ? "monitor monitoring"
+                  : st === "ST_CONNECTING" ? "monitor connecting" : "monitor disconnected";
+    let state_cls = st === "ST_MONITORING" ? "is-success"
+                  : st === "ST_CONNECTING" ? "is-warning" : "is-light";
+    priv.$state.className = `MONITOR_STATE tag ${state_cls}`;
+    priv.$state.setAttribute("data-i18n", state_key);
+    priv.$state.textContent = t(state_key);
+
+    let has = !!priv.scenario;
+    if(has && priv.scenario.name) {
+        priv.$name.removeAttribute("data-i18n");
+        priv.$name.textContent = priv.scenario.name;
+    } else {
+        priv.$name.setAttribute("data-i18n", "monitor");
+        priv.$name.textContent = t("monitor");
+    }
+    priv.$url.textContent = has ? priv.scenario.agent_url : "";
+
+    show(priv.$connect, has && st === "ST_DISCONNECTED");
+    show(priv.$disconnect, st !== "ST_DISCONNECTED");
+    show(priv.$updated, priv.last_update > 0);
+    priv.$updated_time.textContent = priv.last_update
+        ? new Date(priv.last_update).toLocaleTimeString() : "";
+
+    let $et = priv.$error.querySelector(".MONITOR_ERROR_TEXT");
+    let $ed = priv.$error.querySelector(".MONITOR_ERROR_DETAIL");
+    if(priv.error) {
+        $et.setAttribute("data-i18n", priv.error.key);
+        $et.textContent = t(priv.error.key);
+        $ed.textContent = priv.error.detail ? ` ${priv.error.detail}` : "";
+    } else {
+        $et.removeAttribute("data-i18n");
+        $et.textContent = "";
+        $ed.textContent = "";
+    }
+    show(priv.$error, !!priv.error);
+
+    show(priv.$editor, priv.editing);
+    show(priv.$empty, !has && !priv.editing);
+    show(priv.$graph, has);
+    show(priv.$charts, has);
+}
+
+function render_all(gobj)
+{
+    build_graph(gobj);
+    paint_all_cards(gobj);
+    render_status(gobj);
+}
+
+function set_error(gobj, key, detail)
+{
+    gobj.priv.error = key ? {key: key, detail: detail || ""} : null;
+    render_status(gobj);
+}
+
+/***************************************************************
+ *  Readings.
+ ***************************************************************/
+function send_request(gobj, command, kw, kind, yuno_id)
+{
+    let link = gobj_read_attr(gobj, "link_svc");
+    msg_iev_write_key(kw, "monitor_kind", kind);
+    msg_iev_write_key(kw, "monitor_yuno", yuno_id || "");
+    gobj_send_event(link, "EV_SEND_COMMAND", {command: command, kw: kw}, gobj);
+}
+
+/***************************************************************
+ *  One reading: close the previous one into the history, then ask
+ *  again. A figure that did not arrive since the last reading is a
+ *  gap in the chart, not the old value drawn again.
+ ***************************************************************/
+function poll_tick(gobj)
+{
+    let priv = gobj.priv;
+    let now = performance.now();
+    if(priv.last_tick > 0) {
+        let row = {tm: Date.now() / 1000};
+        for(let y of priv.scenario.yunos) {
+            let m = priv.model[y.id];
+            let fresh_cpu = m.cpu_t > priv.last_tick;
+            let fresh_app = m.app_t > priv.last_tick;
+            let rate = y.rate === "tx" ? m.tx : m.rx;
+            row["cpu:" + y.id] = (fresh_cpu && typeof m.cpu === "number") ? m.cpu : null;
+            row["rate:" + y.id] = (fresh_app && typeof rate === "number") ? Math.round(rate) : null;
+        }
+        priv.rows.push(row);
+        let config = gobj_read_attr(gobj, "config_svc");
+        let window_min = config ? agent_config_get_monitor(config).window : 15;
+        prune_history(priv.rows, row.tm, window_min * 60);
+        load_charts(gobj);
+    }
+    priv.last_tick = now;
+
+    /*  `service` goes IN the command line, never in the kw: C_IEVENT_CLI
+     *  takes kw.service as the service the command is ADDRESSED to, so
+     *  the agent's `stats-yuno` would go to the agent's own __yuno__.
+     *  The agent's parser merges the line into the kw, the line winning.  */
+    send_request(gobj, "list-yunos", {}, "yunos", "");
+    for(let y of priv.scenario.yunos) {
+        send_request(gobj, "stats-yuno service=__yuno__", {id: y.id}, "cpu", y.id);
+        let command = y.service ? `stats-yuno service=${y.service}` : "stats-yuno";
+        send_request(gobj, command, {id: y.id}, "app", y.id);
+    }
+}
+
+function arm_poll(gobj)
+{
+    let priv = gobj.priv;
+    clear_timeout(priv.gobj_timer);
+    if(priv.visible && gobj_current_state(gobj) === "ST_MONITORING") {
+        let config = gobj_read_attr(gobj, "config_svc");
+        let secs = config ? agent_config_get_monitor(config).refresh : 2;
+        set_timeout_periodic(priv.gobj_timer, secs * 1000);
+    }
+}
+
+/***************************************************************
+ *  Poll only what someone is looking at: the shell hides a
+ *  keep_alive view by toggling `is-hidden` on its container. The
+ *  observer only translates that flip into an event.
+ ***************************************************************/
+function watch_visibility(gobj)
+{
+    let priv = gobj.priv;
+    let $c = gobj_read_attr(gobj, "$container");
+    if(!$c || typeof MutationObserver === "undefined") {
+        return;
+    }
+    priv.vis_obs = new MutationObserver(function() {
+        let vis = !$c.classList.contains("is-hidden");
+        if(vis !== priv.visible) {
+            gobj_send_event(gobj, "EV_VISIBILITY", {visible: vis}, gobj);
+        }
+    });
+    priv.vis_obs.observe($c, {attributes: true, attributeFilter: ["class"]});
+}
+
+function open_editor(gobj)
+{
+    let priv = gobj.priv;
+    priv.editing = true;
+    let base = priv.scenario || SCENARIO_TEMPLATE;
+    priv.$text.value = JSON.stringify(base, null, 4);
+    set_edit_error(gobj, null);
+    render_status(gobj);
+}
+
+function set_edit_error(gobj, error)
+{
+    let priv = gobj.priv;
+    let $et = priv.$edit_error.querySelector(".MONITOR_SCENARIO_ERROR_TEXT");
+    let $ed = priv.$edit_error.querySelector(".MONITOR_SCENARIO_ERROR_DETAIL");
+    if(error) {
+        $et.setAttribute("data-i18n", error.key);
+        $et.textContent = t(error.key);
+        $ed.textContent = error.detail ? ` ${error.detail}` : "";
+    } else {
+        $et.removeAttribute("data-i18n");
+        $et.textContent = "";
+        $ed.textContent = "";
+    }
+}
+
+
+
+
+                    /***************************
+                     *      Actions
+                     ***************************/
+
+
+
+
+/***************************************************************
+ *  Connect to the scenario's agent.
+ ***************************************************************/
+function ac_connect(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(!priv.scenario) {
+        log_error(`${gobj_short_name(gobj)}: EV_CONNECT without a scenario`);
+        gobj_send_event(gobj, "EV_EDIT_SCENARIO", {}, gobj);
+        return -1;
+    }
+    set_error(gobj, null);
+    gobj_send_event(gobj_read_attr(gobj, "link_svc"), "EV_CONNECT",
+        {url: priv.scenario.agent_url}, gobj);
+    render_status(gobj);
+    return 0;
+}
+
+function ac_disconnect(gobj, event, kw, src)
+{
+    clear_timeout(gobj.priv.gobj_timer);
+    gobj_send_event(gobj_read_attr(gobj, "link_svc"), "EV_DISCONNECT", {}, gobj);
+    render_status(gobj);
+    return 0;
+}
+
+function ac_on_open(gobj, event, kw, src)
+{
+    set_error(gobj, null);
+    arm_poll(gobj);
+    if(gobj.priv.visible) {
+        poll_tick(gobj);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  In session the close is a drop: the link retries on its own.
+ ***************************************************************/
+function ac_on_close_drop(gobj, event, kw, src)
+{
+    clear_timeout(gobj.priv.gobj_timer);
+    gobj.priv.last_tick = 0;
+    render_status(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The close of the session we left on purpose (disconnect, or a
+ *  new agent url): only the status changes.
+ ***************************************************************/
+function ac_on_close_left(gobj, event, kw, src)
+{
+    render_status(gobj);
+    return 0;
+}
+
+function ac_on_open_error(gobj, event, kw, src)
+{
+    let detail = (kw && kw.url) || "";
+    set_error(gobj, "monitor cannot reach the agent", detail);
+    return 0;
+}
+
+function ac_link_failed(gobj, event, kw, src)
+{
+    set_error(gobj, (kw && kw.error_code) || "monitor cannot reach the agent",
+        (kw && kw.comment) || "");
+    return 0;
+}
+
+function ac_timeout_periodic(gobj, event, kw, src)
+{
+    poll_tick(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  A stats answer: the cpu or the counters of one yuno.
+ ***************************************************************/
+function ac_mt_stats_answer(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let kind = msg_iev_read_key(kw, "monitor_kind");
+    let id = msg_iev_read_key(kw, "monitor_yuno");
+    let m = priv.model[id];
+    if(!m || (kind !== "cpu" && kind !== "app")) {
+        log_warning(`${gobj_short_name(gobj)}: stats answer of no reading (${kind}, ${id})`);
+        return 0;
+    }
+    let now = performance.now();
+    priv.last_update = Date.now();
+    if(typeof kw.result === "number" && kw.result < 0) {
+        m.errors[kind] = kw.comment ? {text: kw.comment} : {key: "monitor no answer"};
+        paint_card(gobj, id);
+        render_status(gobj);
+        return 0;
+    }
+    m.errors[kind] = null;
+    let data = kw.data || {};
+    if(kind === "cpu") {
+        m.cpu = typeof data.cpu === "number" ? data.cpu : null;
+        m.cpu_t = now;
+    } else {
+        let rx = pick_rate(data, "rx", m.prev_rx, now);
+        let tx = pick_rate(data, "tx", m.prev_tx, now);
+        m.rx = rx.rate;
+        m.prev_rx = rx.prev;
+        m.tx = tx.rate;
+        m.prev_tx = tx.prev;
+        m.queue = typeof data.msgs_in_queue === "number" ? data.msgs_in_queue : null;
+        m.app_t = now;
+    }
+    paint_card(gobj, id);
+    render_status(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  A command answer: the list of yunos, or a stats-yuno that could
+ *  not be dispatched (a yuno that is not running is "not found").
+ ***************************************************************/
+function ac_mt_command_answer(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let kind = msg_iev_read_key(kw, "monitor_kind");
+    if(kind === "yunos") {
+        if(typeof kw.result === "number" && kw.result < 0) {
+            set_error(gobj, "monitor no answer", kw.comment || "list-yunos");
+            return 0;
+        }
+        let rows = Array.isArray(kw.data) ? kw.data : [];
+        let by_id = {};
+        rows.forEach((r) => {
+            if(r && r.id !== undefined) {
+                by_id[String(r.id)] = r;
+            }
+        });
+        for(let id of Object.keys(priv.model)) {
+            priv.model[id].run = yuno_run_state(by_id[id]);
+            paint_card(gobj, id);
+        }
+        return 0;
+    }
+    if(kind === "cpu" || kind === "app") {
+        let id = msg_iev_read_key(kw, "monitor_yuno");
+        let m = priv.model[id];
+        if(m && typeof kw.result === "number" && kw.result < 0) {
+            m.errors[kind] = kw.comment ? {text: kw.comment} : {key: "monitor no answer"};
+            if(kind === "cpu") {
+                m.cpu = null;
+            } else {
+                m.rx = null;
+                m.tx = null;
+                m.queue = null;
+            }
+            paint_card(gobj, id);
+        }
+        return 0;
+    }
+    log_warning(`${gobj_short_name(gobj)}: command answer of no reading (${kind})`);
+    return 0;
+}
+
+function ac_visibility(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    priv.visible = !!(kw && kw.visible);
+    if(gobj_current_state(gobj) !== "ST_MONITORING") {
+        return 0;
+    }
+    if(priv.visible) {
+        arm_poll(gobj);
+        poll_tick(gobj);
+    } else {
+        clear_timeout(priv.gobj_timer);
+        priv.last_tick = 0;
+    }
+    return 0;
+}
+
+function ac_set_refresh(gobj, event, kw, src)
+{
+    let config = gobj_read_attr(gobj, "config_svc");
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no config service, cannot save the reading interval`);
+        return -1;
+    }
+    agent_config_set_monitor(config, {refresh: kw.value});
+    arm_poll(gobj);
+    return 0;
+}
+
+function ac_set_window(gobj, event, kw, src)
+{
+    let config = gobj_read_attr(gobj, "config_svc");
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no config service, cannot save the history window`);
+        return -1;
+    }
+    agent_config_set_monitor(config, {window: kw.value});
+    let rows = gobj.priv.rows;
+    if(rows.length) {
+        prune_history(rows, rows[rows.length - 1].tm, kw.value * 60);
+        load_charts(gobj);
+    }
+    return 0;
+}
+
+function ac_clear_history(gobj, event, kw, src)
+{
+    gobj.priv.rows = [];
+    gobj_start_charts(gobj);
+    return 0;
+}
+
+function ac_edit_scenario(gobj, event, kw, src)
+{
+    open_editor(gobj);
+    return 0;
+}
+
+function ac_cancel_edit(gobj, event, kw, src)
+{
+    gobj.priv.editing = false;
+    render_status(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Save the scenario written in the editor. A new agent means a new
+ *  link; the same agent keeps its session and only the yunos change.
+ ***************************************************************/
+function ac_save_scenario(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let r = parse_scenario((kw && kw.text) || "");
+    if(!r.ok) {
+        set_edit_error(gobj, r.error);
+        return -1;
+    }
+    let config = gobj_read_attr(gobj, "config_svc");
+    if(!config) {
+        log_error(`${gobj_short_name(gobj)}: no config service, cannot save the scenario`);
+        return -1;
+    }
+    let old_url = priv.scenario ? priv.scenario.agent_url : "";
+    priv.scenario = r.scenario;
+    agent_config_set_monitor(config, {scenario: r.scenario});
+    priv.editing = false;
+
+    reset_model(gobj);
+    gobj_start_charts(gobj);
+    render_all(gobj);
+
+    let st = gobj_current_state(gobj);
+    if(st === "ST_DISCONNECTED" || r.scenario.agent_url !== old_url) {
+        gobj_send_event(gobj, "EV_CONNECT", {}, gobj);
+    } else if(st === "ST_MONITORING") {
+        poll_tick(gobj);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  The shell switched language: what carries its key is re-read;
+ *  the chart legends and the state tooltips are rebuilt.
+ ***************************************************************/
+function ac_language_changed(gobj, event, kw, src)
+{
+    let $c = gobj_read_attr(gobj, "$container");
+    if($c) {
+        refresh_language($c, t);
+    }
+    paint_all_cards(gobj);
+    render_status(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *              FSM
+ ***************************************************************/
+/*---------------------------------------------*
+ *          Global methods table
+ *---------------------------------------------*/
+const gmt = {
+    mt_create:  mt_create,
+    mt_start:   mt_start,
+    mt_stop:    mt_stop,
+    mt_destroy: mt_destroy
+};
+
+/***************************************************************
+ *          Create the GClass
+ ***************************************************************/
+function create_gclass(gclass_name)
+{
+    if(__gclass__) {
+        log_error(`GClass ALREADY created: ${gclass_name}`);
+        return -1;
+    }
+
+    /*---------------------------------------------*
+     *          States
+     *  The state changes BEFORE the action runs: the close of a
+     *  session we leave on purpose arrives in the state we go to.
+     *---------------------------------------------*/
+    const common = [
+        ["EV_VISIBILITY",           ac_visibility,          null],
+        ["EV_SET_REFRESH",          ac_set_refresh,         null],
+        ["EV_SET_WINDOW",           ac_set_window,          null],
+        ["EV_CLEAR_HISTORY",        ac_clear_history,       null],
+        ["EV_EDIT_SCENARIO",        ac_edit_scenario,       null],
+        ["EV_CANCEL_EDIT",          ac_cancel_edit,         null],
+        ["EV_SAVE_SCENARIO",        ac_save_scenario,       null],
+        ["EV_LANGUAGE_CHANGED",     ac_language_changed,    null]
+    ];
+    const states = [
+        ["ST_DISCONNECTED", [
+            ["EV_CONNECT",              ac_connect,             "ST_CONNECTING"],
+            ["EV_ON_CLOSE",             ac_on_close_left,       null],
+            ...common
+        ]],
+        ["ST_CONNECTING", [
+            ["EV_CONNECT",              ac_connect,             null],
+            ["EV_DISCONNECT",           ac_disconnect,          "ST_DISCONNECTED"],
+            ["EV_ON_OPEN",              ac_on_open,             "ST_MONITORING"],
+            ["EV_ON_CLOSE",             ac_on_close_left,       null],
+            ["EV_ON_OPEN_ERROR",        ac_on_open_error,       null],
+            ["EV_LINK_FAILED",          ac_link_failed,         "ST_DISCONNECTED"],
+            ...common
+        ]],
+        ["ST_MONITORING", [
+            ["EV_CONNECT",              ac_connect,             "ST_CONNECTING"],
+            ["EV_DISCONNECT",           ac_disconnect,          "ST_DISCONNECTED"],
+            ["EV_ON_CLOSE",             ac_on_close_drop,       "ST_CONNECTING"],
+            ["EV_MT_STATS_ANSWER",      ac_mt_stats_answer,     null],
+            ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,   null],
+            ["EV_TIMEOUT_PERIODIC",     ac_timeout_periodic,    null],
+            ...common
+        ]]
+    ];
+
+    /*---------------------------------------------*
+     *          Events
+     *---------------------------------------------*/
+    const event_types = [
+        ["EV_CONNECT",              0],
+        ["EV_DISCONNECT",           0],
+        ["EV_ON_OPEN",              0],
+        ["EV_ON_CLOSE",             0],
+        ["EV_ON_OPEN_ERROR",        0],
+        ["EV_LINK_FAILED",          0],
+        ["EV_MT_STATS_ANSWER",      0],
+        ["EV_MT_COMMAND_ANSWER",    0],
+        ["EV_TIMEOUT_PERIODIC",     0],
+        ["EV_VISIBILITY",           0],
+        ["EV_SET_REFRESH",          0],
+        ["EV_SET_WINDOW",           0],
+        ["EV_CLEAR_HISTORY",        0],
+        ["EV_EDIT_SCENARIO",        0],
+        ["EV_CANCEL_EDIT",          0],
+        ["EV_SAVE_SCENARIO",        0],
+        ["EV_LANGUAGE_CHANGED",     0]
+    ];
+
+    __gclass__ = gclass_create(
+        gclass_name,
+        event_types,
+        states,
+        gmt,
+        0,  // lmt,
+        attrs_table,
+        PRIVATE_DATA,
+        0,  // authz_table,
+        0,  // command_table,
+        0,  // s_user_trace_level
+        0   // gclass_flag
+    );
+
+    if(!__gclass__) {
+        return -1;
+    }
+
+    return 0;
+}
+
+/***************************************************************
+ *          Register GClass
+ ***************************************************************/
+function register_c_agent_monitor()
+{
+    return create_gclass(GCLASS_NAME);
+}
+
+export { register_c_agent_monitor };

@@ -104,6 +104,7 @@ let PRIVATE_DATA = {
     shell:          null,
     login_ui:       null,
     link:           null,
+    monitor_link:   null,
     live_hosts:     {},     /*  set of node ids currently in list-agents  */
     nak_recovering: false,  /*  a NAK is being recovered via silent refresh  */
     /*  Last route visited INSIDE each node tab, keyed "<ws>|<id>".  A tab
@@ -169,6 +170,13 @@ function mt_create(gobj)
     gobj_subscribe_event(link, "EV_ON_CLOSE", {}, gobj);
     /*  list-agents answers keep the live-node set fresh (tab red state). */
     gobj_subscribe_event(link, "EV_MT_COMMAND_ANSWER", {}, gobj);
+
+    /*  The Monitor's DIRECT link to one agent — child of the yuno too, and
+     *  only its view subscribes to it. Started with the session, emptied
+     *  and stopped when it ends (stop_monitor_link).  */
+    gobj.priv.monitor_link = gobj_create_service(
+        "monitor_link", "C_MONITOR_LINK", {}, gobj_yuno()
+    );
 }
 
 /***************************************************************
@@ -239,6 +247,19 @@ function show_login_screen(gobj)
             }
         }
     });
+}
+
+/***************************************************************
+ *  The session ended: drop the Monitor's link (back to its ST_IDLE,
+ *  so the next session starts clean) and stop it.
+ ***************************************************************/
+function stop_monitor_link(gobj)
+{
+    let mlink = gobj.priv.monitor_link;
+    if(mlink && gobj_is_running(mlink)) {
+        gobj_send_event(mlink, "EV_DISCONNECT", {}, gobj);
+        gobj_stop(mlink);
+    }
 }
 
 function hide_login_screen(gobj)
@@ -721,6 +742,10 @@ function ac_login_accepted(gobj, event, kw, src)
     if(link && !gobj_is_running(link)) {
         gobj_start(link);
     }
+    let mlink = gobj.priv.monitor_link;
+    if(mlink && !gobj_is_running(mlink)) {
+        gobj_start(mlink);
+    }
     return 0;
 }
 
@@ -833,6 +858,7 @@ function ac_login_denied(gobj, event, kw, src)
         if(priv.link && gobj_is_running(priv.link)) {
             gobj_stop(priv.link);
         }
+        stop_monitor_link(gobj);
     }
     show_login_screen(gobj);
     if(priv.login_ui) {
@@ -933,6 +959,7 @@ function ac_logout_done(gobj, event, kw, src)
     if(gobj.priv.link && gobj_is_running(gobj.priv.link)) {
         gobj_stop(gobj.priv.link);
     }
+    stop_monitor_link(gobj);
     show_login_screen(gobj);
     return 0;
 }

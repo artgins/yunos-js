@@ -5,11 +5,12 @@ built on the **v2 declarative shell** of `@yuneta/gobj-ui`
 (`C_YUI_SHELL` + `C_YUI_NAV`).
 
 It is the modern successor of the old webix "Yuneta CLI"
-(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Four workspaces** in the primary rail,
-and all four are WORK: **Commands** (control-plane CLI to a node's yunos),
+(`yuno_gui/v2/.../ui_yuneta_cli.js`). **Five workspaces** in the primary rail,
+and all five are WORK: **Commands** (control-plane CLI to a node's yunos),
 **Statistics** (live `SDF_RSTATS` counters as cards), **Terminal** (an
-interactive xterm.js PTY console) and **Schemas** (edit the schemas a yuno
-keeps in its `treedb_system_schema`). The preferences page is not a rail item:
+interactive xterm.js PTY console), **Schemas** (edit the schemas a yuno
+keeps in its `treedb_system_schema`) and **Monitor** (the yunos of one test,
+live, as a graph and two charts — see [Monitor](#monitor-a-test-live-straight-from-its-agent)). The preferences page is not a rail item:
 it hangs off the toolbar avatar as the route **`/preferences`** (a route, not a
 dialog — linkable, F5-proof, in the site map). **Commands** and **Terminal** share
 one pattern — a flat node-picker tab (`C_NODES`) plus one closable tab per
@@ -112,6 +113,77 @@ command-yuno id=<yuno> service=<treedb> command=print-tranger expanded=1
 // a stub at topics`users: "this part cannot be loaded here"
 command-yuno id=<yuno> service=<treedb> command=print-tranger expanded=1 path=topics`users
 ```
+
+## Monitor: a test, live, straight from its agent
+
+The Monitor workspace (`/monitor/live`, `C_AGENT_MONITOR`) watches the yunos of
+ONE test — a stress run, a new deployment — while it happens: a **graph** of
+the yunos in the order the messages flow (left to right), each card with its
+cpu %, its messages per second in and out, its queue when its service reports
+one (`msgs_in_queue`) and what the agent says of it (playing, paused,
+stopped, disabled, not a yuno of this agent); the edges carry the messages per
+second that go through them; and under the graph two **charts** (`C_YUI_UPLOT`):
+messages per second and cpu, over a history window of 5 to 60 minutes.
+
+**What it watches is a scenario**, written as JSON in the view (the
+*Scenario* button) and kept in `C_AGENT_CONFIG` (`monitor_scenario`,
+localStorage):
+
+```json
+{
+    "name": "yunovatios stress (controlador)",
+    "agent_url": "wss://agent.yunovatios.es:1993",
+    "yunos": [
+        {"id": "stress", "label": "sim_controllers", "rate": "tx"},
+        {"id": "2120",   "label": "gate_central"},
+        {"id": "5120",   "label": "db_tracks_ce"}
+    ],
+    "links": [["stress", "2120"], ["2120", "5120"]]
+}
+```
+
+`id` is the agent's yuno id. `rate` is the direction plotted as the yuno's
+throughput: `rx` (default, what it takes in) or `tx` (what it puts out — a
+generator). An optional `service` names the service whose counters are read;
+the default is the one named as the yuno's role. `links` gives the columns of
+the graph (a yuno sits one column right of the furthest yuno that feeds it).
+The validator (`monitor_helpers.js`) names what is wrong and where.
+
+**It talks to the agent DIRECTLY**, not through the control center:
+`C_MONITOR_LINK` (named service `monitor_link`) opens its own `C_IEVENT_CLI` to
+`agent_url` (remote role `yuneta_agent`, service `agent`). The console's
+session is the BFF's httpOnly cookie, which never reaches another host, so the
+link asks the BFF for the access_token (`POST /auth/token`) and puts it in the
+identity card. **That needs `expose_access_token: true` on this plane's BFF**
+(`auth_bff` 1806 on `artgins.yunetacontrol.com` has it since config v3,
+2026-09-29); without it the view says so and does not connect. The token is
+renewed whenever the login rotates the cookies, and once after an identity
+NAK (an expired token); a second NAK in a row is a refusal of the user by
+that agent, and the view says that too. Two conditions on the agent: the user
+has to be in its authz, and its port 1993 must serve a certificate the
+BROWSER trusts — `agent.yunovatios.es` does; an agent still serving the
+self-signed `yuneta_agent.yuneta.io` cannot be reached from a browser.
+
+**Each reading** is a `list-yunos` plus, per yuno, two `stats-yuno`: one with
+`service=__yuno__` for its `cpu` (the yuno computes it every second, % of one
+core) and one to its own service for the message counters. `service` travels
+INSIDE the command line (`stats-yuno service=__yuno__`), never in the kw:
+`C_IEVENT_CLI` reads `kw.service` as the service the command is ADDRESSED to,
+and the request would land on the agent's own `__yuno__`. A yuno's own
+`rxMsgsec`/`txMsgsec` is used when its service reports one (an application
+service computes it on its own timer, whoever reads); otherwise the rate is
+derived from the `rxMsgs`/`txMsgs` counters with a monotonic clock. A figure
+that did not arrive since the previous reading is a GAP in the chart, not the
+old value drawn again.
+
+**The readings are polled** every 1–30 s (default 2 s): the same deliberate
+exception to the no-polling rule as the Statistics auto-refresh, approved for
+this view on 2026-09-29, until the agent can publish the stats to a
+subscriber. It runs only while connected and while the tab is the visible one.
+
+What it does not do yet: operate the test (pause/resume the generator, stop
+it, reset counters — phase 2), and reach several agents at once or derive the
+graph from the yunos' configs (phase 3, through the control center).
 
 ## Handing the backends to the TreeDB GUI
 
@@ -649,13 +721,18 @@ editor all ship. What is open:
 | Open item | Note |
 |---|---|
 | **Operating yunos from the GUI** | The agent's own job — `kill-yuno` / `run-yuno` / `play-yuno`, binaries, configs, snaps — is reachable only by TYPING into Commands. The one exception is the Schemas tab's *Apply*, which drives the restart itself. A workspace over the existing nodes→yunos tree is the natural home. |
-| **Time-series charts** | `C_YUI_UPLOT` over the live `SDF_RSTATS` counters the Statistics cards already poll. |
+| **Monitor: test controls** | Pause/resume the generator, stop the test (`set-controllers 0` + kill + disable), reset the counters — from the Monitor, with confirmation, hidden outside a test. |
+| **Monitor: many agents, derived graph** | Several agents at once through the control center, and the graph derived from the yunos' configs instead of written by hand. |
+| **Monitor: push instead of polling** | The agent publishing the stats to a subscriber (SDK work). |
+| **Time-series charts in Statistics** | The Monitor has them; the Statistics cards still show the last value only. |
 | **Statistics *Reset* on app gclasses** | `stats-yuno stats="__reset__"` only lands where the gclass honours it; counters kept in private fields behind `mt_reading` need their own `mt_stats(__reset__)`. Backend work, not a GUI bug. |
 | **Terminal key bar on iOS / old Android** | Browsers without `interactive-widget=resizes-content` still overlay the on-screen keyboard; the bar needs pinning to `visualViewport` there. |
 
 ## Status
 
-**Live**, restructured into **four primary workspaces** — **Commands**
+**Live**, restructured into **five primary workspaces** — **Monitor** (the
+yunos of one test, live, straight from their agent: see the section above),
+**Commands**
 (`C_AGENT_CONSOLE`), **Statistics** (`C_STATS_NODES` tree picker +
 `C_AGENT_STATS` cards), **Terminal** (`C_AGENT_TTY`, xterm.js over the agent
 PTY), **Schemas** (`C_STATS_NODES` tree picker + `C_AGENT_TREEDB`, the gobj-ui

@@ -52,6 +52,9 @@ SDATA(data_type_t.DTP_STRING,   "nav_mode",     sdata_flag_t.SDF_PERSIST, "stack
 SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "{}",  "Selected nodes per workspace: {workspace: [{id, host}, ...]}"),
 SDATA(data_type_t.DTP_JSON,     "active_tabs",  sdata_flag_t.SDF_PERSIST, "{}",    "Last-active node tab per workspace: {workspace: node_id}"),
 SDATA(data_type_t.DTP_JSON,     "cmd_history",  sdata_flag_t.SDF_PERSIST, "[]",    "Global console command history: [cmd,...] most-recent first (shared by all nodes)"),
+SDATA(data_type_t.DTP_DICT,     "monitor_scenario", sdata_flag_t.SDF_PERSIST, "{}", "Monitor: the scenario watched (see monitor_helpers.js), {} = none yet"),
+SDATA(data_type_t.DTP_INTEGER,  "monitor_refresh", sdata_flag_t.SDF_PERSIST, 2,    "Monitor: seconds between two readings of the yunos"),
+SDATA(data_type_t.DTP_INTEGER,  "monitor_window", sdata_flag_t.SDF_PERSIST, 15,    "Monitor: minutes of history kept in the charts"),
 SDATA(data_type_t.DTP_JSON,     "shortkeys",    sdata_flag_t.SDF_PERSIST, JSON.stringify(DEFAULT_SHORTKEYS), "Console command shortkeys {key: template}; $1 $2 … are positional args (ycli parity)"),
 SDATA_END()
 ];
@@ -212,6 +215,51 @@ function agent_config_set_stats_refresh(gobj, secs)
     gobj_write_attr(gobj, "stats_refresh", v);
     gobj_save_persistent_attrs(gobj, "stats_refresh");
     gobj_publish_event(gobj, "EV_STATS_REFRESH_CHANGED", {stats_refresh: v});
+}
+
+/***************************************************************
+ *  Monitor settings: the scenario (a validated object, or null), the
+ *  seconds between two readings and the minutes of history kept. The
+ *  readings are the same DELIBERATE polling exception as the
+ *  Statistics auto-refresh, until the agent can push them.
+ ***************************************************************/
+const MONITOR_REFRESH_CHOICES = [1, 2, 5, 10, 30];
+const MONITOR_WINDOW_CHOICES = [5, 15, 30, 60];
+
+function agent_config_get_monitor(gobj)
+{
+    let scenario = gobj_read_attr(gobj, "monitor_scenario");
+    let refresh = parseInt(gobj_read_attr(gobj, "monitor_refresh"), 10);
+    let window_min = parseInt(gobj_read_attr(gobj, "monitor_window"), 10);
+    return {
+        scenario: (scenario && Array.isArray(scenario.yunos)) ? scenario : null,
+        refresh:  MONITOR_REFRESH_CHOICES.indexOf(refresh) >= 0 ? refresh : 2,
+        window:   MONITOR_WINDOW_CHOICES.indexOf(window_min) >= 0 ? window_min : 15
+    };
+}
+
+/***************************************************************
+ *  Write the given monitor settings ({scenario?, refresh?, window?})
+ *  and persist exactly those.
+ ***************************************************************/
+function agent_config_set_monitor(gobj, patch)
+{
+    let names = [];
+    if(patch && patch.scenario !== undefined) {
+        gobj_write_attr(gobj, "monitor_scenario", patch.scenario);
+        names.push("monitor_scenario");
+    }
+    if(patch && patch.refresh !== undefined) {
+        gobj_write_attr(gobj, "monitor_refresh", parseInt(patch.refresh, 10));
+        names.push("monitor_refresh");
+    }
+    if(patch && patch.window !== undefined) {
+        gobj_write_attr(gobj, "monitor_window", parseInt(patch.window, 10));
+        names.push("monitor_window");
+    }
+    if(names.length) {
+        gobj_save_persistent_attrs(gobj, names);
+    }
 }
 
 /***************************************************************
@@ -555,6 +603,10 @@ export {
     agent_config_set_stats_refresh,
     agent_config_get_nav_mode,
     agent_config_set_nav_mode,
+    agent_config_get_monitor,
+    agent_config_set_monitor,
+    MONITOR_REFRESH_CHOICES,
+    MONITOR_WINDOW_CHOICES,
     NAV_MODES,
     agent_config_get_selected_nodes,
     agent_config_set_selected_nodes,

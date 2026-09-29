@@ -6,6 +6,33 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.23.0 (2026-09-29)
+
+- **New workspace: Monitor** (`/monitor/live`, `C_AGENT_MONITOR`). The yunos
+  of one test, live: a left-to-right graph of the yunos in the order the
+  messages flow — each card with cpu %, messages per second in and out, queue,
+  and what the agent says of the yuno — with the rates on the edges, and two
+  `C_YUI_UPLOT` charts (messages per second, cpu) over a 5-60 minute window.
+  What it watches is a scenario written as JSON in the view (agent url, yunos,
+  links), validated with a message that names the culprit, and kept in
+  `C_AGENT_CONFIG` with the reading interval and the window.
+- **A direct link to one agent** (`C_MONITOR_LINK`, service `monitor_link`):
+  the first transport of this console that does not go through the control
+  center. It fetches the access_token from the BFF (`POST /auth/token`), so
+  this plane's BFF needs `expose_access_token: true` — `auth_bff` 1806 on
+  `artgins.yunetacontrol.com` has it since its config v3. The token follows
+  the login's refreshes; one identity NAK asks for a fresh token, a second one
+  gives up and says the agent refused the user.
+- **The readings are polled** (1-30 s, default 2 s, visible tab only): the
+  Statistics polling exception, extended to this view on 2026-09-29 until the
+  agent can push them. Each is a `list-yunos` plus two `stats-yuno` per yuno
+  (`service=__yuno__` for the cpu, the yuno's own service for the counters).
+  Found on the way: `service` has to travel in the command LINE, because
+  `C_IEVENT_CLI` takes `kw.service` as the service the command is addressed
+  to.
+- New i18n keys (en, es): the `monitor *` family, and the `scenario *` keys of
+  the validator, which arrive as variables.
+
 ## gui_agent 0.22.99, gui_treedb 0.17.72 + gobj-ui ^7.25.23 (2026-09-25)
 
 - **Both: vite `^8.3.1`, gobj-ui `^7.25.23`, maplibre-gl 6.11.2.** Build tool

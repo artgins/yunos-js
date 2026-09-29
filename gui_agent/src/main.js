@@ -63,6 +63,7 @@ import {register_c_yui_treedb_schema}          from "@yuneta/gobj-ui/src/c_yui_t
 import {register_c_yui_treedb_graph}           from "@yuneta/gobj-ui/src/c_yui_treedb_graph.js";
 import {register_c_yui_schema_editor}          from "@yuneta/gobj-ui/src/c_yui_schema_editor.js";
 import {register_c_g6_nodes_tree}              from "@yuneta/gobj-ui/src/c_g6_nodes_tree.js";
+import {register_c_yui_uplot}                  from "@yuneta/gobj-ui/src/c_yui_uplot.js";
 
 import {register_c_app} from "./c_app.js";
 import {register_c_account_view} from "./c_account_view.js";
@@ -77,6 +78,8 @@ import {register_c_agent_tty} from "./c_agent_tty.js";
 import {register_c_agent_treedb} from "./c_agent_treedb.js";
 import {register_c_agent_treedb_link} from "./c_agent_treedb_link.js";
 import {register_c_agent_treedb_view} from "./c_agent_treedb_view.js";
+import {register_c_monitor_link} from "./c_monitor_link.js";
+import {register_c_agent_monitor} from "./c_agent_monitor.js";
 
 import {setup_locale} from "./locales/locales.js";
 import {apply_theme, current_theme} from "./theme.js";
@@ -143,6 +146,7 @@ function main()
     register_c_yui_treedb_graph();   // the treedb as a graph of records (Schemas)
     register_c_yui_schema_editor();  // the schemas of a yuno, edited as schemas (Schemas)
     register_c_g6_nodes_tree();      // its G6 canvas
+    register_c_yui_uplot();          // the charts of the Monitor
 
     /*  App root + config + login + link services + views  */
     register_c_app();
@@ -158,6 +162,8 @@ function main()
     register_c_agent_treedb_link();  // treedb commands routed through the agent
     register_c_agent_treedb_view();  // one treedb: the link node of the Schemas tree
     register_c_agent_treedb();
+    register_c_monitor_link();       // direct link to one agent (Monitor)
+    register_c_agent_monitor();      // the Monitor workspace
 
     /*------------------------------------------------*
      *          Start yuneta
