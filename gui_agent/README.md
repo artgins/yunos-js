@@ -204,10 +204,17 @@ derived from the `rxMsgs`/`txMsgs` counters with a monotonic clock. A figure
 that did not arrive since the previous reading is a GAP in the chart, not the
 old value drawn again.
 
-**The readings are polled** every 1–30 s (default 2 s): the same deliberate
-exception to the no-polling rule as the Statistics auto-refresh, approved for
-this view on 2026-09-29, until the agent can publish the stats to a
-subscriber. It runs only while connected and while the tab is the visible one.
+**The readings are pushed, or polled** (0.26.0). On a direct link the view
+asks the agent for `watch-yuno-stats ids=… period=…` and the agent SENDS every
+reading as `EV_YUNO_STATS` (state, cpu, service stats of each yuno) every 1–30
+s (default 2 s); a hidden tab stops the watch and a visible one asks again. An
+agent older than the command answers it with an error, and the view falls
+back to POLLING — per tick a `list-yunos` and two `stats-yuno` per yuno, the
+deliberate exception to the no-polling rule approved for this view on
+2026-09-29. Through the control center it always polls, until the control
+center relays `EV_YUNO_STATS`. Either way a periodic timer closes each period
+into a row of the history, only while connected and while the tab is the
+visible one.
 
 **A scenario with a `test` block is a TEST, and gets controls** (0.24.0).
 Each control is a list of commands of ONE yuno — the generator — sent in order
@@ -253,8 +260,8 @@ not answer; the operator reviews and saves. It is a proposal because the
 config is not always what runs — the stress generator's persisted `target_url`
 overrides its config.
 
-What it does not do yet: receive the stats PUSHED instead of polling them
-(SDK work, see yunetas `TODO.md`).
+What it does not do yet: receive the stats pushed through the control center
+(the control center does not relay `EV_YUNO_STATS` yet; see yunetas `TODO.md`).
 
 ## Handing the backends to the TreeDB GUI
 
@@ -792,7 +799,7 @@ editor all ship. What is open:
 | Open item | Note |
 |---|---|
 | **Operating yunos from the GUI** | The agent's own job — `kill-yuno` / `run-yuno` / `play-yuno`, binaries, configs, snaps — is reachable only by TYPING into Commands. The one exception is the Schemas tab's *Apply*, which drives the restart itself. A workspace over the existing nodes→yunos tree is the natural home. |
-| **Monitor: push instead of polling** | The agent publishing the stats to a subscriber (SDK work). |
+| **Monitor: push through the control center** | The control center relaying `EV_YUNO_STATS`, so the Monitor stops polling there too (SDK work). |
 | **Time-series charts in Statistics** | The Monitor has them; the Statistics cards still show the last value only. |
 | **Statistics *Reset* on app gclasses** | `stats-yuno stats="__reset__"` only lands where the gclass honours it; counters kept in private fields behind `mt_reading` need their own `mt_stats(__reset__)`. Backend work, not a GUI bug. |
 | **Terminal key bar on iOS / old Android** | Browsers without `interactive-widget=resizes-content` still overlay the on-screen keyboard; the bar needs pinning to `visualViewport` there. |

@@ -261,6 +261,10 @@ describe("where the yunos are", () => {
         expect(lines.app({id: "5", service: "db"})).toBe("stats-yuno id=5 service=db");
         expect(lines.reset({id: "5", service: "db"})).toBe("stats-yuno id=5 service=db stats=__reset__");
         expect(lines.config(y)).toBe("command-yuno id=2120 service=__yuno__ command=view-config");
+        expect(lines.watch([{id: "stress"}, {id: "2120", service: ""}, {id: "5", service: "db"},
+                            {id: "stress"}], 2000))
+            .toBe("watch-yuno-stats ids=stress,2120,5:db period=2000");
+        expect(lines.unwatch()).toBe("watch-yuno-stats stop=1");
     });
 });
 

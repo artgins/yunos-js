@@ -346,8 +346,19 @@ const lines = {
     app:    (y) => `stats-yuno id=${y.id}` + (y.service ? ` service=${y.service}` : ""),
     reset:  (y) => `stats-yuno id=${y.id}` + (y.service ? ` service=${y.service}` : "") + " stats=__reset__",
     config: (y) => `command-yuno id=${y.id} service=__yuno__ command=view-config`,
-    yunos:  () => "list-yunos"
+    yunos:  () => "list-yunos",
+    /*  The agent pushes the readings (EV_YUNO_STATS) instead of being
+     *  asked every period: one watch per requester, replaced by the next.  */
+    watch:  (yunos, period_ms) => "watch-yuno-stats ids=" +
+        unique(yunos.map((y) => y.service ? `${y.id}:${y.service}` : y.id)).join(",") +
+        ` period=${period_ms}`,
+    unwatch: () => "watch-yuno-stats stop=1"
 };
+
+function unique(list)
+{
+    return list.filter((v, i) => list.indexOf(v) === i);
+}
 
 /***************************************************************
  *  The distinct nodes of a scenario ("" for a direct one).

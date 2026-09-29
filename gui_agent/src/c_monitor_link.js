@@ -34,8 +34,9 @@
  *              kw}, EV_SEND_STATS {stats, kw}.
  *      Output: EV_ON_OPEN, EV_ON_CLOSE, EV_ON_OPEN_ERROR, EV_LINK_FAILED
  *              {error_code, comment}, EV_MT_COMMAND_ANSWER,
- *              EV_MT_STATS_ANSWER. The two answers are also PUBLIC: the
- *              agent addresses them to this service by name.
+ *              EV_MT_STATS_ANSWER, EV_YUNO_STATS. The last three are also
+ *              PUBLIC: the agent addresses them to this service by name
+ *              (EV_YUNO_STATS is what it pushes for a `watch-yuno-stats`).
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -431,6 +432,11 @@ function ac_mt_stats_answer(gobj, event, kw, src)
     return bubble(gobj, "EV_MT_STATS_ANSWER", kw);
 }
 
+function ac_yuno_stats(gobj, event, kw, src)
+{
+    return bubble(gobj, "EV_YUNO_STATS", kw);
+}
+
 /***************************************************************
  *              FSM
  ***************************************************************/
@@ -485,7 +491,8 @@ function create_gclass(gclass_name)
             ["EV_SEND_COMMAND",         ac_send_command,        null],
             ["EV_SEND_STATS",           ac_send_stats,          null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,   null],
-            ["EV_MT_STATS_ANSWER",      ac_mt_stats_answer,     null]
+            ["EV_MT_STATS_ANSWER",      ac_mt_stats_answer,     null],
+            ["EV_YUNO_STATS",           ac_yuno_stats,          null]
         ]]
     ];
 
@@ -507,7 +514,8 @@ function create_gclass(gclass_name)
         ["EV_ON_OPEN_ERROR",        out],
         ["EV_LINK_FAILED",          out],
         ["EV_MT_COMMAND_ANSWER",    answer],
-        ["EV_MT_STATS_ANSWER",      answer]
+        ["EV_MT_STATS_ANSWER",      answer],
+        ["EV_YUNO_STATS",           answer]
     ];
 
     __gclass__ = gclass_create(

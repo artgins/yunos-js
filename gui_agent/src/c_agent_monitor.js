@@ -39,12 +39,20 @@
  *      the text being edited and nothing else: the operator reads them
  *      and saves, or not.
  *
- *      POLLING. The readings repeat every `monitor_refresh` seconds: the
- *      same DELIBERATE exception to the no-polling rule as the Statistics
- *      auto-refresh, approved for this view on 2026-09-29, until the
- *      agent can publish the stats to a subscriber. A periodic C_TIMER,
- *      so each tick is EV_TIMEOUT_PERIODIC in the machine trace; it runs
- *      only in ST_MONITORING and only while this tab is the visible one.
+ *      PUSHED, OR POLLED. Talking to an agent directly, the view asks it
+ *      for a `watch-yuno-stats` (the yunos, the period) and the agent
+ *      SENDS the readings as EV_YUNO_STATS -- state, cpu and service
+ *      stats of each yuno -- every `monitor_refresh` seconds, until the
+ *      session ends or the view asks it to stop (a hidden tab does). An
+ *      agent that does not know the command (older than 7.25.13) answers
+ *      it with an error and the view falls back to POLLING: per tick a
+ *      `list-yunos` and two `stats-yuno` per yuno, the DELIBERATE
+ *      exception to the no-polling rule approved for this view on
+ *      2026-09-29. Through the control center it always polls, until the
+ *      control center relays EV_YUNO_STATS. Either way a periodic C_TIMER
+ *      closes each period into a row of the history (and, polling, sends
+ *      the requests); it runs only in ST_MONITORING and while this tab is
+ *      the visible one.
  *
  *      RATES. A yuno's own `rxMsgsec`/`txMsgsec` is used when its service
  *      reports one (an application service computes it on its own
@@ -185,6 +193,7 @@ let PRIVATE_DATA = {
     control:        null,   /*  last control: {control, ok, text}  */
     control_buttons: {},    /*  control -> its button  */
     watching:       null,   /*  the link whose events reach this view  */
+    push:           null,   /*  the agent pushes the readings: null = asked, not answered yet  */
     discovery:      null,   /*  {pending: {key: true}, configs: {key: config}, failed: [key]}  */
 };
 
@@ -923,7 +932,7 @@ function send_request(gobj, line, kind, key, node, md)
  ***************************************************************/
 const LINK_EVENTS = {
     direct: ["EV_ON_OPEN", "EV_ON_CLOSE", "EV_ON_OPEN_ERROR", "EV_LINK_FAILED",
-             "EV_MT_COMMAND_ANSWER", "EV_MT_STATS_ANSWER"],
+             "EV_MT_COMMAND_ANSWER", "EV_MT_STATS_ANSWER", "EV_YUNO_STATS"],
     control_center: ["EV_ON_OPEN", "EV_ON_CLOSE", "EV_ON_OPEN_ERROR",
                      "EV_MT_COMMAND_ANSWER", "EV_MT_STATS_ANSWER"]
 };
@@ -982,11 +991,14 @@ function poll_tick(gobj)
     let priv = gobj.priv;
     let now = performance.now();
     if(priv.last_tick > 0) {
+        /*  Fresh = arrived within the last period and a half: a pushed
+         *  reading keeps its own phase against this timer.  */
+        let fresh_from = now - 1.5 * (now - priv.last_tick);
         let row = {tm: Date.now() / 1000};
         for(let y of priv.scenario.yunos) {
             let m = priv.model[y.key];
-            let fresh_cpu = m.cpu_t > priv.last_tick;
-            let fresh_app = m.app_t > priv.last_tick;
+            let fresh_cpu = m.cpu_t > fresh_from;
+            let fresh_app = m.app_t > fresh_from;
             let rate = y.rate === "tx" ? m.tx : m.rx;
             row["cpu:" + y.key] = (fresh_cpu && typeof m.cpu === "number") ? m.cpu : null;
             row["rate:" + y.key] = (fresh_app && typeof rate === "number") ? Math.round(rate) : null;
@@ -999,6 +1011,9 @@ function poll_tick(gobj)
     }
     priv.last_tick = now;
 
+    if(priv.push !== false) {
+        return;     /*  pushed by the agent, or still asking whether it can  */
+    }
     for(let node of scenario_nodes(priv.scenario)) {
         send_request(gobj, lines.yunos(), "yunos", "", node);
     }
@@ -1035,6 +1050,33 @@ function control_plan(gobj, control)
         add_lines(control);
     }
     return plan;
+}
+
+/***************************************************************
+ *  Ask the agent to push the readings (direct link only), or to stop.
+ ***************************************************************/
+function refresh_ms(gobj)
+{
+    let config = gobj_read_attr(gobj, "config_svc");
+    return (config ? agent_config_get_monitor(config).refresh : 2) * 1000;
+}
+
+function send_watch(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.scenario.place !== "direct" || priv.push === false) {
+        return;
+    }
+    send_request(gobj, lines.watch(priv.scenario.yunos, refresh_ms(gobj)), "watch", "", "");
+}
+
+function send_unwatch(gobj)
+{
+    let priv = gobj.priv;
+    if(priv.scenario.place !== "direct" || priv.push !== true) {
+        return;
+    }
+    send_request(gobj, lines.unwatch(), "watch", "", "");
 }
 
 function arm_poll(gobj)
@@ -1231,9 +1273,14 @@ function ac_disconnect(gobj, event, kw, src)
 
 function ac_on_open(gobj, event, kw, src)
 {
+    let priv = gobj.priv;
     set_error(gobj, null);
+    /*  Directly, first ask the agent to push; through the control
+     *  center there is nothing to ask yet, poll.  */
+    priv.push = priv.scenario.place === "direct" ? null : false;
     arm_poll(gobj);
-    if(gobj.priv.visible) {
+    if(priv.visible) {
+        send_watch(gobj);
         poll_tick(gobj);
     }
     return 0;
@@ -1288,16 +1335,27 @@ function ac_mt_stats_answer(gobj, event, kw, src)
         log_warning(`${gobj_short_name(gobj)}: stats answer of no reading (${kind}, ${id})`);
         return 0;
     }
+    return apply_reading(gobj, id, kind, kw.result, kw.comment, kw.data);
+}
+
+/***************************************************************
+ *  One reading of one yuno -- asked (polled) or pushed -- into its
+ *  model and its card.
+ ***************************************************************/
+function apply_reading(gobj, id, kind, result, comment, data_)
+{
+    let priv = gobj.priv;
+    let m = priv.model[id];
     let now = performance.now();
     priv.last_update = Date.now();
-    if(typeof kw.result === "number" && kw.result < 0) {
-        m.errors[kind] = kw.comment ? {text: kw.comment} : {key: "monitor no answer"};
+    if(typeof result === "number" && result < 0) {
+        m.errors[kind] = comment ? {text: comment} : {key: "monitor no answer"};
         paint_card(gobj, id);
         render_status(gobj);
         return 0;
     }
     m.errors[kind] = null;
-    let data = kw.data || {};
+    let data = data_ || {};
     if(kind === "cpu") {
         m.cpu = typeof data.cpu === "number" ? data.cpu : null;
         m.cpu_t = now;
@@ -1356,6 +1414,19 @@ function ac_mt_command_answer(gobj, event, kw, src)
     if(kind === "config") {
         return discovery_answer(gobj, a.key, failed ? null : kw.data);
     }
+    if(kind === "watch") {
+        if(failed) {
+            if(priv.push !== false) {
+                log_warning(`${gobj_short_name(gobj)}: the agent does not push the stats ` +
+                    `(${kw.comment || "no comment"}), polling them`);
+                priv.push = false;
+                poll_tick(gobj);
+            }
+        } else {
+            priv.push = true;
+        }
+        return 0;
+    }
     if(kind === "cpu" || kind === "app") {
         let id = a.key;
         let m = priv.model[id];
@@ -1393,6 +1464,34 @@ function ac_mt_command_answer(gobj, event, kw, src)
     return 0;
 }
 
+/***************************************************************
+ *  A reading pushed by the agent (watch-yuno-stats): the state, the
+ *  cpu or the service stats of one yuno, for every card showing it.
+ ***************************************************************/
+function ac_yuno_stats(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let d = (kw && kw.data) || {};
+    let hit = false;
+    for(let y of priv.scenario.yunos) {
+        if(y.id !== d.yuno_id) {
+            continue;
+        }
+        if(d.kind === "state") {
+            priv.model[y.key].run = d.missing ? "missing" : yuno_run_state(d);
+            paint_card(gobj, y.key);
+            hit = true;
+        } else if(d.kind === "cpu" || (d.kind === "app" && (y.service || "") === (d.service || ""))) {
+            apply_reading(gobj, y.key, d.kind, d.result, d.comment, d.data);
+            hit = true;
+        }
+    }
+    if(!hit) {
+        log_warning(`${gobj_short_name(gobj)}: pushed reading of no card (${d.yuno_id}, ${d.kind})`);
+    }
+    return 0;
+}
+
 function ac_visibility(gobj, event, kw, src)
 {
     let priv = gobj.priv;
@@ -1402,10 +1501,12 @@ function ac_visibility(gobj, event, kw, src)
     }
     if(priv.visible) {
         arm_poll(gobj);
+        send_watch(gobj);
         poll_tick(gobj);
     } else {
         clear_timeout(priv.gobj_timer);
         priv.last_tick = 0;
+        send_unwatch(gobj);
     }
     return 0;
 }
@@ -1419,6 +1520,9 @@ function ac_set_refresh(gobj, event, kw, src)
     }
     agent_config_set_monitor(config, {refresh: kw.value});
     arm_poll(gobj);
+    if(gobj_current_state(gobj) === "ST_MONITORING" && gobj.priv.visible) {
+        send_watch(gobj);
+    }
     return 0;
 }
 
@@ -1490,6 +1594,7 @@ function ac_save_scenario(gobj, event, kw, src)
     if(st === "ST_DISCONNECTED" || new_where !== old_where) {
         gobj_send_event(gobj, "EV_CONNECT", {}, gobj);
     } else if(st === "ST_MONITORING") {
+        send_watch(gobj);
         poll_tick(gobj);
     }
     return 0;
@@ -1662,6 +1767,7 @@ function create_gclass(gclass_name)
             ["EV_MT_STATS_ANSWER",      ac_mt_stats_answer,     null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,   null],
             ["EV_TIMEOUT_PERIODIC",     ac_timeout_periodic,    null],
+            ["EV_YUNO_STATS",           ac_yuno_stats,          null],
             ["EV_TEST_CONTROL",         ac_test_control,        null],
             ["EV_TEST_CONFIRMED",       ac_test_confirmed,      null],
             ["EV_PROPOSE_LINKS",        ac_propose_links,       null],
@@ -1692,7 +1798,8 @@ function create_gclass(gclass_name)
         ["EV_LANGUAGE_CHANGED",     0],
         ["EV_TEST_CONTROL",         0],
         ["EV_TEST_CONFIRMED",       0],
-        ["EV_PROPOSE_LINKS",        0]
+        ["EV_PROPOSE_LINKS",        0],
+        ["EV_YUNO_STATS",           0]
     ];
 
     __gclass__ = gclass_create(

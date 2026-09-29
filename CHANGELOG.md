@@ -6,6 +6,22 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.26.0 (2026-09-29)
+
+- **Monitor: the readings pushed by the agent.** On a direct link the view
+  asks for the agent's new `watch-yuno-stats` (SDK, Unreleased) and takes the
+  `EV_YUNO_STATS` it sends -- state, cpu and service stats of each yuno every
+  period -- instead of polling. A hidden tab stops the watch, a visible one
+  asks again, a change of interval or of scenario replaces it. An agent that
+  does not know the command answers with an error and the view falls back to
+  polling, with one warning. Through the control center it still polls.
+  Verified against yunovatios' controller running the new agent (≈500 msg/s,
+  start and stop of the stress test) and against an older agent (fallback).
+- `C_MONITOR_LINK` declares `EV_YUNO_STATS` public; a reading pushed or
+  polled goes through one path (`apply_reading`). A history row takes a
+  reading as fresh within a period and a half, so a pushed reading keeps its
+  own phase against the view's timer.
+
 ## gui_agent 0.25.0 (2026-09-29)
 
 - **Monitor through the control center.** A scenario can say `node` instead
