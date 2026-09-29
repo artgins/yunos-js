@@ -181,9 +181,42 @@ exception to the no-polling rule as the Statistics auto-refresh, approved for
 this view on 2026-09-29, until the agent can publish the stats to a
 subscriber. It runs only while connected and while the tab is the visible one.
 
-What it does not do yet: operate the test (pause/resume the generator, stop
-it, reset counters — phase 2), and reach several agents at once or derive the
-graph from the yunos' configs (phase 3, through the control center).
+**A scenario with a `test` block is a TEST, and gets controls** (0.24.0).
+Each control is a list of commands of ONE yuno — the generator — sent in order
+as `command-yuno id=<yuno> service=<service> command=<command>`; nothing about
+any particular generator is written in the view:
+
+```json
+"test": {
+    "yuno": "stress",
+    "service": "sim_controllers",
+    "start":  ["set-target target_url=tcps://127.0.0.1:2122 target_server_name=stress.yunovatios.es",
+               "set-period period=2000", "set-controllers controllers=10", "resume-generation"],
+    "pause":  ["pause-generation"],
+    "resume": ["resume-generation"],
+    "stop":   ["set-controllers controllers=0"]
+}
+```
+
+The buttons are **Start**, **Pause**, **Resume** and **Stop** — one per list
+declared — and **Restart**, offered whenever the test can start: stop, every
+yuno of the scenario asked to zero its counters (`stats-yuno
+stats=__reset__`), the history cleared, start. Every control is confirmed in a
+dialog that lists the commands it will send (stop and restart in red), and the
+last answer of the generator is shown next to the buttons
+(`sim_controllers^stress: controllers=10`). The controls work only while
+monitoring; a dialog answered after the link dropped sends nothing and says
+so. A command is a name followed by `key=value` parameters without spaces,
+because it travels inside a command line. Two things the controls do not do:
+put the generator back where it was (a `start` that retargets it leaves it
+retargeted — write a `stop` that restores it if that matters), and zero the
+counters of a service that does not honour `__reset__` (the yunovatios yunos
+do not yet; the rates the view shows are not affected). A scenario without
+`test` — production — shows no control at all.
+
+What it does not do yet: reach several agents at once or derive the graph
+from the yunos' configs (phase 3, through the control center), and receive
+the stats pushed instead of polling them.
 
 ## Handing the backends to the TreeDB GUI
 
@@ -721,7 +754,6 @@ editor all ship. What is open:
 | Open item | Note |
 |---|---|
 | **Operating yunos from the GUI** | The agent's own job — `kill-yuno` / `run-yuno` / `play-yuno`, binaries, configs, snaps — is reachable only by TYPING into Commands. The one exception is the Schemas tab's *Apply*, which drives the restart itself. A workspace over the existing nodes→yunos tree is the natural home. |
-| **Monitor: test controls** | Pause/resume the generator, stop the test (`set-controllers 0` + kill + disable), reset the counters — from the Monitor, with confirmation, hidden outside a test. |
 | **Monitor: many agents, derived graph** | Several agents at once through the control center, and the graph derived from the yunos' configs instead of written by hand. |
 | **Monitor: push instead of polling** | The agent publishing the stats to a subscriber (SDK work). |
 | **Time-series charts in Statistics** | The Monitor has them; the Statistics cards still show the last value only. |

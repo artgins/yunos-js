@@ -6,6 +6,24 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.24.0 (2026-09-29)
+
+- **Monitor: test controls.** A scenario with a `test` block gets Start,
+  Pause, Resume, Stop — each a list of commands of the generator, sent in
+  order as `command-yuno` — and Restart (stop, every yuno asked to zero its
+  counters with `stats-yuno stats=__reset__`, the history cleared, start).
+  The view knows nothing of any generator: the commands are data of the
+  scenario, validated like the rest (a name and `key=value` parameters
+  without spaces). Each control is confirmed in a dialog listing what it will
+  send, stop and restart in red; the generator's last answer is shown beside
+  the buttons. Only while monitoring: a dialog answered after a drop sends
+  nothing and says so. Without `test` (production) there is no control.
+  Verified against yunovatios' controller at 500 msg/s: each control moved
+  the three yunos as expected.
+- New i18n keys (en, es): `monitor test`, the five control names, their
+  confirmations (arrive as variables), `monitor commands that will run`,
+  `monitor control not sent`, `scenario bad test`, `scenario bad test command`.
+
 ## gui_agent 0.23.0 (2026-09-29)
 
 - **New workspace: Monitor** (`/monitor/live`, `C_AGENT_MONITOR`). The yunos

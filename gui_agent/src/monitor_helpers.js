@@ -20,6 +20,23 @@
  *              "links": [["stress", "2120"], ["2120", "5120"]]
  *          }
  *
+ *      An optional `test` block makes it a TEST, and gives the view its
+ *      controls. Each control is a list of commands of ONE yuno (the
+ *      generator), sent in order as `command-yuno id=<yuno>
+ *      service=<service> command=<command>`:
+ *
+ *              "test": {
+ *                  "yuno": "stress", "service": "sim_controllers",
+ *                  "start":  ["set-controllers controllers=10", "resume-generation"],
+ *                  "pause":  ["pause-generation"],
+ *                  "resume": ["resume-generation"],
+ *                  "stop":   ["set-controllers controllers=0"]
+ *              }
+ *
+ *      Restart is not written: it is stop, the counters of every yuno of
+ *      the scenario to zero, and start. A scenario without `test` is a
+ *      production one, and shows no control at all.
+ *
  *      `id` is the agent's yuno id. `rate` says which direction is the
  *      yuno's throughput in the chart: "rx" (default, what it takes in)
  *      or "tx" (what it puts out -- a generator). `service` is the one
@@ -42,10 +59,26 @@ const SCENARIO_TEMPLATE = {
         {id: "2120", label: "gate"},
         {id: "5120", label: "store"}
     ],
-    links: [["stress", "2120"], ["2120", "5120"]]
+    links: [["stress", "2120"], ["2120", "5120"]],
+    test: {
+        yuno: "stress",
+        service: "generator",
+        start: ["set-controllers controllers=10", "resume-generation"],
+        pause: ["pause-generation"],
+        resume: ["resume-generation"],
+        stop: ["set-controllers controllers=0"]
+    }
 };
 
 const RATE_DIRECTIONS = ["rx", "tx"];
+
+/*  The controls a test block can declare, in the order they are shown.  */
+const TEST_CONTROLS = ["start", "pause", "resume", "stop"];
+
+/*  A command travels inside a `command-yuno` line: a name, then
+ *  key=value parameters whose values carry no space.  */
+const TEST_COMMAND_RE = /^[a-z][\w-]*( [\w.^-]+=\S*)*$/;
+const NAME_RE = /^[\w.^-]+$/;
 
 
 /***************************************************************
@@ -120,15 +153,96 @@ function validate_scenario(raw)
         links.push([l[0], l[1]]);
     }
 
-    return {
-        ok: true,
-        scenario: {
-            name: (typeof raw.name === "string" && raw.name.trim()) ? raw.name.trim() : "",
-            agent_url: url,
-            yunos: yunos,
-            links: links
+    let test = null;
+    if(raw.test !== undefined) {
+        let r = validate_test(raw.test);
+        if(!r.ok) {
+            return r;
         }
+        test = r.test;
+    }
+
+    let scenario = {
+        name: (typeof raw.name === "string" && raw.name.trim()) ? raw.name.trim() : "",
+        agent_url: url,
+        yunos: yunos,
+        links: links
     };
+    if(test) {
+        scenario.test = test;
+    }
+    return {ok: true, scenario: scenario};
+}
+
+function validate_test(raw)
+{
+    if(!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        return fail("scenario bad test", JSON.stringify(raw));
+    }
+    if(typeof raw.yuno !== "string" || !NAME_RE.test(raw.yuno.trim())) {
+        return fail("scenario bad test", "yuno");
+    }
+    let service = raw.service === undefined ? "" : raw.service;
+    if(typeof service !== "string" || (service.trim() && !NAME_RE.test(service.trim()))) {
+        return fail("scenario bad test", "service");
+    }
+    let test = {yuno: raw.yuno.trim(), service: service.trim()};
+    let any = false;
+    for(let c of TEST_CONTROLS) {
+        if(raw[c] === undefined) {
+            continue;
+        }
+        if(!Array.isArray(raw[c]) || raw[c].length === 0) {
+            return fail("scenario bad test", c);
+        }
+        let list = [];
+        for(let cmd of raw[c]) {
+            let line = typeof cmd === "string" ? cmd.trim().replace(/\s+/g, " ") : "";
+            if(!TEST_COMMAND_RE.test(line)) {
+                return fail("scenario bad test command", `${c}: ${JSON.stringify(cmd)}`);
+            }
+            list.push(line);
+        }
+        test[c] = list;
+        any = true;
+    }
+    if(!any) {
+        return fail("scenario bad test", TEST_CONTROLS.join("/"));
+    }
+    return {ok: true, test: test};
+}
+
+/***************************************************************
+ *  The controls a test offers, in order: its declared lists, plus
+ *  restart whenever it can start.
+ ***************************************************************/
+function test_controls(test)
+{
+    if(!test) {
+        return [];
+    }
+    let out = TEST_CONTROLS.filter((c) => Array.isArray(test[c]));
+    if(test.start) {
+        out.push("restart");
+    }
+    return out;
+}
+
+/***************************************************************
+ *  The agent command lines one control sends, in order. Restart's
+ *  resets are not here: they go to every yuno of the scenario.
+ ***************************************************************/
+function test_command_lines(test, control)
+{
+    let lists = control === "restart" ? [test.stop || [], test.start || []] : [test[control] || []];
+    let head = `command-yuno id=${test.yuno}` + (test.service ? ` service=${test.service}` : "");
+    let out = [];
+    for(let list of lists) {
+        for(let cmd of list) {
+            out.push(`${head} command=${cmd}`);
+        }
+    }
+    return out;
 }
 
 function fail(key, detail)
@@ -358,6 +472,8 @@ function fmt_rate(v)
 
 export {
     SCENARIO_TEMPLATE,
+    test_controls,
+    test_command_lines,
     parse_scenario,
     validate_scenario,
     layout_graph,

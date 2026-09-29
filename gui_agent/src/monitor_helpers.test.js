@@ -8,6 +8,8 @@ import {describe, it, expect} from "vitest";
 
 import {
     SCENARIO_TEMPLATE,
+    test_controls,
+    test_command_lines,
     parse_scenario,
     layout_graph,
     pick_rate,
@@ -146,5 +148,47 @@ describe("small helpers", () => {
     it("formats a rate", () => {
         expect(fmt_rate(499.6)).toBe("500");
         expect(fmt_rate(null)).toBe("–");
+    });
+});
+
+
+describe("test block", () => {
+    const base = {agent_url: "wss://h:1993", yunos: [{id: "g"}, {id: "s"}]};
+    const with_test = (test) => parse_scenario(JSON.stringify(Object.assign({}, base, {test})));
+
+    it("is optional, and a scenario without it has no control", () => {
+        let r = parse_scenario(JSON.stringify(base));
+        expect(r.ok).toBe(true);
+        expect(r.scenario.test).toBe(undefined);
+        expect(test_controls(r.scenario.test)).toEqual([]);
+    });
+
+    it("keeps the declared lists and offers restart when it can start", () => {
+        let r = with_test({yuno: "g", service: "sim", start: ["set-controllers controllers=10"],
+                           stop: ["set-controllers   controllers=0"]});
+        expect(r.ok).toBe(true);
+        expect(r.scenario.test.stop).toEqual(["set-controllers controllers=0"]);
+        expect(test_controls(r.scenario.test)).toEqual(["start", "stop", "restart"]);
+    });
+
+    it("builds the command-yuno lines, restart being stop then start", () => {
+        let t = with_test({yuno: "g", service: "sim", start: ["a x=1", "b"], stop: ["c"]}).scenario.test;
+        expect(test_command_lines(t, "start")).toEqual([
+            "command-yuno id=g service=sim command=a x=1",
+            "command-yuno id=g service=sim command=b"
+        ]);
+        expect(test_command_lines(t, "restart").map((l) => l.split("command=")[1])).toEqual(["c", "a x=1", "b"]);
+        let t2 = with_test({yuno: "g", pause: ["p"]}).scenario.test;
+        expect(test_command_lines(t2, "pause")).toEqual(["command-yuno id=g command=p"]);
+    });
+
+    it("names what is wrong", () => {
+        expect(with_test([]).error.key).toBe("scenario bad test");
+        expect(with_test({start: ["a"]}).error.key).toBe("scenario bad test");
+        expect(with_test({yuno: "g"}).error.key).toBe("scenario bad test");
+        expect(with_test({yuno: "g", stop: []}).error.key).toBe("scenario bad test");
+        expect(with_test({yuno: "g", stop: ["a b"]}).error.key).toBe("scenario bad test command");
+        expect(with_test({yuno: "g", stop: ["a x=1 y=two words"]}).error.key).toBe("scenario bad test command");
+        expect(with_test({yuno: "g", service: "a b", stop: ["a"]}).error.key).toBe("scenario bad test");
     });
 });

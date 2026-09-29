@@ -34,6 +34,17 @@
  *      counters and a monotonic clock. The chart plots, per yuno, the
  *      direction the scenario names as its throughput (`rate`).
  *
+ *      TEST CONTROLS. A scenario with a `test` block is a test, and the
+ *      view shows its controls: start, pause, resume, stop -- each a list
+ *      of commands of the generator, sent as `command-yuno` in order --
+ *      and restart (stop, every yuno asked to zero its counters with
+ *      `stats-yuno stats=__reset__` -- only a service that honours the
+ *      reset does it -- the history cleared, start). Each
+ *      asks for confirmation first and shows the commands it will send;
+ *      stop and restart in red. Only in ST_MONITORING: a control confirmed
+ *      after the link went down is refused, not queued. A scenario
+ *      without `test` (production) shows none.
+ *
  *      States:
  *          ST_DISCONNECTED  no link (no scenario, or the user left).
  *          ST_CONNECTING    the link is being made, or is retrying.
@@ -75,6 +86,10 @@ import {
 import {t} from "i18next";
 
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {
+    yui_shell_confirm_yesno,
+    yui_shell_confirm_danger,
+} from "@yuneta/gobj-ui/src/shell_modals.js";
 
 import {
     agent_config_get_monitor,
@@ -84,6 +99,8 @@ import {
 } from "./c_agent_config.js";
 import {
     SCENARIO_TEMPLATE,
+    test_controls,
+    test_command_lines,
     parse_scenario,
     validate_scenario,
     layout_graph,
@@ -103,6 +120,16 @@ const CARD_W = 208;
 const CARD_H = 132;
 const CHART_H = 220;
 const SVG_NS = "http://www.w3.org/2000/svg";
+
+/*  One shape per meaning: start and resume are two different actions.  */
+const CONTROL_ICONS = {
+    start:   "yi-play",
+    pause:   "yi-pause",
+    resume:  "yi-forward-step",
+    stop:    "yi-square",
+    restart: "yi-arrows-rotate"
+};
+const DANGEROUS_CONTROLS = ["stop", "restart"];
 
 /***************************************************************
  *              Data
@@ -130,6 +157,8 @@ let PRIVATE_DATA = {
     cpu_chart:      null,
     cards:          {},     /*  yuno id -> element refs of its card  */
     edge_labels:    [],     /*  [{from, to, $text}]  */
+    control:        null,   /*  last control: {control, ok, text}  */
+    control_buttons: {},    /*  control -> its button  */
 };
 
 let __gclass__ = null;
@@ -363,6 +392,21 @@ function build_dom(gobj)
         ["div", {class: "MONITOR_STATUS is-size-7"}, [priv.$url, priv.$updated, priv.$error]]
     );
 
+    /*  Test controls: filled from the scenario's test block.  */
+    priv.$test_buttons = createElement2(["div", {class: "MONITOR_TEST_BUTTONS"}, []]);
+    priv.$control = createElement2(["span", {class: "MONITOR_CONTROL is-size-7"}, [
+        ["span", {class: "MONITOR_CONTROL_NAME has-text-weight-semibold"}, ""],
+        ["span", {class: "MONITOR_CONTROL_TEXT is-family-monospace"}, ""]
+    ]]);
+    priv.$test = createElement2(
+        ["div", {class: "MONITOR_TEST"}, [
+            ["span", {class: "MONITOR_TEST_LABEL tag is-warning is-light", i18n: "monitor test"},
+                t("monitor test")],
+            priv.$test_buttons,
+            priv.$control
+        ]]
+    );
+
     /*  Scenario editor.  */
     priv.$text = createElement2(
         ["textarea", {class: "MONITOR_SCENARIO_TEXT textarea is-family-monospace is-size-7",
@@ -423,6 +467,7 @@ function build_dom(gobj)
 
     $c.appendChild($toolbar);
     $c.appendChild($status);
+    $c.appendChild(priv.$test);
     $c.appendChild(priv.$editor);
     $c.appendChild(priv.$empty);
     $c.appendChild(priv.$graph);
@@ -722,14 +767,76 @@ function render_status(gobj)
     }
     show(priv.$error, !!priv.error);
 
+    render_control(gobj);
     show(priv.$editor, priv.editing);
     show(priv.$empty, !has && !priv.editing);
     show(priv.$graph, has);
     show(priv.$charts, has);
 }
 
+/***************************************************************
+ *  One button per control the scenario's test declares.
+ ***************************************************************/
+function build_test_controls(gobj)
+{
+    let priv = gobj.priv;
+    clear_node(priv.$test_buttons);
+    priv.control_buttons = {};
+    let test = priv.scenario ? priv.scenario.test : null;
+    for(let control of test_controls(test)) {
+        let key = `monitor ${control}`;
+        let danger = DANGEROUS_CONTROLS.indexOf(control) >= 0;
+        let $btn = createElement2(
+            ["button", {class: `MONITOR_TEST_${control.toUpperCase()} button` +
+                               (danger ? " is-danger is-outlined" : ""),
+                        type: "button",
+                        title: t(key), "data-i18n-title": key,
+                        "aria-label": t(key), "data-i18n-aria-label": key},
+                [
+                    ["span", {class: "icon"}, [["i", {class: CONTROL_ICONS[control]}]]],
+                    ["span", {class: "is-hidden-mobile", i18n: key}, t(key)]
+                ],
+                {click: () => gobj_send_event(gobj, "EV_TEST_CONTROL", {control: control}, gobj)}]
+        );
+        priv.$test_buttons.appendChild($btn);
+        priv.control_buttons[control] = $btn;
+    }
+}
+
+function render_control(gobj)
+{
+    let priv = gobj.priv;
+    let monitoring = gobj_current_state(gobj) === "ST_MONITORING";
+    for(let control of Object.keys(priv.control_buttons)) {
+        priv.control_buttons[control].disabled = !monitoring;
+    }
+    let $name = priv.$control.querySelector(".MONITOR_CONTROL_NAME");
+    let $text = priv.$control.querySelector(".MONITOR_CONTROL_TEXT");
+    let c = priv.control;
+    if(c) {
+        let key = `monitor ${c.control}`;
+        $name.setAttribute("data-i18n", key);
+        $name.textContent = t(key);
+        if(c.not_sent) {
+            $text.setAttribute("data-i18n", "monitor control not sent");
+            $text.textContent = t("monitor control not sent");
+        } else {
+            $text.removeAttribute("data-i18n");
+            $text.textContent = c.text || "";
+        }
+    } else {
+        $name.removeAttribute("data-i18n");
+        $name.textContent = "";
+        $text.textContent = "";
+    }
+    priv.$control.classList.toggle("has-text-danger", !!(c && !c.ok));
+    show(priv.$control, !!c);
+    show(priv.$test, Object.keys(priv.control_buttons).length > 0);
+}
+
 function render_all(gobj)
 {
+    build_test_controls(gobj);
     build_graph(gobj);
     paint_all_cards(gobj);
     render_status(gobj);
@@ -789,6 +896,36 @@ function poll_tick(gobj)
         let command = y.service ? `stats-yuno service=${y.service}` : "stats-yuno";
         send_request(gobj, command, {id: y.id}, "app", y.id);
     }
+}
+
+/***************************************************************
+ *  What a control sends, in order: the one list that says it, or --
+ *  for restart -- stop, every yuno's counters to zero, and start.
+ *  The same plan is shown in the confirmation and then sent.
+ ***************************************************************/
+function control_plan(gobj, control)
+{
+    let priv = gobj.priv;
+    let test = priv.scenario.test;
+    let plan = [];
+    let add_lines = (c) => {
+        for(let line of test_command_lines(test, c)) {
+            plan.push({command: line, kw: {}, kind: "control", yuno: control});
+        }
+    };
+    if(control === "restart") {
+        if(test.stop) {
+            add_lines("stop");
+        }
+        for(let y of priv.scenario.yunos) {
+            plan.push({command: "stats-yuno stats=__reset__", kw: {id: y.id},
+                       kind: "app", yuno: y.id, preview: `stats-yuno id=${y.id} stats=__reset__`});
+        }
+        add_lines("start");
+    } else {
+        add_lines(control);
+    }
+    return plan;
 }
 
 function arm_poll(gobj)
@@ -1019,6 +1156,24 @@ function ac_mt_command_answer(gobj, event, kw, src)
         }
         return 0;
     }
+    if(kind === "control") {
+        let c = priv.control;
+        let control = msg_iev_read_key(kw, "monitor_control");
+        if(!c || c.control !== control) {
+            log_warning(`${gobj_short_name(gobj)}: answer of a control no longer shown (${control})`);
+            return 0;
+        }
+        let failed = typeof kw.result === "number" && kw.result < 0;
+        if(failed) {
+            c.ok = false;
+            c.text = kw.comment || t("monitor no answer");
+            log_warning(`${gobj_short_name(gobj)}: control '${control}' failed: ${c.text}`);
+        } else if(c.ok) {
+            c.text = kw.comment || "";
+        }
+        render_status(gobj);
+        return 0;
+    }
     log_warning(`${gobj_short_name(gobj)}: command answer of no reading (${kind})`);
     return 0;
 }
@@ -1124,6 +1279,83 @@ function ac_save_scenario(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  A control button: ask first, showing what will be sent. The
+ *  answer of the dialog is an OS notification: it only becomes an
+ *  event.
+ ***************************************************************/
+function ac_test_control(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let control = (kw && kw.control) || "";
+    if(!priv.scenario || !priv.scenario.test || test_controls(priv.scenario.test).indexOf(control) < 0) {
+        log_error(`${gobj_short_name(gobj)}: EV_TEST_CONTROL of no control of this test: '${control}'`);
+        return -1;
+    }
+    let shell = yui_shell_of(gobj);
+    if(!shell) {
+        log_error(`${gobj_short_name(gobj)}: no shell to confirm the control '${control}'`);
+        return -1;
+    }
+    let lines = control_plan(gobj, control).map((p) => p.preview || p.command);
+    let $msg = createElement2(
+        ["div", {class: "MONITOR_CONFIRM"}, [
+            ["p", {class: "MONITOR_CONFIRM_TEXT", i18n: `monitor confirm ${control}`},
+                t(`monitor confirm ${control}`)],
+            ["p", {class: "MONITOR_CONFIRM_LIST_TITLE is-size-7 has-text-weight-semibold mt-3",
+                   i18n: "monitor commands that will run"}, t("monitor commands that will run")],
+            ["pre", {class: "MONITOR_CONFIRM_COMMANDS is-size-7 has-text-left"}, lines.join("\n")]
+        ]]
+    );
+    let label = `monitor ${control}`;
+    let opts = {t: t, logical_class: "MONITOR_CONFIRM_DIALOG"};
+    let asked = DANGEROUS_CONTROLS.indexOf(control) >= 0
+        ? yui_shell_confirm_danger(shell, $msg, Object.assign(opts, {confirm_label: label}))
+        : yui_shell_confirm_yesno(shell, $msg, Object.assign(opts, {yes_label: label, no_label: "cancel"}));
+    asked.then((yes) => {
+        if(yes) {
+            gobj_send_event(gobj, "EV_TEST_CONFIRMED", {control: control}, gobj);
+        }
+    });
+    return 0;
+}
+
+/***************************************************************
+ *  Confirmed: send the plan, in order, over the one link.
+ ***************************************************************/
+function ac_test_confirmed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let control = kw.control;
+    let plan = control_plan(gobj, control);
+    priv.control = {control: control, ok: true, text: ""};
+    if(control === "restart") {
+        priv.rows = [];
+        gobj_start_charts(gobj);
+    }
+    for(let p of plan) {
+        let kw_send = Object.assign({}, p.kw);
+        if(p.kind === "control") {
+            msg_iev_write_key(kw_send, "monitor_control", control);
+        }
+        send_request(gobj, p.command, kw_send, p.kind, p.yuno);
+    }
+    render_status(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  The dialog was answered after the link went down: nothing was
+ *  sent, and the operator is told so.
+ ***************************************************************/
+function ac_test_not_sent(gobj, event, kw, src)
+{
+    log_warning(`${gobj_short_name(gobj)}: control '${kw.control}' confirmed out of session, not sent`);
+    gobj.priv.control = {control: kw.control, ok: false, text: "", not_sent: true};
+    render_status(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  The shell switched language: what carries its key is re-read;
  *  the chart legends and the state tooltips are rebuilt.
  ***************************************************************/
@@ -1180,6 +1412,7 @@ function create_gclass(gclass_name)
         ["ST_DISCONNECTED", [
             ["EV_CONNECT",              ac_connect,             "ST_CONNECTING"],
             ["EV_ON_CLOSE",             ac_on_close_left,       null],
+            ["EV_TEST_CONFIRMED",       ac_test_not_sent,       null],
             ...common
         ]],
         ["ST_CONNECTING", [
@@ -1189,6 +1422,7 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",             ac_on_close_left,       null],
             ["EV_ON_OPEN_ERROR",        ac_on_open_error,       null],
             ["EV_LINK_FAILED",          ac_link_failed,         "ST_DISCONNECTED"],
+            ["EV_TEST_CONFIRMED",       ac_test_not_sent,       null],
             ...common
         ]],
         ["ST_MONITORING", [
@@ -1198,6 +1432,8 @@ function create_gclass(gclass_name)
             ["EV_MT_STATS_ANSWER",      ac_mt_stats_answer,     null],
             ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,   null],
             ["EV_TIMEOUT_PERIODIC",     ac_timeout_periodic,    null],
+            ["EV_TEST_CONTROL",         ac_test_control,        null],
+            ["EV_TEST_CONFIRMED",       ac_test_confirmed,      null],
             ...common
         ]]
     ];
@@ -1222,7 +1458,9 @@ function create_gclass(gclass_name)
         ["EV_EDIT_SCENARIO",        0],
         ["EV_CANCEL_EDIT",          0],
         ["EV_SAVE_SCENARIO",        0],
-        ["EV_LANGUAGE_CHANGED",     0]
+        ["EV_LANGUAGE_CHANGED",     0],
+        ["EV_TEST_CONTROL",         0],
+        ["EV_TEST_CONFIRMED",       0]
     ];
 
     __gclass__ = gclass_create(

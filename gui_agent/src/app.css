@@ -420,3 +420,31 @@
         flex: 1 1 0;
     }
 }
+
+/*
+ *  Monitor test controls: one wrapping row, shown only for a scenario
+ *  with a `test` block.
+ */
+.MONITOR_TEST {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.MONITOR_TEST_BUTTONS {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.MONITOR_CONTROL_TEXT {
+    margin-left: 0.35em;
+}
+
+.MONITOR_CONFIRM_COMMANDS {
+    max-height: 14rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
