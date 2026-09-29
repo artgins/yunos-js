@@ -210,6 +210,17 @@ function answer(view, req, {result = 0, data = null, comment = "", outer} = {})
     }, link);
 }
 
+/*  The stats answer of a request relayed by the control center.  */
+function stats_answer(view, req, {result = 0, data = {}, comment = ""} = {})
+{
+    gobj_send_event(view, "EV_MT_STATS_ANSWER", {
+        result: result, comment: comment, data: data,
+        __md_iev__: Object.assign({}, req.kw.__md_iev__, {
+            command_stack: [{command: "stats-yuno", kw: {}}]
+        })
+    }, link);
+}
+
 function watch_saved(scenario)
 {
     agent_config_set_monitor(config, {scenario: validate_scenario(scenario).scenario, source: "saved"});
@@ -256,6 +267,21 @@ describe("the list of the control center's scenarios", () => {
         gobj_send_event(list, "EV_REFRESH", {}, list);
         gobj_send_event(list, "EV_VISIBILITY", {visible: true}, list);
         expect(find("scenarios").length).toBe(2);
+        expect(errors()).toEqual([]);
+    });
+
+    test("while it is read again, a row still opens, and a change is read after", () => {
+        sent.length = 0;
+        const list = new_list();
+        answer(list, find("scenarios")[0], {data: [Object.assign({}, SAVED)]});
+        gobj_send_event(list, "EV_REFRESH", {}, list);
+        expect(gobj_current_state(list)).toBe("ST_LOADING");
+        gobj_send_event(list, "EV_OPEN_SCENARIO", {scenario_id: "stress"}, list);
+        expect(agent_config_get_monitor(config).scenario.id).toBe("stress");
+        /*  that open was a change while loading: read once more after  */
+        answer(list, find("scenarios")[1], {data: [Object.assign({}, SAVED)]});
+        expect(find("scenarios").length).toBe(3);
+        expect(gobj_current_state(list)).toBe("ST_LOADING");
         expect(errors()).toEqual([]);
     });
 
@@ -319,7 +345,48 @@ describe("the live view of a scenario the control center keeps", () => {
         answer(mon, stop[0], {data: [{id: "stress.2", result: 0, steps: []}]});
         let resets = find("command-agent").filter((r) => /stats=__reset__/.test(r.kw.cmd2agent));
         expect(resets.length).toBe(2);
+        /*  The start waits for every reset: a counter zeroed after the
+         *  start would wipe the first figures of the new run.  */
+        expect(find("run-scenario").map((r) => r.kw.action)).toEqual(["stop"]);
+        expect(mon.priv.control_buttons.start.disabled).toBe(true);
+        answer(mon, resets[0]);                         /*  the dispatch ack: not the answer  */
+        stats_answer(mon, resets[0]);
+        expect(find("run-scenario").map((r) => r.kw.action)).toEqual(["stop"]);
+        answer(mon, resets[1], {result: -1, comment: "Yuno not found", outer: "stats-yuno"});
         expect(find("run-scenario").map((r) => r.kw.action)).toEqual(["stop", "start"]);
+        answer(mon, find("run-scenario")[1], {data: [{id: "stress.3", result: 0, steps: []}]});
+        expect(mon.priv.control.running).toBe(false);
+        expect(mon.priv.control.ok).toBe(true);
+        expect(mon.priv.control_buttons.start.disabled).toBe(false);
+        expect(errors()).toEqual([]);
+    });
+
+    test("one control at a time, and an answer of another one is dropped", () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        sent.length = 0;
+        gobj_send_event(mon, "EV_TEST_CONFIRMED", {control: "report"}, mon);
+        let first = find("run-scenario")[0];
+        gobj_send_event(mon, "EV_TEST_CONFIRMED", {control: "report"}, mon);
+        expect(find("run-scenario").length).toBe(1);     /*  refused, not sent  */
+        answer(mon, first, {data: [{id: "stress.4", result: 0, steps: []}]});
+        expect(mon.priv.control.running).toBe(false);
+        answer(mon, first, {data: [{id: "stress.4", result: 0, steps: []}]});
+        expect(logged.some((l) => /no longer waited for/.test(l.msg))).toBe(true);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a readings answer of the scenario shown before is dropped", () => {
+        sent.length = 0;
+        const mon = new_monitor();
+        watch_saved(Object.assign({}, SAVED, {id: "before"}));
+        let watch = find("command-agent").filter((r) => /watch-yuno-stats/.test(r.kw.cmd2agent)).pop();
+        answer(mon, watch, {result: -1, comment: "command not available", outer: "watch-yuno-stats"});
+        let cpu = find("command-agent").filter((r) => /service=__yuno__/.test(r.kw.cmd2agent))[0];
+        watch_saved(Object.assign({}, SAVED, {id: "other"}));
+        stats_answer(mon, cpu, {data: {cpu: 77}});
+        expect(Object.values(mon.priv.model).some((m) => m.cpu === 77)).toBe(false);
+        expect(errors()).toEqual([]);
     });
 
     test("save: the same scenario is written again at once, another name is asked first", async () => {

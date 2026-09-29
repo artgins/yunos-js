@@ -47,6 +47,12 @@ describe("parse_scenario", () => {
             .toBe("scenario bad id");
         expect(parse_scenario('{"id":"a b","node":"n","yunos":[{"id":"a"}]}').error.key)
             .toBe("scenario bad id");
+        expect(parse_scenario('{"id":".hidden","node":"n","yunos":[{"id":"a"}]}').error.key)
+            .toBe("scenario bad id");
+        expect(parse_scenario(`{"id":"${"x".repeat(201)}","node":"n","yunos":[{"id":"a"}]}`).error.key)
+            .toBe("scenario bad id");
+        expect(parse_scenario(`{"id":"${"x".repeat(200)}","node":"n","yunos":[{"id":"a"}]}`).ok)
+            .toBe(true);
         expect(parse_scenario('{"node":"n","yunos":[{"id":"a"}],"view":{"mode":"pie"}}').error.key)
             .toBe("scenario bad view");
         expect(parse_scenario('{"node":"n","yunos":[{"id":"a"}],"view":{"mode":"cards"}}').scenario.view)
@@ -230,6 +236,21 @@ describe("actions", () => {
         expect(with_actions({stop: [{yuno: "g", command: "a b"}]}).error.key).toBe("scenario bad test command");
         expect(with_actions({stop: [{yuno: "g", command: "a x=1 y=two words"}]}).error.key)
             .toBe("scenario bad test command");
+    });
+
+    it("refuse a parameter that command-yuno would take as the yuno's selector", () => {
+        for(let k of ["id", "service", "command", "yuno_name", "date", "global"]) {
+            let r = with_actions({stop: [{yuno: "g", command: `set-x ${k}=1`}]});
+            expect(r.ok).toBe(false);
+            expect(r.error.key).toBe("scenario reserved step parameter");
+            expect(r.error.detail).toBe(`stop: ${k}`);
+        }
+        expect(with_actions({stop: [{yuno: "g", command: "set-x period=1 target_url=a"}]}).ok).toBe(true);
+    });
+
+    it("offer restart only when there is a stop to run before the start", () => {
+        let r = with_actions({start: [{yuno: "g", command: "a"}]});
+        expect(scenario_controls(r.scenario)).toEqual(["start"]);
     });
 });
 

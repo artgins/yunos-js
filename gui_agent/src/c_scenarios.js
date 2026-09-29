@@ -21,7 +21,9 @@
  *      which is what a save or a delete there does; whenever it is SHOWN,
  *      so the runs counted are the ones made since, here or by another
  *      operator (a visit is the operator asking -- not a poll); and on
- *      Refresh.
+ *      Refresh. A change that lands while a read is in flight is read
+ *      again once that one is in, and a row clicked while the list is
+ *      being read opens the scenario as the last list had it.
  *
  *      STATES:
  *          ST_IDLE         no session.
@@ -248,7 +250,7 @@ function build_dom(gobj)
         "aria-label": t("search scenarios"),
         "data-i18n-aria-label": "search scenarios"
     }, null, {
-        input: () => apply_filter(gobj)
+        input: () => gobj_send_event(gobj, "EV_SEARCH", {}, gobj)
     }]);
     priv.$input = $input;
     let $search = createElement2(
@@ -522,6 +524,10 @@ function ac_scenario_changed(gobj, event, kw, src)
     let st = gobj_current_state(gobj);
     if(st === "ST_READY") {
         request_list(gobj);
+    } else if(st === "ST_LOADING") {
+        /*  The read in flight may have been answered before the change:
+         *  read again once it is in.  */
+        gobj.priv.stale = true;
     }
     return 0;
 }
@@ -562,6 +568,10 @@ function ac_mt_command_answer(gobj, event, kw, src)
     gobj_change_state(gobj, "ST_READY");
     set_table_data(gobj);
     render(gobj);
+    if(priv.stale) {
+        priv.stale = false;
+        request_list(gobj);
+    }
     return 0;
 }
 
@@ -595,6 +605,12 @@ function ac_open_scenario(gobj, event, kw, src)
     if(shell) {
         yui_shell_navigate(shell, LIVE_ROUTE);
     }
+    return 0;
+}
+
+function ac_search(gobj, event, kw, src)
+{
+    apply_filter(gobj);
     return 0;
 }
 
@@ -645,6 +661,7 @@ function create_gclass(gclass_name)
         ["EV_MT_COMMAND_ANSWER",        ac_mt_command_answer,   null],
         ["EV_MONITOR_SCENARIO_CHANGED", ac_scenario_changed,    null],
         ["EV_VISIBILITY",               ac_visibility,          null],
+        ["EV_SEARCH",                   ac_search,              null],
         ["EV_LANGUAGE_CHANGED",         ac_language_changed,    null]
     ];
 
@@ -656,8 +673,11 @@ function create_gclass(gclass_name)
             ["EV_ON_OPEN",          ac_on_open,         null],
             ["EV_ON_CLOSE",         ac_on_close,        null]
         ].concat(always)],
+        /*  The table stays up while it is read again: a row clicked
+         *  meanwhile opens the scenario as the last list had it.  */
         ["ST_LOADING", [
-            ["EV_ON_CLOSE",         ac_on_close,        null]
+            ["EV_ON_CLOSE",         ac_on_close,        null],
+            ["EV_OPEN_SCENARIO",    ac_open_scenario,   null]
         ].concat(always)],
         ["ST_READY", [
             ["EV_ON_CLOSE",         ac_on_close,        null],
@@ -681,6 +701,7 @@ function create_gclass(gclass_name)
         ["EV_LANGUAGE_CHANGED",         0],
         ["EV_REFRESH",                  0],
         ["EV_OPEN_SCENARIO",            0],
+        ["EV_SEARCH",                   0],
         ["EV_VISIBILITY",               0]
     ];
 

@@ -59,6 +59,7 @@ import {
     gobj_unsubscribe_event,
     gobj_publish_event,
     gobj_send_event,
+    gobj_post_event,
     gobj_change_state,
     gobj_find_service,
     gobj_yuno,
@@ -93,6 +94,7 @@ let PRIVATE_DATA = {
     token:      "",     /*  last access_token from the BFF  */
     nak_retry:  false,  /*  a NAK already asked for a fresh token  */
     seq:        0,      /*  name of the next transport  */
+    login_watched: false, /*  subscribed to the login's cookie refreshes  */
 };
 
 let __gclass__ = null;
@@ -134,6 +136,7 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     close_link(gobj);
+    watch_login(gobj, false);
 }
 
 /***************************************************************
@@ -249,6 +252,10 @@ function close_link(gobj)
  ***************************************************************/
 function watch_login(gobj, on)
 {
+    if(!!gobj.priv.login_watched === !!on) {
+        return;
+    }
+    gobj.priv.login_watched = !!on;
     let login = gobj_find_service("agent_login", false);
     if(!login) {
         log_error(`${gobj_short_name(gobj)}: no agent_login service, the token will not be renewed`);
@@ -401,8 +408,9 @@ function ac_on_id_nak(gobj, event, kw, src)
     }
     log_error(`${gobj_short_name(gobj)}: identity refused again by ` +
         `${gobj_read_str_attr(gobj, "url")}: ${comment}`);
-    close_link(gobj);
-    watch_login(gobj, false);
+    /*  This runs inside the transport's own EV_ON_ID_NAK publish: its
+     *  tree is torn down on the next cycle, not from under it.  */
+    gobj_post_event(gobj, "EV_DROP_LINK", {}, gobj);
     gobj_change_state(gobj, "ST_IDLE");
     return bubble(gobj, "EV_LINK_FAILED", {
         error_code: "monitor identity refused",
@@ -471,6 +479,7 @@ function create_gclass(gclass_name)
             ["EV_CONNECT",              ac_connect,             "ST_FETCHING"],
             ["EV_DISCONNECT",           ac_disconnect,          null],
             ["EV_TOKEN_FETCHED",        ac_token_late,          null],
+            ["EV_DROP_LINK",            ac_disconnect,          null],
             ["EV_ON_CLOSE",             ac_on_close,            null]
         ]],
         ["ST_FETCHING", [
@@ -504,6 +513,7 @@ function create_gclass(gclass_name)
     const event_types = [
         ["EV_CONNECT",              0],
         ["EV_DISCONNECT",           0],
+        ["EV_DROP_LINK",            0],
         ["EV_TOKEN_FETCHED",        0],
         ["EV_LOGIN_REFRESHED",      0],
         ["EV_SEND_COMMAND",         0],

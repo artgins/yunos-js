@@ -91,6 +91,18 @@
  *      other, and the run written with the answer of every step, which
  *      the Runs button lists. Any other one is run from here, every step
  *      sent at once. What a `report` answers is shown in a dialog.
+ *      A control is one at a time: its buttons are off while it runs,
+ *      every request of it carries its number (`monitor_seq`) and its
+ *      phase, and an answer of another one is dropped. A restart goes
+ *      in PHASES, each waiting for every answer of the one before: stop,
+ *      the counters to zero, start -- a phase that fails ends it there.
+ *      A control run from here that is not answered in time, or whose
+ *      link drops, is said so instead of staying "running".
+ *
+ *      GENERATIONS. Every request carries the generation of the scenario
+ *      shown (`monitor_gen`, bumped when another one is adopted): a
+ *      reading asked for the one before, or pushed by its watch, is
+ *      dropped instead of landing on a card of the same key.
  *
  *      States:
  *          ST_DISCONNECTED  no link (no scenario, or the user left).
@@ -119,6 +131,7 @@ import {
     gobj_create_pure_child,
     gobj_find_service,
     gobj_current_state,
+    gobj_change_state,
     gobj_destroy,
     gobj_is_running,
     gobj_stop,
@@ -234,7 +247,12 @@ let PRIVATE_DATA = {
     watch_renew_ms: 20000,  /*  renew a watch this often (ttl / 3 of the agent's answer)  */
     watch_sent_at:  0,      /*  performance.now() of the last watch sent  */
     discovery:      null,   /*  {pending: {key: true}, configs: {key: config}, failed: [key]}  */
+    generation:     0,      /*  of the scenario shown: tags every request  */
+    control_seq:    0,      /*  number of the last control sent  */
 };
+
+/*  How long a phase of a control run from here waits for its answers.  */
+const CONTROL_PHASE_MS = 30000;
 
 let __gclass__ = null;
 
@@ -340,7 +358,14 @@ function mt_stop(gobj)
 {
     let priv = gobj.priv;
     clear_timeout(priv.gobj_timer);
+    if(gobj_current_state(gobj) === "ST_MONITORING" && priv.scenario) {
+        send_unwatch(gobj);
+    }
+    let was_direct = priv.watching && priv.watching.place === "direct";
     watch_link(gobj, null);
+    if(was_direct) {
+        gobj_send_event(gobj_read_attr(gobj, "link_svc"), "EV_DISCONNECT", {}, gobj);
+    }
     if(priv.vis_obs) {
         priv.vis_obs.disconnect();
         priv.vis_obs = null;
@@ -419,16 +444,26 @@ function tool_button(cls, icon, key, event, gobj, with_label)
 
 function tool_select(cls, key, choices, unit, value, event, gobj)
 {
+    /*  An option's text is a number and a unit: it cannot carry a key,
+     *  so relabel_select() writes it again when the language changes.  */
     let $sel = createElement2(
-        ["select", {class: cls,
+        ["select", {class: cls, "data-unit": unit,
                     title: t(key), "data-i18n-title": key,
                     "aria-label": t(key), "data-i18n-aria-label": key},
-            choices.map((v) => ["option", {value: String(v)}, `${v} ${unit}`]),
+            choices.map((v) => ["option", {value: String(v)}, `${v} ${t(unit)}`]),
             {change: (e) => gobj_send_event(gobj, event,
                 {value: parseInt(e.target.value, 10)}, gobj)}]
     );
     $sel.value = String(value);
     return $sel;
+}
+
+function relabel_select($sel)
+{
+    let unit = $sel.getAttribute("data-unit") || "";
+    for(let $o of $sel.options) {
+        $o.textContent = `${$o.value} ${t(unit)}`;
+    }
 }
 
 /***************************************************************
@@ -450,9 +485,9 @@ function build_dom(gobj)
     priv.$disconnect = tool_button("MONITOR_DISCONNECT", "yi-plug-slash", "monitor disconnect",
         "EV_DISCONNECT", gobj, true);
     priv.$refresh = tool_select("MONITOR_REFRESH", "monitor refresh",
-        MONITOR_REFRESH_CHOICES, "s", settings.refresh, "EV_SET_REFRESH", gobj);
+        MONITOR_REFRESH_CHOICES, "unit seconds short", settings.refresh, "EV_SET_REFRESH", gobj);
     priv.$window = tool_select("MONITOR_WINDOW", "monitor window",
-        MONITOR_WINDOW_CHOICES, "min", settings.window, "EV_SET_WINDOW", gobj);
+        MONITOR_WINDOW_CHOICES, "unit minutes short", settings.window, "EV_SET_WINDOW", gobj);
     priv.$clear = tool_button("MONITOR_CLEAR", "yi-broom", "monitor clear history",
         "EV_CLEAR_HISTORY", gobj, false);
     priv.$edit = tool_button("MONITOR_EDIT", "yi-pen", "monitor scenario",
@@ -963,12 +998,13 @@ function render_control(gobj)
 {
     let priv = gobj.priv;
     let monitoring = gobj_current_state(gobj) === "ST_MONITORING";
+    let c = priv.control;
+    let busy = !!(c && c.running);
     for(let control of Object.keys(priv.control_buttons)) {
-        priv.control_buttons[control].disabled = !monitoring;
+        priv.control_buttons[control].disabled = !monitoring || busy;
     }
     let $name = priv.$control.querySelector(".MONITOR_CONTROL_NAME");
     let $text = priv.$control.querySelector(".MONITOR_CONTROL_TEXT");
-    let c = priv.control;
     if(c) {
         let key = `monitor ${c.control}`;
         $name.setAttribute("data-i18n", key);
@@ -979,6 +1015,9 @@ function render_control(gobj)
         } else if(c.running) {
             $text.setAttribute("data-i18n", "scenario run in flight");
             $text.textContent = t("scenario run in flight");
+        } else if(c.text_key) {
+            $text.setAttribute("data-i18n", c.text_key);
+            $text.textContent = t(c.text_key);
         } else {
             $text.removeAttribute("data-i18n");
             $text.textContent = c.text || "";
@@ -1003,10 +1042,19 @@ function render_all(gobj)
     render_status(gobj);
 }
 
-function set_error(gobj, key, detail)
+function set_error(gobj, key, detail, from_reading)
 {
-    gobj.priv.error = key ? {key: key, detail: detail || ""} : null;
+    gobj.priv.error = key ? {key: key, detail: detail || "", reading: !!from_reading} : null;
     render_status(gobj);
+}
+
+/*  A reading answered: an error that only a reading had set is over.  */
+function clear_reading_error(gobj)
+{
+    let e = gobj.priv.error;
+    if(e && e.reading) {
+        set_error(gobj, null);
+    }
 }
 
 /***************************************************************
@@ -1018,6 +1066,7 @@ function send_request(gobj, line, kind, key, node, md)
     msg_iev_write_key(kw, "monitor_kind", kind);
     msg_iev_write_key(kw, "monitor_yuno", key || "");
     msg_iev_write_key(kw, "monitor_node", node || "");
+    msg_iev_write_key(kw, "monitor_gen", gobj.priv.generation);
     for(let k of Object.keys(md || {})) {
         msg_iev_write_key(kw, k, md[k]);
     }
@@ -1085,8 +1134,20 @@ function answer_of(gobj, kw)
         kind: kind,
         key: msg_iev_read_key(kw, "monitor_yuno") || "",
         node: msg_iev_read_key(kw, "monitor_node") || "",
+        gen: msg_iev_read_key(kw, "monitor_gen"),
         ack: ack
     };
+}
+
+/*  Of the scenario shown now, and of a yuno of it on that node?  */
+function answer_is_current(gobj, a)
+{
+    let priv = gobj.priv;
+    if(a.gen !== priv.generation || !priv.scenario) {
+        return false;
+    }
+    let y = a.key ? priv.scenario.yunos.find((x) => x.key === a.key) : null;
+    return !a.key || (!!y && (y.node || "") === a.node);
 }
 
 /***************************************************************
@@ -1118,6 +1179,13 @@ function poll_tick(gobj)
         load_charts(gobj);
     }
     priv.last_tick = now;
+
+    let c = priv.control;
+    if(c && c.running && c.deadline && now > c.deadline) {
+        log_warning(`${gobj_short_name(gobj)}: control '${c.control}' (${c.phase}) ` +
+            `not answered in time, ${c.pending} answers missing`);
+        control_over(gobj, false, "scenario run timed out");
+    }
 
     if(now - priv.watch_sent_at > priv.watch_renew_ms) {
         send_watch(gobj);
@@ -1222,12 +1290,19 @@ function send_watch(gobj)
     }
 }
 
+/*  Every node that pushes, or may (its watch unanswered yet). Only on
+ *  a link in session: a direct link that closes ends the watch at the
+ *  agent by itself.  */
 function send_unwatch(gobj)
 {
     let priv = gobj.priv;
+    if(priv.scenario.place === "control_center" &&
+            !agent_link_is_connected(gobj_read_attr(gobj, "cc_link_svc"))) {
+        return;
+    }
     for(let node of scenario_nodes(priv.scenario)) {
-        if(priv.push[node] === true) {
-            send_request(gobj, lines.unwatch(), "watch", "", node);
+        if(priv.push[node] !== false) {
+            send_request(gobj, lines.unwatch(), "unwatch", "", node);
         }
     }
 }
@@ -1467,6 +1542,7 @@ function adopt_scenario(gobj)
         send_unwatch(gobj);
     }
     priv.scenario = next;
+    priv.generation++;
     priv.source = settings.source;
     priv.view_mode = next ? next.view.mode : "graph";
     priv.control = null;
@@ -1485,8 +1561,14 @@ function adopt_scenario(gobj)
     if(st === "ST_DISCONNECTED" || new_where !== old_where) {
         gobj_send_event(gobj, "EV_CONNECT", {}, gobj);
     } else if(st === "ST_MONITORING") {
-        send_watch(gobj);
-        poll_tick(gobj);
+        priv.push = {};
+        for(let node of scenario_nodes(priv.scenario)) {
+            priv.push[node] = null;
+        }
+        if(priv.visible) {
+            send_watch(gobj);
+            poll_tick(gobj);
+        }
     }
 }
 
@@ -1516,9 +1598,8 @@ function show_json_dialog(gobj, logical, title_key, prefix, value)
  *  The runs of the scenario, newest first: when, what, who, how it
  *  went, and the answer of every step.
  ***************************************************************/
-function show_runs_dialog(gobj, runs)
+function show_runs_dialog(gobj, runs, scenario_id)
 {
-    let priv = gobj.priv;
     let shell = yui_shell_of(gobj);
     if(!shell) {
         log_error(`${gobj_short_name(gobj)}: no shell to show the runs`);
@@ -1559,7 +1640,7 @@ function show_runs_dialog(gobj, runs)
     );
     yui_shell_show_modal(shell, $content, {
         dialog: true, wide: true, logical_class: "MONITOR_RUNS_DIALOG",
-        title: "scenario runs", title_prefix: priv.scenario ? priv.scenario.id : "", t: t
+        title: "scenario runs", title_prefix: scenario_id || "", t: t
     });
 }
 
@@ -1601,12 +1682,17 @@ function cc_answer(gobj, a, kw)
         agent_config_set_monitor(config, {scenario: r.ok ? r.scenario : pending, source: "saved"});
         return 0;
     }
+    let scenario_id = msg_iev_read_key(kw, "monitor_scenario") || "";
     if(a.kind === "cc_delete") {
         if(failed) {
             set_error(gobj, "scenario not deleted", kw.comment || "");
             return 0;
         }
-        agent_config_set_monitor(config, {scenario: {}, source: "local"});
+        /*  Only the one shown is taken off the view: another may have been
+         *  opened while the delete was on its way.  */
+        if(priv.scenario && priv.source === "saved" && priv.scenario.id === scenario_id) {
+            agent_config_set_monitor(config, {scenario: {}, source: "local"});
+        }
         return 0;
     }
     if(a.kind === "cc_runs") {
@@ -1614,7 +1700,7 @@ function cc_answer(gobj, a, kw)
             set_error(gobj, "scenario runs not read", kw.comment || "");
             return 0;
         }
-        show_runs_dialog(gobj, kw.data);
+        show_runs_dialog(gobj, kw.data, scenario_id);
         return 0;
     }
     if(a.kind === "cc_run") {
@@ -1625,56 +1711,161 @@ function cc_answer(gobj, a, kw)
 }
 
 /***************************************************************
- *  The control center ran an action (or the stop half of a restart):
- *  the answer is the run, with every step's.
+ *  The control center ran an action (or a phase of a restart): the
+ *  answer is the run, with every step's.
  ***************************************************************/
 function cc_run_answer(gobj, kw, failed)
+{
+    let run = Array.isArray(kw.data) && kw.data[0] ? kw.data[0] : null;
+    let outputs = ((run && Array.isArray(run.steps)) ? run.steps : []).map((st) =>
+        ({yuno: st.yuno, line: st.line, result: st.result, comment: st.comment, data: st.data}));
+    return control_answered(gobj, kw, failed, outputs);
+}
+
+/***************************************************************
+ *  A control: its phases, each waiting for all its answers.
+ *
+ *  c = {control, seq, phase, pending, deadline, running, ok,
+ *       text (data, not translated) | text_key, outputs, by_cc}
+ ***************************************************************/
+function control_md(c)
+{
+    return {monitor_control: c.control, monitor_phase: c.phase, monitor_seq: c.seq};
+}
+
+/*  Send the requests of the phase `phase` of the control in flight.  */
+function control_phase(gobj, phase)
+{
+    let priv = gobj.priv;
+    let c = priv.control;
+    c.phase = phase;
+    c.deadline = performance.now() + CONTROL_PHASE_MS;
+    if(phase === "reset") {
+        /*  Only while monitoring: the answers come on the monitor's link.  */
+        if(gobj_current_state(gobj) !== "ST_MONITORING") {
+            log_warning(`${gobj_short_name(gobj)}: restart stopped before the counters ` +
+                `were reset: not monitoring`);
+            return control_over(gobj, false, "scenario run interrupted");
+        }
+        priv.rows = [];
+        gobj_start_charts(gobj);
+        c.pending = priv.scenario.yunos.length;
+        for(let y of priv.scenario.yunos) {
+            send_request(gobj, lines.reset(y), "reset", y.key, y.node || "", control_md(c));
+        }
+        if(!c.pending) {
+            return control_next(gobj);
+        }
+        render_status(gobj);
+        return 0;
+    }
+    if(c.by_cc) {
+        c.pending = 1;
+        /*  The control center runs the steps one by one, each with its
+         *  own deadline: give it the time of all of them.  */
+        c.deadline = performance.now() + CONTROL_PHASE_MS *
+            (action_steps(priv.scenario, phase).length + 1);
+        let md = Object.assign(control_md(c), {monitor_scenario: priv.scenario.id});
+        if(cc_request(gobj, "run-scenario", {scenario_id: priv.scenario.id, action: phase},
+                "cc_run", md) < 0) {
+            c.not_sent = true;
+            return control_over(gobj, false, "");
+        }
+        render_status(gobj);
+        return 0;
+    }
+    let steps = action_steps(priv.scenario, phase);
+    c.pending = steps.length;
+    for(let st of steps) {
+        send_request(gobj, st.line, "control", st.key, st.node, control_md(c));
+    }
+    if(!c.pending) {
+        return control_next(gobj);
+    }
+    render_status(gobj);
+    return 0;
+}
+
+/*  The phase after the one just answered, or the end.  */
+function control_next(gobj)
+{
+    let c = gobj.priv.control;
+    if(c.control === "restart") {
+        if(c.phase === "stop") {
+            return control_phase(gobj, "reset");
+        }
+        if(c.phase === "reset") {
+            return control_phase(gobj, "start");
+        }
+    }
+    return control_over(gobj, c.ok, "");
+}
+
+/*  The control ends: `text_key` says why, when it is not an answer.  */
+function control_over(gobj, ok, text_key)
+{
+    let c = gobj.priv.control;
+    c.running = false;
+    c.pending = 0;
+    c.deadline = 0;
+    c.ok = !!ok && c.ok;
+    if(text_key) {
+        c.text_key = text_key;
+    }
+    render_status(gobj);
+    return 0;
+}
+
+/*  A control in flight lost the link its answers come on.  */
+function control_interrupted(gobj)
+{
+    let c = gobj.priv.control;
+    if(c && c.running) {
+        log_warning(`${gobj_short_name(gobj)}: control '${c.control}' (${c.phase}) interrupted`);
+        control_over(gobj, false, "scenario run interrupted");
+    }
+}
+
+/***************************************************************
+ *  One answer of the control in flight (a step, a reset, a run of
+ *  the control center). A reset that fails does not end a restart --
+ *  a yuno that is not running has no counters to zero; anything
+ *  else that fails ends the control after its phase.
+ ***************************************************************/
+function control_answered(gobj, kw, failed, outputs)
 {
     let priv = gobj.priv;
     let c = priv.control;
     let control = msg_iev_read_key(kw, "monitor_control");
     let phase = msg_iev_read_key(kw, "monitor_phase");
-    if(!c || c.control !== control) {
-        log_warning(`${gobj_short_name(gobj)}: answer of a run no longer shown (${control})`);
+    let seq = msg_iev_read_key(kw, "monitor_seq");
+    if(!c || !c.running || c.seq !== seq || c.phase !== phase) {
+        log_warning(`${gobj_short_name(gobj)}: answer of a control no longer waited for ` +
+            `(${control}, ${phase})`);
         return 0;
     }
-    let run = Array.isArray(kw.data) && kw.data[0] ? kw.data[0] : null;
-    for(let st of ((run && Array.isArray(run.steps)) ? run.steps : [])) {
-        c.outputs.push({yuno: st.yuno, line: st.line, result: st.result,
-                        comment: st.comment, data: st.data});
+    for(let o of outputs) {
+        c.outputs.push(o);
     }
-    if(failed) {
-        c.running = false;
+    if(failed && phase !== "reset") {
         c.ok = false;
-        c.text = kw.comment || t("monitor no answer");
-        log_warning(`${gobj_short_name(gobj)}: run of '${control}' failed: ${c.text}`);
-        render_status(gobj);
-        return 0;
-    }
-    if(control === "restart" && phase === "stop") {
-        /*  Stopped: the counters to zero and the history cleared here,
-         *  then the control center starts it.  */
-        if(gobj_current_state(gobj) === "ST_MONITORING") {
-            for(let y of priv.scenario.yunos) {
-                send_request(gobj, lines.reset(y), "app", y.key, y.node || "");
-            }
-        }
-        priv.rows = [];
-        gobj_start_charts(gobj);
         c.text = kw.comment || "";
-        if(cc_request(gobj, "run-scenario", {scenario_id: priv.scenario.id, action: "start"}, "cc_run",
-                {monitor_control: "restart", monitor_phase: "start"}) < 0) {
-            c.running = false;
-            c.not_sent = true;
-        }
+        c.text_key = kw.comment ? "" : "monitor no answer";
+        log_warning(`${gobj_short_name(gobj)}: control '${control}' (${phase}) failed: ` +
+            `${kw.comment || "no comment"}`);
+    } else if(!failed && c.ok && phase !== "reset") {
+        c.text = kw.comment || "";
+        c.text_key = "";
+    }
+    c.pending--;
+    if(c.pending > 0) {
         render_status(gobj);
         return 0;
     }
-    c.running = false;
-    c.ok = true;
-    c.text = kw.comment || "";
-    render_status(gobj);
-    return 0;
+    if(!c.ok) {
+        return control_over(gobj, false, "");
+    }
+    return control_next(gobj);
 }
 
 
@@ -1694,7 +1885,9 @@ function ac_connect(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     if(!priv.scenario) {
+        /*  The state changed before this action: undo it.  */
         log_error(`${gobj_short_name(gobj)}: EV_CONNECT without a scenario`);
+        gobj_change_state(gobj, "ST_DISCONNECTED");
         gobj_send_event(gobj, "EV_EDIT_SCENARIO", {}, gobj);
         return -1;
     }
@@ -1729,6 +1922,16 @@ function ac_disconnect(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     clear_timeout(priv.gobj_timer);
+    /*  Tell the agents to stop pushing, while the link is still up: behind
+     *  a control center they would push until the watch expires.  */
+    if(priv.scenario && priv.scenario.place === "control_center" && priv.watching) {
+        send_unwatch(gobj);
+    }
+    /*  A run of the control center still answers on the console's link;
+     *  one run from here does not any more.  */
+    if(!(priv.control && priv.control.by_cc)) {
+        control_interrupted(gobj);
+    }
     let was_direct = priv.watching && priv.watching.place === "direct";
     watch_link(gobj, null);
     if(was_direct) {
@@ -1765,6 +1968,7 @@ function ac_on_close_drop(gobj, event, kw, src)
     clear_timeout(gobj.priv.gobj_timer);
     gobj.priv.last_tick = 0;
     gobj.priv.discovery = null;
+    control_interrupted(gobj);
     render_status(gobj);
     return 0;
 }
@@ -1778,6 +1982,7 @@ function ac_on_open_error(gobj, event, kw, src)
 
 function ac_link_failed(gobj, event, kw, src)
 {
+    watch_link(gobj, null);
     set_error(gobj, (kw && kw.error_code) || "monitor cannot reach the agent",
         (kw && kw.comment) || "");
     return 0;
@@ -1801,6 +2006,14 @@ function ac_mt_stats_answer(gobj, event, kw, src)
     }
     let id = a.key;
     let kind = a.kind;
+    if(kind === "reset") {
+        let failed = typeof kw.result === "number" && kw.result < 0;
+        return control_answered(gobj, kw, failed,
+            [{yuno: id, result: kw.result, comment: kw.comment}]);
+    }
+    if(!answer_is_current(gobj, a)) {
+        return 0;   /*  asked for the scenario shown before  */
+    }
     let m = priv.model[id];
     if(!m || (kind !== "cpu" && kind !== "app")) {
         log_warning(`${gobj_short_name(gobj)}: stats answer of no reading (${kind}, ${id})`);
@@ -1826,6 +2039,7 @@ function apply_reading(gobj, id, kind, result, comment, data_)
         return 0;
     }
     m.errors[kind] = null;
+    clear_reading_error(gobj);
     let data = data_ || {};
     if(kind === "cpu") {
         m.cpu = typeof data.cpu === "number" ? data.cpu : null;
@@ -1861,7 +2075,24 @@ function ac_mt_command_answer(gobj, event, kw, src)
     if(CC_KINDS.indexOf(kind) >= 0) {
         return cc_answer(gobj, a, kw);
     }
-    if(gobj_current_state(gobj) !== "ST_MONITORING" || !priv.scenario) {
+    let failed_ = typeof kw.result === "number" && kw.result < 0;
+    if(kind === "unwatch") {
+        if(failed_ && !a.ack) {
+            log_warning(`${gobj_short_name(gobj)}: ${a.node || "the agent"} did not stop its watch: ` +
+                `${kw.comment || "no comment"}`);
+        }
+        return 0;
+    }
+    if(kind === "reset" || kind === "control") {
+        /*  A dispatch ack of the control center is not the answer;
+         *  a dispatch that failed is.  */
+        if(a.ack && !failed_) {
+            return 0;
+        }
+        return control_answered(gobj, kw, failed_,
+            [{yuno: a.key, result: kw.result, comment: kw.comment, data: kw.data}]);
+    }
+    if(gobj_current_state(gobj) !== "ST_MONITORING" || !answer_is_current(gobj, a)) {
         /*  A reading or a control asked before the session ended (or the
          *  scenario changed): its answer has no card to go to any more.  */
         return 0;
@@ -1872,9 +2103,10 @@ function ac_mt_command_answer(gobj, event, kw, src)
     }
     if(kind === "yunos") {
         if(failed) {
-            set_error(gobj, "monitor no answer", kw.comment || `list-yunos ${a.node}`);
+            set_error(gobj, "monitor no answer", kw.comment || `list-yunos ${a.node}`, true);
             return 0;
         }
+        clear_reading_error(gobj);
         let rows = Array.isArray(kw.data) ? kw.data : [];
         let by_id = {};
         rows.forEach((r) => {
@@ -1896,7 +2128,11 @@ function ac_mt_command_answer(gobj, event, kw, src)
     }
     if(kind === "watch") {
         let node = a.node;
-        if(failed) {
+        if(failed && a.ack) {
+            /*  The control center could not dispatch it (the node's agent
+             *  is not connected there): asked again at the next renewal.  */
+            set_error(gobj, "monitor no answer", `${node}: ${kw.comment || ""}`, true);
+        } else if(failed) {
             if(priv.push[node] !== false) {
                 log_warning(`${gobj_short_name(gobj)}: ${node || "the agent"} does not push the stats ` +
                     `(${kw.comment || "no comment"}), polling them`);
@@ -1904,6 +2140,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 poll_requests(gobj, node);
             }
         } else {
+            clear_reading_error(gobj);
             priv.push[node] = true;
             let ttl = kw.data && typeof kw.data.ttl === "number" ? kw.data.ttl : 0;
             if(ttl > 0) {
@@ -1928,24 +2165,6 @@ function ac_mt_command_answer(gobj, event, kw, src)
         }
         return 0;
     }
-    if(kind === "control") {
-        let c = priv.control;
-        let control = msg_iev_read_key(kw, "monitor_control");
-        if(!c || c.control !== control) {
-            log_warning(`${gobj_short_name(gobj)}: answer of a control no longer shown (${control})`);
-            return 0;
-        }
-        c.outputs.push({yuno: a.key, result: kw.result, comment: kw.comment, data: kw.data});
-        if(failed) {
-            c.ok = false;
-            c.text = kw.comment || t("monitor no answer");
-            log_warning(`${gobj_short_name(gobj)}: control '${control}' failed: ${c.text}`);
-        } else if(c.ok) {
-            c.text = kw.comment || "";
-        }
-        render_status(gobj);
-        return 0;
-    }
     log_warning(`${gobj_short_name(gobj)}: command answer of no reading (${kind})`);
     return 0;
 }
@@ -1961,6 +2180,9 @@ function ac_yuno_stats(gobj, event, kw, src)
         log_warning(`${gobj_short_name(gobj)}: pushed reading of no watch of this view`);
         return 0;
     }
+    if(msg_iev_read_key(kw, "monitor_gen") !== priv.generation) {
+        return 0;   /*  still pushed by the watch of the scenario shown before  */
+    }
     let node = msg_iev_read_key(kw, "monitor_node") || "";
     let d = (kw && kw.data) || {};
     let hit = false;
@@ -1969,7 +2191,18 @@ function ac_yuno_stats(gobj, event, kw, src)
             continue;
         }
         if(d.kind === "state") {
-            priv.model[y.key].run = d.missing ? "missing" : yuno_run_state(d);
+            let m = priv.model[y.key];
+            m.run = d.missing ? "missing" : yuno_run_state(d);
+            if(d.missing || !d.yuno_running) {
+                /*  No cpu and no stats come for a yuno that does not run:
+                 *  its last figures are not its figures any more.  */
+                m.cpu = null;
+                m.rx = null;
+                m.tx = null;
+                m.queue = null;
+                m.prev_rx = null;
+                m.prev_tx = null;
+            }
             paint_card(gobj, y.key);
             hit = true;
         } else if(d.kind === "cpu" || (d.kind === "app" && (y.service || "") === (d.service || ""))) {
@@ -2165,7 +2398,8 @@ function ac_delete_scenario(gobj, event, kw, src)
 
 function ac_delete_confirmed(gobj, event, kw, src)
 {
-    if(cc_request(gobj, "delete-scenario", {scenario_id: kw.scenario_id}, "cc_delete") < 0) {
+    if(cc_request(gobj, "delete-scenario", {scenario_id: kw.scenario_id}, "cc_delete",
+            {monitor_scenario: kw.scenario_id}) < 0) {
         set_error(gobj, "not connected to an agent", "");
     }
     return 0;
@@ -2178,7 +2412,8 @@ function ac_show_runs(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: EV_SHOW_RUNS with no saved scenario shown`);
         return -1;
     }
-    if(cc_request(gobj, "scenario-runs", {scenario_id: priv.scenario.id}, "cc_runs") < 0) {
+    if(cc_request(gobj, "scenario-runs", {scenario_id: priv.scenario.id}, "cc_runs",
+            {monitor_scenario: priv.scenario.id}) < 0) {
         set_error(gobj, "not connected to an agent", "");
     }
     return 0;
@@ -2292,30 +2527,25 @@ function ac_test_confirmed(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     let control = kw.control;
-    if(run_by_control_center(gobj)) {
-        priv.control = {control: control, ok: true, text: "", outputs: [], running: true};
-        let action = control === "restart" ? "stop" : control;
-        let sent = cc_request(gobj, "run-scenario", {scenario_id: priv.scenario.id, action: action},
-            "cc_run", {monitor_control: control, monitor_phase: action});
-        if(sent < 0) {
-            priv.control.running = false;
-            priv.control.not_sent = true;
-        }
-        render_status(gobj);
+    if(priv.control && priv.control.running) {
+        log_warning(`${gobj_short_name(gobj)}: control '${control}' confirmed while ` +
+            `'${priv.control.control}' runs, not sent`);
         return 0;
     }
-    let plan = control_plan(gobj, control);
-    priv.control = {control: control, ok: true, text: "", outputs: []};
-    if(control === "restart") {
-        priv.rows = [];
-        gobj_start_charts(gobj);
-    }
-    for(let p of plan) {
-        send_request(gobj, p.line, p.kind, p.key, p.node,
-            p.kind === "control" ? {monitor_control: control} : null);
-    }
-    render_status(gobj);
-    return 0;
+    priv.control = {
+        control:  control,
+        seq:      ++priv.control_seq,
+        phase:    "",
+        pending:  0,
+        deadline: 0,
+        running:  true,
+        ok:       true,
+        text:     "",
+        text_key: "",
+        outputs:  [],
+        by_cc:    run_by_control_center(gobj)
+    };
+    return control_phase(gobj, control === "restart" ? "stop" : control);
 }
 
 /***************************************************************
@@ -2325,7 +2555,8 @@ function ac_test_confirmed(gobj, event, kw, src)
 function ac_test_not_sent(gobj, event, kw, src)
 {
     log_warning(`${gobj_short_name(gobj)}: control '${kw.control}' confirmed out of session, not sent`);
-    gobj.priv.control = {control: kw.control, ok: false, text: "", not_sent: true, outputs: []};
+    gobj.priv.control = {control: kw.control, ok: false, text: "", text_key: "", not_sent: true,
+                         outputs: []};
     render_status(gobj);
     return 0;
 }
@@ -2340,6 +2571,8 @@ function ac_language_changed(gobj, event, kw, src)
     if($c) {
         refresh_language($c, t);
     }
+    relabel_select(gobj.priv.$refresh);
+    relabel_select(gobj.priv.$window);
     paint_all_cards(gobj);
     render_status(gobj);
     return 0;

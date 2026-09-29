@@ -109,8 +109,38 @@ const VIEW_MODES = ["graph", "cards"];
  *  key=value parameters whose values carry no space.  */
 const TEST_COMMAND_RE = /^[a-z][\w-]*( [\w.^-]+=\S*)*$/;
 const NAME_RE = /^[\w.^-]+$/;
-/*  A scenario id goes inside a treedb ref: no `^`, no backtick.  */
-const SCENARIO_ID_RE = /^[\w.@-]+$/;
+/*  A scenario id goes inside a treedb ref: no `^`, no backtick; not
+ *  starting with a dot (timeranger2 refuses it as a key); and it starts
+ *  a run id, so it has room for one (the control center's rule).  */
+const SCENARIO_ID_RE = /^[\w@-][\w.@-]*$/;
+const SCENARIO_ID_MAX = 200;
+
+/*  The parameters a step cannot carry: it travels as `command-yuno id=
+ *  service= command=<the step>`, and the agent takes the whole kw of
+ *  command-yuno as the filter that selects the yuno -- a parameter named
+ *  like a column of its `yunos` topic, or like command-yuno's own, picks
+ *  another yuno or none. The control center refuses the same list.  */
+const RESERVED_STEP_PARAMS = [
+    "id", "service", "command",
+    "realm_id", "yuno_role", "yuno_name", "yuno_release", "yuno_tag",
+    "yuno_running", "yuno_playing", "yuno_pid", "watcher_pid", "yuno_disabled",
+    "must_play", "start_priority", "sched_priority", "cpu_core",
+    "role_version", "name_version", "traced", "yuno_multiple", "global",
+    "date", "yuno_startdate", "_channel_gobj", "_requester",
+    "_requester_md_iev", "launch_id", "configurations", "binary", "_geometry"
+];
+
+/*  The first reserved parameter of a command line, or "".  */
+function reserved_step_param(line)
+{
+    for(let word of line.split(" ").slice(1)) {
+        let k = word.split("=")[0];
+        if(RESERVED_STEP_PARAMS.indexOf(k) >= 0) {
+            return k;
+        }
+    }
+    return "";
+}
 
 
 /***************************************************************
@@ -163,7 +193,8 @@ function validate_scenario(raw)
     }
     let id;
     if(raw.id !== undefined) {
-        if(typeof raw.id !== "string" || !SCENARIO_ID_RE.test(raw.id.trim())) {
+        if(typeof raw.id !== "string" || !SCENARIO_ID_RE.test(raw.id.trim()) ||
+                raw.id.trim().length > SCENARIO_ID_MAX) {
             return fail("scenario bad id", String(raw.id));
         }
         id = raw.id.trim();
@@ -245,6 +276,10 @@ function validate_scenario(raw)
                 let line = typeof st.command === "string" ? st.command.trim().replace(/\s+/g, " ") : "";
                 if(!TEST_COMMAND_RE.test(line)) {
                     return fail("scenario bad test command", `${a}: ${JSON.stringify(st.command)}`);
+                }
+                let reserved = reserved_step_param(line);
+                if(reserved) {
+                    return fail("scenario reserved step parameter", `${a}: ${reserved}`);
                 }
                 let step = {yuno: st.yuno, command: line};
                 if(st.service) {
@@ -422,13 +457,14 @@ function scenario_document(scenario)
 
 /***************************************************************
  *  The controls a scenario offers, in order: its declared actions,
- *  plus restart whenever it can start.
+ *  plus restart whenever it can stop AND start -- a restart is a stop,
+ *  the counters to zero, and a start.
  ***************************************************************/
 function scenario_controls(scenario)
 {
     let actions = (scenario && scenario.actions) || {};
     let out = SCENARIO_ACTIONS.filter((a) => Array.isArray(actions[a]) && actions[a].length);
-    if(actions.start && actions.start.length) {
+    if(out.indexOf("start") >= 0 && out.indexOf("stop") >= 0) {
         out.push("restart");
     }
     return out;

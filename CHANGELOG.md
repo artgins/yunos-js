@@ -6,6 +6,54 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.3 (2026-09-30)
+
+A review of the Scenarios workspace, after running the `yunovatios-stress`
+scenario end to end from it. Goes with SDK 7.25.15 (control center + agent),
+and works with older ones.
+
+- **The agents' watches are stopped when the view leaves them.** Disconnect,
+  the view being stopped and another scenario being shown now send
+  `watch-yuno-stats stop=1` to every node that pushes (or may: its watch not
+  answered yet). Behind the control center a watch pushed on until its ttl
+  (60 s), on nodes that may be under a stress test.
+- **Readings of the scenario shown before are dropped.** Every request
+  carries the generation of the scenario shown (`monitor_gen`); an answer, or
+  a reading pushed by the old watch, of another generation -- or of a key on
+  another node -- used to land on the card of the same key and mix two yunos'
+  counters into a false rate.
+- **One control at a time.** The buttons are off while a control runs; every
+  request carries its number (`monitor_seq`) and phase, and an answer of
+  another one is dropped (a second confirm could take the first run's answer).
+  A **restart goes in phases** -- stop, the resets, start -- each sent when
+  every answer of the one before is in (a reset landing after the start zeroed
+  the new run's first figures); a reset that fails does not stop it, anything
+  else does. A control run from here not answered within 30 s per phase, or
+  cut by a link drop, says *no answer in time* / *interrupted* instead of
+  staying "running". Restart is offered only when the scenario has a stop:
+  through the control center it failed without one.
+- **A watch the control center could not dispatch** (the node's agent not
+  connected there) is asked again at the next renewal, with the reason in the
+  status line, cleared by the next good reading; it no longer turned that node
+  to polling for the rest of the session. Only a refusal of the watch itself
+  (an older agent, a control center that does not relay) does.
+- **A yuno that stops keeps no figures**: its pushed `state` clears its cpu,
+  rates and queue, as the polled path did.
+- **The editor refuses a step parameter that selects the yuno**
+  (`scenario reserved step parameter`): named like a parameter of
+  `command-yuno` or a column of the agent's `yunos` topic, it made the step go
+  to another yuno or to none. A scenario id may not start with a dot, and has
+  200 characters at most -- the control center's rules.
+- The list opens a row clicked while it re-reads, and re-reads once more when
+  a save or a delete landed during a read. Its search box is an event.
+- The direct link (`C_MONITOR_LINK`) tears its transport down on the next
+  cycle instead of inside the transport's own `EV_ON_ID_NAK` publish, and lets
+  go of the login's refreshes when stopped. The view stops listening to it when
+  it fails, and disconnects it when stopped.
+- The units of the refresh and window selectors (`s`, `min`) change language;
+  a control's result keeps its key instead of the text of the language it was
+  written in.
+
 ## gui_agent 0.29.2, gui_treedb 0.17.73 + tabulator-tables ^6.6.0 (2026-09-29)
 
 - **Tabulator 6.6.0.** A minor release, additive for these apps: a fill

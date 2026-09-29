@@ -222,7 +222,9 @@ yuno) every 1–30 s (default 2 s), directly or relayed by the control center
 (`C_AGENT_LINK` re-publishes it; the node is told by the `monitor_node` the
 watch was tagged with). The watch is renewed every third of the `ttl` the
 agent answers (behind a control center the agent never sees the browser
-leave); a hidden tab stops it and a visible one asks again. A node whose
+leave); a hidden tab stops it, a visible one asks again, and Disconnect,
+leaving the workspace or switching to another scenario stop it too
+(0.29.3: before, a watch behind the control center pushed on until its `ttl`). A node whose
 agent is older than the command, or whose control center does not relay the
 event, refuses the watch, and the view POLLS that node — per tick a
 `list-yunos` and two `stats-yuno` per yuno, the deliberate exception to the
@@ -233,8 +235,16 @@ while the tab is the visible one.
 **Actions** (0.24.0; run by the control center since 0.29.0). A scenario that
 declares actions gets their buttons — **Start**, **Pause**, **Resume**,
 **Stop**, **Report**, one per action declared — and **Restart** whenever it
-can start: stop, every yuno of the scenario asked to zero its counters
-(`stats-yuno stats=__reset__`), the history cleared, start. Each step is
+can stop AND start: stop, every yuno of the scenario asked to zero its
+counters (`stats-yuno stats=__reset__`), the history cleared, start — in
+PHASES since 0.29.3, each sent only when every answer of the one before has
+come (a reset that lands after the start would zero the new run's first
+figures). A reset that fails (a yuno that does not run) does not stop the
+restart; anything else that fails ends it there. One control at a time: the
+buttons are off while one runs, every request carries the control's number,
+and an answer of another one is dropped. A control run from here that is not
+answered in 30 s per phase, or whose link drops, says so (*no answer in
+time*, *interrupted*) instead of staying "running". Each step is
 `command-yuno id=<yuno> [service=<service>] command=<command>`; nothing about
 any particular generator is written in the view. Every control is confirmed
 in a dialog that lists the commands it will send (stop and restart in red),
@@ -251,7 +261,14 @@ What the last action answered, step by step, opens in a dialog (the ⓘ next to
 the answer) — for a **Report**, which only asks, that is all it is for. The
 controls work only while monitoring; a dialog answered after the link dropped
 sends nothing and says so. A command is a name followed by `key=value`
-parameters without spaces, because it travels inside a command line. Two
+parameters without spaces, because it travels inside a command line — and
+none named like a parameter of `command-yuno` or a column of the agent's
+`yunos` topic (`id`, `service`, `date`, `yuno_name`...), which would select
+another yuno: the editor refuses them as the control center does.
+
+Every request also carries the GENERATION of the scenario shown: a reading
+asked for the scenario shown before, or still pushed by its watch, is dropped
+instead of landing on a card with the same key. Two
 things the controls do not do: put the generator back where it was (write a
 `stop` that restores it if that matters), and zero the counters of a service
 that does not honour `__reset__`.
