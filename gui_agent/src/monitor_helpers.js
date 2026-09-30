@@ -130,6 +130,22 @@ const RESERVED_STEP_PARAMS = [
     "_requester_md_iev", "launch_id", "configurations", "binary", "_geometry"
 ];
 
+/*  The first parameter of a command line that is a framework key
+ *  (`__md_iev__`, `__username__`, ...: any name starting with `__`), or
+ *  "". The agent's command parser sets the parameters over the kw, so it
+ *  would replace the routing of the answer, or the user the control
+ *  center stamps. The control center refuses the same.  */
+function framework_step_param(line)
+{
+    for(let word of line.split(" ").slice(1)) {
+        let k = word.split("=")[0];
+        if(k.startsWith("__")) {
+            return k;
+        }
+    }
+    return "";
+}
+
 /*  The first reserved parameter of a command line, or "".  */
 function reserved_step_param(line)
 {
@@ -276,6 +292,10 @@ function validate_scenario(raw)
                 let line = typeof st.command === "string" ? st.command.trim().replace(/\s+/g, " ") : "";
                 if(!TEST_COMMAND_RE.test(line)) {
                     return fail("scenario bad test command", `${a}: ${JSON.stringify(st.command)}`);
+                }
+                let framework = framework_step_param(line);
+                if(framework) {
+                    return fail("scenario framework step parameter", `${a}: ${framework}`);
                 }
                 let reserved = reserved_step_param(line);
                 if(reserved) {

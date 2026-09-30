@@ -1075,6 +1075,12 @@ function send_request(gobj, line, kind, key, node, md)
         kw.cmd2agent = line;
         agent_link_command(gobj_read_attr(gobj, "cc_link_svc"), "command-agent", kw);
     } else {
+        /*  The agent refuses a watch whose requester does not say it
+         *  takes the pushes (SDK 7.25.16). Behind a control center the
+         *  control center writes the marker itself.  */
+        if(kind === "watch") {
+            kw.__relays__ = ["EV_YUNO_STATS"];
+        }
         gobj_send_event(gobj_read_attr(gobj, "link_svc"), "EV_SEND_COMMAND",
             {command: line, kw: kw}, gobj);
     }

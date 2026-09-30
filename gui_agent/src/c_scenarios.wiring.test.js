@@ -103,6 +103,7 @@ function iev_command_parser(gobj, command, kw, src)
 let yuno = null;
 let host = null;
 let link = null;
+let mlink = null;
 let config = null;
 let n_views = 0;
 
@@ -143,9 +144,18 @@ beforeAll(() => {
     ];
     gclass_create("C_TEST_LINK", link_events, [["ST_IDLE", []]], {}, 0,
         [SDATA(data_type_t.DTP_POINTER, "iev", 0, null, "session"), SDATA_END()], {}, 0, 0, 0, 0);
-    /*  The direct link: this test never uses it, but the view finds it.  */
-    gclass_create("C_TEST_MLINK", link_events.concat([["EV_CONNECT", 0], ["EV_DISCONNECT", 0]]),
-        [["ST_IDLE", [["EV_CONNECT", () => 0, null], ["EV_DISCONNECT", () => 0, null]]]],
+    /*  The direct link (C_MONITOR_LINK): what the view sends it is kept,
+     *  as what it sends through the console's link.  */
+    gclass_create("C_TEST_MLINK",
+        link_events.concat([["EV_CONNECT", 0], ["EV_DISCONNECT", 0], ["EV_SEND_COMMAND", 0]]),
+        [["ST_IDLE", [
+            ["EV_CONNECT", () => 0, null],
+            ["EV_DISCONNECT", () => 0, null],
+            ["EV_SEND_COMMAND", (gobj, event, kw) => {
+                sent.push({command: kw.command, kw: kw.kw, direct: true});
+                return 0;
+            }, null]
+        ]]],
         {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
     gclass_create("C_YUI_UPLOT", [["EV_ADD_SERIE", 0], ["EV_LOAD_DATA", 0]],
         [["ST_IDLE", [["EV_ADD_SERIE", () => 0, null], ["EV_LOAD_DATA", () => 0, null]]]],
@@ -162,7 +172,7 @@ beforeAll(() => {
     const iev = gobj_create_service("iev", "C_TEST_IEV", {}, yuno);
     gobj_change_state(iev, "ST_SESSION");
     link = gobj_create_service("agent_link", "C_TEST_LINK", {iev: iev}, yuno);
-    gobj_create_service("monitor_link", "C_TEST_MLINK", {}, yuno);
+    mlink = gobj_create_service("monitor_link", "C_TEST_MLINK", {}, yuno);
     config = gobj_create_service("agent_config", "C_AGENT_CONFIG", {}, yuno);
     gobj_start(config);
     test_shell.shell = gobj_create_service("shell", "C_TEST_SHELL", {}, yuno);
@@ -501,6 +511,23 @@ describe("a scenario that is not the control center's", () => {
         expect(steps.map((r) => [r.kw.agent_id, r.kw.cmd2agent])).toEqual([
             ["ctrl", "command-yuno id=stress service=sim_controllers command=set-controllers controllers=10"]
         ]);
+    });
+
+    test("an agent reached directly is asked to push with the marker it requires", () => {
+        const mon = new_monitor();
+        const direct = Object.assign({}, SAVED, {agent_url: "wss://agent.example.com:1993"});
+        delete direct.node;
+        agent_config_set_monitor(config, {scenario: validate_scenario(direct).scenario, source: "local"});
+        expect(mon.priv.scenario.place).toBe("direct");
+        sent.length = 0;
+        gobj_send_event(mon, "EV_ON_OPEN", {}, mlink);
+        /*  The agent refuses a watch-yuno-stats whose requester does not
+         *  say it takes EV_YUNO_STATS (SDK 7.25.16); the control center
+         *  writes the marker itself, a direct link must.  */
+        let watch = sent.filter((r) => r.direct && /^watch-yuno-stats /.test(r.command));
+        expect(watch.length).toBe(1);
+        expect(watch[0].kw.__relays__).toEqual(["EV_YUNO_STATS"]);
+        expect(errors()).toEqual([]);
     });
 
     test("yunos ticked BEFORE the live view exists are what it shows when it opens", () => {

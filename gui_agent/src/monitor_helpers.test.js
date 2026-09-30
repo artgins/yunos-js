@@ -248,6 +248,16 @@ describe("actions", () => {
         expect(with_actions({stop: [{yuno: "g", command: "set-x period=1 target_url=a"}]}).ok).toBe(true);
     });
 
+    it("refuse a framework key, as the control center does", () => {
+        for(let k of ["__md_iev__", "__username__", "__md_command__", "__x"]) {
+            let r = with_actions({start: [{yuno: "g", command: `resume-generation ${k}=x`}]});
+            expect(r.ok).toBe(false);
+            expect(r.error.key).toBe("scenario framework step parameter");
+            expect(r.error.detail).toBe(`start: ${k}`);
+        }
+        expect(with_actions({stop: [{yuno: "g", command: "set-x _one=1 a__b=2"}]}).ok).toBe(true);
+    });
+
     it("offer restart only when there is a stop to run before the start", () => {
         let r = with_actions({start: [{yuno: "g", command: "a"}]});
         expect(scenario_controls(r.scenario)).toEqual(["start"]);

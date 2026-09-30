@@ -220,7 +220,10 @@ asks each node's agent for `watch-yuno-stats ids=… period=…` and the agent
 SENDS every reading as `EV_YUNO_STATS` (state, cpu, service stats of each
 yuno) every 1–30 s (default 2 s), directly or relayed by the control center
 (`C_AGENT_LINK` re-publishes it; the node is told by the `monitor_node` the
-watch was tagged with). The watch is renewed every third of the `ttl` the
+watch was tagged with). The requester says it takes the pushes with
+`__relays__: ["EV_YUNO_STATS"]` in the kw: the view writes it on a direct
+watch, the control center writes its own on a relayed one, and an agent of
+SDK 7.25.21 or later refuses a watch without it (0.29.6). The watch is renewed every third of the `ttl` the
 agent answers (behind a control center the agent never sees the browser
 leave); a hidden tab stops it, a visible one asks again, and Disconnect,
 leaving the workspace or switching to another scenario stop it too
@@ -264,7 +267,10 @@ sends nothing and says so. A command is a name followed by `key=value`
 parameters without spaces, because it travels inside a command line — and
 none named like a parameter of `command-yuno` or a column of the agent's
 `yunos` topic (`id`, `service`, `date`, `yuno_name`...), which would select
-another yuno: the editor refuses them as the control center does.
+another yuno, nor any whose name starts with `__` (`__md_iev__`,
+`__username__`...), which the agent would set over what the framework writes
+(the routing of the answer, the user the control center stamps): the editor
+refuses both as the control center does (0.29.6, SDK 7.25.21).
 
 Every request also carries the GENERATION of the scenario shown: a reading
 asked for the scenario shown before, or still pushed by its watch, is dropped

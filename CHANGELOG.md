@@ -6,6 +6,23 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.6 (2026-09-30)
+
+Goes with SDK 7.25.21 (agent + control center), and works with older ones.
+
+- **A direct watch says it takes the pushes.** The agent now refuses a
+  `watch-yuno-stats` whose requester does not carry
+  `__relays__: ["EV_YUNO_STATS"]` (a `ycommand` that asked for a watch got
+  pushes its client did not know). The live view of a scenario with an
+  `agent_url` writes the marker on its watch; without it that agent refused
+  the watch and the node was polled. Behind a control center nothing changes:
+  the control center removes a client's own marker and writes its own.
+- **The editor refuses a step parameter that starts with `__`**
+  (`scenario framework step parameter`): the agent sets the parameters of the
+  line over the kw, so `__md_iev__=x` replaced the routing of the step's
+  answer and `__username__=` the user the control center stamps. The control
+  center refuses the same, at the save and at the run.
+
 ## gui_agent 0.29.5 (2026-09-30)
 
 - **"For TreeDB" gives each agent its own domain.** The connections export
