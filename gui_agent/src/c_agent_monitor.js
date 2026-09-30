@@ -60,7 +60,10 @@
  *      the view asks it to stop (a hidden tab does) or the watch is not
  *      renewed within its ttl (the view renews it every ttl/3: behind a
  *      control center the agent never sees the browser leave). Through
- *      the control center the events come back relayed by it. An agent
+ *      the control center the events come back relayed by it. The watch
+ *      says the view takes them (`__relays__: ["EV_YUNO_STATS"]`, on both
+ *      paths: SDK 7.25.21 refuses a watch without it, and its control
+ *      center passes it on only when the client wrote it). An agent
  *      that does not know the command (older than 7.25.13), or a control
  *      center that does not relay the event, answers the watch with an
  *      error and the view POLLS that node: per tick a `list-yunos` and
@@ -1070,17 +1073,17 @@ function send_request(gobj, line, kind, key, node, md)
     for(let k of Object.keys(md || {})) {
         msg_iev_write_key(kw, k, md[k]);
     }
+    /*  The agent refuses a watch whose requester does not say it takes
+     *  the pushes (SDK 7.25.21). Behind a control center the control
+     *  center passes the marker on only when the client wrote it.  */
+    if(kind === "watch") {
+        kw.__relays__ = ["EV_YUNO_STATS"];
+    }
     if(gobj.priv.scenario.place === "control_center") {
         kw.agent_id = node;
         kw.cmd2agent = line;
         agent_link_command(gobj_read_attr(gobj, "cc_link_svc"), "command-agent", kw);
     } else {
-        /*  The agent refuses a watch whose requester does not say it
-         *  takes the pushes (SDK 7.25.16). Behind a control center the
-         *  control center writes the marker itself.  */
-        if(kind === "watch") {
-            kw.__relays__ = ["EV_YUNO_STATS"];
-        }
         gobj_send_event(gobj_read_attr(gobj, "link_svc"), "EV_SEND_COMMAND",
             {command: line, kw: kw}, gobj);
     }

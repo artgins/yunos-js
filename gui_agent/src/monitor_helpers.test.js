@@ -258,6 +258,18 @@ describe("actions", () => {
         expect(with_actions({stop: [{yuno: "g", command: "set-x _one=1 a__b=2"}]}).ok).toBe(true);
     });
 
+    it("name the first refused parameter of the line, as the control center does", () => {
+        /*  check_step_command() refuses word by word: a reserved word
+         *  before a framework key is the one it names, and the other way
+         *  round  */
+        let r = with_actions({stop: [{yuno: "g", command: "cmd id=1 __x=2"}]});
+        expect(r.error.key).toBe("scenario reserved step parameter");
+        expect(r.error.detail).toBe("stop: id");
+        r = with_actions({stop: [{yuno: "g", command: "cmd __x=2 id=1"}]});
+        expect(r.error.key).toBe("scenario framework step parameter");
+        expect(r.error.detail).toBe("stop: __x");
+    });
+
     it("offer restart only when there is a stop to run before the start", () => {
         let r = with_actions({start: [{yuno: "g", command: "a"}]});
         expect(scenario_controls(r.scenario)).toEqual(["start"]);

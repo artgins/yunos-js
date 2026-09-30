@@ -6,6 +6,26 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.7 (2026-09-30)
+
+Goes with SDK 7.25.21 (agent + control center), and works with older ones.
+Deploy it before, or together with, a control center of SDK 7.25.21.
+
+- **A watch through the control center says it takes the pushes too.** The
+  control center of SDK 7.25.21 no longer says it for every client (a
+  `ycommand` watch through it got readings it could not handle): it passes
+  `__relays__: ["EV_YUNO_STATS"]` on to the agent only when the client wrote
+  it. The live view now writes it on the watch it sends through the control
+  center, as it already did on a direct one. With that control center an
+  older gui_agent is refused the watch and polls the node.
+- **The editor names the same refused step parameter as the control center.**
+  It looked for a framework key (`__x`) over the whole line before looking
+  for a reserved one, so `cmd id=1 __x=2` was refused for `__x` here and for
+  `id` by the control center. Now each word is checked for both, in order,
+  as `check_step_command()` does.
+- The comments that dated the agent's `__relays__` check to SDK 7.25.16 name
+  7.25.21, the release that carries it.
+
 ## gui_agent 0.29.6 (2026-09-30)
 
 Goes with SDK 7.25.21 (agent + control center), and works with older ones.

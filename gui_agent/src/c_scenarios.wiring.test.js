@@ -315,6 +315,9 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(mon.priv.source).toBe("saved");
         let watch = find("command-agent").filter((r) => /watch-yuno-stats/.test(r.kw.cmd2agent));
         expect(watch.map((r) => r.kw.agent_id)).toEqual(["ctrl"]);
+        /*  The control center passes the marker on to the agent only when
+         *  its client wrote it (SDK 7.25.21)  */
+        expect(watch[0].kw.__relays__).toEqual(["EV_YUNO_STATS"]);
         expect(errors()).toEqual([]);
     });
 
@@ -522,8 +525,7 @@ describe("a scenario that is not the control center's", () => {
         sent.length = 0;
         gobj_send_event(mon, "EV_ON_OPEN", {}, mlink);
         /*  The agent refuses a watch-yuno-stats whose requester does not
-         *  say it takes EV_YUNO_STATS (SDK 7.25.16); the control center
-         *  writes the marker itself, a direct link must.  */
+         *  say it takes EV_YUNO_STATS (SDK 7.25.21).  */
         let watch = sent.filter((r) => r.direct && /^watch-yuno-stats /.test(r.command));
         expect(watch.length).toBe(1);
         expect(watch[0].kw.__relays__).toEqual(["EV_YUNO_STATS"]);
