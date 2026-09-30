@@ -278,7 +278,10 @@ opens it with the scenario watched. *Save* writes it to the control center
 (`save-scenario`), asked first when the name is not the one watched (a
 scenario with that name is replaced); a control center that keeps none makes
 it a scenario of this browser. *Delete* (a saved one only) asks in red and
-takes its runs with it.
+takes its runs with it. A save of the scenario watched carries the revision
+it was read at (0.29.4, SDK 7.25.16): when somebody else saved it meanwhile,
+the control center refuses it and the editor says so -- open it again from
+the list and write the change over what it has now.
 
 **Links proposed from the configs** (0.25.0). While monitoring, the scenario
 editor's *Propose links* asks every yuno for its `view-config` and proposes the

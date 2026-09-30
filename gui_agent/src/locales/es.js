@@ -927,6 +927,7 @@ const es = {
         "scenario source saved": "En el control center",
         "scenario source selection": "Yunos marcados",
         "scenario run in flight": "ejecutándose en el control center...",
+        "scenario changed since read": "Alguien guardó este escenario después de que lo abrieras: ábrelo otra vez desde la lista y escribe tus cambios sobre lo que tiene ahora.",
         "scenario reserved step parameter": "Un paso no puede llevar un parámetro de command-yuno ni un campo del yuno (elegiría otro yuno):",
         "scenario run interrupted": "interrumpido: el enlace cayó antes de la respuesta",
         "scenario run timed out": "sin respuesta a tiempo",

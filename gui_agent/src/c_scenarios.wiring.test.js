@@ -415,6 +415,33 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(find("save-scenario").map((r) => r.kw.scenario.id)).toEqual(["stress-copy"]);
     });
 
+    test("save: over the revision it was read at, and told when somebody saved it since", () => {
+        const mon = new_monitor();
+        agent_config_set_monitor(config, {scenario: validate_scenario(
+            Object.assign({}, SAVED, {__md_treedb__: {g_rowid: 7}})).scenario, source: "saved"});
+        sent.length = 0;
+        gobj_send_event(mon, "EV_EDIT_SCENARIO", {}, mon);
+        expect(mon.priv.$text.value).not.toMatch(/revision|__md_treedb__/);
+        gobj_send_event(mon, "EV_SAVE_SCENARIO", {text: mon.priv.$text.value}, mon);
+        let save = find("save-scenario")[0];
+        expect(save.kw.revision).toBe(7);
+        expect(save.kw.scenario.revision).toBe(undefined);
+        answer(mon, save, {data: [Object.assign({}, SAVED, {__md_treedb__: {g_rowid: 8}})]});
+        expect(agent_config_get_monitor(config).scenario.revision).toBe(8);
+
+        sent.length = 0;
+        gobj_send_event(mon, "EV_EDIT_SCENARIO", {}, mon);
+        gobj_send_event(mon, "EV_SAVE_SCENARIO", {text: mon.priv.$text.value}, mon);
+        save = find("save-scenario")[0];
+        expect(save.kw.revision).toBe(8);
+        answer(mon, save, {result: -1, comment: "controlcenter^x: scenario 'stress' was saved by " +
+            "ana since you read it (revision 9, yours 8): read it again"});
+        expect(mon.priv.$edit_error.querySelector(".MONITOR_SCENARIO_ERROR_TEXT")
+            .getAttribute("data-i18n")).toBe("scenario changed since read");
+        expect(agent_config_get_monitor(config).scenario.revision).toBe(8);
+        expect(errors()).toEqual([]);
+    });
+
     test("a control center that keeps no scenario: saved in the browser", () => {
         const mon = new_monitor();
         watch_saved(SAVED);

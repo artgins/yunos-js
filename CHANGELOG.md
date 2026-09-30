@@ -6,6 +6,18 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.4 (2026-09-30)
+
+- **Two editors of one scenario.** The live view keeps the revision the
+  scenario was read at (`__md_treedb__.g_rowid`, which the control center
+  answers since SDK 7.25.16, from the list and from each save) and sends it
+  with a save of the same scenario: when somebody saved it after it was
+  opened, the control center refuses and the editor says so (`scenario
+  changed since read`) instead of the last writer silently winning. A save
+  under another name, confirmed first, is an overwrite and sends none. With a
+  control center older than 7.25.16 there is no revision, and nothing
+  changes.
+
 ## gui_agent 0.29.3 (2026-09-30)
 
 A review of the Scenarios workspace, after running the `yunovatios-stress`

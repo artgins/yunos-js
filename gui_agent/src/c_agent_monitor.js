@@ -1674,7 +1674,9 @@ function cc_answer(gobj, a, kw)
             return 0;
         }
         if(failed) {
-            set_edit_error(gobj, {key: "scenario not saved", detail: kw.comment || ""});
+            let changed = /since you read it/.test(String(kw.comment || ""));
+            set_edit_error(gobj, {key: changed ? "scenario changed since read" : "scenario not saved",
+                                  detail: kw.comment || ""});
             return 0;
         }
         let doc = Array.isArray(kw.data) && kw.data[0] ? kw.data[0] : null;
@@ -2313,7 +2315,8 @@ function ac_save_scenario(gobj, event, kw, src)
     }
     let same = priv.source === "saved" && priv.scenario && priv.scenario.id === r.scenario.id;
     if(same) {
-        return send_save(gobj, r.scenario);
+        /*  The same one, saved over the revision it was read at.  */
+        return send_save(gobj, r.scenario, priv.scenario.revision || 0);
     }
     let shell = yui_shell_of(gobj);
     if(!shell) {
@@ -2344,14 +2347,18 @@ function ac_save_confirmed(gobj, event, kw, src)
         set_edit_error(gobj, r.error);
         return -1;
     }
-    return send_save(gobj, r.scenario);
+    return send_save(gobj, r.scenario, 0);   /*  an overwrite asked for  */
 }
 
-function send_save(gobj, scenario)
+function send_save(gobj, scenario, revision)
 {
     let priv = gobj.priv;
     priv.pending_save = scenario;
-    if(cc_request(gobj, "save-scenario", {scenario: scenario_document(scenario)}, "cc_save") < 0) {
+    let kw = {scenario: scenario_document(scenario)};
+    if(revision > 0) {
+        kw.revision = revision;
+    }
+    if(cc_request(gobj, "save-scenario", kw, "cc_save") < 0) {
         priv.pending_save = null;
         set_edit_error(gobj, {key: "not connected to an agent", detail: ""});
         return -1;

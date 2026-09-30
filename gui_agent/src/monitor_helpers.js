@@ -319,6 +319,15 @@ function validate_scenario(raw)
     } else if(default_node) {
         scenario.node = default_node;
     }
+    /*  The revision it was read at, when the control center said it
+     *  (`__md_treedb__.g_rowid`) or it was kept: sent back with a save,
+     *  which is refused if somebody saved it since.  */
+    let md = raw.__md_treedb__;
+    let revision = (md && typeof md.g_rowid === "number") ? md.g_rowid
+                 : (typeof raw.revision === "number" ? raw.revision : 0);
+    if(revision > 0) {
+        scenario.revision = revision;
+    }
     return {ok: true, scenario: scenario};
 }
 

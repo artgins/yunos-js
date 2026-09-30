@@ -918,6 +918,7 @@ const en = {
         "scenario source saved": "In the control center",
         "scenario source selection": "Yunos ticked",
         "scenario run in flight": "running in the control center...",
+        "scenario changed since read": "Somebody saved this scenario after you opened it: open it again from the list, and write your changes over what it has now.",
         "scenario reserved step parameter": "A step cannot carry a parameter of command-yuno or a field of the yuno (it would select another yuno):",
         "scenario run interrupted": "interrupted: the link went down before the answer",
         "scenario run timed out": "no answer in time",
