@@ -29,6 +29,7 @@ import {
     normalize_history,
     cert_host_of_config,
     agent_endpoint_of_config,
+    agent_endpoint_of_cert,
 } from "./agent_helpers.js";
 
 
@@ -439,5 +440,42 @@ describe("agent_endpoint_of_config", () => {
         expect(agent_endpoint_of_config({services: [{kw: {url: "udp://127.0.0.1:1992"}}]}))
             .toEqual({port: "", host: ""});
         expect(agent_endpoint_of_config(null)).toEqual({port: "", host: ""});
+    });
+});
+
+
+describe("agent_endpoint_of_cert", () => {
+    /*  What `command-agent service=agent_secure_port command=view-cert`
+     *  answers (artgins, 2026-09-30).  */
+    const artgins = {
+        subject: "/CN=agent.artgins.com",
+        issuer: "/C=US/O=Let's Encrypt/CN=YE1",
+        not_before: 1790750856,
+        not_after: 1798526855,
+        serial: "0535E69BB16E40FFFA335B77E2EEDEDD7E73",
+        days_remaining: 89,
+        url: "wss://0.0.0.0:1993"
+    };
+
+    test("the host is the loaded certificate's CN, the port the gate's", () => {
+        expect(agent_endpoint_of_cert(artgins)).toEqual({port: "1993", host: "agent.artgins.com"});
+        expect(agent_endpoint_of_cert([artgins])).toEqual({port: "1993", host: "agent.artgins.com"});
+    });
+
+    test("an RFC 2253 subject names it too", () => {
+        expect(agent_endpoint_of_cert({subject: "C=ES, CN=agent.central.yunovatios.es", url: "wss://0.0.0.0:1993"}))
+            .toEqual({port: "1993", host: "agent.central.yunovatios.es"});
+    });
+
+    test("a certificate that names no domain gives no host", () => {
+        expect(agent_endpoint_of_cert({subject: "/CN=yuneta_agent", url: "wss://0.0.0.0:1993"}))
+            .toEqual({port: "1993", host: ""});
+        expect(agent_endpoint_of_cert({subject: "/CN=*.artgins.com", url: "wss://0.0.0.0:1993"}))
+            .toEqual({port: "1993", host: ""});
+        /*  the package's own, self-signed: not a hostname  */
+        expect(agent_endpoint_of_cert({subject: "/C=ES/O=ArtGins/CN=yuneta_agent.yuneta.io",
+                                       url: "wss://0.0.0.0:1993"}))
+            .toEqual({port: "1993", host: ""});
+        expect(agent_endpoint_of_cert(null)).toEqual({port: "", host: ""});
     });
 });

@@ -6,6 +6,20 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.5 (2026-09-30)
+
+- **"For TreeDB" gives each agent its own domain.** The connections export
+  built an agent's url from the node's name (`wss://artgins:1993`): it read
+  the certificate out of the agent's `view-config`, where the real one is a
+  global override (`"agent_secure_port.crypto"`) the walk does not see, and
+  fell back to the node. The scan asks the agent's secure gate `view-cert`
+  instead (`command-agent service=agent_secure_port command=view-cert`): the
+  CN of the certificate it has LOADED and the port of its url --
+  `wss://agent.artgins.com:1993`, `wss://agent.wattyzer.com:1993`,
+  `wss://agent.central.yunovatios.es:1993`... A CN that is not a hostname
+  (the package's self-signed `yuneta_agent.yuneta.io`) or an agent that does
+  not answer falls back to `view-config` and the node's name, as before.
+
 ## gui_agent 0.29.4 (2026-09-30)
 
 - **Two editors of one scenario.** The live view keeps the revision the

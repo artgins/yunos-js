@@ -438,7 +438,11 @@ function cert_host_of_config(config, port)
  *
  *      The host is the gate's certificate only when that names one: the
  *      agent ships `yuneta_agent.crt`, which is not a host, and then the
- *      caller falls back to the node's name.
+ *      caller falls back to the node's name. An agent given its own
+ *      certificate (`agent.<domain>`) gets it through a GLOBAL override
+ *      (`"agent_secure_port.crypto"`), which this walk does not see: ask
+ *      the gate itself instead (agent_endpoint_of_cert). This reading is
+ *      the fallback for an agent that does not answer `view-cert`.
  ***************************************************************/
 function agent_endpoint_of_config(config)
 {
@@ -479,6 +483,45 @@ function agent_endpoint_of_config(config)
 }
 
 
+/***************************************************************
+ *  agent_endpoint_of_cert(data)
+ *
+ *      -> {port, host} out of what the agent's secure gate answers to
+ *      `view-cert` (C_TCP_S `agent_secure_port`): the certificate it
+ *      has LOADED -- not a file named in a config -- and the url it
+ *      listens on.
+ *
+ *          {"subject": "/CN=agent.artgins.com", ...,
+ *           "url": "wss://0.0.0.0:1993"}
+ *          -> {port: "1993", host: "agent.artgins.com"}
+ *
+ *      The port is the url's (the host there is the BIND address). The
+ *      host is the subject's CN -- the name the certificate is issued
+ *      for, which a browser must dial -- when it is a HOSTNAME: a
+ *      wildcard names nothing, and neither does the certificate the
+ *      package ships (`yuneta_agent.yuneta.io`, self-signed, with an `_`
+ *      no hostname may carry); host stays "" and the caller falls back.
+ ***************************************************************/
+const HOSTNAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+
+function agent_endpoint_of_cert(data)
+{
+    let out = {port: "", host: ""};
+    let info = Array.isArray(data) ? data[0] : data;
+    if(!info || typeof info !== "object") {
+        return out;
+    }
+    let m = String(info.url || "").match(/:(\d+)\s*$/);
+    out.port = m ? m[1] : "";
+    let cn = String(info.subject || "").match(/(?:^|[\/,]\s*)CN\s*=\s*([^\/,]+)/);
+    let host = cn ? cn[1].trim() : "";
+    if(HOSTNAME_RE.test(host)) {
+        out.host = host;
+    }
+    return out;
+}
+
+
 export {
     AGENT_YUNO_ID,
     SYSTEM_TREEDB,
@@ -497,4 +540,5 @@ export {
     normalize_history,
     cert_host_of_config,
     agent_endpoint_of_config,
+    agent_endpoint_of_cert,
 };

@@ -304,11 +304,16 @@ The Schemas picker copies the yunos it shows as **gui_treedb connections**
 `wss://host:port` rows between two tabs of one browser was the alternative.
 
 The node's **agent** is copied too: it is a row of the picker, and its treedbs
-are real. Its config has no `__top_url__`, so the port is read from its `wss://`
-gate (`agent_secure_port`, `1993`), the host falls back to the node's name, and
-the service is its `C_AGENT` one (`agent`). `yuneta_agent22` has no such gate
-and is left out. The agent serves a self-signed certificate, so a browser
-reaches that url only once the certificate is trusted.
+are real. Its config has no `__top_url__`, so the scan asks its secure gate
+itself (0.29.5): `command-agent service=agent_secure_port command=view-cert`
+answers the certificate it has LOADED and the url it listens on, and the url
+copied is the certificate's CN with the gate's port --
+`wss://agent.artgins.com:1993` on a node given its own agent domain. The
+service is its `C_AGENT` one (`agent`). A CN that is not a hostname (the
+package's self-signed `yuneta_agent.yuneta.io`) or an agent that does not
+answer falls back to the config: the port of its `wss://` gate and the node's
+name as the host -- a url a browser reaches only once that self-signed
+certificate is trusted. `yuneta_agent22` has no such gate and is left out.
 
 The document says what each yuno **exposes**, and nothing in it is ticked:
 which treedbs to browse is decided where it is pasted, because a scanned

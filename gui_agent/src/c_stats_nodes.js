@@ -26,7 +26,7 @@
 import {
     escapeHtml,
     SDATA, SDATA_END, data_type_t,
-    gclass_create, log_error, log_warning,
+    gclass_create, log_error, log_warning, log_info,
     gobj_parent, gobj_name,
     gobj_read_attr, gobj_read_bool_attr, gobj_read_pointer_attr, gobj_write_attr,
     gobj_send_event,
@@ -63,6 +63,7 @@ import {
     esc,
     cert_host_of_config,
     agent_endpoint_of_config,
+    agent_endpoint_of_cert,
 } from "./agent_helpers.js";
 import {
     agent_config_get_selected_nodes,
@@ -103,6 +104,14 @@ const MASTER_PURPOSE = "treedbmaster";
  *  exposes a top gate at all, so the same answer says both "this can be a
  *  treedb backend" and "on this port".  */
 const CONNS_PURPOSE = "ytreedbconns";
+
+/*  Marker of the same scan's question to a node's AGENT: `view-cert` of its
+ *  secure gate, whose loaded certificate names the domain a browser must
+ *  dial (`agent.<domain>`) -- `view-config` does not show it, the agent
+ *  gets its certificate through a global override. An agent that does not
+ *  answer it is asked `view-config` after all.  */
+const CONNS_CERT_PURPOSE = "ytreedbconnscert";
+const AGENT_SECURE_GATE = "agent_secure_port";
 
 /*  A scan is one round trip per yuno; give up on the ones that never answer
  *  rather than leave the button spinning for ever.  */
@@ -1551,6 +1560,62 @@ function set_conns_config(gobj, node, yuno_id, data, result)
 }
 
 /***************************************************************
+ *  One question of the connections scan to one yuno (or agent).
+ ***************************************************************/
+function send_conns_request(link, row, service, command, purpose)
+{
+    let kw_send = {
+        agent_id:  row.node,
+        cmd2agent: cmd2agent_service(row.yuno_id, service, command)
+    };
+    msg_iev_write_key(kw_send, "console_purpose", purpose);
+    msg_iev_write_key(kw_send, "console_node", row.node);
+    msg_iev_write_key(kw_send, "console_yuno", row.yuno_id);
+    return agent_link_command(link, "command-agent", kw_send);
+}
+
+/***************************************************************
+ *  An agent answered `view-cert`: its endpoint is the loaded
+ *  certificate's domain and its gate's port. One that could not
+ *  answer (older than the command, or no TLS gate) is asked its
+ *  config, the way every agent was before.
+ ***************************************************************/
+function set_conns_cert(gobj, node, yuno_id, data, result)
+{
+    let priv = gobj.priv;
+    let scan = priv.conns_scan;
+    if(!scan) {
+        return;     /*  timed out, or a stale answer of a previous scan  */
+    }
+    let key = stats_sel_id(node, yuno_id);
+    let entry = scan.rows[key];
+    if(!entry || entry.answered) {
+        return;
+    }
+    let failed = typeof result === "number" && result < 0;
+    let endpoint = failed ? null : agent_endpoint_of_cert(data);
+    if(!endpoint || !endpoint.port || !endpoint.host) {
+        /*  The package's own certificate names no domain: normal on a node
+         *  that was given none. A view-cert that failed is not.  */
+        let say = failed ? log_warning : log_info;
+        say(`${gobj_short_name(gobj)}: ${node}: the agent's view-cert names no domain` +
+            (failed ? ` (result ${result})` : "") + ", reading its config instead");
+        let link = gobj_read_attr(gobj, "link_svc");
+        if(link && agent_link_is_connected(link) &&
+                send_conns_request(link, entry.row, "__yuno__", "view-config", CONNS_PURPOSE) >= 0) {
+            return;     /*  set_conns_config() closes this entry  */
+        }
+        log_error(`${gobj_short_name(gobj)}: ${node}: cannot ask the agent its config`);
+    }
+    entry.answered = true;
+    entry.endpoint = endpoint;
+    scan.pending--;
+    if(scan.pending <= 0) {
+        finish_conns_scan(gobj);
+    }
+}
+
+/***************************************************************
  *  The yuno rows the table is showing, flattened.
  *
  *  The yunos are `_children` of their node row: this is a dataTree, and
@@ -1680,14 +1745,11 @@ function start_conns_config_phase(gobj)
 
     for(let key of Object.keys(scan.rows)) {
         let row = scan.rows[key].row;
-        let kw_send = {
-            agent_id:  row.node,
-            cmd2agent: cmd2agent_service(row.yuno_id, "__yuno__", "view-config")
-        };
-        msg_iev_write_key(kw_send, "console_purpose", CONNS_PURPOSE);
-        msg_iev_write_key(kw_send, "console_node", row.node);
-        msg_iev_write_key(kw_send, "console_yuno", row.yuno_id);
-        agent_link_command(link, "command-agent", kw_send);
+        if(is_agent_yuno(row.yuno_id)) {
+            send_conns_request(link, row, AGENT_SECURE_GATE, "view-cert", CONNS_CERT_PURPOSE);
+        } else {
+            send_conns_request(link, row, "__yuno__", "view-config", CONNS_PURPOSE);
+        }
     }
 
     /*  A yuno that never answers must not hold the scan for ever: build the
@@ -2069,6 +2131,16 @@ function ac_mt_command_answer(gobj, event, kw, src)
             let yuno_id = msg_iev_read_key(kw, "console_yuno") || "";
             if(node && yuno_id) {
                 set_yuno_services(gobj, node, yuno_id, kw.data, kw.result);
+            }
+        }
+        return 0;
+    }
+    if(purpose === CONNS_CERT_PURPOSE) {
+        if(command !== "command-agent") {
+            let node = msg_iev_read_key(kw, "console_node") || "";
+            let yuno_id = msg_iev_read_key(kw, "console_yuno") || "";
+            if(node && yuno_id) {
+                set_conns_cert(gobj, node, yuno_id, kw.data, kw.result);
             }
         }
         return 0;
