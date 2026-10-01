@@ -6,7 +6,7 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
-## gui_agent 0.29.7, gui_treedb 0.17.74 + tabulator-tables ^6.6.1 (2026-10-01)
+## gui_agent 0.29.7, gui_treedb 0.17.74 + gobj-js ^7.25.9, tabulator-tables ^6.6.1 (2026-10-01)
 
 Goes with SDK 7.25.21 (agent + control center), and works with older ones.
 Deploy it before, or together with, a control center of SDK 7.25.21.
@@ -32,6 +32,9 @@ Deploy it before, or together with, a control center of SDK 7.25.21.
 - Both SPAs take `tabulator-tables` `^6.6.1` (its only change: `rangeEdited`
   also emits the changed cells; no SPA listens to it). gui_agent 244/244,
   gui_treedb 67/67, and gobj-ui's suite 1047/1047 against 6.6.1.
+- Both SPAs take `@yuneta/gobj-js` `^7.25.9` (SDK 7.25.21): the subscription
+  fixes (a repeated or renamed subscription, the subscription given to
+  `gobj_unsubscribe_list()`) and traces that mask credentials.
 
 ## gui_agent 0.29.6 (2026-09-30)
 
