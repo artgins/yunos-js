@@ -25,6 +25,10 @@ Deploy it before, or together with, a control center of SDK 7.25.21.
   as `check_step_command()` does.
 - The comments that dated the agent's `__relays__` check to SDK 7.25.16 name
   7.25.21, the release that carries it.
+- The text on the Monitor's rates says which services compute their own
+  `<dir>Msgsec` on a timer (yunovatios' gates, the control center of SDK
+  7.25.21) and which on the reading (a `C_IOGATE`/`C_CHANNEL` below a
+  service). No code change.
 
 ## gui_agent 0.29.6 (2026-09-30)
 

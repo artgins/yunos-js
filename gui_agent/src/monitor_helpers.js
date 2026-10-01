@@ -840,7 +840,10 @@ function layout_graph(ids, links, opts)
 /***************************************************************
  *  Messages per second in one direction ("rx"/"tx") from a stats
  *  answer. The yuno's own `<dir>Msgsec` is preferred: an application
- *  service computes it on its own timer, whoever reads. Without it the
+ *  service (yunovatios' gates, the control center since SDK 7.25.21)
+ *  computes it on its own timer, whoever reads. Not every one does: the
+ *  `<dir>Msgsec` of a C_IOGATE or C_CHANNEL below a service is computed by
+ *  the reading itself (SDK TODO), and two readers disturb it. Without it the
  *  rate is derived from the `<dir>Msgs` counter and the previous
  *  reading, taken with a MONOTONIC clock (`now_ms`); a counter that
  *  went down was reset, and gives no rate this time.

@@ -76,8 +76,10 @@
  *      with, which the agent keeps in the route it sends along.
  *
  *      RATES. A yuno's own `rxMsgsec`/`txMsgsec` is used when its service
- *      reports one (an application service computes it on its own
- *      timer); otherwise the rate comes from the `rxMsgs`/`txMsgs`
+ *      reports one (an application service -- yunovatios' gates, the
+ *      control center -- computes it on its own timer; one that comes from
+ *      a C_IOGATE/C_CHANNEL below is computed by the reading, see
+ *      monitor_helpers.js); otherwise the rate comes from the `rxMsgs`/`txMsgs`
  *      counters and a monotonic clock. The chart plots, per yuno, the
  *      direction the scenario names as its throughput (`rate`).
  *

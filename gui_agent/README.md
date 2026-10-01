@@ -210,7 +210,10 @@ INSIDE the command line (`stats-yuno service=__yuno__`), never in the kw:
 `C_IEVENT_CLI` reads `kw.service` as the service the command is ADDRESSED to,
 and the request would land on the agent's own `__yuno__`. A yuno's own
 `rxMsgsec`/`txMsgsec` is used when its service reports one (an application
-service computes it on its own timer, whoever reads); otherwise the rate is
+service such as yunovatios' gates or the control center of SDK 7.25.21
+computes it on its own timer, whoever reads; a `C_IOGATE`/`C_CHANNEL` below
+a service still computes its own on the reading, so two readers disturb it);
+otherwise the rate is
 derived from the `rxMsgs`/`txMsgs` counters with a monotonic clock. A figure
 that did not arrive since the previous reading is a GAP in the chart, not the
 old value drawn again.
