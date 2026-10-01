@@ -25,7 +25,7 @@
     "@yuneta/gobj-ui": "^7.25.23",
     "bulma": "^1.0.4",
     "i18next": "^26.4.2",
-    "tabulator-tables": "^6.6.0",
+    "tabulator-tables": "^6.6.1",
     "tom-select": "^2.6.2",
     "vanilla-jsoneditor": "^3.13.0"
   },

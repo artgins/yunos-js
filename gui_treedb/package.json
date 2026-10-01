@@ -1,7 +1,7 @@
 {
   "name": "gui-treedb",
   "private": true,
-  "version": "0.17.73",
+  "version": "0.17.74",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,7 +22,7 @@
     "i18next": "^26.4.2",
     "luxon": "^3.7.2",
     "maplibre-gl": "^6.11.2",
-    "tabulator-tables": "^6.6.0",
+    "tabulator-tables": "^6.6.1",
     "tom-select": "^2.6.2",
     "uplot": "^1.6.32",
     "vanilla-jsoneditor": "^3.13.0"

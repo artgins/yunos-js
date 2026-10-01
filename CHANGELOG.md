@@ -6,7 +6,7 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
-## gui_agent 0.29.7 (2026-09-30)
+## gui_agent 0.29.7, gui_treedb 0.17.74 + tabulator-tables ^6.6.1 (2026-10-01)
 
 Goes with SDK 7.25.21 (agent + control center), and works with older ones.
 Deploy it before, or together with, a control center of SDK 7.25.21.
@@ -29,6 +29,9 @@ Deploy it before, or together with, a control center of SDK 7.25.21.
   `<dir>Msgsec` on a timer (yunovatios' gates, the control center of SDK
   7.25.21) and which on the reading (a `C_IOGATE`/`C_CHANNEL` below a
   service). No code change.
+- Both SPAs take `tabulator-tables` `^6.6.1` (its only change: `rangeEdited`
+  also emits the changed cells; no SPA listens to it). gui_agent 244/244,
+  gui_treedb 67/67, and gobj-ui's suite 1047/1047 against 6.6.1.
 
 ## gui_agent 0.29.6 (2026-09-30)
 
