@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.8, gui_treedb 0.17.75 + gobj-ui ^7.25.24 (2026-10-02)
+
+- **gui_agent: the bottom bar of a phone no longer clips its fifth item.** At
+  360px the five labelled items (Commands, Terminal, Schemas, Users,
+  Scenarios) scrolled: 29px over in Spanish, 5px in English, because Bulma's
+  `.level` put a 0.75rem gap between items that already carry their padding.
+  gobj-ui 7.25.24 drops that gap from its icon bar; measured with the real
+  Bulma in Chromium and Firefox, both locales fit (19px to spare in Spanish,
+  the longest). gui_treedb takes the same library for its own icon bar.
+
 ## gui_agent 0.29.7, gui_treedb 0.17.74 + gobj-js ^7.25.9, tabulator-tables ^6.6.1 (2026-10-01)
 
 Goes with SDK 7.25.21 (agent + control center), and works with older ones.
