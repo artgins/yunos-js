@@ -149,13 +149,14 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 - **View adapter:** `C_TREEDB_VIEW` hosts the gobj-ui `C_YUI_TREEDB_TOPICS` /
   `C_YUI_TREEDB_GRAPH` as a **named service** (so `C_IEVENT_CLI` can route their
   command answers back) and resolves the live transport by `conn_id`.
-- **Graphs follow other operators' links** (`EV_TREEDB_NODE_LINKED` /
-  `EV_TREEDB_NODE_UNLINKED`) — but **only if the backend publishes them**: its
-  `C_NODE` service must be configured with `with_link_events` (default
-  **false**). Careful, it is an either/or in the backend: with link events ON,
-  a link/unlink stops publishing the parent's `EV_TREEDB_NODE_UPDATED`, so
-  enabling it on a treedb that also serves a **v1** SPA changes what that SPA
-  receives. With the flag off, an open Graph shows stale edges until reloaded.
+- **Graphs and tables follow other operators' links** (`EV_TREEDB_NODE_LINKED`
+  / `EV_TREEDB_NODE_UNLINKED`): the graph moves the edge, the topic table
+  re-reads the parent's row (gobj-ui 7.25.26+). The backend publishes them when
+  its `C_NODE` runs with `with_link_events`, the default since SDK 7.25.23. It
+  is an either/or in the backend: with link events ON, a link/unlink does not
+  publish the parent's `EV_TREEDB_NODE_UPDATED`, which is what a **v1** SPA
+  reads, so a backend that serves one (estadodelaire, hidraulia) turns it off.
+  Against such a backend an open Graph shows stale edges until reloaded.
 - **The runtime is auditable — every action crosses an FSM.** This is a
   contract of this SPA, not an accident: a DOM click, a modal `on_close`, a
   resolved `fetch` do nothing but `gobj_send_event`; the work lives in the FSM

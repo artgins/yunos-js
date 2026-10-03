@@ -6,6 +6,15 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.10, gui_treedb 0.17.76 + gobj-ui ^7.25.26 (2026-10-03)
+
+- **The topic tables follow a link made by somebody else.** SDK 7.25.23
+  turns `with_link_events` on by default: a link arrives as
+  `EV_TREEDB_NODE_LINKED` / `UNLINKED`, not as the parent's update, and the
+  table (gobj-ui `C_YUI_TREEDB_TOPICS`) left the parent's hook column as it
+  was until the topic was read again. gobj-ui 7.25.26 re-reads the parent on
+  the link event. Works with older backends too (they never publish them).
+
 ## gui_agent 0.29.9 + gobj-ui ^7.25.25 (2026-10-03)
 
 - **The schema editor warns before deleting a column with data behind it**
