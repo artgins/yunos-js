@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.11, gui_treedb 0.17.77 + gobj-ui ^7.26.0 (2026-10-03)
+
+Goes with SDK 7.26.0, and works with older ones.
+
+- **A burst of links costs two re-reads, and a failed one no modal.** The
+  topic tables (gobj-ui 7.26.0 `C_YUI_TREEDB_TOPICS`) re-read a linked
+  parent only when its row is loaded, one read at a time per parent; a
+  re-read that fails -- a parent deleted with `force`, its children told
+  `UNLINKED` one by one -- is a warning in the console, not the error modal
+  of every open viewer.
+
 ## gui_agent 0.29.10, gui_treedb 0.17.76 + gobj-ui ^7.25.26 (2026-10-03)
 
 - **The topic tables follow a link made by somebody else.** SDK 7.26.0
