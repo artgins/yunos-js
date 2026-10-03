@@ -152,7 +152,7 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 - **Graphs and tables follow other operators' links** (`EV_TREEDB_NODE_LINKED`
   / `EV_TREEDB_NODE_UNLINKED`): the graph moves the edge, the topic table
   re-reads the parent's row (gobj-ui 7.25.26+). The backend publishes them when
-  its `C_NODE` runs with `with_link_events`, the default since SDK 7.25.23. It
+  its `C_NODE` runs with `with_link_events`, the default since SDK 7.26.0. It
   is an either/or in the backend: with link events ON, a link/unlink does not
   publish the parent's `EV_TREEDB_NODE_UPDATED`, which is what a **v1** SPA
   reads, so a backend that serves one (estadodelaire, hidraulia) turns it off.

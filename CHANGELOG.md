@@ -8,7 +8,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## gui_agent 0.29.10, gui_treedb 0.17.76 + gobj-ui ^7.25.26 (2026-10-03)
 
-- **The topic tables follow a link made by somebody else.** SDK 7.25.23
+- **The topic tables follow a link made by somebody else.** SDK 7.26.0
   turns `with_link_events` on by default: a link arrives as
   `EV_TREEDB_NODE_LINKED` / `UNLINKED`, not as the parent's update, and the
   table (gobj-ui `C_YUI_TREEDB_TOPICS`) left the parent's hook column as it
