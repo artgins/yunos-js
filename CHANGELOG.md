@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.9 + gobj-ui ^7.25.25 (2026-10-03)
+
+- **The schema editor warns before deleting a column with data behind it**
+  (gobj-ui 7.25.25): before the confirm it reads the topic's records, up
+  to the first holding a value in that column, and says the records keep
+  those values while no reader shows them any more -- or that it could not
+  read them, or that it stopped at the cap. Four new locale keys (en, es).
+
 ## gui_agent 0.29.8, gui_treedb 0.17.75 + gobj-ui ^7.25.24 (2026-10-02)
 
 - **gui_agent: the bottom bar of a phone no longer clips its fifth item.** At
