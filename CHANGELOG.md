@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.80: maplibre-gl ^6.13.0 (2026-10-07)
+
+Dependency floor only; no map is mounted (maplibre-gl is here for the
+`resolve.dedupe` of gobj-ui's peers). gui_agent declares no maplibre and is
+unchanged. Tests 67, validate-locales OK; deployed and checked live (login,
+shell mounted).
+
 ## gui_agent 0.29.13, gui_treedb 0.17.79: vite ^8.3.3 (2026-10-06)
 
 Build tool floor only. vite 8.3.3 fixes the dev server (`fs.serve` is now
