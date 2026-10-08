@@ -6,6 +6,15 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.14, gui_treedb 0.17.81: gobj-ui ^7.26.1 (2026-10-08)
+
+Library floor only. gobj-ui 7.26.1 fixes the Developer window of both SPAs:
+in the Collapsed view "Copy" copies each entry as it is on screen (a closed
+branch as its one-line summary) instead of every payload laid out, and the
+TRACES row scrolls on its own instead of pushing the whole window sideways.
+Tests 244 (gui_agent) and 67 (gui_treedb); deployed through the deploy round
+and checked live (gui_agent: a clean console).
+
 ## gui_treedb 0.17.80: maplibre-gl ^6.13.0 (2026-10-07)
 
 Dependency floor only; no map is mounted (maplibre-gl is here for the
