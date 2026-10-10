@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.16, gui_treedb 0.17.83: gobj-ui ^7.26.4 (2026-10-10)
+
+Library floor only. gobj-ui 7.26.4: the treedb arrows go where browser Back
+goes -- the route before this one (`yui_shell_previous_route()`) -- the topics
+view's `←` and now also the graph's `← back`, which went to its fixed
+`back_route`. Tests 244 (gui_agent) and 67 (gui_treedb); deployed through the
+deploy round and checked live (gui_agent: a clean console).
+
 ## gui_agent 0.29.15, gui_treedb 0.17.82: gobj-ui ^7.26.3 (2026-10-10)
 
 Library floor only. gobj-ui 7.26.3: in the treedb views, the `←` of an open
