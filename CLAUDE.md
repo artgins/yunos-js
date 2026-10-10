@@ -26,7 +26,7 @@ shape), a `<label for=x>` over a control carrying only `name=x`, a
 A `<label>` that **wraps** its control does. A LITERAL `aria-label` next to a
 visible `i18n` label OVERRIDES it for a reader — worse than none.
 
-⚠️ Both these yunos mount gobj-ui's **Developer window**, whose 46 keys arrive
+⚠️ Both these yunos mount gobj-ui's **Developer window**, whose 51 keys (from 7 sites) arrive
 as VARIABLES and are therefore invisible to `validate-locales`: the list to
 copy sits above `TRACE_DEFS` in `yui_dev.js`.
 

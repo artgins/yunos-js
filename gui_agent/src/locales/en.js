@@ -52,6 +52,7 @@ const en = {
         "window":                                       "Window",
         "breadcrumbs":                                  "Breadcrumbs",
         "minimize":                                     "Minimize",
+        "restore":                                      "Restore",
         "maximize":                                     "Maximize",
         "coordinates...":                               "Coordinates...",
         "discard":                                      "Discard",

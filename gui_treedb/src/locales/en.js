@@ -62,6 +62,8 @@ const en = {
         "window":                                       "Window",
         "breadcrumbs":                                  "Breadcrumbs",
         "minimize":                                     "Minimize",
+        "restore":                                      "Restore",
+        "navigation":                                   "Navigation",
         "maximize":                                     "Maximize",
         "coordinates...":                               "Coordinates...",
         "select row":                                       "Select row",

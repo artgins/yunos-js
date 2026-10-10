@@ -56,6 +56,7 @@ const es = {
         "window":                                       "Ventana",
         "breadcrumbs":                                  "Miga de pan",
         "minimize":                                     "Minimizar",
+        "restore":                                      "Restaurar",
         "maximize":                                     "Maximizar",
         "coordinates...":                               "Coordenadas...",
         "discard":                                      "Descartar",

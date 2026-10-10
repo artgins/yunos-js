@@ -66,6 +66,8 @@ const es = {
         "window":                                       "Ventana",
         "breadcrumbs":                                  "Miga de pan",
         "minimize":                                     "Minimizar",
+        "restore":                                      "Restaurar",
+        "navigation":                                   "Navegación",
         "maximize":                                     "Maximizar",
         "coordinates...":                               "Coordenadas...",
         "select row":                                       "Seleccionar la fila",

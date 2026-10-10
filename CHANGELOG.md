@@ -6,6 +6,15 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.19, gui_treedb 0.17.86: gobj-js ^7.26.0, gobj-ui ^7.26.7 (2026-10-10)
+
+The libraries of the review of 2026-10-10: `log_*()` substitute their
+arguments again, a subscription filter on a false value matches, a link
+stopped and started in the same turn keeps working, a json field that does
+not parse is refused instead of saved as `{}`, and data shown in window
+titles and remote gclass views is text, never markup. New locale keys
+`restore` (both yunos) and `navigation` (gui_treedb).
+
 ## gui_agent 0.29.18, gui_treedb 0.17.85: gobj-ui ^7.26.6 (2026-10-10)
 
 gobj-ui 7.26.6: icons a user adds, as data. A treedb of SDK 7.26.7+ has the
