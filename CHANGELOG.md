@@ -6,6 +6,15 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.20, gui_treedb 0.17.87: gobj-js ^7.26.1, gobj-ui ^7.26.8 (2026-10-10)
+
+The second check of the review of 2026-10-10. Through gobj-ui 7.26.8: the
+labels the apps feed into the nav at run time (`list-agents` hosts in
+gui_agent, the selected treedb in gui_treedb) are text, never markup; a form
+with a table destroyed right after saving no longer throws; Back closes the
+"unsaved changes" question again. Through gobj-js 7.26.1: a link restarted
+against a url that fails no longer delivers the old close twice.
+
 ## gui_agent 0.29.19, gui_treedb 0.17.86: gobj-js ^7.26.0, gobj-ui ^7.26.7 (2026-10-10)
 
 The libraries of the review of 2026-10-10: `log_*()` substitute their
