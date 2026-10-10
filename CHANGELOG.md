@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.15, gui_treedb 0.17.82: gobj-ui ^7.26.3 (2026-10-10)
+
+Library floor only. gobj-ui 7.26.3: in the treedb views, the `←` of an open
+topic goes back to where the reader was -- the previous topic, the landing, or
+the view they came from -- the same place browser Back goes, instead of always
+the topic cards; its label is now `back`. (7.26.2 added the shell helper it
+uses, `yui_shell_last_route_outside()`.) Tests 244 (gui_agent) and 67
+(gui_treedb); deployed through the deploy round and checked live (gui_agent: a
+clean console).
+
 ## gui_agent 0.29.14, gui_treedb 0.17.81: gobj-ui ^7.26.1 (2026-10-08)
 
 Library floor only. gobj-ui 7.26.1 fixes the Developer window of both SPAs:
