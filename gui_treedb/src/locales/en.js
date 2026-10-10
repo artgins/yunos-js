@@ -236,6 +236,13 @@ const en = {
         "unknown error": "Unknown error",
         "geolocation is not supported": "Geolocation is not supported",
         "remove all selected options": "Remove all selected options",
+        "__icons__": "Icons",
+        "left out": "left out",
+        "empty svg": "empty svg",
+        "svg too big": "svg too big (32 KB max)",
+        "not an svg document": "not an svg document",
+        "svg without size": "svg without size: it needs a viewBox, or a width and a height",
+        "svg without shapes": "svg without shapes",
 
         "label": "Label",
         "url":                                "URL",

@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.18, gui_treedb 0.17.85: gobj-ui ^7.26.6 (2026-10-10)
+
+gobj-ui 7.26.6: icons a user adds, as data. A treedb of SDK 7.26.7+ has the
+system topic `__icons__`; the treedb topics view shows it as a tab, and an
+`icon` column names its nodes as `yi-u-<id>`. The form's `icon` column is a
+picker that draws every icon beside its name; the `svg` of `__icons__` is a
+text area with a live preview.
+
+- New locale keys (en, es): `__icons__`, `left out`, `empty svg`, `svg too
+  big`, `not an svg document`, `svg without size`, `svg without shapes`.
+
 ## gui_agent 0.29.17, gui_treedb 0.17.84: gobj-ui ^7.26.5 (2026-10-10)
 
 gobj-ui 7.26.5: the schema editor's `←` (Schemas workspace,

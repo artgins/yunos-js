@@ -240,6 +240,13 @@ const es = {
         "unknown error": "Error desconocido",
         "geolocation is not supported": "La geolocalización no está soportada",
         "remove all selected options": "Quitar todas las opciones seleccionadas",
+        "__icons__": "Iconos",
+        "left out": "omitido",
+        "empty svg": "svg vacío",
+        "svg too big": "svg demasiado grande (máx. 32 KB)",
+        "not an svg document": "no es un documento svg",
+        "svg without size": "svg sin tamaño: necesita un viewBox, o un width y un height",
+        "svg without shapes": "svg sin formas",
 
         "label": "Etiqueta",
         "url":                                "URL",
