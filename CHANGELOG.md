@@ -6,6 +6,21 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.17, gui_treedb 0.17.84: gobj-ui ^7.26.5 (2026-10-10)
+
+gobj-ui 7.26.5: the schema editor's `←` (Schemas workspace,
+`…/treedb_system_schema/edit/…`) lands where browser Back lands -- the
+previous position -- instead of going up a level whatever came before.
+
+- gui_agent `scripts/qa.mjs --check schemaback`: selects a yuno in the Schemas
+  picker, moves between two topics of the editor, presses `←` and expects the
+  first topic; then reloads on that position and expects it kept; and leaves
+  the picker as it found it. It failed against 7.26.4 (the arrow went to the
+  treedb) and passes against 7.26.5.
+
+Tests 244 (gui_agent) and 67 (gui_treedb); deployed through the deploy round
+and checked live (gui_agent: a clean console).
+
 ## gui_agent 0.29.16, gui_treedb 0.17.83: gobj-ui ^7.26.4 (2026-10-10)
 
 Library floor only. gobj-ui 7.26.4: the treedb arrows go where browser Back

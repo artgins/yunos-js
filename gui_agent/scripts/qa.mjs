@@ -27,6 +27,7 @@
  *          node scripts/qa.mjs                         # the .com plane
  *          node scripts/qa.mjs --url https://artgins.yunetacontrol.ovh
  *          node scripts/qa.mjs --no-login              # login screen only
+ *          node scripts/qa.mjs --check schemaback      # the schema editor's ← = browser Back
  *
  *      Routes are hash routes of the shell, given without the '#':
  *
@@ -79,13 +80,15 @@ const SEL = {
 
 
 function parse_args(argv) {
-    const out = {url: process.env.QA_URL || DEFAULTS.URL, routes: [], login: true};
+    const out = {url: process.env.QA_URL || DEFAULTS.URL, routes: [], login: true, checks: []};
     for(let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if(a === "--url") {
             out.url = argv[++i];
         } else if(a === "--route") {
             out.routes.push(argv[++i]);
+        } else if(a === "--check") {
+            out.checks.push(argv[++i]);
         } else if(a === "--no-login") {
             out.login = false;
         } else if(a === "--help" || a === "-h") {
@@ -152,6 +155,118 @@ function get_credentials() {
     }
     return {user, pass};
 }
+
+
+                    /***************************
+                     *      Checks
+                     ***************************/
+
+
+/*
+ *  --check schemaback: the schema editor's «←» lands where browser Back
+ *  lands (gobj-ui 7.26.5).  It used to go UP a level -- columns, topics,
+ *  treedbs -- whatever came before, so after two topics Back returned to
+ *  the first and the arrow to the treedb.
+ *
+ *  Only navigation: nothing is written.  The yuno is SELECTED in the
+ *  picker to get its tab, and unselected again at the end when it was not
+ *  selected before -- a check leaves the app as it found it.
+ */
+const SCHEMA_NODE = process.env.QA_SCHEMA_NODE || "yunovatios-central";
+const SCHEMA_YUNO = process.env.QA_SCHEMA_YUNO || "db_history_ce";
+const SCHEMA_TREEDB = process.env.QA_SCHEMA_TREEDB || "treedb_yunovatioscedb";
+const SCHEMA_TOPICS = ["devices", "places"];
+
+async function check_schemaback(page, args, step, out_dir)
+{
+    const hash = () => page.evaluate(() => decodeURIComponent(window.location.hash));
+    const yuno_box = () => page.locator(".tabulator-row", {hasText: SCHEMA_YUNO})
+        .locator("input.STATNODES_SEL").first();
+
+    await page.evaluate(() => { window.location.hash = "#/schemas/nodes"; });
+    await page.waitForSelector(".tabulator-row", {timeout: DEFAULTS.TIMEOUT});
+    const $node = page.locator(".tabulator-row", {hasText: SCHEMA_NODE}).first();
+    await $node.locator(".tabulator-data-tree-control").first().click().catch(() => {});
+    await page.waitForTimeout(800);
+    if(!await yuno_box().count()) {
+        step("check schemaback", false, `no '${SCHEMA_YUNO}' under '${SCHEMA_NODE}' in the picker`);
+        return false;
+    }
+    const was_selected = await yuno_box().isChecked();
+    if(!was_selected) {
+        await yuno_box().click();
+        await page.waitForTimeout(1500);
+    }
+
+    let ok = false;
+    try {
+        /*  The yuno's tab: the nav link whose route is under /schemas/node/.  */
+        const tab = await page.evaluate((yuno) => {
+            const as = [...document.querySelectorAll("a[href^='#/schemas/node/']")];
+            const a = as.find((x) => (x.textContent || "").includes(yuno));
+            return a? a.getAttribute("href"): null;
+        }, SCHEMA_YUNO);
+        if(!tab) {
+            step("check schemaback", false, `no tab for '${SCHEMA_YUNO}' after selecting it`);
+            return false;
+        }
+        const base = `${tab.slice(1)}/treedb_system_schema/edit`;
+        const at = async (topic) => {
+            await page.evaluate((h) => { window.location.hash = h; },
+                `#${base}/${SCHEMA_TREEDB}/${topic}`);
+            await page.waitForTimeout(2500);
+            console.log(`    after ${topic}: ${await hash()}`);
+        };
+        /*  The first visit mounts the editor; the moves are made on a
+         *  mounted one.  */
+        await at(SCHEMA_TOPICS[0]);
+        await at(SCHEMA_TOPICS[0]);
+        await at(SCHEMA_TOPICS[1]);
+        await page.waitForSelector(".SCHEMA_BACK", {timeout: DEFAULTS.TIMEOUT});
+        await page.screenshot({path: join(out_dir, "schemaback-before.png"), fullPage: true});
+        await page.click(".SCHEMA_BACK");
+        await page.waitForTimeout(2000);
+        const by_arrow = await hash();
+        const want = decodeURIComponent(`#${base}/${SCHEMA_TREEDB}/${SCHEMA_TOPICS[0]}`);
+        ok = by_arrow === want;
+        step("check schemaback: the arrow lands where Back would", ok,
+            ok? by_arrow: `${by_arrow}, expected ${want}`);
+
+        /*  And a reload ON that position keeps it: the url is the
+         *  position, and F5 or a shared link must land there.  */
+        await page.goto(`${args.url}/${want}`, {waitUntil: "load"});
+        await page.waitForSelector(".C_YUI_SHELL", {timeout: DEFAULTS.TIMEOUT});
+        await page.waitForTimeout(5000);
+        const by_reload = await hash();
+        const kept = by_reload === want;
+        step("check schemaback: a reload keeps the position", kept,
+            kept? by_reload: `${by_reload}, expected ${want}`);
+        ok = ok && kept;
+    } finally {
+        if(!was_selected) {
+            await page.evaluate(() => { window.location.hash = "#/schemas/nodes"; });
+            await page.waitForTimeout(1500);
+            const $n = page.locator(".tabulator-row", {hasText: SCHEMA_NODE}).first();
+            if(!await yuno_box().count()) {
+                await $n.locator(".tabulator-data-tree-control").first().click().catch(() => {});
+                await page.waitForTimeout(800);
+            }
+            if(await yuno_box().count() && await yuno_box().isChecked()) {
+                await yuno_box().click();
+                await page.waitForTimeout(800);
+            }
+            const left = await yuno_box().isChecked().catch(() => null);
+            step("check schemaback: the picker is left as it was", left === false,
+                left === false? "": `still selected (${left})`);
+            ok = ok && left === false;
+        }
+    }
+    return ok;
+}
+
+const CHECKS = {
+    schemaback: check_schemaback,
+};
 
 
                     /***************************
@@ -277,6 +392,17 @@ async function main() {
                     !!document.querySelector(".C_YUI_SHELL")?.textContent);
                 step("shell renders content", connected);
                 failed ||= !connected;
+
+                for(const name of args.checks) {
+                    const fn = CHECKS[name];
+                    if(!fn) {
+                        step(`check ${name}`, false, "no such check");
+                        failed = true;
+                        continue;
+                    }
+                    const ok = await fn(page, args, step, out_dir);
+                    failed ||= !ok;
+                }
 
                 for(const route of args.routes) {
                     await page.goto(`${args.url}/#${route}`, {waitUntil: "load"});
