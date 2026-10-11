@@ -6,6 +6,11 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.32, gui_treedb 0.17.99: gobj-js ^7.26.13 (2026-10-11)
+
+gobj-js 7.26.13: `kw_set_dict_value()` refuses a path with an empty segment,
+as the C writer does now.
+
 ## gui_agent 0.29.31, gui_treedb 0.17.98: gobj-js ^7.26.12, gobj-ui ^7.26.19 (2026-10-11)
 
 The tenth review of the implementation: the markup check of the `prebuild`
