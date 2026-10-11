@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.36, gui_treedb 0.17.103: gobj-js ^7.26.17, gobj-ui ^7.26.22 (2026-10-11)
+
+The fourteenth review: two name rules in the schema editor (a topic is a
+directory, a column only a key), its import stops before any write on a name
+the treedb refuses, and gui_agent's locales carry the four keys that say it;
+no log path of gobj-js throws.
+
 ## gui_agent 0.29.35, gui_treedb 0.17.102: gobj-js ^7.26.16, gobj-ui ^7.26.21 (2026-10-11)
 
 The thirteenth review: the schema editor refuses a topic or column name that
