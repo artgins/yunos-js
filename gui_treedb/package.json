@@ -1,22 +1,23 @@
 {
   "name": "gui-treedb",
   "private": true,
-  "version": "0.17.88",
+  "version": "0.17.89",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "validate-locales": "node scripts/validate-locales.mjs",
-    "prebuild": "npm run validate-locales",
+    "check-markup": "node scripts/check-markup-strings.mjs src",
+    "prebuild": "npm run validate-locales && npm run check-markup",
     "test": "vitest run",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage"
   },
   "dependencies": {
     "@antv/g6": "^5.1.1",
-    "@yuneta/gobj-js": "^7.26.2",
-    "@yuneta/gobj-ui": "^7.26.9",
+    "@yuneta/gobj-js": "^7.26.3",
+    "@yuneta/gobj-ui": "^7.26.10",
     "bulma": "^1.0.4",
     "bulma-switch-control": "^1.2.2",
     "i18next": "^26.4.2",
@@ -30,6 +31,7 @@
   "devDependencies": {
     "@rollup/plugin-terser": "^1.0.0",
     "@vitest/coverage-v8": "^5.0.0",
+    "acorn": "^8.19.0",
     "playwright": "^1.62.1",
     "vite": "^8.3.3",
     "vitest": "^5.0.0"

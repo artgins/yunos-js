@@ -37,6 +37,7 @@ import {
     register_c_yuno,
     register_c_timer,
     register_c_ievent_cli,
+    set_strings_are_text,
 } from "@yuneta/gobj-js";
 
 /*
@@ -173,6 +174,14 @@ function main()
      *  SDF_PERSIST attrs (user connection/auth config)
      *  survive reloads.
      *------------------------------------------------*/
+    /*
+     *  A plain string given to createElement2() is TEXT, never markup:
+     *  markup is said with html_markup() (gobj-js 7.26.3+, gobj-ui
+     *  7.26.10+ pass all theirs that way). A string that starts with
+     *  '<' is logged once -- a datum that used to run as html.
+     */
+    set_strings_are_text(true);
+
     gobj_start_up(
         null,                       // jn_global_settings
         db_load_persistent_attrs,

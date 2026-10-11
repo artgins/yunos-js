@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.22, gui_treedb 0.17.89: gobj-js ^7.26.3, gobj-ui ^7.26.10 (2026-10-11)
+
+Strings are text. Both yunos start with `set_strings_are_text(true)`: a plain
+string given to `createElement2()` is always text, even when it starts with
+`<`, and markup is asked for with `html_markup()`. The build runs
+`scripts/check-markup-strings.mjs` over `src` (a literal markup, or markup built
+with values, in a description stops it; `acorn` is a new devDependency for it).
+Through gobj-ui 7.26.10 the window manager's events carry the window's name,
+not the gobj.
+
 ## gui_agent 0.29.21, gui_treedb 0.17.88: gobj-js ^7.26.2, gobj-ui ^7.26.9 (2026-10-11)
 
 The third check of the review of 2026-10-10. Through gobj-ui 7.26.9: more
