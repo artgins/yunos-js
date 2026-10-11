@@ -348,6 +348,7 @@ const es = {
         "raising it is what publishes a change of the columns": "Subirla es lo que publica un cambio de las columnas",
         "a column needs a name": "Una columna necesita un nombre",
         "that column is already there": "Esa columna ya existe",
+        "a name cannot be . or .., nor hold / or `": "Un nombre no puede ser . ni .., ni llevar / ni `",
         "a topic needs a name": "Un topic necesita un nombre",
         "that topic is already there": "Ese topic ya existe",
         "delete this column?": "¿Borrar esta columna?",

@@ -344,6 +344,7 @@ const en = {
         "raising it is what publishes a change of the columns": "Raising it is what publishes a change of the columns",
         "a column needs a name": "A column needs a name",
         "that column is already there": "That column is already there",
+        "a name cannot be . or .., nor hold / or `": "A name cannot be . or .., nor hold / or `",
         "a topic needs a name": "A topic needs a name",
         "that topic is already there": "That topic is already there",
         "delete this column?": "Delete this column?",
