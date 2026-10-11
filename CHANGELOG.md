@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.24, gui_treedb 0.17.91: gobj-js ^7.26.6, gobj-ui ^7.26.12 (2026-10-11)
+
+The fifth check of the review. Through gobj-ui 7.26.12: a `back()` the browser
+dropped no longer closes the overlay that waited for its marker, the gclass
+view header and the treedb graph legend show data as text, and the markup
+check sees more shapes. Through gobj-js 7.26.6: `kw_delete()` answers as C.
+
 ## gui_agent 0.29.23, gui_treedb 0.17.90: gobj-js ^7.26.5, gobj-ui ^7.26.11 (2026-10-11)
 
 The fourth check of the review. `check-markup` runs the script gobj-ui
