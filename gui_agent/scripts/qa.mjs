@@ -32,10 +32,11 @@
  *      Routes are hash routes of the shell, given without the '#':
  *
  *          node scripts/qa.mjs --route /commands/nodes --route /preferences
- *          node scripts/qa.mjs --route /statistics/nodes --route /schemas/nodes
+ *          node scripts/qa.mjs --route /terminal/nodes --route /schemas/nodes
  *
- *      The four workspaces are /commands, /statistics, /terminal and
- *      /schemas; each has a picker at /<ws>/nodes and its per-node tabs at
+ *      The workspaces are /commands, /terminal, /schemas, /users and
+ *      /scenarios; each has a picker at /<ws>/nodes (scenarios: /list,
+ *      /yunos, /live) and its per-node tabs at
  *      /<ws>/node/<id>. Preferences is /preferences.
  *
  *      Output (one directory per run):
