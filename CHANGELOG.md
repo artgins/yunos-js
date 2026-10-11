@@ -6,6 +6,11 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.38, gui_treedb 0.17.105: gobj-js ^7.26.19, gobj-ui ^7.26.24 (2026-10-11)
+
+The sixteenth review: an import conflict of the schema editor names the bad
+name; the reentrancy guard of gobj-js no longer swallows console lines.
+
 ## gui_agent 0.29.37, gui_treedb 0.17.104: gobj-js ^7.26.18, gobj-ui ^7.26.23 (2026-10-11)
 
 The fifteenth review. `validate-locales` (both yunos) scans the gobj-ui it

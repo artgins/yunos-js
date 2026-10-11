@@ -181,7 +181,7 @@ function collect_used_keys() {
      *  carries views this app never mounts.  */
     /*  The library this app BUILDS with: the installed package first; the
      *  yunetas checkout only when there is none. Neither is a failure, not a
-     *  scan of the app alone (210 keys instead of 474 in a lone clone).  */
+     *  scan of the app alone (gui_agent: 210 keys used instead of 501).  */
     const candidates = [
         new URL("../node_modules/@yuneta/gobj-ui/src/", import.meta.url),
         new URL("../../../../kernel/js/gobj-ui/src/", import.meta.url),
