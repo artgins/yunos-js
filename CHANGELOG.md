@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.27, gui_treedb 0.17.94: gobj-js ^7.26.8, gobj-ui ^7.26.15 (2026-10-11)
+
+The sixth review of the implementation. Through gobj-ui 7.26.15: a link (or a
+menu click) back to the hash a panel was opened on no longer closes the panel
+nor leaves the URL and the view on screen disagreeing; a navigation made while
+the shell retires an overlay's history entry has a bounded wait and says when
+it is replaced or dropped, and a menu click waits for it too. Through gobj-js
+7.26.8: `kw_set_subdict_value()` and `jdb_update()`/`jdb_delete()` refuse a
+path they cannot write.
+
 ## gui_agent 0.29.26, gui_treedb 0.17.93: gobj-ui ^7.26.14 (2026-10-11)
 
 The close of the review. Through gobj-ui 7.26.14: Back over a panel opened
