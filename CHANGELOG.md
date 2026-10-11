@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.26, gui_treedb 0.17.93: gobj-ui ^7.26.14 (2026-10-11)
+
+The close of the review. Through gobj-ui 7.26.14: Back over a panel opened
+before a replace navigation keeps the position, and closing a panel and
+navigating in the same turn no longer undoes the navigation (both found and
+checked in Chromium and Firefox); the window manager refuses the legacy form
+of its events (BREAKING for a sender of them; none here).
+
 ## gui_agent 0.29.25, gui_treedb 0.17.92: gobj-js ^7.26.7, gobj-ui ^7.26.13 (2026-10-11)
 
 The sixth check of the review. Through gobj-ui 7.26.13: a panel that stays
