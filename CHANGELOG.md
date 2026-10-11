@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.29, gui_treedb 0.17.96: gobj-js ^7.26.10, gobj-ui ^7.26.17 (2026-10-11)
+
+The eighth review of the implementation. Through gobj-ui 7.26.17: the markup
+check of the `prebuild` no longer reads a `replace()` whose pattern cannot
+match at the start as built markup. Through gobj-js 7.26.10: the jdb and an
+empty kw path log what they do not do.
+
 ## gui_agent 0.29.28, gui_treedb 0.17.95: gobj-js ^7.26.9, gobj-ui ^7.26.16 (2026-10-11)
 
 The seventh review of the implementation. Through gobj-ui 7.26.16: Forward onto
