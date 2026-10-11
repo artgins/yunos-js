@@ -348,6 +348,8 @@ const en = {
         "invalid column name": "A column name cannot be empty, nor hold `",
         "topic name breaks the name rule": "Topic name breaks the name rule (no . or .., no / or `)",
         "column name breaks the name rule": "Column name breaks the name rule (no `)",
+        "treedb name breaks the name rule": "Treedb name breaks the name rule (no . or .., no / or `)",
+        "column has no name": "A column has no name",
         "a topic needs a name": "A topic needs a name",
         "that topic is already there": "That topic is already there",
         "delete this column?": "Delete this column?",

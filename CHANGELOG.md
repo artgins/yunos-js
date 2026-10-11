@@ -6,6 +6,15 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.37, gui_treedb 0.17.104: gobj-js ^7.26.18, gobj-ui ^7.26.23 (2026-10-11)
+
+The fifteenth review. `validate-locales` (both yunos) scans the gobj-ui it
+BUILDS with -- the installed package, the yunetas checkout only when there is
+none -- and fails when it finds neither or misses a module (a lone clone
+scanned the app alone and passed); it also reads the codes of gobj-ui's
+schema checks (`add("error", "…")`, `code: "…"`), so gui_agent's 2 new keys
+(`treedb name breaks the name rule`, `column has no name`) are checked.
+
 ## gui_agent 0.29.36, gui_treedb 0.17.103: gobj-js ^7.26.17, gobj-ui ^7.26.22 (2026-10-11)
 
 The fourteenth review: two name rules in the schema editor (a topic is a

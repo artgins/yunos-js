@@ -25,7 +25,7 @@
  *          Copyright (c) 2025, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
-import {readdirSync, readFileSync} from "fs";
+import {readdirSync, readFileSync, existsSync} from "fs";
 
 import {en} from "../src/locales/en.js";
 import {es} from "../src/locales/es.js";
@@ -141,6 +141,10 @@ function collect_used_keys() {
          *  asks for its whole chrome through `tr(key, default)`, so a scan
          *  of `t(` saw none of it.  */
         /\btr\(\s*['"]([^'"]+)['"]/g,
+        /*  The codes gobj-ui's schema checks hand to `t(finding.code)` /
+         *  `t(conflict.code)`: an i18n key each, written where it is born.  */
+        /\badd\(\s*['"](?:error|warning)['"]\s*,\s*['"]([^'"]+)['"]/g,
+        /\bcode:\s*['"]([^'"]+)['"]/g,
         /\bi18n:\s*['"]([^'"]+)['"]/g,
         /["']data-i18n(?:-title|-aria-label|-placeholder)?["']:\s*['"]([^'"]+)['"]/g,
         /data-i18n(?:-title|-aria-label|-placeholder)?=["']([^"']+)["']/g
@@ -175,7 +179,19 @@ function collect_used_keys() {
      *  + graph editor shipped reading "edit", "new", "delete", "paste"). Only
      *  the modules actually imported are scanned, transitively — the library
      *  carries views this app never mounts.  */
-    const lib = new URL("../../../../kernel/js/gobj-ui/src/", import.meta.url);
+    /*  The library this app BUILDS with: the installed package first; the
+     *  yunetas checkout only when there is none. Neither is a failure, not a
+     *  scan of the app alone (210 keys instead of 474 in a lone clone).  */
+    const candidates = [
+        new URL("../node_modules/@yuneta/gobj-ui/src/", import.meta.url),
+        new URL("../../../../kernel/js/gobj-ui/src/", import.meta.url),
+    ];
+    const lib = candidates.find((u) => existsSync(u));
+    if(!lib) {
+        console.error("validate-locales: no @yuneta/gobj-ui source to scan (npm install first)");
+        process.exit(1);
+    }
+    const missing = [];
     const seen = new Set();
     while(pending.length > 0) {
         const name = pending.pop();
@@ -184,12 +200,17 @@ function collect_used_keys() {
         }
         seen.add(name);
         let src;
-        try {
-            src = scan(new URL(name, lib));
-        } catch(e) {
-            continue;   /*  not a source module of the library (css, asset)  */
+        const url = new URL(name, lib);
+        if(!existsSync(url)) {
+            missing.push(name);
+            continue;
         }
-        pending.push(...lib_imports(src));
+        src = scan(url);
+        pending.push(...lib_imports(src, true));
+    }
+    if(missing.length > 0) {
+        console.error(`validate-locales: modules of gobj-ui not found in ${lib.pathname}: ${missing.join(", ")}`);
+        process.exit(1);
     }
 
     keys_from_shell_config(keys);
@@ -262,16 +283,20 @@ function strip_comments(src) {
  *  The gobj-ui source modules a file imports ("@yuneta/gobj-ui/src/x.js"
  *  from the app, "./x.js" from inside the library).
  ***************************************************************/
-function lib_imports(src) {
+function lib_imports(src, inside_lib) {
     const out = [];
     let m;
     const from_app = /from\s+["']@yuneta\/gobj-ui\/src\/([\w.-]+\.js)["']/g;
     while((m = from_app.exec(src)) !== null) {
         out.push(m[1]);
     }
-    const inside = /from\s+["']\.\/([\w.-]+\.js)["']/g;
-    while((m = inside.exec(src)) !== null) {
-        out.push(m[1]);
+    if(inside_lib) {
+        /*  A relative import is the library's own module only INSIDE it: in
+         *  the app it names an app file, scanned already.  */
+        const inside = /from\s+["']\.\/([\w.-]+\.js)["']/g;
+        while((m = inside.exec(src)) !== null) {
+            out.push(m[1]);
+        }
     }
     return out;
 }
