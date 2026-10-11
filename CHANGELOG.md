@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.25, gui_treedb 0.17.92: gobj-js ^7.26.7, gobj-ui ^7.26.13 (2026-10-11)
+
+The sixth check of the review. Through gobj-ui 7.26.13: a panel that stays
+across navigation closes with Back again after the view under it wrote its
+position with a replace, and that position survives the close; no orphan
+history marker after a dropped back(). Through gobj-js 7.26.7: a path that is
+not a string is an error, not a TypeError.
+
 ## gui_agent 0.29.24, gui_treedb 0.17.91: gobj-js ^7.26.6, gobj-ui ^7.26.12 (2026-10-11)
 
 The fifth check of the review. Through gobj-ui 7.26.12: a `back()` the browser
