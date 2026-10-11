@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.21, gui_treedb 0.17.88: gobj-js ^7.26.2, gobj-ui ^7.26.9 (2026-10-11)
+
+The third check of the review of 2026-10-10. Through gobj-ui 7.26.9: more
+runtime data shown as text (treedb topic cards and info panel, schema editor,
+delete confirmation, column titles from a schema `header`, traffic keys of the
+dev window), a node colour from `__graphs__` is checked before it is painted,
+and Back after a window's question answered by a button no longer leaves the
+app or gets swallowed. Through gobj-js 7.26.2: a url the browser refuses
+publishes `EV_ON_OPEN_ERROR` and retries, and the copies of a kw keep an own
+`__proto__` as a key.
+
 ## gui_agent 0.29.20, gui_treedb 0.17.87: gobj-js ^7.26.1, gobj-ui ^7.26.8 (2026-10-10)
 
 The second check of the review of 2026-10-10. Through gobj-ui 7.26.8: the
