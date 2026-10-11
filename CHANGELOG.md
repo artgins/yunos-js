@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.23, gui_treedb 0.17.90: gobj-js ^7.26.5, gobj-ui ^7.26.11 (2026-10-11)
+
+The fourth check of the review. `check-markup` runs the script gobj-ui
+publishes (`node_modules/@yuneta/gobj-ui/scripts/check-markup-strings.mjs`);
+the copies under `scripts/` are gone. Through gobj-ui 7.26.11: more runtime
+data as text (icon cells, schema editor selects, Tabulator list editors and
+filters, gclass method chips), and a Back the browser dropped no longer
+swallows the next one. Through gobj-js 7.26.4/7.26.5: path writers read a
+list as the reader does, and a treedb template record keeps an own
+`__proto__` as a key.
+
 ## gui_agent 0.29.22, gui_treedb 0.17.89: gobj-js ^7.26.3, gobj-ui ^7.26.10 (2026-10-11)
 
 Strings are text. Both yunos start with `set_strings_are_text(true)`: a plain
