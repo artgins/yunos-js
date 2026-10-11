@@ -6,6 +6,10 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.34, gui_treedb 0.17.101: gobj-js ^7.26.15 (2026-10-11)
+
+gobj-js 7.26.15: a log line can no longer throw, whatever it prints.
+
 ## gui_agent 0.29.33, gui_treedb 0.17.100: gobj-js ^7.26.14, gobj-ui ^7.26.20 (2026-10-11)
 
 The eleventh review: `KW_CREATE` over another type is logged, a `null` is
