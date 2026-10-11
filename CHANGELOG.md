@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.28, gui_treedb 0.17.95: gobj-js ^7.26.9, gobj-ui ^7.26.16 (2026-10-11)
+
+The seventh review of the implementation. Through gobj-ui 7.26.16: Forward onto
+an entry stamped for an earlier dialog no longer closes a panel the reader has
+not left, and after a reload a Back over a reopened panel closes it instead of
+being lost. Through gobj-js 7.26.9: `jdb_init()` creates its topics.
+
 ## gui_agent 0.29.27, gui_treedb 0.17.94: gobj-js ^7.26.8, gobj-ui ^7.26.15 (2026-10-11)
 
 The sixth review of the implementation. Through gobj-ui 7.26.15: a link (or a
