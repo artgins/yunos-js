@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.41, gui_treedb 0.17.108: gobj-ui ^7.26.27 (2026-10-12)
+
+The nineteenth review (yunovatios `REV-CLOUD.md` V19.4): the property popovers
+of the gobj tree name their controls and change language (gobj-ui 7.26.27);
+the published `validate-locales` reads the keys the library's modules publish
+as data. Both pass with no change of their catalogs.
+
 ## gui_agent 0.29.40, gui_treedb 0.17.107: gobj-ui ^7.26.26 (2026-10-12)
 
 The eighteenth review (yunovatios `REV-CLOUD.md` V18.4).
