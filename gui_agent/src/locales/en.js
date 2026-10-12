@@ -9,7 +9,7 @@
  *               missing translation falls through to the lower-case key,
  *               making the gap visible to the user at a glance.
  *            3. Every locale file must carry the *same* key set; see
- *               scripts/validate-locales.mjs.
+ *               validate-locales (published by @yuneta/gobj-ui).
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -348,6 +348,7 @@ const en = {
         "invalid column name": "A column name cannot be empty, nor hold `",
         "topic name breaks the name rule": "Topic name breaks the name rule (no . or .., no / or `)",
         "column name breaks the name rule": "Column name breaks the name rule (no `)",
+        "in the hook map of":   "in the hook map of",
         "treedb name breaks the name rule": "Treedb name breaks the name rule (no . or .., no / or `)",
         "column has no name": "A column has no name",
         "a topic needs a name": "A topic needs a name",

@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.39, gui_treedb 0.17.106: gobj-ui ^7.26.25 (2026-10-12)
+
+The seventeenth review (yunovatios `REV-CLOUD.md` V17.3.4-5).
+
+- Both run the `validate-locales` gobj-ui publishes
+  (`node node_modules/@yuneta/gobj-ui/scripts/validate-locales.mjs`) and keep
+  no copy: the copies of the apps had drifted into three families with
+  different rules. Same result here (gui_agent 502 keys used, gui_treedb 375).
+- gui_agent: new key `in the hook map of` -- an import conflict of the schema
+  editor that comes from a hook map names the hook column it is written in.
+
 ## gui_agent 0.29.38, gui_treedb 0.17.105: gobj-js ^7.26.19, gobj-ui ^7.26.24 (2026-10-11)
 
 The sixteenth review: an import conflict of the schema editor names the bad

@@ -352,6 +352,7 @@ const es = {
         "invalid column name": "Un nombre de columna no puede estar vacío ni llevar `",
         "topic name breaks the name rule": "El nombre del topic rompe la regla de nombres (ni . ni .., ni / ni `)",
         "column name breaks the name rule": "El nombre de la columna rompe la regla de nombres (sin `)",
+        "in the hook map of":   "en el mapa del hook",
         "treedb name breaks the name rule": "El nombre de la treedb rompe la regla de nombres (ni . ni .., ni / ni `)",
         "column has no name": "Una columna no tiene nombre",
         "a topic needs a name": "Un topic necesita un nombre",
