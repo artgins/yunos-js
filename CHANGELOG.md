@@ -6,10 +6,27 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.42, gui_treedb 0.17.109: gobj-ui ^7.26.28 (2026-10-12)
+
+The twentieth review (yunovatios `REV-CLOUD.md` V20.5). The `validate-locales`
+of gobj-ui 7.26.28 reads a key where it is handed to a FUNCTION of the library
+(`yui_shell_show_error`, `icon_button`, the popover rows...), and the shell's
+fallback names are keys now. Keys both apps lacked, which reached the page raw:
+
+- gui_agent: `expand loaded`, `click to load`, `please select some row`,
+  `user menu`, `menu`, `print-tranger failed`, `schema-file failed`, `enum`,
+  `app`, `cannot load treedb`.
+- gui_treedb: `user menu`, `menu`, `backend connection`, `app`,
+  `cannot load treedb`, `print-tranger failed`, `schema-file failed`, and the
+  date navigator's `minute`, `5min`, `15min`, `fortnight`, `last hour`,
+  `last 6h`, `last 24h`, `last 7 days`, `last 30 days`.
+- `CLAUDE.md`: the Developer window's keys are published by gobj-ui as data
+  and read by `validate-locales`; nothing to copy by hand.
+
 ## gui_agent 0.29.41, gui_treedb 0.17.108: gobj-ui ^7.26.27 (2026-10-12)
 
 The nineteenth review (yunovatios `REV-CLOUD.md` V19.4): the property popovers
-of the gobj tree name their controls and change language (gobj-ui 7.26.27);
+of the treedb's node graph (`C_G6_NODES_TREE`) name their controls and change language (gobj-ui 7.26.27);
 the published `validate-locales` reads the keys the library's modules publish
 as data. Both pass with no change of their catalogs.
 
@@ -17,7 +34,7 @@ as data. Both pass with no change of their catalogs.
 
 The eighteenth review (yunovatios `REV-CLOUD.md` V18.4).
 
-- Key `node id required` (both): the gobj tree's create popover said
+- Key `node id required` (both): the treedb node graph's create popover said
   `t('node id') + ' required'`, with "required" in English for ever.
 - gui_treedb: `topics` reads *"Topics"* in Spanish, as `topic` does (it read
   *"Temas"*).

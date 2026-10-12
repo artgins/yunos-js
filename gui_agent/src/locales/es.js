@@ -162,6 +162,8 @@ const es = {
         "refresh":           "Recargar",
         "copied":            "Copiado",
         "copy json":         "Copiar JSON",
+        "expand loaded":     "Expandir lo cargado",
+        "click to load":     "Pulsa para cargar",
         "for treedb":        "Para TreeDB",
         "nothing to copy":   "Nada que copiar",
         "{{n}} selected": "{{n}} seleccionadas",
@@ -181,6 +183,7 @@ const es = {
         "dagre left-right":     "Dagre izq-dcha",
         "select":            "Seleccionar",
         "are you sure":      "¿Está seguro?",
+        "please select some row": "Selecciona alguna fila",
         "this field is required": "Campo requerido",
 
         /* mensajes */
@@ -295,6 +298,8 @@ const es = {
         "cannot connect":    "No se puede conectar",
         "reconnecting":      "Reconectando…",
         "backend connection": "Conexión con el backend",
+        "user menu": "Menú de usuario",
+        "menu": "Menú",
         "authentication required": "Autenticación requerida",
         "identity card refused": "Tarjeta de identidad rechazada",
 
@@ -334,6 +339,8 @@ const es = {
         "that treedb is not here any more": "Ese treedb ya no está",
         "that topic is not here any more": "Ese topic ya no está",
         "the treedb is read-only": "Este treedb es de solo lectura: este yuno no es el master de su tranger",
+        "print-tranger failed": "El comando print-tranger ha fallado",
+        "schema-file failed": "El comando schema-file ha fallado",
         "that is not json": "Eso no es JSON",
         "secondary keys": "Claves secundarias",
         "system flag": "System flag",
@@ -439,6 +446,7 @@ const es = {
         "flags": "Flags",
         "link": "Enlace",
         "hook": "Hook",
+        "enum": "Enum",
         "system": "Sistema",
         "system topic": "Topic de sistema",
         "topic name": "Nombre del topic",
@@ -659,6 +667,7 @@ const es = {
         "shown above":       "Mostrado arriba",
         "show references":   "Mostrar referencias",
         "other routes":      "Otras rutas",
+        "app":               "Aplicación",
         "toolbar":           "Barra de herramientas",
         "about":             "Acerca de",
         "agent console":     "Consola de agentes",
@@ -785,6 +794,7 @@ const es = {
         "reset same type edges": "Restablecer los enlaces del mismo tipo",
         "reset all edges": "Restablecer todos los enlaces",
         "operation mode":       "Modo de operación",
+        "cannot load treedb":   "No se puede cargar el treedb",
 
         "apply needs a node restart": "Aplicar es reiniciar el yuno, y el agente no lo es: reinicialo en el nodo",
         /*  visor de gclass (C_YUI_GCLASS)  */

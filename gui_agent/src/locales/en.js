@@ -158,6 +158,8 @@ const en = {
         "refresh":           "Refresh",
         "copied":            "Copied",
         "copy json":         "Copy JSON",
+        "expand loaded":     "Expand loaded",
+        "click to load":     "Click to load",
         "for treedb":        "For TreeDB",
         "nothing to copy":   "Nothing to copy",
         "{{n}} selected": "{{n}} selected",
@@ -177,6 +179,7 @@ const en = {
         "dagre left-right":     "Dagre left-right",
         "select":            "Select",
         "are you sure":      "Are you sure?",
+        "please select some row": "Please select some row",
         "this field is required": "This field is required",
 
         /* messages */
@@ -291,6 +294,8 @@ const en = {
         "cannot connect":    "Cannot connect",
         "reconnecting":      "Reconnecting…",
         "backend connection": "Backend connection",
+        "user menu": "User menu",
+        "menu": "Menu",
         "authentication required": "Authentication required",
         "identity card refused": "Identity card refused",
 
@@ -330,6 +335,8 @@ const en = {
         "that treedb is not here any more": "That treedb is not here any more",
         "that topic is not here any more": "That topic is not here any more",
         "the treedb is read-only": "The treedb is read-only",
+        "print-tranger failed": "The print-tranger command failed",
+        "schema-file failed": "The schema-file command failed",
         "that is not json": "That is not JSON",
         "secondary keys": "Secondary keys",
         "system flag": "System flag",
@@ -435,6 +442,7 @@ const en = {
         "flags": "Flags",
         "link": "Link",
         "hook": "Hook",
+        "enum": "Enum",
         "system": "System",
         "system topic": "System topic",
         "topic name": "Topic name",
@@ -651,6 +659,7 @@ const en = {
         "shown above":       "Shown above",
         "show references":   "Show references",
         "other routes":      "Other routes",
+        "app":               "App",
         "toolbar":           "Toolbar",
         "about":             "About",
         "agent console":     "Agent Console",
@@ -777,6 +786,7 @@ const en = {
         "reset same type edges": "Reset same type edges",
         "reset all edges": "Reset all edges",
         "operation mode":       "Operation mode",
+        "cannot load treedb":   "Cannot load the treedb",
 
         "apply needs a node restart": "Applying is restarting the yuno, and the agent is not one: restart it on the node",
         /*  gclass viewer (C_YUI_GCLASS)  */
