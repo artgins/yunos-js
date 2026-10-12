@@ -6,6 +6,24 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.43, gui_treedb 0.17.110: gobj-ui ^7.26.29 (2026-10-12)
+
+The twenty-first review (yunovatios `REV-CLOUD.md` V21.4). The
+`validate-locales` of gobj-ui 7.26.29 holds the app's own code to the per-call
+rule the library keeps, with the file and the line:
+
+- Both apps handed the install prompt `t("install this app")`, a translated
+  text where the function takes the KEY: it was translated again and marked
+  `data-i18n` with the translation, so it never changed language. They hand
+  the key.
+- gui_agent: the monitor's confirmation builds its options as literals (it
+  `Object.assign`ed one variable into both dialogs); the keys it builds from a
+  control's name, the owners' joined save errors and a node's apply comment
+  are marked as data.
+- gui_treedb: `C_TRANGER_VIEW` publishes the titles it hands its modals
+  (`C_TRANGER_VIEW_I18N_KEYS`: `rows topic`, `rows`, `all keys`, `columns`),
+  so the validator asks for them.
+
 ## gui_agent 0.29.42, gui_treedb 0.17.109: gobj-ui ^7.26.28 (2026-10-12)
 
 The twentieth review (yunovatios `REV-CLOUD.md` V20.5). The `validate-locales`

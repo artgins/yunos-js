@@ -731,7 +731,7 @@ function ac_on_open(gobj, event, kw, src)
      *  does the asking; on a browser that never offered this is a no-op. */
     yui_install_ask_once(shell, {
         t:         t,
-        message:   t("install this app"),
+        message:   "install this app",
         yes_label: "install",
         no_label:  "not now"
     });
@@ -1046,7 +1046,7 @@ function ac_open_about(gobj, event, kw, src)
     let view = gobj_create_pure_child("about-view", "C_ACCOUNT_VIEW", {view: "about"}, gobj);
     gobj_start(view);
     let $c = gobj_read_attr(view, "$container");
-    priv.about_modal = yui_shell_show_modal(priv.shell, $c, {
+    priv.about_modal = yui_shell_show_modal(priv.shell, /* i18n: data */ $c, {     // the view's own DOM
         dialog: true,
         logical_class: "AGENT_ABOUT",
         title: "about",

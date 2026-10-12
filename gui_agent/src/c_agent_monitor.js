@@ -1599,9 +1599,10 @@ function show_json_dialog(gobj, logical, title_key, prefix, value)
                 JSON.stringify(value, null, 4)]
         ]]
     );
+    /*  Its caller builds the key from the control's name: data  */
     yui_shell_show_modal(shell, $content, {
         dialog: true, wide: true, logical_class: logical,
-        title: title_key, title_prefix: prefix, t: t
+        title: /* i18n: data */ title_key, title_prefix: prefix, t: t
     });
 }
 
@@ -2525,11 +2526,17 @@ function ac_test_control(gobj, event, kw, src)
             ["pre", {class: "MONITOR_CONFIRM_COMMANDS is-size-7 has-text-left"}, plan_lines.join("\n")]
         ]]
     );
+    /*  The control's own key, built from its name: data  */
     let label = `monitor ${control}`;
-    let opts = {t: t, logical_class: "MONITOR_CONFIRM_DIALOG"};
     let asked = DANGEROUS_CONTROLS.indexOf(control) >= 0
-        ? yui_shell_confirm_danger(shell, $msg, Object.assign(opts, {confirm_label: label}))
-        : yui_shell_confirm_yesno(shell, $msg, Object.assign(opts, {yes_label: label, no_label: "cancel"}));
+        ? yui_shell_confirm_danger(shell, $msg, {
+            t: t, logical_class: "MONITOR_CONFIRM_DIALOG",
+            confirm_label: /* i18n: data */ label
+        })
+        : yui_shell_confirm_yesno(shell, $msg, {
+            t: t, logical_class: "MONITOR_CONFIRM_DIALOG",
+            yes_label: /* i18n: data */ label, no_label: "cancel"
+        });
     asked.then((yes) => {
         if(yes) {
             gobj_send_event(gobj, "EV_TEST_CONFIRMED", {control: control}, gobj);

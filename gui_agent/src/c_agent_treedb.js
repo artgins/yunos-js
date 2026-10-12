@@ -1540,7 +1540,8 @@ function end_save(gobj)
 
     clear_timeout(priv.save_timer);
     if(priv.save_errors.length) {
-        yui_shell_show_error(yui_shell_of(gobj), priv.save_errors.join("\n"), {t: t});
+        /*  What the owners answered, joined: data  */
+        yui_shell_show_error(yui_shell_of(gobj), /* i18n: data */ priv.save_errors.join("\n"), {t: t});
     }
     if(priv.save_unanswered.length) {
         /*  Two halves, so the sentence keeps its key and changes language;
@@ -1816,7 +1817,9 @@ function end_apply(gobj, error_comment)
 
     clear_apply_timer(gobj);
     if(error_comment) {
-        yui_shell_show_error(yui_shell_of(gobj), error_comment, {t: t});
+        /*  A key, the node's words or DOM, as its callers hand it (see above):
+         *  this function is in no table, so what reaches it is marked here  */
+        yui_shell_show_error(yui_shell_of(gobj), /* i18n: data */ error_comment, {t: t});
     } else if(!priv.apply_unknown) {
         /*  Not when an owner never answered `apply-schema`: the restart
          *  read what it had in place, and whether that was the saved

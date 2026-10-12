@@ -751,7 +751,7 @@ function ac_login_accepted(gobj, event, kw, src)
      *  does the asking; on a browser that never offered this is a no-op. */
     yui_install_ask_once(gobj.priv.shell, {
         t:         t,
-        message:   t("install this app"),
+        message:   "install this app",
         yes_label: "install",
         no_label:  "not now"
     });

@@ -151,6 +151,11 @@ import {
  ***************************************************************/
 const GCLASS_NAME = "C_TRANGER_VIEW";
 
+/*  The titles the view hands show_view_modal(): a key that reaches t()
+ *  through a parameter is invisible to validate-locales, so the module
+ *  publishes them and marks the call that hands them on.  */
+export const C_TRANGER_VIEW_I18N_KEYS = ["rows topic", "rows", "all keys", "columns"];
+
 /*  Records per page in a Rows card (Tabulator's paginationSize).  */
 const PAGE_SIZE = 100;
 
@@ -810,7 +815,9 @@ function show_view_modal(gobj, shell, $content, opts)
             caller_on_close();
         }
     };
-    entry.modal = yui_shell_show_modal(shell, $content, opts);
+    /*  The DOM its callers build, and the title they name (published above)  */
+    entry.modal = yui_shell_show_modal(shell, /* i18n: data */ $content,
+        /* i18n: C_TRANGER_VIEW_I18N_KEYS */ opts);
     priv.open_modals.push(entry);
     return entry.modal;
 }
@@ -1489,7 +1496,7 @@ function open_json_viewer(gobj)
             close_json_viewer(gobj);
             return;
         }
-        priv.json_modal = yui_shell_show_modal(shell, $box, {
+        priv.json_modal = yui_shell_show_modal(shell, /* i18n: data */ $box, {     // the viewer's own DOM
             dialog:        true,
             logical_class: "TRANGER_JSON_SHEET",
             title_prefix: service,
