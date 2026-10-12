@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.40, gui_treedb 0.17.107: gobj-ui ^7.26.26 (2026-10-12)
+
+The eighteenth review (yunovatios `REV-CLOUD.md` V18.4).
+
+- Key `node id required` (both): the gobj tree's create popover said
+  `t('node id') + ' required'`, with "required" in English for ever.
+- gui_treedb: `topics` reads *"Topics"* in Spanish, as `topic` does (it read
+  *"Temas"*).
+- The published `validate-locales` of gobj-ui 7.26.26 compares plurals by
+  language; both pass it (gui_agent 505 keys used, gui_treedb 378).
+
 ## gui_agent 0.29.39, gui_treedb 0.17.106: gobj-ui ^7.26.25 (2026-10-12)
 
 The seventeenth review (yunovatios `REV-CLOUD.md` V17.3.4-5).

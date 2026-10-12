@@ -770,6 +770,7 @@ const es = {
         "no fields":            "Sin campos",
         "topic":                "Topic",
         "node id":              "Id del nodo",
+        "node id required":     "El id del nodo es obligatorio",
         "resize all":           "Redimensionar todo",
         "resize topic nodes":   "Redimensionar los nodos del topic",
         "resize all ports":     "Redimensionar todos los puertos",

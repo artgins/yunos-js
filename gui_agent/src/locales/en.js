@@ -762,6 +762,7 @@ const en = {
         "no fields":            "No fields",
         "topic":                "Topic",
         "node id":              "Node id",
+        "node id required":     "Node id required",
         "resize all":           "Resize all",
         "resize topic nodes":   "Resize topic nodes",
         "resize all ports":     "Resize all ports",

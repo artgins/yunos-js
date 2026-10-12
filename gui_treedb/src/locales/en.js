@@ -211,6 +211,7 @@ const en = {
         "operation mode": "Operation mode",
         "no fields": "No fields",
         "node id": "Node id",
+        "node id required": "Node id required",
         "enter full screen": "Enter full screen",
         "exit full screen": "Exit full screen",
         "this node": "This node",

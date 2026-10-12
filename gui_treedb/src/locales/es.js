@@ -215,6 +215,7 @@ const es = {
         "operation mode": "Modo de operación",
         "no fields": "Sin campos",
         "node id": "Id del nodo",
+        "node id required": "El id del nodo es obligatorio",
         "enter full screen": "Pantalla completa",
         "exit full screen": "Salir de pantalla completa",
         "this node": "Este nodo",
@@ -324,7 +325,7 @@ const es = {
         "documentation":                      "Documentación",
 
         /* app chrome — nav, connection picker, settings (added 2026-07-10) */
-        "topics": "Temas",
+        "topics": "Topics",
         "graphs": "Grafos",
         "info": "Info",
         "table": "Tabla",
