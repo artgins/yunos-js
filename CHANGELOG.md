@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.50, gui_treedb 0.17.116 + gobj-ui ^7.26.40 (2026-10-13)
+
+gobj-ui 7.26.40: the values of the Y axis of a chart can be read on the dark
+scheme (uPlot always draws a Y axis with its own black, and C_YUI_UPLOT inked
+only the X it was given) -- gui_agent's monitor charts among them. No change
+of the apps' own code; versions raised by gobj-ui's deploy round, built and
+deployed by it.
+
 ## gui_agent 0.29.49, gui_treedb 0.17.115 + gobj-ui ^7.26.39 (2026-10-13)
 
 gobj-ui 7.26.39: closing a form asks only for what the reader changed. A
