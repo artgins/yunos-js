@@ -6,6 +6,24 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.52, gui_treedb 0.17.118 + gobj-ui ^7.26.42 (2026-10-13)
+
+gobj-ui 7.26.42, the twenty-fourth review's library and validator round
+(yunovatios `REV-CLOUD.md` V24.5): every change of a badge is said, as text; the
+canvas of a graph -- the monitor's, the gobj tree, the treedb and schema graphs,
+the JSON viewer -- is named and shows its focus, with four new keys in both
+locales (`json graph`, `gobj tree graph`, `treedb graph`, `fsm graph`); the
+items of the nav and of the toolbar are named by a key; validate-locales reads
+every write of an unmarked `let` and fails a translated text wherever a key is
+read. The built-key tests (`monitor_i18n_keys.test.js`,
+`tranger_view_i18n_keys.test.js`) read the sources with the published
+validator's reader, so a state or a command named by a const, an import or a
+function's return is followed too, and one the reader cannot follow fails
+with its file and line (proved by mutation: a const-named state or command
+without its key fails; refactoring a key into a const no longer raises a
+false alarm). Versions raised, built, tested (gui_agent 250, gui_treedb 70)
+and deployed by gobj-ui's deploy round.
+
 ## gui_agent 0.29.51, gui_treedb 0.17.117 + gobj-ui ^7.26.41 (2026-10-13)
 
 gobj-ui 7.26.41: what the reader does to a table of a form -- edits a cell,
