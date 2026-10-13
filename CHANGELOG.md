@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.53, gui_treedb 0.17.119 + gobj-js ^7.26.21 (2026-10-13)
+
+gobj-js 7.26.21, the masking of the twenty-fourth review and of the security
+review of its C commit (yunovatios `REV-CLOUD.md` V24.4.2, V24.4.3): after
+`Bearer` or `Basic` only a word that can be a credential is masked; a JWE, a
+JWT a cap cut and a `name: value` whose name is a secret's are masked; and each
+rule judges the text as it came, so no rule hides a value from the next. No
+change of the yunos' own code. Versions raised, built, tested (gui_agent 250,
+gui_treedb 70) and deployed by gobj-ui's deploy round.
+
 ## gui_agent 0.29.52, gui_treedb 0.17.118 + gobj-ui ^7.26.42 (2026-10-13)
 
 gobj-ui 7.26.42, the twenty-fourth review's library and validator round
