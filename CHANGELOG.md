@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.47, gui_treedb 0.17.113 + gobj-ui ^7.26.37 (2026-10-13)
+
+gobj-ui 7.26.37: the editor of a boolean cell is a box to tick, not the
+whole cell (a checkbox given width and height 100% was drawn as a square the
+size of the cell). No change of the apps' own code; versions raised by
+gobj-ui's deploy round, built and deployed by it.
+
 ## gui_agent 0.29.46, gui_treedb 0.17.112 + gobj-ui ^7.26.36 (2026-10-13)
 
 gobj-ui 7.26.36: the title of a dock chip whose window has a data half
