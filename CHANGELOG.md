@@ -6,6 +6,18 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.44: gobj-ui ^7.26.32 (2026-10-13)
+
+The twenty-second review (yunovatios `REV-CLOUD.md` V22.6.5). The monitor
+BUILDS keys from a control's name, `monitor ${control}` (the label of its
+confirmation) and `monitor confirm ${control}` (its question), and marked them
+as data, so no key of either was ever asked of the locales. It publishes both
+sets now (`C_AGENT_MONITOR_I18N_KEYS`, `C_AGENT_MONITOR_CONFIRM_I18N_KEYS`: the
+six controls a scenario can offer) and its five calls name those lists, which
+the `validate-locales` of gobj-ui 7.26.32 asks for -- a control added to
+`SCENARIO_ACTIONS` needs its two keys added there. gui_treedb only raises its
+range (no change of its code).
+
 ## gui_agent 0.29.43, gui_treedb 0.17.110: gobj-ui ^7.26.29 (2026-10-12)
 
 The twenty-first review (yunovatios `REV-CLOUD.md` V21.4). The

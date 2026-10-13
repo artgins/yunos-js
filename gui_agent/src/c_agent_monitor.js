@@ -212,6 +212,23 @@ const CC_KINDS = ["cc_save", "cc_delete", "cc_runs", "cc_run"];
 
 const DANGEROUS_CONTROLS = ["stop", "restart"];
 
+/*  The keys this view BUILDS from a control's name, `monitor ${control}`:
+ *  one per control a scenario can offer (scenario_controls(): the
+ *  SCENARIO_ACTIONS of monitor_helpers.js, and restart). A key built at
+ *  run time is read by no scan, so it is published here, and the calls
+ *  that hand it on name this list: a control added there needs its key
+ *  added here.  */
+export const C_AGENT_MONITOR_I18N_KEYS = [
+    "monitor start", "monitor pause", "monitor resume", "monitor stop", "monitor report", "monitor restart"
+];
+
+/*  And the question each control asks before it runs, `monitor confirm
+ *  ${control}`: the same controls, the same rule.  */
+export const C_AGENT_MONITOR_CONFIRM_I18N_KEYS = [
+    "monitor confirm start", "monitor confirm pause", "monitor confirm resume",
+    "monitor confirm stop", "monitor confirm report", "monitor confirm restart"
+];
+
 /***************************************************************
  *              Data
  ***************************************************************/
@@ -1599,10 +1616,10 @@ function show_json_dialog(gobj, logical, title_key, prefix, value)
                 JSON.stringify(value, null, 4)]
         ]]
     );
-    /*  Its caller builds the key from the control's name: data  */
+    /*  Its caller builds the key from the control's name  */
     yui_shell_show_modal(shell, $content, {
         dialog: true, wide: true, logical_class: logical,
-        title: /* i18n: data */ title_key, title_prefix: prefix, t: t
+        title: /* i18n: C_AGENT_MONITOR_I18N_KEYS */ title_key, title_prefix: prefix, t: t
     });
 }
 
@@ -2518,24 +2535,25 @@ function ac_test_control(gobj, event, kw, src)
     let who = run_by_control_center(gobj) ? "scenario run by the control center" : "scenario run from here";
     let $msg = createElement2(
         ["div", {class: "MONITOR_CONFIRM"}, [
-            ["p", {class: "MONITOR_CONFIRM_TEXT", i18n: `monitor confirm ${control}`},
-                t(`monitor confirm ${control}`)],
+            ["p", {class: "MONITOR_CONFIRM_TEXT",
+                   i18n: /* i18n: C_AGENT_MONITOR_CONFIRM_I18N_KEYS */ `monitor confirm ${control}`},
+                t(/* i18n: C_AGENT_MONITOR_CONFIRM_I18N_KEYS */ `monitor confirm ${control}`)],
             ["p", {class: "MONITOR_CONFIRM_WHO is-size-7 has-text-grey mt-2", i18n: who}, t(who)],
             ["p", {class: "MONITOR_CONFIRM_LIST_TITLE is-size-7 has-text-weight-semibold mt-3",
                    i18n: "monitor commands that will run"}, t("monitor commands that will run")],
             ["pre", {class: "MONITOR_CONFIRM_COMMANDS is-size-7 has-text-left"}, plan_lines.join("\n")]
         ]]
     );
-    /*  The control's own key, built from its name: data  */
+    /*  The control's own key, built from its name  */
     let label = `monitor ${control}`;
     let asked = DANGEROUS_CONTROLS.indexOf(control) >= 0
         ? yui_shell_confirm_danger(shell, $msg, {
             t: t, logical_class: "MONITOR_CONFIRM_DIALOG",
-            confirm_label: /* i18n: data */ label
+            confirm_label: /* i18n: C_AGENT_MONITOR_I18N_KEYS */ label
         })
         : yui_shell_confirm_yesno(shell, $msg, {
             t: t, logical_class: "MONITOR_CONFIRM_DIALOG",
-            yes_label: /* i18n: data */ label, no_label: "cancel"
+            yes_label: /* i18n: C_AGENT_MONITOR_I18N_KEYS */ label, no_label: "cancel"
         });
     asked.then((yes) => {
         if(yes) {
