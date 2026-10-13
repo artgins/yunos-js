@@ -6,6 +6,12 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.46, gui_treedb 0.17.112 + gobj-ui ^7.26.36 (2026-10-13)
+
+gobj-ui 7.26.36: the title of a dock chip whose window has a data half
+changes language (estadodelaire's QA found it). No change of the apps' own
+code; versions raised by gobj-ui's deploy round, built and deployed by it.
+
 ## gui_agent 0.29.45, gui_treedb 0.17.111 + gobj-ui ^7.26.35, gobj-js ^7.26.20 (2026-10-13)
 
 The twenty-third review (yunovatios `REV-CLOUD.md` V23.5), and the libraries
