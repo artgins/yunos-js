@@ -6,6 +6,15 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.49, gui_treedb 0.17.115 + gobj-ui ^7.26.39 (2026-10-13)
+
+gobj-ui 7.26.39: closing a form asks only for what the reader changed. A
+record that lacks a field with a default opened changed (the default fills
+it), and its close asked "all changes will be lost" with nothing of the
+reader's to lose; clearing and pasting are changes of the reader now. No
+change of the apps' own code; versions raised by gobj-ui's deploy round,
+built and deployed by it.
+
 ## gui_agent 0.29.48, gui_treedb 0.17.114 + gobj-ui ^7.26.38 (2026-10-13)
 
 gobj-ui 7.26.38: a guard that asks before a modal closes asks once. The
