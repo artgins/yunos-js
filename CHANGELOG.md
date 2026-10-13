@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.51, gui_treedb 0.17.117 + gobj-ui ^7.26.41 (2026-10-13)
+
+gobj-ui 7.26.41: what the reader does to a table of a form -- edits a cell,
+adds or deletes a row -- is `edited` whatever the record the form opened with
+(a form that opened changed did not hear its tables, so closing it lost a
+table edit without a question), and a change of language no longer adds a copy
+of every column title. No change of the apps' own code; versions raised by
+gobj-ui's deploy round, which TESTS each app before deploying it now (gui_agent
+250, gui_treedb 69), built and deployed by it.
+
 ## gui_agent 0.29.50, gui_treedb 0.17.116 + gobj-ui ^7.26.40 (2026-10-13)
 
 gobj-ui 7.26.40: the values of the Y axis of a chart can be read on the dark
