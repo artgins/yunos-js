@@ -111,7 +111,6 @@ import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {
     yui_shell_show_modal,
-    yui_shell_popup_layer,
     yui_shell_confirm_yesno,
 } from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize,
@@ -155,6 +154,22 @@ const GCLASS_NAME = "C_TRANGER_VIEW";
  *  through a parameter is invisible to validate-locales, so the module
  *  publishes them and marks the call that hands them on.  */
 export const C_TRANGER_VIEW_I18N_KEYS = ["rows topic", "rows", "all keys", "columns"];
+
+/*  What the error banner says (show_error()): the keys its callers hand
+ *  it, and `${command} failed` -- built from the name of a command that
+ *  failed with no comment, one per command the view sends whose answer
+ *  reaches the generic error path of ac_mt_command_answer(). A key that
+ *  reaches t() through a parameter, or is built at run time, is read by
+ *  no scan: it is published here, the hand-off names this list, and
+ *  tranger_view_i18n_keys.test.js fails while a key show_error() is
+ *  handed, or a command, lacks its key here.  */
+export const C_TRANGER_VIEW_ERROR_I18N_KEYS = [
+    "the link points at a key this topic does not have", "print-tranger failed", "no topics",
+    "disconnected - open connections", "the backend did not answer in time", "export failed",
+    "the browser did not allow the copy",
+    "topics failed", "list-keys failed", "delete-key failed", "open-iterator failed",
+    "close-iterator failed", "open-rt failed", "close-rt failed"
+];
 
 /*  Records per page in a Rows card (Tabulator's paginationSize).  */
 const PAGE_SIZE = 100;
@@ -788,7 +803,8 @@ function show_error(gobj, msg)
         priv.$error.textContent = "";
         return;
     }
-    priv.$error.textContent = t(msg);
+    /*  A key of the list, or a backend's comment (data)  */
+    priv.$error.textContent = t(/* i18n: C_TRANGER_VIEW_ERROR_I18N_KEYS */ msg);
     priv.$error.classList.remove("is-hidden");
 }
 
@@ -1288,21 +1304,15 @@ function open_keys_picker(gobj)
             }
         });
     } else {
-        /*  Mount the window in the shell's popup layer (z-index 20), NOT on
-         *  document.body: a body-level window lands in the root stacking
-         *  context above the shell's modal layer (z-index 99) and would hide
-         *  every modal opened from it (the Rows-options form, record
-         *  dialogs). Inside the popup layer, the modal layer — a higher
-         *  sibling — always renders above the window.  */
-        let $win_parent = (shell && yui_shell_popup_layer(shell)) ||
-            (typeof document !== "undefined" && document.getElementById("top-layer")) ||
-            null;
-
+        /*  No `$parent`: the window takes the shell's WINDOW layer (gobj-ui
+         *  7.26.35), under its modals -- the Rows-options form, the record
+         *  dialogs open above it -- and under its dropdowns and drawer, in
+         *  the one z-order of every window. It was the POPUP layer: above
+         *  the drawer, in the way of the toolbar's dropdowns.  */
         priv.picker_win = gobj_create_service(
             `tranger-keys-${priv.tok}`,
             "C_YUI_WINDOW",
             {
-                $parent: $win_parent,
                 subscriber: null,
                 modal:      false,
                 showMax:    true,
@@ -1510,15 +1520,11 @@ function open_json_viewer(gobj)
             }
         });
     } else {
-        let $win_parent = (shell && yui_shell_popup_layer(shell)) ||
-            (typeof document !== "undefined" && document.getElementById("top-layer")) ||
-            null;
-
+        /*  The shell's window layer, as the keys window above.  */
         priv.json_win = gobj_create_service(
             `tranger-jsonwin-${priv.tok}`,
             "C_YUI_WINDOW",
             {
-                $parent:    $win_parent,
                 subscriber: null,
                 modal:      false,
                 showMax:    true,
@@ -3604,15 +3610,11 @@ function show_record_dialog(gobj, record, key)
         return;
     }
 
-    let $win_parent = yui_shell_popup_layer(shell) ||
-        (typeof document !== "undefined" && document.getElementById("top-layer")) ||
-        null;
-
+    /*  The shell's window layer, as the keys window.  */
     priv.record_win = gobj_create_service(
         `tranger-recwin-${priv.tok}`,
         "C_YUI_WINDOW",
         {
-            $parent:    $win_parent,
             subscriber: null,
             modal:      false,
             showMax:    true,
@@ -3804,8 +3806,12 @@ function ac_mt_command_answer(gobj, event, kw, src)
         let path = (kw_command && kw_command.path) || "";
         if(result < 0) {
             if(path) {
+                /*  The backend's words are `error`, drawn as they came; the
+                 *  fallback is a KEY, `i18n`, drawn translated (gobj-ui
+                 *  7.26.35): as `error` it was the raw key, in English.  */
                 gobj_send_event(jv, "EV_SUBTREE_ERROR",
-                    {path: path, error: comment || "print-tranger failed"}, gobj);
+                    comment? {path: path, error: comment} : {path: path, i18n: "print-tranger failed"},
+                    gobj);
             } else {
                 show_error(gobj, comment || "print-tranger failed");
             }
@@ -3820,6 +3826,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
     }
 
     if(result < 0) {
+        /*  The fallback is a key of C_TRANGER_VIEW_ERROR_I18N_KEYS  */
         show_error(gobj, comment || `${command} failed`);
         return 0;
     }

@@ -215,9 +215,9 @@ const DANGEROUS_CONTROLS = ["stop", "restart"];
 /*  The keys this view BUILDS from a control's name, `monitor ${control}`:
  *  one per control a scenario can offer (scenario_controls(): the
  *  SCENARIO_ACTIONS of monitor_helpers.js, and restart). A key built at
- *  run time is read by no scan, so it is published here, and the calls
- *  that hand it on name this list: a control added there needs its key
- *  added here.  */
+ *  run time is read by no scan, so it is published here, and every place
+ *  that reads one names this list: a control added there needs its key
+ *  added here, and monitor_i18n_keys.test.js fails until it is.  */
 export const C_AGENT_MONITOR_I18N_KEYS = [
     "monitor start", "monitor pause", "monitor resume", "monitor stop", "monitor report", "monitor restart"
 ];
@@ -227,6 +227,22 @@ export const C_AGENT_MONITOR_I18N_KEYS = [
 export const C_AGENT_MONITOR_CONFIRM_I18N_KEYS = [
     "monitor confirm start", "monitor confirm pause", "monitor confirm resume",
     "monitor confirm stop", "monitor confirm report", "monitor confirm restart"
+];
+
+/*  What the agent says of a yuno, `monitor yuno ${run}`: the state of its
+ *  card -- what yuno_run_state() of monitor_helpers.js answers, and
+ *  "unknown" until the first answer comes. The same rule: a state added
+ *  there needs its key added here, and monitor_i18n_keys.test.js fails
+ *  until it is.  */
+export const C_AGENT_MONITOR_STATE_I18N_KEYS = [
+    "monitor yuno unknown", "monitor yuno playing", "monitor yuno paused",
+    "monitor yuno stopped", "monitor yuno disabled", "monitor yuno missing"
+];
+
+/*  Where the scenario watched comes from, `scenario source ${source}`: one
+ *  per MONITOR_SOURCES of c_agent_config.js, the same rule.  */
+export const C_AGENT_MONITOR_SOURCE_I18N_KEYS = [
+    "scenario source local", "scenario source saved", "scenario source selection"
 ];
 
 /***************************************************************
@@ -874,11 +890,12 @@ function paint_card(gobj, id)
     let level = cpu_level(m.cpu);
     c.$card.className = `MONITOR_NODE card MONITOR_NODE--cpu-${level} MONITOR_NODE--${m.run}`;
     let state_key = `monitor yuno ${m.run}`;
+    let state_text = t(/* i18n: C_AGENT_MONITOR_STATE_I18N_KEYS */ state_key);
     c.$dot.className = `MONITOR_NODE_STATE MONITOR_NODE_STATE--${m.run}`;
-    c.$dot.setAttribute("title", t(state_key));
-    c.$dot.setAttribute("data-i18n-title", state_key);
-    c.$dot.setAttribute("aria-label", t(state_key));
-    c.$dot.setAttribute("data-i18n-aria-label", state_key);
+    c.$dot.setAttribute("title", state_text);
+    c.$dot.setAttribute("data-i18n-title", /* i18n: C_AGENT_MONITOR_STATE_I18N_KEYS */ state_key);
+    c.$dot.setAttribute("aria-label", state_text);
+    c.$dot.setAttribute("data-i18n-aria-label", /* i18n: C_AGENT_MONITOR_STATE_I18N_KEYS */ state_key);
     c.$dot.setAttribute("role", "img");
 
     c.$cpu.textContent = typeof m.cpu === "number" ? `${m.cpu} %` : "–";
@@ -940,8 +957,8 @@ function render_status(gobj)
         priv.$name.removeAttribute("title");
     }
     let source_key = `scenario source ${priv.source}`;
-    priv.$source.setAttribute("data-i18n", source_key);
-    priv.$source.textContent = t(source_key);
+    priv.$source.setAttribute("data-i18n", /* i18n: C_AGENT_MONITOR_SOURCE_I18N_KEYS */ source_key);
+    priv.$source.textContent = t(/* i18n: C_AGENT_MONITOR_SOURCE_I18N_KEYS */ source_key);
     show(priv.$source, has);
     let saved = has && priv.source === "saved";
     show(priv.$runs, saved);
@@ -997,17 +1014,20 @@ function build_test_controls(gobj)
     clear_node(priv.$test_buttons);
     priv.control_buttons = {};
     for(let control of scenario_controls(priv.scenario)) {
+        /*  The control's key, built from its name: every place that reads
+         *  it names the list that publishes it  */
         let key = `monitor ${control}`;
+        let label = t(/* i18n: C_AGENT_MONITOR_I18N_KEYS */ key);
         let danger = DANGEROUS_CONTROLS.indexOf(control) >= 0;
         let $btn = createElement2(
             ["button", {class: `MONITOR_TEST_${control.toUpperCase()} button` +
                                (danger ? " is-danger is-outlined" : ""),
                         type: "button",
-                        title: t(key), "data-i18n-title": key,
-                        "aria-label": t(key), "data-i18n-aria-label": key},
+                        title: label, "data-i18n-title": /* i18n: C_AGENT_MONITOR_I18N_KEYS */ key,
+                        "aria-label": label, "data-i18n-aria-label": /* i18n: C_AGENT_MONITOR_I18N_KEYS */ key},
                 [
                     ["span", {class: "icon"}, [["i", {class: CONTROL_ICONS[control]}]]],
-                    ["span", {class: "is-hidden-mobile", i18n: key}, t(key)]
+                    ["span", {class: "is-hidden-mobile", i18n: /* i18n: C_AGENT_MONITOR_I18N_KEYS */ key}, label]
                 ],
                 {click: () => gobj_send_event(gobj, "EV_TEST_CONTROL", {control: control}, gobj)}]
         );
@@ -1029,8 +1049,8 @@ function render_control(gobj)
     let $text = priv.$control.querySelector(".MONITOR_CONTROL_TEXT");
     if(c) {
         let key = `monitor ${c.control}`;
-        $name.setAttribute("data-i18n", key);
-        $name.textContent = t(key);
+        $name.setAttribute("data-i18n", /* i18n: C_AGENT_MONITOR_I18N_KEYS */ key);
+        $name.textContent = t(/* i18n: C_AGENT_MONITOR_I18N_KEYS */ key);
         if(c.not_sent) {
             $text.setAttribute("data-i18n", "monitor control not sent");
             $text.textContent = t("monitor control not sent");
@@ -1516,8 +1536,8 @@ function paint_stats_card(gobj, key)
         return;
     }
     let state_key = `monitor yuno ${m.run}`;
-    c.$state.setAttribute("data-i18n", state_key);
-    c.$state.textContent = t(state_key);
+    c.$state.setAttribute("data-i18n", /* i18n: C_AGENT_MONITOR_STATE_I18N_KEYS */ state_key);
+    c.$state.textContent = t(/* i18n: C_AGENT_MONITOR_STATE_I18N_KEYS */ state_key);
     c.$cpu.textContent = typeof m.cpu === "number" ? `${m.cpu} %` : "–";
 
     let data = m.data;
@@ -1642,7 +1662,8 @@ function show_runs_dialog(gobj, runs, scenario_id)
         return ["tr", {class: "MONITOR_RUN"}, [
             ["td", {class: "MONITOR_RUN_WHEN is-family-monospace"},
                 r.started_at ? new Date(r.started_at * 1000).toLocaleString(i18next.language || undefined) : ""],
-            ["td", {class: "MONITOR_RUN_ACTION", i18n: `monitor ${r.action}`}, t(`monitor ${r.action}`)],
+            ["td", {class: "MONITOR_RUN_ACTION", i18n: /* i18n: C_AGENT_MONITOR_I18N_KEYS */ `monitor ${r.action}`},
+                t(/* i18n: C_AGENT_MONITOR_I18N_KEYS */ `monitor ${r.action}`)],
             ["td", {class: "MONITOR_RUN_USER"}, r.username || ""],
             ["td", {class: `MONITOR_RUN_RESULT ${ok ? "has-text-success" : "has-text-danger"}`,
                     i18n: ok ? "scenario run ok" : "scenario run failed"},

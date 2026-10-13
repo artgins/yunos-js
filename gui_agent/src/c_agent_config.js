@@ -582,6 +582,7 @@ export {
     agent_config_set_monitor,
     MONITOR_REFRESH_CHOICES,
     MONITOR_WINDOW_CHOICES,
+    MONITOR_SOURCES,
     NAV_MODES,
     agent_config_get_selected_nodes,
     agent_config_set_selected_nodes,

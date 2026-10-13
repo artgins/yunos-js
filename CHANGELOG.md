@@ -6,6 +6,39 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.45, gui_treedb 0.17.111 + gobj-ui ^7.26.35, gobj-js ^7.26.20 (2026-10-13)
+
+The twenty-third review (yunovatios `REV-CLOUD.md` V23.5), and the libraries
+of its round.
+
+- **gui_agent: every key the monitor BUILDS is published and pinned by a
+  test.** `monitor_i18n_keys.test.js` requires `C_AGENT_MONITOR_I18N_KEYS`
+  and `C_AGENT_MONITOR_CONFIRM_I18N_KEYS` to hold exactly `monitor ${c}` and
+  `monitor confirm ${c}` for every control a scenario can offer: a key
+  dropped from a list, or a control added without its keys, fails the test
+  (it passed the build before). Two more families built from data were read
+  by no check and are published and marked now: `monitor yuno ${run}` (six
+  run states, `C_AGENT_MONITOR_STATE_I18N_KEYS`) and `scenario source
+  ${source}` (`C_AGENT_MONITOR_SOURCE_I18N_KEYS`, `MONITOR_SOURCES` exported).
+  `build_test_controls`, `render_control` and `show_runs_dialog` mark their
+  hand-offs.
+- **gui_treedb: a command that failed with no comment said so in raw
+  English.** `` `${command} failed` `` reached the error banner as a key that
+  existed in no locale (seven commands: topics, list-keys, delete-key,
+  open-iterator, close-iterator, open-rt, close-rt). They are published
+  (`C_TRANGER_VIEW_ERROR_I18N_KEYS`, with every literal `show_error()` is
+  handed), defined in English and Spanish, and `tranger_view_i18n_keys.test.js`
+  fails when a command the view sends has none. The drill fallback "print-tranger
+  failed" reaches the JSON viewer as a key (`i18n`), drawn translated.
+- **gui_treedb: its three windows (keys, json, record) take the shell's
+  window layer** (gobj-ui 7.26.35), under the dialogs, dropdowns and drawer,
+  in one z-order with every window; they named the popup layer.
+- **Both:** the 36 keys the libraries' new controls ask for (the json
+  editor's menus, the badge said with its item, Tom Select's remove), and
+  gobj-js 7.26.20 (secrets masked by value, the trace `set` read as C reads
+  it). Versions raised by gobj-ui's deploy round, which raises an app's third
+  number with its range now.
+
 ## gui_agent 0.29.44: gobj-ui ^7.26.32 (2026-10-13)
 
 The twenty-second review (yunovatios `REV-CLOUD.md` V22.6.5). The monitor
