@@ -6,6 +6,18 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.66, gui_treedb 0.17.132 + gobj-ui ^7.26.49, gobj-js ^7.26.27 (2026-10-14)
+
+the gobj-ui 7.26.49 and gobj-js 7.26.27 rounds (the twenty-ninth
+review): a logout with an overlay up no longer leaves dead Back entries; a
+focus trap whose panel left is warned; a time cell confirmed unchanged no
+longer goes back one hour in the repeated autumn hour; a template time field
+shows its time again; gobj-js no longer throws with the site's data blocked
+(the app did not start), floors the reconnection retry at 1000 ms, and its
+walks step over a gobj already destroyed. The two rounds ran back to back:
+the version between them was deployed and has no commit. No change of the yunos' own code. Built,
+tested, deployed; console check clean.
+
 ## gui_agent 0.29.64, gui_treedb 0.17.130 + gobj-ui ^7.26.47, gobj-js ^7.26.26 (2026-10-14)
 
 the gobj-ui 7.26.47 and gobj-js 7.26.26 rounds (the twenty-eighth
