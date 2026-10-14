@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.67, gui_treedb 0.17.133 + gobj-ui ^7.26.50 (2026-10-14)
+
+the gobj-ui 7.26.50 round: a menu item's badge is the v1 pill again,
+with no ring of the page's colour (in the dark theme it read as a black
+circle that ate the tone; red and yellow were hard to tell apart). No change of the yunos'
+own code. Built, tested, deployed; console check clean.
+
 ## gui_agent 0.29.66, gui_treedb 0.17.132 + gobj-ui ^7.26.49, gobj-js ^7.26.27 (2026-10-14)
 
 the gobj-ui 7.26.49 and gobj-js 7.26.27 rounds (the twenty-ninth
