@@ -6,6 +6,18 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.62, gui_treedb 0.17.128 + gobj-ui ^7.26.46, gobj-js ^7.26.25 (2026-10-14)
+
+the gobj-ui 7.26.46 and gobj-js 7.26.25 rounds (the twenty-seventh
+review): a stopped shell closes its overlays (their focus traps left later
+windows without focus after a logout); the checkbox column respects
+`selectable`; a time column is editable without luxon; `C_IEVENT_CLI`
+refuses the transport's own events from the server and closes with 4002 on
+a server fault without resetting the backoff; URLs and queries encoded
+inside a value are masked. The two rounds ran back to back: the version
+between them was deployed and has no commit. No change of the yunos' own code. Built,
+tested (gui_agent 251, gui_treedb 72), deployed; console check clean.
+
 ## gui_agent 0.29.60, gui_treedb 0.17.126 + gobj-ui ^7.26.45, gobj-js ^7.26.24 (2026-10-14)
 
 the gobj-ui 7.26.45 and gobj-js 7.26.24 rounds (the twenty-sixth review):
