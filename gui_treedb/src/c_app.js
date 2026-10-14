@@ -847,27 +847,10 @@ function ac_on_id_nak(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: connection '${conn_id}' rejected ` +
                   `by the backend after a token refresh: ${reason}`);
 
-        let links = gobj_find_service("treedb_links", false);
-        if(links) {
-            /*  Not a bare close: a close leaves NO trace and the picker sits on
-             *  "Connecting…" for a connection nobody is retrying. Reject it —
-             *  the transport goes and the cause stays visible.  */
-            gobj_send_event(links, "EV_REJECT_CONN",
-                {conn_id: conn_id, reason: reason}, gobj);
-        }
-
-        /*  Clear the user's connect intent too. Closing the transport alone was
-         *  not enough: `enabled` stayed true, so the NEXT EV_CONNECTIONS_CHANGED
-         *  (any unrelated edit) re-synced it back up and re-armed the very
-         *  refresh→reopen→NAK loop this branch exists to break. Reconnecting is
-         *  now a deliberate act in Settings, once the roles are fixed.  */
-        let config = gobj_find_service("treedb_config", false);
-        if(config) {
-            gobj_send_event(config, "EV_SET_CONN_ENABLED",
-                {conn_id: conn_id, enabled: false}, gobj);
-        }
-
-        rebuild_all_workspaces(gobj);
+        /*  This runs inside the transport's own EV_ON_ID_NAK publication, and
+         *  the reject destroys that transport: on the next turn.  */
+        gobj_post_event(gobj, "EV_CONN_REJECTED",
+            {conn_id: conn_id, reason: reason}, gobj);
         return 0;
     }
 
@@ -882,6 +865,39 @@ function ac_on_id_nak(gobj, event, kw, src)
             gobj_send_event(login, "EV_DO_REFRESH", {}, gobj);
         }
     }
+    return 0;
+}
+
+/***************************************************************
+ *  {conn_id, reason} -- the deferred half of a refusal
+ *  (ac_on_id_nak): give up on that connection.
+ ***************************************************************/
+function ac_conn_rejected(gobj, event, kw, src)
+{
+    let conn_id = (kw && kw.conn_id) || "";
+    let reason = (kw && kw.reason) || "";
+
+    let links = gobj_find_service("treedb_links", false);
+    if(links) {
+        /*  Not a bare close: a close leaves NO trace and the picker sits on
+         *  "Connecting…" for a connection nobody is retrying. Reject it —
+         *  the transport goes and the cause stays visible.  */
+        gobj_send_event(links, "EV_REJECT_CONN",
+            {conn_id: conn_id, reason: reason}, gobj);
+    }
+
+    /*  Clear the user's connect intent too. Closing the transport alone was
+     *  not enough: `enabled` stayed true, so the NEXT EV_CONNECTIONS_CHANGED
+     *  (any unrelated edit) re-synced it back up and re-armed the very
+     *  refresh→reopen→NAK loop this branch exists to break. Reconnecting is
+     *  now a deliberate act in Settings, once the roles are fixed.  */
+    let config = gobj_find_service("treedb_config", false);
+    if(config) {
+        gobj_send_event(config, "EV_SET_CONN_ENABLED",
+            {conn_id: conn_id, enabled: false}, gobj);
+    }
+
+    rebuild_all_workspaces(gobj);
     return 0;
 }
 
@@ -1524,6 +1540,7 @@ function create_gclass(gclass_name)
             ["EV_ON_OPEN",          ac_on_open,         null],
             ["EV_ON_CLOSE",         ac_on_close,        null],
             ["EV_ON_ID_NAK",        ac_on_id_nak,       null],
+            ["EV_CONN_REJECTED",    ac_conn_rejected,   null],
             /*  shell chrome  */
             ["EV_TOGGLE_THEME",     ac_toggle_theme,    null],
             ["EV_TOGGLE_LANGUAGE",  ac_toggle_language, null],
@@ -1551,6 +1568,7 @@ function create_gclass(gclass_name)
         ["EV_ON_OPEN",          0],
         ["EV_ON_CLOSE",         0],
         ["EV_ON_ID_NAK",        0],
+        ["EV_CONN_REJECTED",    0],     /*  internal: posted by ac_on_id_nak  */
         ["EV_LOGOUT",           0],
         ["EV_TOGGLE_THEME",     0],
         ["EV_TOGGLE_LANGUAGE",  0],

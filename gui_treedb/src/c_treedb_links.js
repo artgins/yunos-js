@@ -884,6 +884,10 @@ function ac_report_scan(gobj, event, kw, src)
  *  it, and that is what says WHICH scan: the id is looked up by
  *  the timer's identity instead of being spelled into its name,
  *  so no connection id has to be a legal gobj name.
+ *
+ *  The scan ends on the next turn (EV_SCAN_TIMED_OUT): ending it
+ *  destroys that timer, and this runs inside the timer's own
+ *  publication of EV_TIMEOUT.
  ***************************************************************/
 function ac_timeout(gobj, event, kw, src)
 {
@@ -891,13 +895,32 @@ function ac_timeout(gobj, event, kw, src)
 
     for(let conn_id of Object.keys(priv.scans)) {
         if(priv.scans[conn_id].timer === src) {
-            finish_scan(gobj, conn_id, "scan timeout");
+            gobj_post_event(gobj, "EV_SCAN_TIMED_OUT",
+                {conn_id: conn_id, timer: gobj_name(src)}, gobj);
             return 0;
         }
     }
 
     log_error(`${gobj_short_name(gobj)}: ${event} of no scan in flight`);
     return -1;
+}
+
+/***************************************************************
+ *  {conn_id, timer} -- the deferred half of a timeout. The scan
+ *  may have ended meanwhile by its answer, and another one may have
+ *  started: only the scan of THAT timer ends here.
+ ***************************************************************/
+function ac_scan_timed_out(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let conn_id = (kw && kw.conn_id) || "";
+    let scan = priv.scans[conn_id];
+
+    if(!scan || !scan.timer || gobj_name(scan.timer) !== (kw && kw.timer)) {
+        return 0;   /*  answered in the same turn: nothing timed out  */
+    }
+    finish_scan(gobj, conn_id, "scan timeout");
+    return 0;
 }
 
 
@@ -942,6 +965,7 @@ function create_gclass(gclass_name)
             ["EV_ON_OPEN_ERROR",      ac_on_open_error,      null],
             ["EV_MT_COMMAND_ANSWER",  ac_mt_command_answer,  null],
             ["EV_TIMEOUT",            ac_timeout,            null],
+            ["EV_SCAN_TIMED_OUT",     ac_scan_timed_out,     null],
             ["EV_REPORT_SCAN",        ac_report_scan,        null],
             /*  the mutations (the app root, Settings)  */
             ["EV_SYNC_CONNECTIONS",   ac_sync_connections,   null],
@@ -969,8 +993,9 @@ function create_gclass(gclass_name)
         ["EV_TREEDB_SCAN_ERROR",  out],
         ["EV_MT_COMMAND_ANSWER",  event_flag_t.EVF_PUBLIC_EVENT],
         /*  internal: the scan watchdog's C_TIMER child, and the deferred
-         *  half of a scan that answered  */
+         *  halves of a scan that timed out and of one that answered  */
         ["EV_TIMEOUT",            0],
+        ["EV_SCAN_TIMED_OUT",     0],
         ["EV_REPORT_SCAN",        0],
         /*  input: the mutations  */
         ["EV_SYNC_CONNECTIONS",   0],

@@ -6,6 +6,30 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.54, gui_treedb 0.17.120 (2026-10-14)
+
+The rule of the C kernel of 7.26.10, which gobj-js 7.26.22 reports too: a gobj
+is never destroyed under code that still runs on it. Three places of the yunos
+broke it; each now takes the transport or the timer down on the next turn,
+from an event posted to itself.
+
+- gui_agent: **an identity refused twice ended the session inside the
+  transport's own `EV_ON_ID_NAK`**: stopping the link destroyed that
+  transport under its publication. The session ends on the next turn
+  (`EV_SESSION_REFUSED`). Test `session_refused.wiring.test.js`.
+- gui_treedb: **a connection refused again after a token refresh was rejected
+  inside its transport's `EV_ON_ID_NAK`**, which destroyed that transport
+  under its publication; it is rejected and disabled on the next turn
+  (`EV_CONN_REJECTED`).
+- gui_treedb: **a scan that timed out ended inside its watchdog's
+  `EV_TIMEOUT`** and destroyed that `C_TIMER` under its publication; it ends on
+  the next turn (`EV_SCAN_TIMED_OUT`, only the scan of that timer). Test
+  `transport_teardown.wiring.test.js`; the vitest config inlines gobj-ui (as
+  gui_agent's) so a wiring test can import `c_app.js`.
+
+Tests: gui_agent 251, gui_treedb 72, with the published libraries and with
+the local gobj-js 7.26.22 / gobj-ui 7.26.43.
+
 ## gui_agent 0.29.53, gui_treedb 0.17.119 + gobj-js ^7.26.21 (2026-10-13)
 
 gobj-js 7.26.21, the masking of the twenty-fourth review and of the security

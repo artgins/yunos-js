@@ -847,14 +847,28 @@ function ac_on_id_nak(gobj, event, kw, src)
         return 0;
     }
 
-    /*  Second NAK after a successful refresh (deeper auth problem): reset
-     *  the login FSM so the login form accepts a fresh submit. */
+    /*  Second NAK after a successful refresh (deeper auth problem): the
+     *  session ends, on the next turn. This runs inside the transport's
+     *  own EV_ON_ID_NAK publication, and ending the session stops the link,
+     *  which destroys that transport.  */
     priv.nak_recovering = false;
+    gobj_post_event(gobj, "EV_SESSION_REFUSED",
+        {error: (kw && kw.comment) || t("authentication required")}, gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  {error} -- the deferred half of a refused identity
+ *  (ac_on_id_nak): reset the login FSM so the login form accepts a
+ *  fresh submit, and behave like a denied login.
+ ***************************************************************/
+function ac_session_refused(gobj, event, kw, src)
+{
+    let login = gobj_find_service("agent_login", false);
     if(login) {
         gobj_send_event(login, "EV_DO_LOGOUT", {}, gobj);
     }
-    return ac_login_denied(gobj, event,
-        {error: (kw && kw.comment) || t("authentication required")}, src);
+    return ac_login_denied(gobj, event, kw, src);
 }
 
 /***************************************************************
@@ -1318,6 +1332,7 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",         ac_on_close,        null],
             ["EV_ON_OPEN_ERROR",    ac_on_open_error,   null],
             ["EV_ON_ID_NAK",        ac_on_id_nak,       null],
+            ["EV_SESSION_REFUSED",  ac_session_refused, null],
             /*  shell chrome  */
             ["EV_LOGOUT",           ac_logout,          null],
             ["EV_TOGGLE_THEME",     ac_toggle_theme,    null],
@@ -1350,6 +1365,7 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",         0],
         ["EV_ON_OPEN_ERROR",    0],
         ["EV_ON_ID_NAK",        0],
+        ["EV_SESSION_REFUSED",  0],     /*  internal: posted by ac_on_id_nak  */
         ["EV_LOGOUT",           0],
         ["EV_TOGGLE_THEME",     0],
         ["EV_TOGGLE_LANGUAGE",  0],
