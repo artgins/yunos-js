@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.57, gui_treedb 0.17.123 + gobj-ui ^7.26.44 (2026-10-14)
+
+gobj-ui 7.26.44: a click on a row of a form's table WROTE its `selectable`
+attr with no value instead of reading it (since v1); with gobj-js 7.26.22
+that was an ERROR and an exception. No change of the yunos' own code. Versions
+raised, built, tested (gui_agent 251, gui_treedb 72) and deployed by gobj-ui's
+deploy round.
+
 ## gui_agent 0.29.56, gui_treedb 0.17.122 + gobj-js ^7.26.22 (2026-10-14)
 
 gobj-js 7.26.22, the gobj-js 7.26.22 round (the twenty-fifth review, parity with the C kernel
