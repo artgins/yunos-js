@@ -71,6 +71,7 @@ const es = {
         "maximize":                                     "Maximizar",
         "coordinates...":                               "Coordenadas...",
         "select row":                                       "Seleccionar la fila",
+        "select all rows":                                  "Seleccionar todas las filas",
         "treedb gui toolbar":                               "Barra de TreeDB GUI",
         "treedb gui home":                                  "TreeDB GUI, ir al inicio",
         "toggle language":                                  "Cambiar de idioma",

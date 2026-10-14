@@ -57,6 +57,7 @@ const en = {
         "coordinates...":                               "Coordinates...",
         "discard":                                      "Discard",
         "select row":                                       "Select row",
+        "select all rows":                                  "Select all rows",
         "agent console toolbar":                            "Agent Console toolbar",
         "agent console home":                               "Agent Console, go home",
         "toggle language":                                  "Toggle language",

@@ -61,6 +61,7 @@ const es = {
         "coordinates...":                               "Coordenadas...",
         "discard":                                      "Descartar",
         "select row":                                       "Seleccionar la fila",
+        "select all rows":                                  "Seleccionar todas las filas",
         "agent console toolbar":                            "Barra de la consola del agente",
         "agent console home":                               "Consola del agente, ir al inicio",
         "toggle language":                                  "Cambiar de idioma",

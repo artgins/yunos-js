@@ -67,6 +67,7 @@ const en = {
         "maximize":                                     "Maximize",
         "coordinates...":                               "Coordinates...",
         "select row":                                       "Select row",
+        "select all rows":                                  "Select all rows",
         "treedb gui toolbar":                               "TreeDB GUI toolbar",
         "treedb gui home":                                  "TreeDB GUI, go home",
         "toggle language":                                  "Toggle language",
