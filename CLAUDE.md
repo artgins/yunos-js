@@ -35,8 +35,8 @@ asks the locales for each key; `c_g6_nodes_tree.js` does the same
 missing from a locale fails the `prebuild`.
 
 The check is not a grep: **dump `title`/`aria-label` from the DEPLOYED DOM and
-switch language**. Full rule in yunetas' `CLAUDE.md` and in gobj-ui's README
-("Conventions").
+switch language**. The full rule lives in ONE place, gobj-ui's README
+("Conventions"); the yunetas `CLAUDE.md` only summarizes it.
 
 ## This repo in the yunetas ecosystem
 
