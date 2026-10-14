@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.58, gui_treedb 0.17.124 + gobj-js ^7.26.23 (2026-10-14)
+
+gobj-js 7.26.23: `C_IEVENT_CLI` no longer warns when a session ends
+(every close was a warning, the clean one of a logout included; it is
+`EV_ON_CLOSE` now, as in C), and the reason of a failed open is masked. No change of the yunos' own code. Versions
+raised, built, tested (gui_agent 251, gui_treedb 72) and deployed by gobj-ui's
+deploy round; console check clean on every host.
+
 ## gui_agent 0.29.57, gui_treedb 0.17.123 + gobj-ui ^7.26.44 (2026-10-14)
 
 gobj-ui 7.26.44: a click on a row of a form's table WROTE its `selectable`
