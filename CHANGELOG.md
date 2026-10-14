@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.60, gui_treedb 0.17.126 + gobj-ui ^7.26.45, gobj-js ^7.26.24 (2026-10-14)
+
+the gobj-ui 7.26.45 and gobj-js 7.26.24 rounds (the twenty-sixth review):
+`selectable` is Tabulator's `selectableRowsCheck`; an open cell editor no
+longer breaks a reload; a window yields Escape to a newer overlay; a session
+cut uncleanly is a WARNING again and `EV_ON_CLOSE` carries `code`, `reason`
+and `was_clean`; names written as a form writes them and a URL's password
+are masked. The two rounds ran back to back: the version between them was
+deployed and has no commit. No change of the yunos' own code. Built,
+tested (gui_agent 251, gui_treedb 72), deployed; console check clean.
+
 ## gui_agent 0.29.58, gui_treedb 0.17.124 + gobj-js ^7.26.23 (2026-10-14)
 
 gobj-js 7.26.23: `C_IEVENT_CLI` no longer warns when a session ends
