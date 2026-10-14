@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.56, gui_treedb 0.17.122 + gobj-js ^7.26.22 (2026-10-14)
+
+gobj-js 7.26.22, the gobj-js 7.26.22 round (the twenty-fifth review, parity with the C kernel
+of 7.26.10): a token in a URL query is masked; an attribute's value is read
+as its type by the command parser's grammar (a value that is not is not
+written, and said); and a gobj destroyed under code still running on it is
+reported with an ERROR. The three yunos sites that
+broke that rule were fixed in 0.29.54 / 0.17.120. Versions raised, built,
+tested (gui_agent 251, gui_treedb 72) and deployed by gobj-ui's deploy round.
+
 ## gui_agent 0.29.55, gui_treedb 0.17.121 + gobj-ui ^7.26.43 (2026-10-14)
 
 gobj-ui 7.26.43, the gobj-ui 7.26.43 round (the twenty-fifth review): Undo reverts a form's
