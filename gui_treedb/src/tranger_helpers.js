@@ -84,6 +84,32 @@ const to_epoch = local_input_to_epoch;
 const fmt_ts = fmt_epoch;
 
 /***************************************************************
+ *  A bound of the range into its `datetime-local` box, and back.
+ *
+ *  The box holds a local wall time to the second, so the way back is
+ *  lossy: a bound in the SECOND pass of the hour the clocks go back is
+ *  read as the first one (-3600 s), and one of a millisecond topic loses
+ *  its milliseconds -- the end of a bucket, at .999, came back at .000
+ *  and left out the records of its last second. A box that still shows
+ *  what it was filled with (as the browser reads it back: :00 seconds
+ *  are dropped) gives back the bound it was filled from.
+ ***************************************************************/
+function fill_bound($input, value, ms)
+{
+    $input.value = epoch_to_local_input(value, ms);
+    $input.yui_bound = {value: value || 0, shown: $input.value};
+}
+
+function read_bound($input, ms)
+{
+    let kept = $input.yui_bound;
+    if(kept && $input.value === kept.shown) {
+        return kept.value;
+    }
+    return to_epoch($input.value, ms);
+}
+
+/***************************************************************
  *  A flag as tr2list prints it: `0x1001`. Absent is empty, not 0x0 — a
  *  record that did not carry the field must not look like one whose flags
  *  are all clear.
@@ -437,6 +463,8 @@ export {
     snaps_from_records,
     to_epoch,
     epoch_to_local_input,
+    fill_bound,
+    read_bound,
     fmt_ts,
     flatten_record,
     op_filter,

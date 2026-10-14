@@ -20,6 +20,8 @@ import {
     snaps_from_records,
     to_epoch,
     epoch_to_local_input,
+    fill_bound,
+    read_bound,
     fmt_ts,
     flatten_record,
     op_filter,
@@ -327,5 +329,75 @@ describe("a get-page answer", () => {
         expect(p.records).toEqual([]);
         expect(p.last_row).toBe(0);
         expect(p.last_page).toBe(1);
+    });
+});
+
+
+/*  Chromium and Firefox write a `datetime-local` value without its
+ *  seconds when they are :00 ("…T02:30:00" reads back "…T02:30").  */
+function browser_box()
+{
+    let raw = "";
+    return {
+        get value() {
+            return raw;
+        },
+        set value(v) {
+            raw = (v === null || v === undefined)? "" :
+                String(v).replace(/^(\d{4}-\d\d-\d\dT\d\d:\d\d):00$/, "$1");
+        }
+    };
+}
+
+function in_madrid(fn)
+{
+    const tz = process.env.TZ;
+    process.env.TZ = "Europe/Madrid";
+    try {
+        fn();
+    } finally {
+        if(tz === undefined) {
+            delete process.env.TZ;
+        } else {
+            process.env.TZ = tz;
+        }
+    }
+}
+
+describe("a bound of the range, filled and read back", () => {
+    it("comes back as it was filled when the box was not touched", () => {
+        in_madrid(() => {
+            /*  01:30Z and 01:30:15Z on 2026-10-25: the SECOND pass of
+             *  02:30 in Madrid, read back as a wall time an hour earlier;
+             *  and the last millisecond of a bucket of a ms topic.  */
+            const second_pass = Date.UTC(2026, 9, 25, 1, 30, 0) / 1000;
+            for(const [value, ms] of [
+                [second_pass, false],
+                [second_pass + 15, false],
+                [second_pass * 1000 + 999, true],
+                [Date.UTC(2026, 2, 14, 8, 26, 0) + 999, true],
+                [0, false],
+            ]) {
+                const $box = browser_box();
+                fill_bound($box, value, ms);
+                expect(read_bound($box, ms)).toBe(value);
+            }
+        });
+    });
+
+    it("a box the reader changed is read: not what it was filled with", () => {
+        in_madrid(() => {
+            const second_pass = Date.UTC(2026, 9, 25, 1, 30, 0) / 1000;
+            const $box = browser_box();
+            fill_bound($box, second_pass, false);
+            $box.value = "2026-10-25T04:00:00";
+            expect(read_bound($box, false)).toBe(Date.UTC(2026, 9, 25, 3, 0, 0) / 1000);
+            $box.value = "";
+            expect(read_bound($box, false)).toBe(0);
+            /*  Filled again: the new bound, not the first one.  */
+            fill_bound($box, second_pass - 3600, false);
+            expect($box.value).toBe("2026-10-25T02:30");
+            expect(read_bound($box, false)).toBe(second_pass - 3600);
+        });
     });
 });

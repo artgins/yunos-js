@@ -6,6 +6,21 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.69, gui_treedb 0.17.135 + gobj-ui ^7.26.51, gobj-js ^7.26.28 (2026-10-14)
+
+the gobj-ui 7.26.51 and gobj-js 7.26.28 rounds (the thirtieth review):
+saving a form time field untouched no longer goes back one hour in the
+repeated autumn hour; the retirement of dead Back entries stays in its
+document and follows the reader's traversals; `node_uuid()` is stable for the
+page; a walk gives each gobj once; `gobj_start()` checks `SDF_REQUIRED`
+attributes (BREAKING; no app declares one); the validator imports the locales
+in a process of its own. The two rounds ran back to back: the version between
+them was deployed and has no commit.
+
+- **fix(`C_TRANGER_VIEW`): a range bound filled by the period picker and not touched is asked as it was filled.** The two `datetime-local` boxes were read back as a wall time: a bound in the second pass of the hour that repeats in autumn asked one hour earlier, and the end of a bucket of a millisecond topic (`.999`) came back at `.000`, leaving out its last second. A box that still shows what it was filled with gives back that bound (`fill_bound` / `read_bound`). Test `tranger_helpers`.
+
+Built, tested, deployed; console check clean.
+
 ## gui_agent 0.29.67, gui_treedb 0.17.133 + gobj-ui ^7.26.50 (2026-10-14)
 
 the gobj-ui 7.26.50 round: a menu item's badge is the v1 pill again,

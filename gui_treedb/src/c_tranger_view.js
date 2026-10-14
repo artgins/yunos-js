@@ -129,8 +129,9 @@ import {get_page_kw, iterator_is_gone} from "./rows_page.js";
 import {
     SF_T_MS,
     SF_TM_MS,
-    to_epoch,
     epoch_to_local_input,
+    fill_bound,
+    read_bound,
     fmt_ts,
     flatten_record,
     fmt_uflag,
@@ -2266,8 +2267,8 @@ function apply_time_axis(time, axis, {preserve_mode=false, keep_inputs=false}={}
      *  axis's stored range; on an axis switch they follow the picker's
      *  freshly re-resolved bounds; on a language refresh they are left alone.  */
     if(!preserve_mode) {
-        time.$from.value = epoch_to_local_input(from_val, ms);
-        time.$to.value = epoch_to_local_input(to_val, ms);
+        fill_bound(time.$from, from_val, ms);
+        fill_bound(time.$to, to_val, ms);
     } else if(!keep_inputs) {
         sync_time_inputs(time);
     }
@@ -2283,8 +2284,8 @@ function sync_time_inputs(time)
     let from = gobj_read_integer_attr(time.gobj, "from");
     let to = gobj_read_integer_attr(time.gobj, "to");
 
-    time.$from.value = epoch_to_local_input(from, time.ms);
-    time.$to.value = epoch_to_local_input(to, time.ms);
+    fill_bound(time.$from, from, time.ms);
+    fill_bound(time.$to, to, time.ms);
 }
 
 /***************************************************************
@@ -2306,8 +2307,8 @@ function paint_hint(time)
     }
     /*  Read the INPUTS, not the picker: they are what will be asked for, and
      *  the user may have nudged them off the bucket.  */
-    let from = to_epoch(time.$from.value, time.ms);
-    let to = to_epoch(time.$to.value, time.ms);
+    let from = read_bound(time.$from, time.ms);
+    let to = read_bound(time.$to, time.ms);
     if(!from && !to) {
         return;                     /*  the full key: never empty  */
     }
@@ -2508,8 +2509,8 @@ function collect_rows_match_cond(form)
      *  another one refills them), but what leaves this dialog is what they say
      *  — so a range nudged by hand off the bucket is honoured instead of being
      *  silently overwritten by the bucket it came from.  */
-    from = to_epoch(time.$from.value, time.ms);
-    to = to_epoch(time.$to.value, time.ms);
+    from = read_bound(time.$from, time.ms);
+    to = read_bound(time.$to, time.ms);
 
     if(from) {
         mc[`from_${time.axis}`] = from;
