@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.55, gui_treedb 0.17.121 + gobj-ui ^7.26.43 (2026-10-14)
+
+gobj-ui 7.26.43, the gobj-ui 7.26.43 round (the twenty-fifth review): Undo reverts a form's
+tables and the record stays as loaded; nested tables live as long as their
+row; a table loads in one call; `C_YUI_WINDOW` is a named dialog with
+Escape and focus; the shell's dialogs are named and reachable from the
+keyboard; the floating dock no longer covers a full-screen window. No change of the yunos' own
+code. Versions raised, built, tested (gui_agent 251, gui_treedb 72) and
+deployed by gobj-ui's deploy round.
+
 ## gui_agent 0.29.54, gui_treedb 0.17.120 (2026-10-14)
 
 The rule of the C kernel of 7.26.10, which gobj-js 7.26.22 reports too: a gobj
