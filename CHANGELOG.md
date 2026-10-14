@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.71, gui_treedb 0.17.137 + gobj-ui ^7.26.53 (2026-10-14)
+
+the gobj-ui 7.26.53 round: a time a view shows as text (the cells of
+the topic and form tables, the JSON viewer, the axes and legend of the
+charts) is in the app's language with a 24-hour clock ("Oct 14, 2026,
+15:05:09") and changes with the language button. (The 7.26.52 round did not
+reach the app: its build failed on the period picker's keys the validator
+asked for; 7.26.53 fixes it.) No change of
+the yunos' own code. Built, tested, deployed; console check clean.
+
 ## gui_agent 0.29.69, gui_treedb 0.17.135 + gobj-ui ^7.26.51, gobj-js ^7.26.28 (2026-10-14)
 
 the gobj-ui 7.26.51 and gobj-js 7.26.28 rounds (the thirtieth review):
