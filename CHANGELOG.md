@@ -6,6 +6,12 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.79, gui_treedb 0.17.145 + gobj-js ^7.27.0, gobj-ui ^7.27.0 (2026-10-15)
+
+gobj-js and gobj-ui 7.27.0, whose number follows SDK 7.27.0 (no change of
+their code). Two rounds (gobj-js, then gobj-ui), so the version moved by two.
+No change of the app's own code.
+
 ## gui_agent 0.29.77, gui_treedb 0.17.143 + gobj-ui ^7.26.59 (2026-10-15)
 
 the gobj-ui 7.26.59 round (the thirty-fourth review): the topic table
