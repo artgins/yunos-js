@@ -6,6 +6,12 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.72, gui_treedb 0.17.138 + gobj-ui ^7.26.54 (2026-10-14)
+
+the gobj-ui 7.26.54 round: a table cell editor no longer closes (nor
+throws a page error in Chromium) when the table redraws on entering the view.
+No change of the app's own code.
+
 ## gui_agent 0.29.71, gui_treedb 0.17.137 + gobj-ui ^7.26.53 (2026-10-14)
 
 the gobj-ui 7.26.53 round: a time a view shows as text (the cells of
