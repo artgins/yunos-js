@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.74, gui_treedb 0.17.140 + gobj-ui ^7.26.56, gobj-js ^7.26.29 (2026-10-15)
+
+the gobj-ui 7.26.56 and gobj-js 7.26.29 rounds (the thirty-first
+review), with the dependencies up to date: i18next ^26.4.5 (26.4.4 fixes a
+ReDoS on an interpolated value holding an unclosed `$t(`; no locale uses the
+`$t(` nesting), maplibre-gl ^6.14.0 (fixes; the worker is self-contained
+since 6.13) and vite ^8.3.4 (build fixes). Also: a time field can clear a
+value it cannot show, a cell editor survives `setColumns`, and `gobj_play()`
+fails when its start does. The two rounds ran back to back: the version
+between them was deployed and has no commit.
+
 ## gui_agent 0.29.72, gui_treedb 0.17.138 + gobj-ui ^7.26.54 (2026-10-14)
 
 the gobj-ui 7.26.54 round: a table cell editor no longer closes (nor

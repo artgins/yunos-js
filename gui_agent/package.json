@@ -1,7 +1,7 @@
 {
   "name": "gui-agent",
   "private": true,
-  "version": "0.29.72",
+  "version": "0.29.74",
   "type": "module",
   "description": "Yuneta Agent Console — web SPA (gobj-ui v2 declarative shell) to operate yuneta agents: control-plane CLI, treedb, stats. Connection and auth URLs are configured by the user and stored locally in the browser (no private data committed).",
   "scripts": {
@@ -22,10 +22,10 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/xterm": "^6.0.0",
-    "@yuneta/gobj-js": "^7.26.28",
-    "@yuneta/gobj-ui": "^7.26.54",
+    "@yuneta/gobj-js": "^7.26.29",
+    "@yuneta/gobj-ui": "^7.26.56",
     "bulma": "^1.0.4",
-    "i18next": "^26.4.2",
+    "i18next": "^26.4.5",
     "tabulator-tables": "^6.6.1",
     "tom-select": "^2.6.2",
     "vanilla-jsoneditor": "^3.13.0"
@@ -35,7 +35,7 @@
     "@vitest/coverage-v8": "^5.0.0",
     "acorn": "^8.19.0",
     "playwright": "^1.62.1",
-    "vite": "^8.3.3",
+    "vite": "^8.3.4",
     "vitest": "^5.0.0"
   }
 }
