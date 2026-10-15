@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.77, gui_treedb 0.17.143 + gobj-ui ^7.26.59 (2026-10-15)
+
+the gobj-ui 7.26.59 round (the thirty-fourth review): the topic table
+cancels an open cell editor only when the update changes the edited
+field, so the echo of the reader's own write no longer closes the next
+cell's editor. No change of the app's own code.
+
 ## gui_agent 0.29.76, gui_treedb 0.17.142 + gobj-ui ^7.26.58 (2026-10-15)
 
 the gobj-ui 7.26.58 round (the thirty-third review): the topic table
