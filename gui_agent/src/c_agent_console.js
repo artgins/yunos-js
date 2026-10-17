@@ -442,7 +442,7 @@ function build_ui(gobj)
         ["button", {class: "CONSOLE_CLEAR button", type: "button",
                     title: t("clear"), "data-i18n-title": "clear",
                     "aria-label": t("clear"), "data-i18n-aria-label": "clear"},
-            [["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]]]]
+            [["span", {class: "icon"}, [["i", {class: "yi-broom"}]]]]]
     );
     $clear.addEventListener("click",
         () => gobj_send_event(gobj, "EV_CLEAR", {}, gobj));
@@ -455,7 +455,7 @@ function build_ui(gobj)
     /*  The KEY and not `t(key)`: `build_popover` needs it to write the
      *  `data-i18n-title`, or the tooltip is translated once and frozen.  */
     let help_pop = build_popover(gobj, "HELP", "yi-question", "help");
-    let hist_pop = build_popover(gobj, "HIST", "yi-arrow-rotate-left", "command history");
+    let hist_pop = build_popover(gobj, "HIST", "yi-clock-rotate-left", "command history");
     priv.popovers = {
         HELP: {dd: help_pop.dd, content: help_pop.content},
         HIST: {dd: hist_pop.dd, content: hist_pop.content},

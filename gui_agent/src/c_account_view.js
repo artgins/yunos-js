@@ -282,8 +282,8 @@ function build_preference(gobj)
     let display_seg = segment(
         [
             {value: "table", i18n: "table",     text: "Table",     icon: "yi-table"},
-            {value: "form",  i18n: "json tree", text: "JSON tree", icon: "yi-square-js"},
-            {value: "raw",   i18n: "raw text",  text: "Raw text",  icon: "yi-bars"}
+            {value: "form",  i18n: "json tree", text: "JSON tree", icon: "yi-code"},
+            {value: "raw",   i18n: "raw text",  text: "Raw text",  icon: "yi-align-left"}
         ],
         display_mode,
         function(v) {
@@ -298,9 +298,9 @@ function build_preference(gobj)
     let nav_mode = config ? agent_config_get_nav_mode(config) : "stack";
     let nav_seg = segment(
         [
-            {value: "stack", i18n: "stacked strips", text: "Stacked strips", icon: "yi-bars"},
+            {value: "stack", i18n: "stacked strips", text: "Stacked strips", icon: "yi-layer-group"},
             {value: "back",  i18n: "back to parent", text: "Back to parent", icon: "yi-arrow-left"},
-            {value: "path",  i18n: "breadcrumb",     text: "Breadcrumb",     icon: "yi-hexagon-nodes"}
+            {value: "path",  i18n: "breadcrumb",     text: "Breadcrumb",     icon: "yi-route"}
         ],
         nav_mode,
         function(v) {

@@ -536,7 +536,7 @@ function workspace_picker_item(ws)
     return {
         id:       "picker",
         name:     "nodes",
-        icon:     "yi-cloudversify",
+        icon:     "yi-server",
         route:    picker_route(ws),
         closable: false,
         target: {

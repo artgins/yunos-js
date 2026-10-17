@@ -99,14 +99,14 @@
                         {
                             "id": "preferences",
                             "name": "preferences",
-                            "icon": "yi-gear",
+                            "icon": "yi-sliders",
                             "action": { "type": "navigate", "route": "/preferences" }
                         },
                         { "type": "divider" },
                         {
                             "id": "developer",
                             "name": "developer",
-                            "icon": "yi-square-js",
+                            "icon": "yi-bug",
                             "action": { "type": "event", "event": "EV_OPEN_DEVTOOLS" }
                         },
                         {
@@ -124,7 +124,7 @@
                         {
                             "id": "sitemap",
                             "name": "site map",
-                            "icon": "yi-bars",
+                            "icon": "yi-sitemap",
                             "action": { "type": "event", "event": "EV_OPEN_SITEMAP" }
                         },
                         {
@@ -167,7 +167,7 @@
                             {
                                 "id": "picker",
                                 "name": "nodes",
-                                "icon": "yi-cloudversify",
+                                "icon": "yi-server",
                                 "route": "/commands/nodes",
                                 "target": {
                                     "stage": "main",
@@ -182,7 +182,7 @@
                 {
                     "id": "terminal",
                     "name": "terminal",
-                    "icon": "yi-lock",
+                    "icon": "yi-display",
                     "tooltip": "interactive console to a node",
                     "route": "/terminal",
                     "submenu": {
@@ -192,7 +192,7 @@
                             {
                                 "id": "picker",
                                 "name": "nodes",
-                                "icon": "yi-cloudversify",
+                                "icon": "yi-server",
                                 "route": "/terminal/nodes",
                                 "target": {
                                     "stage": "main",
@@ -207,7 +207,7 @@
                 {
                     "id": "schemas",
                     "name": "schemas",
-                    "icon": "yi-hexagon-nodes",
+                    "icon": "yi-database",
                     "tooltip": "edit the schemas a yuno keeps",
                     "route": "/schemas",
                     "submenu": {
@@ -217,7 +217,7 @@
                             {
                                 "id": "picker",
                                 "name": "nodes",
-                                "icon": "yi-cloudversify",
+                                "icon": "yi-server",
                                 "route": "/schemas/nodes",
                                 "target": {
                                     "stage": "main",
@@ -242,7 +242,7 @@
                             {
                                 "id": "picker",
                                 "name": "nodes",
-                                "icon": "yi-cloudversify",
+                                "icon": "yi-server",
                                 "route": "/users/nodes",
                                 "target": {
                                     "stage": "main",
@@ -267,7 +267,7 @@
                             {
                                 "id": "list",
                                 "name": "scenarios",
-                                "icon": "yi-table",
+                                "icon": "yi-list",
                                 "route": "/scenarios/list",
                                 "target": {
                                     "stage": "main",
@@ -279,7 +279,7 @@
                             {
                                 "id": "yunos",
                                 "name": "yunos",
-                                "icon": "yi-cloudversify",
+                                "icon": "yi-cube",
                                 "route": "/scenarios/yunos",
                                 "target": {
                                     "stage": "main",
@@ -291,7 +291,7 @@
                             {
                                 "id": "live",
                                 "name": "live",
-                                "icon": "yi-diagram-project",
+                                "icon": "yi-heart-pulse",
                                 "route": "/scenarios/live",
                                 "target": {
                                     "stage": "main",

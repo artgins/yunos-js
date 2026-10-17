@@ -385,7 +385,7 @@ function picker_item(ws)
          *  tick which treedbs of a backend to open. Two things one click
          *  apart cannot share a label.  */
         name:     "select",
-        icon:     "yi-square-check",
+        icon:     "yi-database",
         route:    picker_route(ws),
         closable: false,
         target: {

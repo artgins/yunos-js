@@ -434,7 +434,7 @@ function build_ui(gobj)
                     "data-i18n-title": "apply schema",
                     "data-i18n-aria-label": "apply schema"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-check"}]]],
                 ["span", {i18n: "apply"}, t("apply")]
             ],
             {click: (e) => {
@@ -451,7 +451,7 @@ function build_ui(gobj)
                     "data-i18n-title": "schema differences",
                     "data-i18n-aria-label": "schema differences"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-magnifying-glass"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-code-compare"}]]],
                 /*  Three controls in one row: the label is dropped on a
                     narrow screen, where "Cambios sin aplicar" + "Aplicar"
                     already fill it. The title carries the meaning there.  */
@@ -938,7 +938,7 @@ function treedb_children(gobj)
         children.push({
             id:    name,
             label: name,
-            icon:  "yi-hexagon-nodes",
+            icon:  "yi-database",
             link: {
                 kind:   "treedb",
                 gclass: "C_AGENT_TREEDB_VIEW",

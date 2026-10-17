@@ -1069,7 +1069,7 @@ function ac_open_user(gobj, event, kw, src)
 
     let toggle_key = user.disabled ? "enable user" : "disable user";
     let $toggle = createElement2(button_spec("USERS_SHEET_TOGGLE",
-        user.disabled ? "yi-check" : "yi-lock", toggle_key, true));
+        user.disabled ? "yi-user-check" : "yi-user-slash", toggle_key, true));
     $toggle.disabled = !writable;
     $toggle.addEventListener("click", () =>
         gobj_send_event(gobj, user.disabled ? "EV_ENABLE_USER" : "EV_DISABLE_USER",

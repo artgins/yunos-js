@@ -6,6 +6,28 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.80, gui_treedb 0.17.146 + gobj-ui ^7.27.10 (2026-10-17)
+
+Icon review, with the vocabulary the other apps settled on and what the market
+draws for each thing:
+
+- Both: preferences are the sliders, the developer window the bug, the site
+  map the site map. A node or a backend is the server (`yi-cloudversify` is a
+  brand's logo), a treedb the database.
+- gui_agent: the TTY is the console screen (it wore a padlock), so the `>_` of
+  the commands workspace is the only one. Schemas are the database; a yuno of
+  a scenario the cube (a container, a pod); live the pulse; the scenario list
+  the list. The console's clear is the broom and its history the clock;
+  "apply schema" is the check (it wore refresh) and its differences the
+  compare (it wore search). Enable / disable a user is the person checked or
+  crossed out; the runs of a scenario are history. In Preferences, raw text is
+  the text, the stacked strips a stack and the breadcrumb a route: the menu
+  bars were three of them.
+- gui_treedb: the topic bar had two eyes and a table for three different
+  things: keys are the key, rows the table, the raw json the code. A card's
+  options (its match conditions) are the filter, its CSV export the CSV file,
+  its columns the columns.
+
 ## gui_agent 0.29.79, gui_treedb 0.17.145 + gobj-js ^7.27.0, gobj-ui ^7.27.0 (2026-10-15)
 
 gobj-js and gobj-ui 7.27.0, whose number follows SDK 7.27.0 (no change of

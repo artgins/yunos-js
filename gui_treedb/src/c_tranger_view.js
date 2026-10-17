@@ -673,7 +673,7 @@ function build_ui(gobj)
                     title: t("keys"), "aria-label": t("keys"),
                     "data-i18n-title": "keys", "data-i18n-aria-label": "keys"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-table"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-key"}]]],
                 ["span", {i18n: "keys"}, t("keys")]
             ]
         ]);
@@ -718,7 +718,7 @@ function build_ui(gobj)
                     title: t("rows of every key of the topic"),
                     "aria-label": t("rows of every key of the topic")},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-eye"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-table"}]]],
                 ["span", {i18n: "rows topic"}, t("rows topic")]
             ]
         ]);
@@ -740,7 +740,7 @@ function build_ui(gobj)
                     title: t("raw json"), "aria-label": t("raw json"),
                     "data-i18n-title": "raw json", "data-i18n-aria-label": "raw json"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-eye"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-code"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "raw json"}, t("raw json")]
             ]
         ]);
@@ -1326,7 +1326,7 @@ function open_keys_picker(gobj)
                 logical_class: "TRANGER_KEYS_WINDOW",
                 title_prefix: priv.cur_topic,
                 title:      "keys",
-                icon:       "yi-table",
+                icon:       "yi-key",
                 body:       $box,
                 /*  No window manager: the Keys picker is a helper of THIS
                  *  view, not a first-class app window — it must not land in
@@ -1538,7 +1538,7 @@ function open_json_viewer(gobj)
                 logical_class: "TRANGER_JSON_WINDOW",
                 title_prefix: service,
                 title:      "raw json",
-                icon:       "yi-eye",
+                icon:       "yi-code",
                 body:       $box,
                 manager:    null,
                 on_close: () => {
@@ -1868,7 +1868,7 @@ function build_key_actions(gobj, cell)
                            (rows_open ? " is-link is-selected" : ""),
                     type: "button", title: t("rows"), "aria-label": t("rows")},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-eye"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-table"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "rows"}, t("rows")]
             ]
         ]);
@@ -2409,7 +2409,7 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
                     "aria-label": t(open_key), "data-i18n-aria-label": open_key},
             [
                 ["span", {class: "icon"},
-                    [["i", {class: editing ? "yi-square-check" : "yi-eye"}]]],
+                    [["i", {class: editing ? "yi-square-check" : "yi-table"}]]],
                 ["span", {i18n: editing ? "apply" : "open rows"},
                     t(editing ? "apply" : "open rows")]
             ]
@@ -2792,7 +2792,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                         title: t("options"), "aria-label": t("options"),
                         "data-i18n-title": "options", "data-i18n-aria-label": "options"},
                 [
-                    ["span", {class: "icon"}, [["i", {class: "yi-cog"}]]],
+                    ["span", {class: "icon"}, [["i", {class: "yi-filter"}]]],
                     ["span", {class: "is-hidden-mobile", i18n: "options"}, t("options")]
                 ]
             ]);
@@ -2813,7 +2813,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                     "data-i18n-title": "download the rows loaded in this table as csv",
                     "data-i18n-aria-label": "export"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-download"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-file-csv"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "export"}, t("export")]
             ]
         ]);
@@ -2852,7 +2852,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                     "data-i18n-title": "choose the columns to show",
                     "data-i18n-aria-label": "columns"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-table"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-columns"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "columns"}, t("columns")]
             ]
         ]);
@@ -3628,7 +3628,7 @@ function show_record_dialog(gobj, record, key)
             logical_class: "TRANGER_RECORD_WINDOW",
             title_prefix: title_prefix,
             title:      title,
-            icon:       "yi-js-square",
+            icon:       "yi-code",
             body:       $view,
             manager:    null,
             /*  close_window() calls this and THEN destroys itself: drop

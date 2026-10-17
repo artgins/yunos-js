@@ -532,7 +532,7 @@ function build_dom(gobj)
         "EV_EDIT_SCENARIO", gobj, true);
     priv.$new = tool_button("MONITOR_NEW", "yi-plus", "scenario new",
         "EV_NEW_SCENARIO", gobj, false);
-    priv.$runs = tool_button("MONITOR_RUNS", "yi-calendar-days", "scenario runs",
+    priv.$runs = tool_button("MONITOR_RUNS", "yi-clock-rotate-left", "scenario runs",
         "EV_SHOW_RUNS", gobj, false);
     priv.$delete = tool_button("MONITOR_DELETE is-danger is-outlined", "yi-trash", "scenario delete",
         "EV_DELETE_SCENARIO", gobj, false);
