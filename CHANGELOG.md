@@ -6,6 +6,11 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.84, gui_treedb 0.17.150 + gobj-ui ^7.27.13 (2026-10-17)
+
+- gobj-ui 7.27.13: adds the `yi-user-shield` icon; nothing visible changes
+  here.
+
 ## gui_agent 0.29.83, gui_treedb 0.17.149 + gobj-ui ^7.27.12 (2026-10-17)
 
 - gobj-ui 7.27.12: adds the `yi-folder-tree` icon; nothing visible changes
