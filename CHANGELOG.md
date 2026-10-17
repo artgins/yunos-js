@@ -6,6 +6,11 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.83, gui_treedb 0.17.149 + gobj-ui ^7.27.12 (2026-10-17)
+
+- gobj-ui 7.27.12: adds the `yi-folder-tree` icon; nothing visible changes
+  here.
+
 ## gui_agent 0.29.82, gui_treedb 0.17.148 + gobj-ui ^7.27.11 (2026-10-17)
 
 - gobj-ui 7.27.11: the default tab icon of the treedb graph is the graph, not
