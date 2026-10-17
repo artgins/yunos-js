@@ -6,6 +6,12 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.81, gui_treedb 0.17.147 (2026-10-17)
+
+- **About** wears the **ⓘ**, the "About" of Google, Apple and Microsoft; the
+  **?** stays for help (the link to the documentation). They were the other
+  way round. Changed the same way in every app.
+
 ## gui_agent 0.29.80, gui_treedb 0.17.146 + gobj-ui ^7.27.10 (2026-10-17)
 
 Icon review, with the vocabulary the other apps settled on and what the market
