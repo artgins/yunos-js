@@ -2409,7 +2409,7 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
                     "aria-label": t(open_key), "data-i18n-aria-label": open_key},
             [
                 ["span", {class: "icon"},
-                    [["i", {class: editing ? "yi-square-check" : "yi-table"}]]],
+                    [["i", {class: editing ? "yi-check" : "yi-table"}]]],
                 ["span", {i18n: editing ? "apply" : "open rows"},
                     t(editing ? "apply" : "open rows")]
             ]

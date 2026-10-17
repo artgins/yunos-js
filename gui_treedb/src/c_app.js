@@ -491,7 +491,7 @@ function rebuild_workspace_tabs(gobj, ws)
         items.push({
             id:       "db-" + sel.id,
             name:     sel.label || sel.service || sel.treedb_name,
-            icon:     (sel.gclass === "C_TRANGER") ? "yi-floppy-disk" : spec.icon,
+            icon:     (sel.gclass === "C_TRANGER") ? "yi-clock-rotate-left" : spec.icon,
             route:    tab_route,
             /*  Red label while the backend is dropped; the view stays mounted. */
             class:    connected ? "" : "yui-nav-disconnected",

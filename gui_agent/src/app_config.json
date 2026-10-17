@@ -137,7 +137,7 @@
                         {
                             "id": "logout",
                             "name": "logout",
-                            "icon": "yi-sign-out-alt",
+                            "icon": "yi-right-from-bracket",
                             "action": { "type": "event", "event": "EV_LOGOUT" }
                         }
                     ]

@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.85, gui_treedb 0.17.151 (2026-10-17)
+
+Icon review of gui_treedb, icons only:
+
+- Both: log out is `yi-right-from-bracket`, the name every app uses for the
+  same glyph (`yi-sign-out-alt` is its FontAwesome 5 name).
+- gui_treedb: "apply" in the options of the tranger view is the check, as in
+  gui_agent (the checked box says selected); exporting the connections, a
+  JSON file, is the code file, as the yunovatios map exports JSON; a
+  timeranger tab is the history clock (the floppy says save).
+
 ## gui_agent 0.29.84, gui_treedb 0.17.150 + gobj-ui ^7.27.13 (2026-10-17)
 
 - gobj-ui 7.27.13: adds the `yi-user-shield` icon; nothing visible changes

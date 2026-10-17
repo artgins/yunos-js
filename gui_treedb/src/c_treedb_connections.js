@@ -290,7 +290,7 @@ function build_ui(gobj)
                     "data-i18n-title": "download the connections as a json file",
                     "data-i18n-aria-label": "export"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-download"}]]],
+                ["span", {class: "icon"}, [["i", {class: "yi-file-code"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "export"}, t("export")]
             ]
         ]);
