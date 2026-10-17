@@ -1465,7 +1465,7 @@ function flash_copied(gobj)
     }
     priv.$copy.classList.add("has-text-success");
     if(priv.$copy_icon) {
-        priv.$copy_icon.className = "yi-square-check";
+        priv.$copy_icon.className = "yi-check";
     }
     /*  Going back is EV_TIMEOUT, an FSM transition that shows in the
      *  machine trace -- not a setTimeout nobody can see.  */

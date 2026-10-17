@@ -6,6 +6,11 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.86 (2026-10-18)
+
+- The console's "copied" confirmation is the check (what GitHub, VS Code or
+  Google show after a copy); the checked box says selected. Icon only.
+
 ## gui_agent 0.29.85, gui_treedb 0.17.151 (2026-10-17)
 
 Icon review of gui_treedb, icons only:
