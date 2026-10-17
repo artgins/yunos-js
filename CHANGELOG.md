@@ -6,6 +6,12 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.88, gui_treedb 0.17.153 + gobj-ui ^7.27.15 (2026-10-18)
+
+- gobj-ui 7.27.15, the library's icon review: success is the circle check,
+  the site map window the site map, raw JSON the code, exporting the table
+  the CSV file. Icons only.
+
 ## gui_agent 0.29.87, gui_treedb 0.17.152 + gobj-ui ^7.27.14 (2026-10-18)
 
 - gui_agent: the "JSON tree" display mode of the configuration is the folder
