@@ -366,7 +366,7 @@ function build_ui(gobj)
                     "data-i18n-title": "show help",
                     "data-i18n-aria-label": "show help"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-circle-info"}]]]
+                ["span", {class: "icon"}, [["i", {class: "yi-question"}]]]
             ]
         ]);
     $help_btn.addEventListener("click", () => {

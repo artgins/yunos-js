@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.90, gui_treedb 0.17.155 + gobj-ui ^7.27.18 (2026-10-18)
+
+Final icon audit of every app, icons only:
+
+- gui_agent: confirming "apply schema" is the check, as every other apply
+  (it wore the refresh arrows).
+- gui_treedb: "show help" in the connections is the question mark; the
+  circle-info is About.
+- gobj-ui 7.27.18: schema = compass, choosing columns = columns.
+
 ## gui_agent 0.29.89, gui_treedb 0.17.154 + gobj-ui ^7.27.17 (2026-10-18)
 
 - gobj-ui 7.27.16-7.27.17: the `yi-message` icon; the G6 graph's unlink is the

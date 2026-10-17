@@ -2468,7 +2468,7 @@ function ac_apply_changes(gobj, event, kw, src)
                             title: t("apply schema"), "data-i18n-title": "apply schema",
                             "aria-label": t("apply schema"), "data-i18n-aria-label": "apply schema"},
                     [
-                        ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
+                        ["span", {class: "icon"}, [["i", {class: "yi-check"}]]],
                         ["span", {i18n: "apply"}, t("apply")]
                     ],
                     {click: (e) => {
