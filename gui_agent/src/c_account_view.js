@@ -282,7 +282,7 @@ function build_preference(gobj)
     let display_seg = segment(
         [
             {value: "table", i18n: "table",     text: "Table",     icon: "yi-table"},
-            {value: "form",  i18n: "json tree", text: "JSON tree", icon: "yi-code"},
+            {value: "form",  i18n: "json tree", text: "JSON tree", icon: "yi-folder-tree"},
             {value: "raw",   i18n: "raw text",  text: "Raw text",  icon: "yi-align-left"}
         ],
         display_mode,

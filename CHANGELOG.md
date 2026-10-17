@@ -6,6 +6,12 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.87, gui_treedb 0.17.152 + gobj-ui ^7.27.14 (2026-10-18)
+
+- gui_agent: the "JSON tree" display mode of the configuration is the folder
+  tree, as the tree view of gobj-ui's JSON viewer is since 7.27.14 (the code
+  stays the raw JSON). Icon only.
+
 ## gui_agent 0.29.86 (2026-10-18)
 
 - The console's "copied" confirmation is the check (what GitHub, VS Code or
