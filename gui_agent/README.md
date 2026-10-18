@@ -33,7 +33,9 @@ because the deployment identity is **derived from the serving hostname**
 | `artgins.yunetacontrol.com` | `yuneta_agent`   | `wss://<host>:1996` | `https://<host>:1806` |
 | `artgins.yunetacontrol.ovh` | `yuneta_agent22` | `wss://<host>:1997` | `https://<host>:1807` |
 
-`deploy-com.sh` / `deploy-ovh.sh` rsync `dist/` to each vhost on `artgins.com`.
+`deploy-com.sh` / `deploy-ovh.sh` rsync `dist/` to each vhost on `artgins.com`,
+without the source maps: the build makes them `hidden` (kept in `dist/` to decode
+a stack from the remote log) and the rsync hides `*.map`.
 Everything is co-located on the SPA's own host, which is what makes the flow
 work: the cookie the BFF sets (`Domain=<host>`) reaches both the BFF and the
 control center, and one letsencrypt cert covers all of it. A new tenant is a

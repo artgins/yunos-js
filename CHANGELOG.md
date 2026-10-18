@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## Source maps no longer published (2026-10-18, no version bump)
+
+Both SPAs build with `sourcemap: "hidden"`: the maps stay in `dist/` (to
+decode a stack sent by the remote log), the bundle carries no
+`sourceMappingURL`, and the deploy scripts hide `*.map` from rsync, whose
+`--delete` also took the maps already on the vhosts. Same code as deployed.
+
 ## gui_agent 0.29.93, gui_treedb 0.17.158 + gobj-ui ^7.27.21 (2026-10-18)
 
 gobj-ui 7.27.21: `EV_VIEW_SHOWN`, the shell tells a `keep_alive` view when it
