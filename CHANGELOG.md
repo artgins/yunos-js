@@ -6,6 +6,12 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.92, gui_treedb 0.17.157 + gobj-ui ^7.27.20 (2026-10-18)
+
+A topic table no longer comes back EMPTY to its tab (a route change took it
+out of the document and the browser dropped its scroll); `C_YUI_NODE` leaves
+a child that is on screen where it is.
+
 ## gui_agent 0.29.91, gui_treedb 0.17.156 + gobj-ui ^7.27.19 (2026-10-18)
 
 Topic tables (gobj-ui 7.27.19): coming back to a tab no longer moves the
