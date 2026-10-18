@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.91, gui_treedb 0.17.156 + gobj-ui ^7.27.19 (2026-10-18)
+
+Topic tables (gobj-ui 7.27.19): coming back to a tab no longer moves the
+table a dozen rows up; a click on an fkey to several parents opens the
+record; edition mode keeps the row height and leaving it clears the
+selection.
+
 ## gui_agent 0.29.90, gui_treedb 0.17.155 + gobj-ui ^7.27.18 (2026-10-18)
 
 Final icon audit of every app, icons only:
