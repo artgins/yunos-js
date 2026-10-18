@@ -40,7 +40,9 @@ export default defineConfig({
         ],
     },
     build: {
-        sourcemap: true,
+        /*  The maps stay in dist/ (to decode a stack sent by the remote
+         *  log) but carry no sourceMappingURL and are not deployed.  */
+        sourcemap: "hidden",
         chunkSizeWarningLimit: 6000
     },
     server: {
