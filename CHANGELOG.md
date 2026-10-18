@@ -6,6 +6,11 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.93, gui_treedb 0.17.158 + gobj-ui ^7.27.21 (2026-10-18)
+
+gobj-ui 7.27.21: `EV_VIEW_SHOWN`, the shell tells a `keep_alive` view when it
+shows it again (opt-in; a view that does not declare it sees no change).
+
 ## gui_agent 0.29.92, gui_treedb 0.17.157 + gobj-ui ^7.27.20 (2026-10-18)
 
 A topic table no longer comes back EMPTY to its tab (a route change took it
