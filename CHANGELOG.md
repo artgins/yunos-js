@@ -6,6 +6,12 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.159 + gobj-ui ^7.27.23 (2026-10-19)
+
+gobj-ui deploy round: 7.27.22 (the Developer window's **Line** view of the
+traffic) and 7.27.23 (the gobj tree's remote mode, which gui_treedb does not
+use). Deployed to artgins.ytreedb.com, QA OK (login, shell, no console error).
+
 ## gui_agent 0.29.95 + gobj-ui ^7.27.23 (2026-10-19)
 
 - **Live view: each card opens the gobj tree of its yuno.** It is a third
