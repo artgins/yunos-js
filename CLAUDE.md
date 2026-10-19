@@ -26,7 +26,7 @@ shape), a `<label for=x>` over a control carrying only `name=x`, a
 A `<label>` that **wraps** its control does. A LITERAL `aria-label` next to a
 visible `i18n` label OVERRIDES it for a reader — worse than none.
 
-⚠️ Both these yunos mount gobj-ui's **Developer window**, whose 51 keys (from 7
+⚠️ Both these yunos mount gobj-ui's **Developer window**, whose 53 keys (from 7
 sites) arrive as VARIABLES, so no scan of the source sees them. Since gobj-ui
 `7.26.27` `yui_dev.js` publishes them as data (`YUI_DEV_I18N_KEYS`), and
 `validate-locales` reads that list in every gobj-ui module the app mounts and

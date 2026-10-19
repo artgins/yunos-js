@@ -89,6 +89,17 @@
  *      session, and survives a change of the scenario that still holds
  *      it (a tick in the tree); it is not saved.
  *
+ *      GOBJ TREE. A third button of each card opens the gobj tree of
+ *      that yuno in a window (C_AGENT_YUNO_TREE, a child of this view,
+ *      one per yuno): its gobjs, what each is doing, and its trace
+ *      levels, which can be turned on and off per gobj or per gclass.
+ *      It sends its commands through THIS view's transport: it
+ *      publishes each line (EV_YUNO_TREE_REQUEST), this view sends it
+ *      tagged `monitor_kind: "ytree"` and hands the answer back
+ *      (EV_YUNO_TREE_ANSWER). Outside a session a request is answered
+ *      with an error at once. A tree whose yuno leaves the scenario is
+ *      closed with it.
+ *
  *      RATES. A yuno's own `rxMsgsec`/`txMsgsec` is used when its service
  *      reports one (an application service -- yunovatios' gates, the
  *      control center -- computes it on its own timer; one that comes from
@@ -148,6 +159,10 @@ import {
     gobj_unsubscribe_event,
     gobj_send_event,
     gobj_create_pure_child,
+    gobj_create,
+    gobj_start,
+    gobj_post_event,
+    clean_name,
     gobj_find_service,
     gobj_current_state,
     gobj_change_state,
@@ -298,6 +313,7 @@ let PRIVATE_DATA = {
     push:           {},     /*  node -> the agent pushes: null = asked, not answered yet  */
     watched:        {},     /*  node -> a watch is asked of its agent now  */
     paused:         {},     /*  pause_id(yuno) -> true: its readings are paused  */
+    ytrees:         {},     /*  yuno key -> its C_AGENT_YUNO_TREE, while its window is open  */
     watch_renew_ms: 20000,  /*  renew a watch this often (ttl / 3 of the agent's answer)  */
     watch_at:       {},     /*  node -> performance.now() of its last watch (renewed ttl/3 later)  */
     discovery:      null,   /*  {pending: {key: true}, configs: {key: config}, failed: [key]}  */
@@ -411,6 +427,12 @@ function mt_start(gobj)
 function mt_stop(gobj)
 {
     let priv = gobj.priv;
+
+    /*  Hosted children are retired HERE: gobj_destroy() destroys the
+     *  children before mt_destroy.  */
+    for(let key of Object.keys(priv.ytrees)) {
+        drop_yuno_tree(gobj, key);
+    }
     clear_timeout(priv.gobj_timer);
     if(gobj_current_state(gobj) === "ST_MONITORING" && priv.scenario) {
         send_unwatch(gobj);
@@ -1569,6 +1591,8 @@ function build_cards(gobj)
         let $live = card_button("MONITOR_CARD_LIVE", "EV_TOGGLE_LIVE", y.key, gobj);
         let $once = card_button("MONITOR_CARD_ONCE", "EV_READ_ONCE", y.key, gobj);
         set_card_button($once, "yi-arrows-rotate", "monitor read once");
+        let $tree = card_button("MONITOR_CARD_TREE", "EV_OPEN_YUNO_TREE", y.key, gobj);
+        set_card_button($tree, "yi-hexagon-nodes", "gobj tree");
         let $cpu = createElement2(["span", {class: "MONITOR_CARD_CPU is-family-monospace"}, ""]);
         let $body = createElement2(["div", {class: "MONITOR_CARD_BODY"}, ""]);
         let $err = createElement2(["p", {class: "MONITOR_CARD_ERROR has-text-danger is-size-7"}, ""]);
@@ -1578,7 +1602,7 @@ function build_cards(gobj)
                     ["span", {class: "MONITOR_CARD_LABEL has-text-weight-bold"}, y.label],
                     ["span", {class: "MONITOR_CARD_ID is-family-monospace has-text-grey"},
                         y.node ? `${y.node} · ${y.id}` : y.id],
-                    ["span", {class: "MONITOR_CARD_TOOLS buttons"}, [$live, $once]]
+                    ["span", {class: "MONITOR_CARD_TOOLS buttons"}, [$live, $once, $tree]]
                 ]],
                 ["div", {class: "MONITOR_CARD_ROW"}, [
                     $state,
@@ -1591,7 +1615,7 @@ function build_cards(gobj)
             ]]
         );
         priv.$cards.appendChild($card);
-        priv.stats_cards[y.key] = {$state, $cpu, $body, $err, $paused, $live, $once};
+        priv.stats_cards[y.key] = {$state, $cpu, $body, $err, $paused, $live, $once, $tree};
     }
 }
 
@@ -1710,6 +1734,12 @@ function adopt_scenario(gobj)
         }
     }
     priv.paused = paused;
+    for(let key of Object.keys(priv.ytrees)) {
+        let still = next ? next.yunos.find((y) => y.key === key) : null;
+        if(!still) {
+            drop_yuno_tree(gobj, key);
+        }
+    }
     priv.view_mode = next ? next.view.mode : "graph";
     priv.control = null;
     priv.editing = false;
@@ -2263,6 +2293,24 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return control_answered(gobj, kw, failed_,
             [{yuno: a.key, result: kw.result, comment: kw.comment, data: kw.data}]);
     }
+    if(kind === "ytree") {
+        /*  To the gobj tree of that yuno while its window is open, in any
+         *  state and across a change of scenario that keeps the yuno: the
+         *  tree numbers its requests and drops what it no longer waits for.  */
+        let child = priv.ytrees[a.key];
+        if(!child || (a.ack && !failed_)) {
+            return 0;   /*  closed meanwhile, or the control center's dispatch ack  */
+        }
+        gobj_send_event(child, "EV_YUNO_TREE_ANSWER", {
+            what:    msg_iev_read_key(kw, "ytree_what") || "",
+            gclass:  msg_iev_read_key(kw, "ytree_gclass") || "",
+            seq:     msg_iev_read_key(kw, "ytree_seq"),
+            result:  kw.result,
+            comment: kw.comment || "",
+            data:    kw.data
+        }, gobj);
+        return 0;
+    }
     if(gobj_current_state(gobj) !== "ST_MONITORING" || !answer_is_current(gobj, a)) {
         /*  A reading or a control asked before the session ended (or the
          *  scenario changed): its answer has no card to go to any more.  */
@@ -2393,6 +2441,93 @@ function ac_yuno_stats(gobj, event, kw, src)
     if(!hit) {
         log_warning(`${gobj_short_name(gobj)}: pushed reading of no card (${d.yuno_id}, ${d.kind})`);
     }
+    return 0;
+}
+
+/***************************************************************
+ *  Take down the gobj tree of a yuno (stop closes its window).
+ ***************************************************************/
+function drop_yuno_tree(gobj, key)
+{
+    let priv = gobj.priv;
+    let child = priv.ytrees[key];
+    delete priv.ytrees[key];
+    if(child) {
+        if(gobj_is_running(child)) {
+            gobj_stop(child);
+        }
+        gobj_destroy(child);
+    }
+}
+
+/***************************************************************
+ *  Open the gobj tree of one yuno, or bring it to the front.
+ ***************************************************************/
+function ac_open_yuno_tree(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === kw.key) : null;
+    if(!y) {
+        log_error(`${gobj_short_name(gobj)}: gobj tree of no yuno of the scenario: '${kw.key}'`);
+        return -1;
+    }
+    if(priv.ytrees[y.key]) {
+        gobj_send_event(priv.ytrees[y.key], "EV_SHOW_VIEW", {}, gobj);
+        return 0;
+    }
+    let child = gobj_create(
+        `ytree-${clean_name(y.key)}`,
+        "C_AGENT_YUNO_TREE",
+        {yuno: {key: y.key, id: y.id, node: y.node || "", label: y.label || y.id}},
+        gobj
+    );
+    if(!child) {
+        log_error(`${gobj_short_name(gobj)}: cannot create the gobj tree of '${y.key}'`);
+        return -1;
+    }
+    priv.ytrees[y.key] = child;
+    gobj_start(child);
+    return 0;
+}
+
+/***************************************************************
+ *  A gobj tree's command line, sent on this view's transport.
+ *  Outside a session it is answered at once, with an error.
+ ***************************************************************/
+function ac_yuno_tree_request(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === kw.key) : null;
+    if(!y || !kw.line) {
+        log_error(`${gobj_short_name(gobj)}: gobj tree request of no yuno or no line: '${kw.key}'`);
+        return -1;
+    }
+    if(gobj_current_state(gobj) !== "ST_MONITORING") {
+        gobj_send_event(src, "EV_YUNO_TREE_ANSWER", {
+            what: kw.what, gclass: kw.gclass, seq: kw.seq,
+            result: -1, comment: "", error_key: "monitor disconnected", data: null
+        }, gobj);
+        return 0;
+    }
+    send_request(gobj, kw.line, "ytree", y.key, y.node, {
+        ytree_what: kw.what, ytree_gclass: kw.gclass || "", ytree_seq: kw.seq
+    });
+    return 0;
+}
+
+/***************************************************************
+ *  The reader closed a gobj tree's window. The child is the
+ *  publisher of this event: it is destroyed on the next turn.
+ ***************************************************************/
+function ac_yuno_tree_closed(gobj, event, kw, src)
+{
+    gobj_post_event(gobj, "EV_DROP_YUNO_TREE", {key: kw.key}, gobj);
+    return 0;
+}
+
+function ac_drop_yuno_tree(gobj, event, kw, src)
+{
+    drop_yuno_tree(gobj, kw.key);
     return 0;
 }
 
@@ -2862,7 +2997,13 @@ function create_gclass(gclass_name)
         /*  the control center's answers come in any state (cc_answer);
          *  a reading's only matters while monitoring  */
         ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,   null],
-        ["EV_LANGUAGE_CHANGED",     ac_language_changed,    null]
+        ["EV_LANGUAGE_CHANGED",     ac_language_changed,    null],
+        /*  a gobj tree stays open across a drop: its requests are
+         *  answered in any state  */
+        ["EV_OPEN_YUNO_TREE",       ac_open_yuno_tree,      null],
+        ["EV_YUNO_TREE_REQUEST",    ac_yuno_tree_request,   null],
+        ["EV_YUNO_TREE_CLOSED",     ac_yuno_tree_closed,    null],
+        ["EV_DROP_YUNO_TREE",       ac_drop_yuno_tree,      null]
     ];
     const states = [
         ["ST_DISCONNECTED", [
@@ -2929,6 +3070,10 @@ function create_gclass(gclass_name)
         ["EV_SET_VIEW_MODE",        0],
         ["EV_TOGGLE_LIVE",          0],
         ["EV_READ_ONCE",            0],
+        ["EV_OPEN_YUNO_TREE",       0],
+        ["EV_YUNO_TREE_REQUEST",    0],
+        ["EV_YUNO_TREE_CLOSED",     0],
+        ["EV_DROP_YUNO_TREE",       0],
         ["EV_MONITOR_SCENARIO_CHANGED", 0]
     ];
 

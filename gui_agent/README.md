@@ -256,6 +256,37 @@ click shows exactly three requests and three answers. The pause is kept per
 yuno (node, id, service) for the session only. A new scenario that still
 holds the yuno keeps it, for example after one more tick in the tree.
 
+**Each card opens the gobj tree of its yuno** (0.29.95). The third button of a
+card opens a window with the yuno's gobjs: what each one IS (gclass, role) and
+what it is DOING (running, playing, FSM state), on gobj-ui's
+`C_YUI_GOBJ_TREE_JS` in its `remote` mode. `C_AGENT_YUNO_TREE`, a child of the
+live view with one per open window, answers what the tree asks for with
+commands to the yuno (`command-yuno id=<id> service=__yuno__ command=...`),
+sent on the live view's own transport, directly or through the control center:
+
+- **The tree:** `view-gobj-tree options=[...]`, with `get-gclass-trace` and
+  `get-global-trace`. The options name the fields the view reads, because
+  the command's default leaves out `gclass` and `fullname`, and an empty
+  list means every attribute of every gobj. The status line counts the gobjs
+  that trace something **of their own** and the gclasses that trace. A
+  `main()` turns some gclass traces on by default (`C_TCP connections`), so
+  a count that included them would be every connection of the yuno.
+- **A card's trace levels:** `info-gclass-trace gclass=G`,
+  `info-global-trace`, `get-gclass-trace gclass=G` and `get-global-trace`.
+  The card shows one row per level, with a box for *this gobj*
+  (`set-gobj-trace gobj=<full name> level=L set=1|0`) and one for *all of
+  the gclass* (`set-gclass-trace gclass=G level=L set=1|0`). After a set,
+  the tree and the levels are read again.
+- **The GClass button:** `view-gclass gclass=G`. This is the backend's
+  class, not a same-named one of the browser.
+
+A gclass trace is saved by the yuno and survives a restart. A gobj trace lasts
+until the yuno ends: the yuno saves it too, but at start-up it re-applies
+only the gclass and global scopes. The traces go to the yuno's log on its
+node, not to the Developer window. Nothing is read on a clock. A request made
+outside a session is answered at once with an error, and a window whose yuno
+leaves the scenario closes with it.
+
 **Actions** (0.24.0; run by the control center since 0.29.0). A scenario that
 declares actions gets their buttons — **Start**, **Pause**, **Resume**,
 **Stop**, **Report**, one per action declared — and **Restart** whenever it

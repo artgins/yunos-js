@@ -6,6 +6,22 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.95 + gobj-ui ^7.27.23 (2026-10-19)
+
+- **Live view: each card opens the gobj tree of its yuno.** It is a third
+  button in the head of the card, and it opens a window with the yuno's
+  gobjs: what each one is and is doing, and what it traces. A box per level
+  turns the trace on or off for that gobj (`set-gobj-trace`) or for its whole
+  gclass (`set-gclass-trace`). A level held by the gclass or globally is shown
+  locked, with where it comes from. The GClass button describes the
+  backend's gclass (`view-gclass`). The status line counts the gobjs that
+  trace something of their own and the gclasses that trace.
+  `C_AGENT_YUNO_TREE` (new) hosts the tree and sends its commands through
+  the live view's transport.
+- gobj-ui 7.27.23 (the tree's `remote` mode, `open_gobj_tree_view`): its six
+  new keys are added to gui_agent and, ahead of its next release, to
+  gui_treedb.
+
 ## gui_agent 0.29.94 + gobj-ui ^7.27.22 (2026-10-19)
 
 - **Live view, cards mode: each card can be paused, or read once.** Two

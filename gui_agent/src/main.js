@@ -80,6 +80,7 @@ import {register_c_agent_treedb_link} from "./c_agent_treedb_link.js";
 import {register_c_agent_treedb_view} from "./c_agent_treedb_view.js";
 import {register_c_monitor_link} from "./c_monitor_link.js";
 import {register_c_agent_monitor} from "./c_agent_monitor.js";
+import {register_c_agent_yuno_tree} from "./c_agent_yuno_tree.js";
 import {register_c_scenarios} from "./c_scenarios.js";
 import {register_c_agent_users} from "./c_agent_users.js";
 
@@ -166,6 +167,7 @@ function main()
     register_c_monitor_link();       // direct link to one agent (Monitor)
     register_c_scenarios();          // the Scenarios workspace: the list
     register_c_agent_monitor();      // the Scenarios workspace: the live view
+    register_c_agent_yuno_tree();    // the gobj tree of a yuno of the live view, in a window
     register_c_agent_users();        // the Users workspace
 
     /*------------------------------------------------*

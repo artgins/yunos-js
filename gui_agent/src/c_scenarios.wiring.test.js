@@ -51,6 +51,21 @@ vi.mock("@yuneta/gobj-ui/src/yui_tabulator_i18n.js", () => ({
     yui_tabulator_relocalize: () => {},
 }));
 
+/*  The gobj tree's window: a gobj that keeps what the host hands it.  */
+const tree_double = vi.hoisted(() => ({opened: [], got: [], make: null}));
+vi.mock("@yuneta/gobj-ui/src/yui_gobj_tree_view.js", () => ({
+    open_gobj_tree_view: (host, opts) => {
+        const handle = {tree: tree_double.make(host, opts), win: null, modal: null, opts: opts};
+        tree_double.opened.push(handle);
+        return handle;
+    },
+    close_gobj_tree_view: (handle) => {
+        if(handle) {
+            handle.closed = true;
+        }
+    },
+}));
+
 vi.mock("@yuneta/gobj-ui/src/yui_inputs.js", () => ({
     attach_clear: () => {},
 }));
@@ -88,6 +103,7 @@ const {
 const {register_c_agent_config, agent_config_get_monitor, agent_config_set_monitor,
        agent_config_toggle_selected_node, stats_sel_id} = await import("./c_agent_config.js");
 const {register_c_agent_monitor} = await import("./c_agent_monitor.js");
+const {register_c_agent_yuno_tree} = await import("./c_agent_yuno_tree.js");
 const {register_c_scenarios} = await import("./c_scenarios.js");
 const {validate_scenario} = await import("./monitor_helpers.js");
 
@@ -126,7 +142,22 @@ beforeAll(() => {
     register_c_timer();
     register_c_agent_config();
     register_c_agent_monitor();
+    register_c_agent_yuno_tree();
     register_c_scenarios();
+
+    const keep = (gobj, event, kw) => {
+        tree_double.got.push({event, kw});
+        return 0;
+    };
+    gclass_create("C_TEST_TREE",
+        [["EV_LOAD_TREE", 0], ["EV_TRACE_INFO", 0], ["EV_GCLASS_DESCRIPTION", 0]],
+        [["ST_IDLE", [
+            ["EV_LOAD_TREE", keep, null],
+            ["EV_TRACE_INFO", keep, null],
+            ["EV_GCLASS_DESCRIPTION", keep, null]
+        ]]], {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
+    let n_trees = 0;
+    tree_double.make = (host, opts) => gobj_create(`tree_double_${++n_trees}`, "C_TEST_TREE", {}, host);
 
     gclass_create("C_TEST_HOST", [], [["ST_IDLE", []]], {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
     gclass_create("C_TEST_SHELL", [["EV_LANGUAGE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT]],
@@ -625,6 +656,156 @@ describe("a scenario that is not the control center's", () => {
         answer(mon, sent[0], {data: [{id: "2120", yuno_running: true, yuno_playing: true}]});
         expect(mon.priv.model.gate.run).toBe("playing");
         expect(mon.priv.model.sim.run).toBe("unknown");
+        expect(errors()).toEqual([]);
+    });
+});
+
+describe("the gobj tree of a yuno of the live view", () => {
+    const DIRECT = Object.assign({}, SAVED, {agent_url: "wss://agent.example.com:1993"});
+    delete DIRECT.node;
+
+    const TREE = {
+        "C_YUNO^gate": {
+            gclass: "C_YUNO", name: "gate", fullname: "C_YUNO^gate", gobj_trace_level: [],
+            children: {
+                "C_TCP^tcp1": {gclass: "C_TCP", name: "tcp1", fullname: "C_YUNO^gate`C_TCP^tcp1",
+                               gobj_trace_level: ["traffic"], children: {}}
+            }
+        }
+    };
+
+    function open_gate()
+    {
+        const mon = new_monitor();
+        agent_config_set_monitor(config, {scenario: validate_scenario(DIRECT).scenario, source: "local"});
+        gobj_send_event(mon, "EV_ON_OPEN", {}, mlink);
+        sent.length = 0;
+        tree_double.got.length = 0;
+        gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: "gate"}, mon);
+        return mon;
+    }
+
+    const lines = () => sent.filter((r) => r.direct && /^command-yuno /.test(r.command));
+    const reply = (mon, req, data, result = 0) => answer(mon, req, {data: data, result: result});
+
+    const TREE_OPTIONS = '["fullname","shortname","gclass","name","parent","state","running",' +
+        '"playing","service","disabled","volatil","gobj_flags","gobj_trace_level","bottom_gobj","commands"]';
+    const cmd = (r) => r.command.replace(/^command-yuno id=2120 service=__yuno__ command=/, "");
+
+    test("opens with the tree of the yuno, read through the view's transport", () => {
+        const mon = open_gate();
+        expect(lines().map(cmd)).toEqual([
+            `view-gobj-tree options=${TREE_OPTIONS}`, "get-gclass-trace", "get-global-trace"
+        ]);
+        expect(lines()[0].kw.__md_iev__.monitor_kind).toBe("ytree");
+        const [tree, gon, glon] = lines();
+        reply(mon, tree, TREE);
+        expect(tree_double.got).toEqual([]);    /*  the three, or nothing  */
+        reply(mon, gon, [{gclass: "C_TCP", trace_levels: ["connections"]}]);
+        reply(mon, glon, []);
+        expect(tree_double.got.map((g) => g.event)).toEqual(["EV_LOAD_TREE"]);
+        expect(tree_double.got[0].kw.tree).toEqual(TREE);
+        /*  tcp1 traces `traffic`, which its gclass does not hold  */
+        expect(mon.priv.ytrees.gate.priv.own_traces).toBe(1);
+        expect(mon.priv.ytrees.gate.priv.gclass_traces).toBe(1);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a gobj whose traces all come from its gclass has none of its own", () => {
+        const mon = open_gate();
+        const [tree, gon, glon] = lines();
+        reply(mon, tree, TREE);
+        reply(mon, gon, [{gclass: "C_TCP", trace_levels: ["traffic"]}]);
+        reply(mon, glon, []);
+        expect(mon.priv.ytrees.gate.priv.own_traces).toBe(0);
+        expect(tree_double.got.map((g) => g.event)).toEqual(["EV_LOAD_TREE"]);
+    });
+
+    test("a card's gclass: its four trace answers reach the tree as one", () => {
+        const mon = open_gate();
+        const child = mon.priv.ytrees.gate;
+        sent.length = 0;
+        gobj_send_event(child, "EV_TRACE_INFO_WANTED", {gclass: "C_TCP"}, child);
+        expect(lines().map((r) => r.command.replace(/^command-yuno id=2120 service=__yuno__ command=/, "")))
+            .toEqual(["info-gclass-trace gclass=C_TCP", "info-global-trace",
+                      "get-gclass-trace gclass=C_TCP", "get-global-trace"]);
+        const [lv, glv, on, gon] = lines();
+        reply(mon, lv, [{gclass: "C_TCP", trace_levels: {traffic: "dump", connections: "conn"}}]);
+        reply(mon, glv, [{trace_levels: {machine: "machine"}}]);
+        reply(mon, on, []);
+        expect(tree_double.got.filter((g) => g.event === "EV_TRACE_INFO")).toEqual([]);
+        reply(mon, gon, ["machine"]);
+        expect(tree_double.got.filter((g) => g.event === "EV_TRACE_INFO").map((g) => g.kw)).toEqual([{
+            gclass: "C_TCP", error: "",
+            gclass_levels: {traffic: "dump", connections: "conn"},
+            global_levels: {machine: "machine"},
+            gclass_on: [], global_on: ["machine"]
+        }]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a trace set: one command per level, then the tree and the levels are read again", () => {
+        const mon = open_gate();
+        const child = mon.priv.ytrees.gate;
+        sent.length = 0;
+        gobj_send_event(child, "EV_SET_TRACE_LEVEL", {scope: "gobj", gobj: "C_YUNO^gate`C_TCP^tcp1",
+            gclass: "C_TCP", levels: ["traffic", "machine"], set: false}, child);
+        expect(lines().map((r) => r.command.replace(/^command-yuno id=2120 service=__yuno__ command=/, "")))
+            .toEqual(["set-gobj-trace gobj=C_YUNO^gate`C_TCP^tcp1 level=traffic set=0",
+                      "set-gobj-trace gobj=C_YUNO^gate`C_TCP^tcp1 level=machine set=0"]);
+        const sets = lines();
+        sent.length = 0;
+        reply(mon, sets[0], []);
+        expect(lines()).toEqual([]);
+        reply(mon, sets[1], []);
+        expect(lines().map(cmd))
+            .toEqual([`view-gobj-tree options=${TREE_OPTIONS}`, "get-gclass-trace", "get-global-trace",
+                      "info-gclass-trace gclass=C_TCP", "info-global-trace",
+                      "get-gclass-trace gclass=C_TCP", "get-global-trace"]);
+
+        sent.length = 0;
+        gobj_send_event(child, "EV_SET_TRACE_LEVEL", {scope: "gclass", gobj: "C_YUNO^gate`C_TCP^tcp1",
+            gclass: "C_TCP", levels: ["connections"], set: true}, child);
+        expect(lines().map((r) => r.command.replace(/^command-yuno id=2120 service=__yuno__ command=/, "")))
+            .toEqual(["set-gclass-trace gclass=C_TCP level=connections set=1"]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("out of session a request is answered with an error at once", () => {
+        const mon = open_gate();
+        const child = mon.priv.ytrees.gate;
+        gobj_send_event(mon, "EV_DISCONNECT", {}, mon);
+        sent.length = 0;
+        gobj_send_event(child, "EV_TREE_WANTED", {}, child);
+        expect(lines()).toEqual([]);
+        expect(child.priv.error).toEqual({key: "monitor disconnected"});
+        expect(errors()).toEqual([]);
+    });
+
+    test("opened twice is one window; closed by the reader, it is gone on the next turn", async () => {
+        const mon = open_gate();
+        const child = mon.priv.ytrees.gate;
+        const opened = tree_double.opened.length;
+        gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: "gate"}, mon);
+        expect(tree_double.opened.length).toBe(opened);
+        expect(mon.priv.ytrees.gate).toBe(child);
+
+        gobj_send_event(child, "EV_VIEW_CLOSED", {}, child);
+        expect(mon.priv.ytrees.gate).toBe(child);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(mon.priv.ytrees.gate).toBe(undefined);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a tree whose yuno leaves the scenario is closed with it", () => {
+        const mon = open_gate();
+        const handle = tree_double.opened[tree_double.opened.length - 1];
+        const fewer = Object.assign({}, DIRECT, {yunos: [DIRECT.yunos[0]], links: [],
+            actions: {start: DIRECT.actions.start, stop: DIRECT.actions.stop}});
+        expect(validate_scenario(fewer).ok).toBe(true);
+        agent_config_set_monitor(config, {scenario: validate_scenario(fewer).scenario, source: "local"});
+        expect(mon.priv.ytrees.gate).toBe(undefined);
+        expect(handle.closed).toBe(true);
         expect(errors()).toEqual([]);
     });
 });

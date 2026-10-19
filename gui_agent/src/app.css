@@ -70,6 +70,13 @@
     gap: 0.5rem;
     align-items: baseline;
 }
+/*  The status line above a gobj tree: where, how many trace, what failed.  */
+.YUNO_TREE_STATUS {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
 /*  Pause/resume and read once, at the right of the head.  */
 .MONITOR_CARD_HEAD .MONITOR_CARD_TOOLS {
     margin-left: auto;
