@@ -566,6 +566,7 @@ const lines = {
     reset:  (y) => `stats-yuno id=${y.id}` + (y.service ? ` service=${y.service}` : "") + " stats=__reset__",
     config: (y) => `command-yuno id=${y.id} service=__yuno__ command=view-config`,
     yunos:  () => "list-yunos",
+    yuno:   (y) => `list-yunos id=${y.id}`,
     /*  The agent pushes the readings (EV_YUNO_STATS) instead of being
      *  asked every period: one watch per requester, replaced by the next.  */
     watch:  (yunos, period_ms) => "watch-yuno-stats ids=" +

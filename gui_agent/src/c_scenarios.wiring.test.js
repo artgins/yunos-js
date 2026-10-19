@@ -568,4 +568,63 @@ describe("a scenario that is not the control center's", () => {
         expect(mon.priv.scenario).toBe(null);
         expect(errors()).toEqual([]);
     });
+
+    test("a yuno paused leaves the watch; with none live the agent is asked to stop", () => {
+        const mon = new_monitor();
+        const direct = Object.assign({}, SAVED, {agent_url: "wss://agent.example.com:1993"});
+        delete direct.node;
+        agent_config_set_monitor(config, {scenario: validate_scenario(direct).scenario, source: "local"});
+        gobj_send_event(mon, "EV_ON_OPEN", {}, mlink);
+        const watches = () => sent.filter((r) => r.direct && /^watch-yuno-stats /.test(r.command))
+            .map((r) => r.command);
+        expect(watches()).toEqual(["watch-yuno-stats ids=stress:sim_controllers,2120 period=2000"]);
+
+        sent.length = 0;
+        gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "sim"}, mon);
+        expect(watches()).toEqual(["watch-yuno-stats ids=2120 period=2000"]);
+        expect(mon.priv.stats_cards.sim.$paused.classList.contains("is-hidden")).toBe(false);
+
+        /*  a reading the watch before the pause still pushes is dropped  */
+        gobj_send_event(mon, "EV_YUNO_STATS", {
+            data: {yuno_id: "stress", kind: "cpu", result: 0, data: {cpu: 7}},
+            __md_iev__: {monitor_kind: "watch", monitor_gen: mon.priv.generation, monitor_node: ""}
+        }, mlink);
+        expect(mon.priv.model.sim.cpu).toBe(null);
+
+        sent.length = 0;
+        gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "gate"}, mon);
+        expect(watches()).toEqual(["watch-yuno-stats stop=1"]);
+        /*  asked to stop once: the renewal sends nothing  */
+        sent.length = 0;
+        gobj_send_event(mon, "EV_TIMEOUT_PERIODIC", {}, mon);
+        mon.priv.watch_at = {};
+        gobj_send_event(mon, "EV_TIMEOUT_PERIODIC", {}, mon);
+        expect(watches()).toEqual([]);
+
+        sent.length = 0;
+        gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "sim"}, mon);
+        expect(watches()).toEqual(["watch-yuno-stats ids=stress:sim_controllers period=2000"]);
+        expect(mon.priv.stats_cards.sim.$paused.classList.contains("is-hidden")).toBe(true);
+        expect(errors()).toEqual([]);
+        expect(logged.filter((l) => l.level === "warning")).toEqual([]);
+    });
+
+    test("read once asks for one yuno, and its state paints that card only", () => {
+        const mon = new_monitor();
+        const direct = Object.assign({}, SAVED, {agent_url: "wss://agent.example.com:1993"});
+        delete direct.node;
+        agent_config_set_monitor(config, {scenario: validate_scenario(direct).scenario, source: "local"});
+        gobj_send_event(mon, "EV_ON_OPEN", {}, mlink);
+        sent.length = 0;
+        gobj_send_event(mon, "EV_READ_ONCE", {key: "gate"}, mon);
+        expect(sent.map((r) => r.command)).toEqual([
+            "list-yunos id=2120",
+            "stats-yuno id=2120 service=__yuno__",
+            "stats-yuno id=2120"
+        ]);
+        answer(mon, sent[0], {data: [{id: "2120", yuno_running: true, yuno_playing: true}]});
+        expect(mon.priv.model.gate.run).toBe("playing");
+        expect(mon.priv.model.sim.run).toBe("unknown");
+        expect(errors()).toEqual([]);
+    });
 });

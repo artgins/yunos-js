@@ -75,6 +75,20 @@
  *      event names its node by the `monitor_node` the watch was tagged
  *      with, which the agent keeps in the route it sends along.
  *
+ *      PAUSED, OR LIVE -- per yuno. Each card of the cards mode has two
+ *      buttons: pause/resume its readings, and read it once. A paused
+ *      yuno is left out of its node's watch (the watch is asked again
+ *      without it; one per requester, the next replaces it, and a node
+ *      with no live yuno left is asked to stop) and out of the polling,
+ *      and its card keeps its last figures with a "readings paused" tag.
+ *      A reading of it still pushed by the watch before is dropped. "Read
+ *      once" asks the agent for that yuno only (`list-yunos id=<id>` and
+ *      its two `stats-yuno`), whatever its state: three requests and three
+ *      answers in the Developer window, and nothing else of this yuno.
+ *      What is paused is kept by the yuno (node, id, service) for the
+ *      session, and survives a change of the scenario that still holds
+ *      it (a tick in the tree); it is not saved.
+ *
  *      RATES. A yuno's own `rxMsgsec`/`txMsgsec` is used when its service
  *      reports one (an application service -- yunovatios' gates, the
  *      control center -- computes it on its own timer; one that comes from
@@ -282,8 +296,10 @@ let PRIVATE_DATA = {
     control_buttons: {},    /*  control -> its button  */
     watching:       null,   /*  the link whose events reach this view  */
     push:           {},     /*  node -> the agent pushes: null = asked, not answered yet  */
+    watched:        {},     /*  node -> a watch is asked of its agent now  */
+    paused:         {},     /*  pause_id(yuno) -> true: its readings are paused  */
     watch_renew_ms: 20000,  /*  renew a watch this often (ttl / 3 of the agent's answer)  */
-    watch_sent_at:  0,      /*  performance.now() of the last watch sent  */
+    watch_at:       {},     /*  node -> performance.now() of its last watch (renewed ttl/3 later)  */
     discovery:      null,   /*  {pending: {key: true}, configs: {key: config}, failed: [key]}  */
     generation:     0,      /*  of the scenario shown: tags every request  */
     control_seq:    0,      /*  number of the last control sent  */
@@ -997,6 +1013,9 @@ function render_status(gobj)
     show(priv.$error, !!priv.error);
 
     render_control(gobj);
+    for(let key of Object.keys(priv.stats_cards)) {
+        paint_card_tools(gobj, key);
+    }
     show(priv.$editor, priv.editing);
     show(priv.$empty, !has && !priv.editing);
     let cards = priv.view_mode === "cards";
@@ -1235,8 +1254,10 @@ function poll_tick(gobj)
         control_over(gobj, false, "scenario run timed out");
     }
 
-    if(now - priv.watch_sent_at > priv.watch_renew_ms) {
-        send_watch(gobj);
+    for(let node of scenario_nodes(priv.scenario)) {
+        if(now - (priv.watch_at[node] || 0) > priv.watch_renew_ms) {
+            watch_node(gobj, node);
+        }
     }
     poll_requests(gobj, null);
 }
@@ -1252,11 +1273,12 @@ function poll_requests(gobj, only_node)
         if(priv.push[node] !== false || (only_node !== null && node !== only_node)) {
             continue;
         }
+        let live = priv.scenario.yunos.filter((y) => (y.node || "") === node && is_live(gobj, y));
+        if(!live.length) {
+            continue;
+        }
         send_request(gobj, lines.yunos(), "yunos", "", node);
-        for(let y of priv.scenario.yunos) {
-            if((y.node || "") !== node) {
-                continue;
-            }
+        for(let y of live) {
             send_request(gobj, lines.cpu(y), "cpu", y.key, y.node);
             send_request(gobj, lines.app(y), "app", y.key, y.node);
         }
@@ -1328,13 +1350,29 @@ function refresh_ms(gobj)
 function send_watch(gobj)
 {
     let priv = gobj.priv;
-    priv.watch_sent_at = performance.now();
     for(let node of scenario_nodes(priv.scenario)) {
-        if(priv.push[node] === false) {
-            continue;
-        }
-        let yunos = priv.scenario.yunos.filter((y) => (y.node || "") === node);
+        watch_node(gobj, node);
+    }
+}
+
+/*  The watch of one node: its live yunos, or none. The agent keeps one
+ *  watch per requester and the next replaces it, so a yuno paused or
+ *  resumed is the watch asked again; a node whose yunos are all paused
+ *  is asked to stop, once.  */
+function watch_node(gobj, node)
+{
+    let priv = gobj.priv;
+    if(priv.push[node] === false) {
+        return;
+    }
+    priv.watch_at[node] = performance.now();
+    let yunos = priv.scenario.yunos.filter((y) => (y.node || "") === node && is_live(gobj, y));
+    if(yunos.length) {
         send_request(gobj, lines.watch(yunos, refresh_ms(gobj)), "watch", "", node);
+        priv.watched[node] = true;
+    } else if(priv.watched[node]) {
+        send_request(gobj, lines.unwatch(), "unwatch", "", node);
+        priv.watched[node] = false;
     }
 }
 
@@ -1344,15 +1382,38 @@ function send_watch(gobj)
 function send_unwatch(gobj)
 {
     let priv = gobj.priv;
+    let watched = priv.watched;
+    priv.watched = {};
     if(priv.scenario.place === "control_center" &&
             !agent_link_is_connected(gobj_read_attr(gobj, "cc_link_svc"))) {
         return;
     }
     for(let node of scenario_nodes(priv.scenario)) {
-        if(priv.push[node] !== false) {
+        if(priv.push[node] !== false && watched[node]) {
             send_request(gobj, lines.unwatch(), "unwatch", "", node);
         }
     }
+}
+
+/*  What is paused is the yuno, not the card: the same yuno keeps it in
+ *  another scenario (a tick more in the tree builds a new one).  */
+function pause_id(y)
+{
+    return `${y.node || ""}|${y.id}|${y.service || ""}`;
+}
+
+function is_live(gobj, y)
+{
+    return !gobj.priv.paused[pause_id(y)];
+}
+
+/*  The readings of one yuno, asked once: its state, its cpu, its
+ *  counters.  */
+function read_yuno(gobj, y)
+{
+    send_request(gobj, lines.yuno(y), "yunos", y.key, y.node);
+    send_request(gobj, lines.cpu(y), "cpu", y.key, y.node);
+    send_request(gobj, lines.app(y), "app", y.key, y.node);
 }
 
 function arm_poll(gobj)
@@ -1503,6 +1564,11 @@ function build_cards(gobj)
     }
     for(let y of priv.scenario.yunos) {
         let $state = createElement2(["span", {class: "MONITOR_CARD_STATE tag is-light"}, ""]);
+        let $paused = createElement2(["span", {class: "MONITOR_CARD_PAUSED tag is-warning is-light",
+            i18n: "monitor readings paused"}, t("monitor readings paused")]);
+        let $live = card_button("MONITOR_CARD_LIVE", "EV_TOGGLE_LIVE", y.key, gobj);
+        let $once = card_button("MONITOR_CARD_ONCE", "EV_READ_ONCE", y.key, gobj);
+        set_card_button($once, "yi-arrows-rotate", "monitor read once");
         let $cpu = createElement2(["span", {class: "MONITOR_CARD_CPU is-family-monospace"}, ""]);
         let $body = createElement2(["div", {class: "MONITOR_CARD_BODY"}, ""]);
         let $err = createElement2(["p", {class: "MONITOR_CARD_ERROR has-text-danger is-size-7"}, ""]);
@@ -1511,20 +1577,64 @@ function build_cards(gobj)
                 ["div", {class: "MONITOR_CARD_HEAD"}, [
                     ["span", {class: "MONITOR_CARD_LABEL has-text-weight-bold"}, y.label],
                     ["span", {class: "MONITOR_CARD_ID is-family-monospace has-text-grey"},
-                        y.node ? `${y.node} · ${y.id}` : y.id]
+                        y.node ? `${y.node} · ${y.id}` : y.id],
+                    ["span", {class: "MONITOR_CARD_TOOLS buttons"}, [$live, $once]]
                 ]],
                 ["div", {class: "MONITOR_CARD_ROW"}, [
                     $state,
                     ["span", {class: "MONITOR_CARD_KEY", i18n: "monitor cpu"}, t("monitor cpu")],
-                    $cpu
+                    $cpu,
+                    $paused
                 ]],
                 $body,
                 $err
             ]]
         );
         priv.$cards.appendChild($card);
-        priv.stats_cards[y.key] = {$state, $cpu, $body, $err};
+        priv.stats_cards[y.key] = {$state, $cpu, $body, $err, $paused, $live, $once};
     }
+}
+
+/*  Whether the card is live, and its two buttons: usable only in
+ *  session.  */
+function paint_card_tools(gobj, key)
+{
+    let priv = gobj.priv;
+    let c = priv.stats_cards[key];
+    let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === key) : null;
+    if(!c || !y) {
+        return;
+    }
+    let live = is_live(gobj, y);
+    show(c.$paused, !live);
+    if(live) {
+        set_card_button(c.$live, "yi-pause", "monitor pause readings");
+    } else {
+        set_card_button(c.$live, "yi-play", "monitor resume readings");
+    }
+    let monitoring = gobj_current_state(gobj) === "ST_MONITORING";
+    c.$live.disabled = !monitoring;
+    c.$once.disabled = !monitoring;
+}
+
+/*  A button of a card: an icon, and its name in title and aria-label
+ *  (set_card_button), which the live one changes with the state.  */
+function card_button(cls, event, key, gobj)
+{
+    return createElement2(
+        ["button", {class: `${cls} button`, type: "button"},
+            [["span", {class: "icon"}, [["i", {}]]]],
+            {click: () => gobj_send_event(gobj, event, {key: key}, gobj)}]
+    );
+}
+
+function set_card_button($b, icon, key)
+{
+    $b.querySelector("i").className = icon;
+    $b.setAttribute("title", t(key));
+    $b.setAttribute("data-i18n-title", key);
+    $b.setAttribute("aria-label", t(key));
+    $b.setAttribute("data-i18n-aria-label", key);
 }
 
 function paint_stats_card(gobj, key)
@@ -1539,6 +1649,7 @@ function paint_stats_card(gobj, key)
     c.$state.setAttribute("data-i18n", /* i18n: C_AGENT_MONITOR_STATE_I18N_KEYS */ state_key);
     c.$state.textContent = t(/* i18n: C_AGENT_MONITOR_STATE_I18N_KEYS */ state_key);
     c.$cpu.textContent = typeof m.cpu === "number" ? `${m.cpu} %` : "–";
+    paint_card_tools(gobj, key);
 
     let data = m.data;
     if(data && typeof data === "object" && !Array.isArray(data) && Object.keys(data).length) {
@@ -1592,6 +1703,13 @@ function adopt_scenario(gobj)
     priv.scenario = next;
     priv.generation++;
     priv.source = settings.source;
+    let paused = {};
+    for(let y of (next ? next.yunos : [])) {
+        if(priv.paused[pause_id(y)]) {
+            paused[pause_id(y)] = true;
+        }
+    }
+    priv.paused = paused;
     priv.view_mode = next ? next.view.mode : "graph";
     priv.control = null;
     priv.editing = false;
@@ -2001,6 +2119,7 @@ function ac_on_open(gobj, event, kw, src)
     /*  First ask every agent to push; a node whose watch is refused is
      *  polled from then on.  */
     priv.push = {};
+    priv.watched = {};
     for(let node of scenario_nodes(priv.scenario)) {
         priv.push[node] = null;
     }
@@ -2170,6 +2289,11 @@ function ac_mt_command_answer(gobj, event, kw, src)
             if((y.node || "") !== a.node) {
                 continue;
             }
+            /*  A reading of one yuno (read once) says nothing of the
+             *  others; a polled one says nothing of a paused yuno.  */
+            if(a.key ? y.key !== a.key : !is_live(gobj, y)) {
+                continue;
+            }
             priv.model[y.key].run = yuno_run_state(by_id[y.id]);
             paint_card(gobj, y.key);
         }
@@ -2242,6 +2366,10 @@ function ac_yuno_stats(gobj, event, kw, src)
         if(y.id !== d.yuno_id || (y.node || "") !== node) {
             continue;
         }
+        if(!is_live(gobj, y)) {
+            hit = true;     /*  pushed by the watch asked before the pause  */
+            continue;
+        }
         if(d.kind === "state") {
             let m = priv.model[y.key];
             m.run = d.missing ? "missing" : yuno_run_state(d);
@@ -2265,6 +2393,51 @@ function ac_yuno_stats(gobj, event, kw, src)
     if(!hit) {
         log_warning(`${gobj_short_name(gobj)}: pushed reading of no card (${d.yuno_id}, ${d.kind})`);
     }
+    return 0;
+}
+
+/***************************************************************
+ *  Pause or resume the readings of one yuno.
+ ***************************************************************/
+function ac_toggle_live(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === kw.key) : null;
+    if(!y) {
+        log_error(`${gobj_short_name(gobj)}: pause of no yuno of the scenario: '${kw.key}'`);
+        return -1;
+    }
+    let id = pause_id(y);
+    let node = y.node || "";
+    if(priv.paused[id]) {
+        delete priv.paused[id];
+    } else {
+        priv.paused[id] = true;
+    }
+    paint_card(gobj, y.key);
+    if(!priv.visible) {
+        return 0;   /*  hidden, no watch: the next one is asked as it is  */
+    }
+    if(priv.push[node] !== false) {
+        watch_node(gobj, node);
+    } else if(!priv.paused[id]) {
+        read_yuno(gobj, y);     /*  polled: no wait for the next tick  */
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  One reading of one yuno, live or paused.
+ ***************************************************************/
+function ac_read_once(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === kw.key) : null;
+    if(!y) {
+        log_error(`${gobj_short_name(gobj)}: reading of no yuno of the scenario: '${kw.key}'`);
+        return -1;
+    }
+    read_yuno(gobj, y);
     return 0;
 }
 
@@ -2713,6 +2886,8 @@ function create_gclass(gclass_name)
             ["EV_MT_STATS_ANSWER",      ac_mt_stats_answer,     null],
             ["EV_TIMEOUT_PERIODIC",     ac_timeout_periodic,    null],
             ["EV_YUNO_STATS",           ac_yuno_stats,          null],
+            ["EV_TOGGLE_LIVE",          ac_toggle_live,         null],
+            ["EV_READ_ONCE",            ac_read_once,           null],
             ["EV_TEST_CONTROL",         ac_test_control,        null],
             ["EV_TEST_CONFIRMED",       ac_test_confirmed,      null],
             ["EV_PROPOSE_LINKS",        ac_propose_links,       null],
@@ -2752,6 +2927,8 @@ function create_gclass(gclass_name)
         ["EV_SHOW_RUNS",            0],
         ["EV_SHOW_OUTPUT",          0],
         ["EV_SET_VIEW_MODE",        0],
+        ["EV_TOGGLE_LIVE",          0],
+        ["EV_READ_ONCE",            0],
         ["EV_MONITOR_SCENARIO_CHANGED", 0]
     ];
 

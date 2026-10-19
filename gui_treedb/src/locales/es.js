@@ -36,6 +36,8 @@ const es = {
         "browser console only":                         "Sólo la consola del navegador (nada se muestra en esta ventana)",
         "collapsed":                                    "Plegada",
         "payload":                                      "Payload",
+        "one line":                                     "Línea",
+        "traffic one line per message":                 "Tráfico: una línea por mensaje",
         "traffic payload folded":                       "Tráfico: payload plegado",
         "traffic payload laid out":                     "Tráfico: payload desplegado",
         "show the payload of the traces":               "Mostrar el payload que vuelcan las trazas (ev_kw, publicaciones)",

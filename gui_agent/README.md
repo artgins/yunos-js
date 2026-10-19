@@ -242,6 +242,20 @@ no-polling rule approved for this view on 2026-09-29. Either way a periodic
 timer closes each period into a row of the history, only while connected and
 while the tab is the visible one.
 
+**Each card can be paused, or read once** (0.29.94). In the cards mode every
+card has two buttons in its head: **pause/resume** its readings and **read
+once**. A paused yuno leaves its node's watch: the agent keeps one watch per
+requester and the next replaces it, so the watch is asked again without that
+yuno, and a node with no live yuno left is asked to stop (`watch-yuno-stats
+stop=1`), once. A paused yuno is not polled either. Its card keeps its last
+figures and shows a *Readings paused* tag. A reading of it that the watch
+before the pause still pushes is dropped. **Read once** asks for that yuno
+only: `list-yunos id=<id>` and its two `stats-yuno`, live or paused. With the
+card paused and the Developer window's traffic in the **Line** view, each
+click shows exactly three requests and three answers. The pause is kept per
+yuno (node, id, service) for the session only. A new scenario that still
+holds the yuno keeps it, for example after one more tick in the tree.
+
 **Actions** (0.24.0; run by the control center since 0.29.0). A scenario that
 declares actions gets their buttons — **Start**, **Pause**, **Resume**,
 **Stop**, **Report**, one per action declared — and **Restart** whenever it

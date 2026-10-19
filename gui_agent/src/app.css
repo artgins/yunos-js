@@ -70,8 +70,18 @@
     gap: 0.5rem;
     align-items: baseline;
 }
+/*  Pause/resume and read once, at the right of the head.  */
+.MONITOR_CARD_HEAD .MONITOR_CARD_TOOLS {
+    margin-left: auto;
+    margin-bottom: 0;
+    flex-wrap: nowrap;
+}
+.MONITOR_CARD_HEAD .MONITOR_CARD_TOOLS .button {
+    margin-bottom: 0;
+}
 .MONITOR_CARD_ROW {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
     align-items: center;
     margin: 0.35rem 0;

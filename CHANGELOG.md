@@ -6,6 +6,21 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.94 + gobj-ui ^7.27.22 (2026-10-19)
+
+- **Live view, cards mode: each card can be paused, or read once.** Two
+  buttons in the head of the card. Pause takes the yuno out of its node's
+  `watch-yuno-stats` (the watch is asked again without it; with no live yuno
+  left on the node, `stop=1`, once) and out of the polling. The card keeps its
+  last figures with a *Readings paused* tag. Read once sends
+  `list-yunos id=<id>` and the two `stats-yuno` of that yuno only. A
+  `list-yunos` answer asked for one yuno now paints that card only. Before,
+  it painted every card of the node, and the yunos that were not in it would
+  have been marked `missing`.
+- **gobj-ui 7.27.22**: the Developer window's traffic has a **Line** view
+  again: one row per message, without the payload. gui_agent and gui_treedb
+  add its two keys (`one line`, `traffic one line per message`).
+
 ## Source maps no longer published (2026-10-18, no version bump)
 
 Both SPAs build with `sourcemap: "hidden"`: the maps stay in `dist/` (to

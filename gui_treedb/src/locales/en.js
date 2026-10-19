@@ -34,6 +34,8 @@ const en = {
         "browser console only":                         "Browser console only (nothing is shown in this window)",
         "collapsed":                                    "Collapsed",
         "payload":                                      "Payload",
+        "one line":                                     "Line",
+        "traffic one line per message":                 "Traffic: one line per message",
         "traffic payload folded":                       "Traffic: payload folded",
         "traffic payload laid out":                     "Traffic: payload laid out",
         "show the payload of the traces":               "Show the payload the traces dump (ev_kw, publications)",
