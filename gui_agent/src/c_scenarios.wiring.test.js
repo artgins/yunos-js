@@ -774,6 +774,21 @@ describe("the gobj tree of a yuno of the live view", () => {
             gclass: "C_TCP", levels: ["connections"], set: true}, child);
         expect(lines().map((r) => r.command.replace(/^command-yuno id=2120 service=__yuno__ command=/, "")))
             .toEqual(["set-gclass-trace gclass=C_TCP level=connections set=1"]);
+
+        /*  The yuno's scope: set-global-trace, then the root's gclass is
+         *  read again -- its answer carries the yuno's levels.  */
+        const gsets = lines();
+        reply(mon, gsets[0], []);
+        sent.length = 0;
+        gobj_send_event(child, "EV_SET_TRACE_LEVEL", {scope: "global", gobj: "C_YUNO^gate",
+            gclass: "C_YUNO", levels: ["ev_kw"], set: true}, child);
+        const globals = lines();
+        expect(globals.map(cmd)).toEqual(["set-global-trace level=ev_kw set=1"]);
+        sent.length = 0;
+        reply(mon, globals[0], []);
+        expect(lines().map(cmd).slice(3))
+            .toEqual(["info-gclass-trace gclass=C_YUNO", "info-global-trace",
+                      "get-gclass-trace gclass=C_YUNO", "get-global-trace"]);
         expect(errors()).toEqual([]);
     });
 

@@ -6,6 +6,24 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.101, gui_treedb 0.17.163 + gobj-ui ^7.27.27 (2026-10-19)
+
+- **Each trace scope where it belongs** (gobj-ui 7.27.27). The gobj tree's
+  card sets this gobj's traces only; every gobj of the gclass is set from
+  the gclass viewer; the whole yuno from the tree's new *traces of the
+  yuno*. gui_agent sends `set-global-trace` for that third scope
+  (`EV_SET_TRACE_LEVEL` with `scope: "global"`) and then reads the root's
+  gclass again, whose answer carries the yuno's levels.
+- **The gclass viewer reviewed**: laid out by its own width, the short zones
+  first, attributes and commands across the whole width and capped at 20
+  rows, the methods in the head, the lit state naming its instance.
+- New i18n keys of gobj-ui 7.27.27 in both locales of both yunos.
+- Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live:
+  the three scopes on db_history_co^1630 (yunovatios-controlador, read
+  only), and set and put back in each scope on gate_enchufe^2046 (wattyzer:
+  `start_stop` for a C_TIMER and for its gclass, `authzs` for the yuno).
+  Console clean but for G6's two usual warnings.
+
 ## gui_agent 0.29.100, gui_treedb 0.17.162 + gobj-ui ^7.27.26 (2026-10-19)
 
 - **The gobj tree has a minimap** (gobj-ui 7.27.26), from 20 cards on: the

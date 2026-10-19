@@ -24,8 +24,11 @@
  *                          get-global-trace             (on for everybody)
  *          a trace set     set-gobj-trace gobj=<full name> level=L set=1|0
  *                          set-gclass-trace gclass=G level=L set=1|0
+ *                          set-global-trace level=L set=1|0  (the yuno's
+ *                          scope; G is then the root's gclass, whose
+ *                          answer carries the yuno's levels)
  *                          one per level; when the last one is answered
- *                          the tree and the gclass' levels are read again
+ *                          the tree and the levels of G are read again
  *          the gclass      view-gclass gclass=G
  *
  *      It has no transport of its own: the scenario's transport is the
@@ -45,11 +48,12 @@
  *      Refresh, and after a set; the levels of a gclass when one of its
  *      cards is opened.
  *
- *      Traces: what `set-gclass-trace` sets is saved by the yuno and
- *      survives a restart; what `set-gobj-trace` sets lasts until the
- *      yuno ends (the yuno saves it too, but re-applies only the gclass
- *      and global scopes when it starts). They go to the yuno's log on
- *      its node, not to the Developer window.
+ *      Traces: what `set-gclass-trace` and `set-global-trace` set is
+ *      saved by the yuno and survives a restart; what `set-gobj-trace`
+ *      sets lasts until the yuno ends (the yuno saves it too, but
+ *      re-applies only the gclass and global scopes when it starts).
+ *      They go to the yuno's log on its node, not to the Developer
+ *      window.
  *
  *      The window is closed by the reader (✕): the view is already gone
  *      then, and this gobj tells its parent (EV_YUNO_TREE_CLOSED), which
@@ -512,17 +516,27 @@ function ac_set_trace_level(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     let levels = Array.isArray(kw.levels) ? kw.levels : [];
-    if(!levels.length || (kw.scope !== "gobj" && kw.scope !== "gclass")) {
+    if(!levels.length || ["gobj", "gclass", "global"].indexOf(kw.scope) < 0) {
         log_error(`${gobj_short_name(gobj)}: a trace set of no level or scope: '${kw.scope}'`);
         return -1;
     }
     let lines = [];
     for(let level of levels) {
-        let line = (kw.scope === "gobj") ?
-            yuno_command(gobj, "set-gobj-trace", {gobj: kw.gobj, level: level, set: kw.set ? 1 : 0}) :
-            yuno_command(gobj, "set-gclass-trace", {gclass: kw.gclass, level: level, set: kw.set ? 1 : 0});
+        let set = kw.set ? 1 : 0;
+        let line = null;
+        switch(kw.scope) {
+            case "gobj":
+                line = yuno_command(gobj, "set-gobj-trace", {gobj: kw.gobj, level: level, set: set});
+                break;
+            case "gclass":
+                line = yuno_command(gobj, "set-gclass-trace", {gclass: kw.gclass, level: level, set: set});
+                break;
+            default:
+                line = yuno_command(gobj, "set-global-trace", {level: level, set: set});
+                break;
+        }
         if(!line) {
-            set_error(gobj, {text: `${kw.gobj}: ?`});
+            set_error(gobj, {text: `${kw.gobj || kw.gclass}: ?`});
             return -1;  // Error already logged
         }
         lines.push(line);
