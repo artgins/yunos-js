@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.99, gui_treedb 0.17.161 (2026-10-19)
+
+The ranges of `package.json` caught up with what was installed (`ncu -u`):
+`npm update` had moved the lockfiles and left the ranges behind (vitest
+`^5.0.0` with 5.0.5 installed). The code is the same as the deployed bundle;
+only the `package.json` it carries for the About dialog differs, which makes
+it a new bundle and a new number. Deployed, QA OK.
+
 ## gui_treedb 0.17.160 + gobj-ui ^7.27.25 (2026-10-19)
 
 gobj-ui deploy round: the G6 graphs centre their root and reach a camera

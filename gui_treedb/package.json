@@ -1,7 +1,7 @@
 {
   "name": "gui-treedb",
   "private": true,
-  "version": "0.17.160",
+  "version": "0.17.161",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,9 +20,9 @@
     "@yuneta/gobj-ui": "^7.27.25",
     "bulma": "^1.0.4",
     "bulma-switch-control": "^1.2.2",
-    "i18next": "^26.4.5",
+    "i18next": "^26.5.2",
     "luxon": "^3.7.2",
-    "maplibre-gl": "^6.14.0",
+    "maplibre-gl": "^6.15.0",
     "tabulator-tables": "^6.6.1",
     "tom-select": "^2.6.2",
     "uplot": "^1.6.32",
@@ -30,10 +30,10 @@
   },
   "devDependencies": {
     "@rollup/plugin-terser": "^1.0.0",
-    "@vitest/coverage-v8": "^5.0.0",
+    "@vitest/coverage-v8": "^5.0.5",
     "acorn": "^8.19.0",
-    "playwright": "^1.62.1",
+    "playwright": "^1.64.1",
     "vite": "^8.3.4",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.5"
   }
 }
