@@ -6,6 +6,19 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.98 + gobj-ui ^7.27.25 (2026-10-19)
+
+- **The gobj tree of a yuno opened on a blank canvas.** It took three
+  defects, all in gobj-ui 7.27.24-7.27.25:
+  - a camera saved while the tree was still empty was restored on every
+    opening;
+  - the opening never centred the root;
+  - under both, `@antv/g-lite` 2.7.0 dropped a camera coordinate of exactly
+    0, which is where a tree's root lives.
+  The lockfile now holds a single g-lite 2.7.2. Checked on the deployed
+  page: the root opens exactly in the middle, with a clean profile and with
+  a bad camera saved, which is replaced on that opening.
+
 ## gui_agent 0.29.97 (2026-10-19)
 
 - **Live view, cards mode: the hidden charts are no longer redrawn every
