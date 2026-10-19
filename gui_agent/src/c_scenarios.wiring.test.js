@@ -97,6 +97,7 @@ const {
     gobj_start_up, gobj_create_yuno, gobj_create, gobj_create_service,
     gobj_start, gobj_send_event, gobj_current_state, gobj_change_state,
     gobj_read_attr,
+    gobj_name,
     register_c_timer,
     set_log_callback,
 } = await import("@yuneta/gobj-js");
@@ -109,6 +110,7 @@ const {validate_scenario} = await import("./monitor_helpers.js");
 
 const logged = [];
 const sent = [];
+const chart_loads = [];
 
 function iev_command_parser(gobj, command, kw, src)
 {
@@ -189,7 +191,10 @@ beforeAll(() => {
         ]]],
         {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
     gclass_create("C_YUI_UPLOT", [["EV_ADD_SERIE", 0], ["EV_LOAD_DATA", 0]],
-        [["ST_IDLE", [["EV_ADD_SERIE", () => 0, null], ["EV_LOAD_DATA", () => 0, null]]]],
+        [["ST_IDLE", [["EV_ADD_SERIE", () => 0, null], ["EV_LOAD_DATA", (gobj, event, kw) => {
+            chart_loads.push({chart: gobj_name(gobj), rows: Array.isArray(kw) ? kw.length : -1});
+            return 0;
+        }, null]]]],
         {}, 0, [
             SDATA(data_type_t.DTP_POINTER, "$container", 0, null, ""),
             SDATA(data_type_t.DTP_INTEGER, "width", 0, 0, ""),
@@ -806,6 +811,32 @@ describe("the gobj tree of a yuno of the live view", () => {
         agent_config_set_monitor(config, {scenario: validate_scenario(fewer).scenario, source: "local"});
         expect(mon.priv.ytrees.gate).toBe(undefined);
         expect(handle.closed).toBe(true);
+        expect(errors()).toEqual([]);
+    });
+});
+
+describe("the charts of the graph mode", () => {
+    test("in the cards mode the history is kept but no hidden chart is redrawn", () => {
+        const mon = new_monitor();
+        const direct = Object.assign({}, SAVED, {agent_url: "wss://agent.example.com:1993",
+            view: {mode: "cards"}});
+        delete direct.node;
+        agent_config_set_monitor(config, {scenario: validate_scenario(direct).scenario, source: "local"});
+        expect(mon.priv.view_mode).toBe("cards");
+        gobj_send_event(mon, "EV_ON_OPEN", {}, mlink);
+        chart_loads.length = 0;
+        gobj_send_event(mon, "EV_TIMEOUT_PERIODIC", {}, mon);
+        gobj_send_event(mon, "EV_TIMEOUT_PERIODIC", {}, mon);
+        expect(mon.priv.rows.length).toBeGreaterThan(0);
+        expect(chart_loads).toEqual([]);
+
+        gobj_send_event(mon, "EV_SET_VIEW_MODE", {mode: "graph"}, mon);
+        expect(chart_loads.map((l) => [l.chart, l.rows])).toEqual([
+            ["rate_chart", mon.priv.rows.length], ["cpu_chart", mon.priv.rows.length]
+        ]);
+        chart_loads.length = 0;
+        gobj_send_event(mon, "EV_TIMEOUT_PERIODIC", {}, mon);
+        expect(chart_loads.map((l) => l.chart)).toEqual(["rate_chart", "cpu_chart"]);
         expect(errors()).toEqual([]);
     });
 });

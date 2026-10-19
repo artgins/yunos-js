@@ -797,10 +797,14 @@ function gobj_start_charts(gobj)
     load_charts(gobj);
 }
 
+/*  Only in the graph mode, where the charts are on screen. The rows are
+ *  kept in both modes: switching to the graph loads them (ac_set_view_mode),
+ *  so it opens on the whole window of history. Fed in the cards mode they
+ *  were redrawn, hidden, every period.  */
 function load_charts(gobj)
 {
     let priv = gobj.priv;
-    if(!priv.rows.length) {
+    if(!priv.rows.length || priv.view_mode !== "graph") {
         return;
     }
     if(priv.rate_chart) {

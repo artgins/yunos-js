@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.97 (2026-10-19)
+
+- **Live view, cards mode: the hidden charts are no longer redrawn every
+  period.** The history is collected in both modes, so switching to the graph
+  shows the whole window. But each period also loaded it into the two
+  charts (`EV_LOAD_DATA` to `rate_chart` and `cpu_chart`), which are hidden in
+  the cards mode. Seen in the Developer window's automata trace. They are
+  loaded only in the graph mode now. Switching to it still loads the history
+  (checked on the deployed page: both charts drawn, 582x220, from the first
+  reading).
+
 ## gui_agent 0.29.96 (2026-10-19)
 
 - **Neutral tags and notices readable in dark.** `tag is-light` and
