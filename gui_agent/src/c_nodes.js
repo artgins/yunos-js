@@ -402,7 +402,7 @@ function build_dom(gobj)
 
     /*  Not-connected notice (Tabulator's own placeholder covers no-nodes)  */
     priv.$notif = createElement2(
-        ["div", {class: "NODES_NOTICE notification is-light", style: "display:none;",
+        ["div", {class: "NODES_NOTICE notification", style: "display:none;",
                  i18n: "not connected to an agent"},
             "Not connected"]
     );

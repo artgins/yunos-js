@@ -1658,7 +1658,7 @@ function apply_changes_lines(gobj)
                 continue;
             }
             lines.push(["li", {class: "TREEDB_APPLY_CHANGE"}, [
-                ["span", {class: "tag is-light mr-2", i18n: kind}, t(kind)],
+                ["span", {class: "TREEDB_APPLY_CHANGE_KIND tag mr-2", i18n: kind}, t(kind)],
                 ["code", {}, flat_id_label(id)],
                 ["span", {class: "ml-2"}, text]
             ]]);

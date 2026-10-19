@@ -554,7 +554,7 @@ function build_dom(gobj)
     let settings = config ? agent_config_get_monitor(config) : {refresh: 2, window: 15};
 
     priv.$name = createElement2(["span", {class: "MONITOR_NAME has-text-weight-semibold"}, ""]);
-    priv.$source = createElement2(["span", {class: "MONITOR_SOURCE tag is-light"}, ""]);
+    priv.$source = createElement2(["span", {class: "MONITOR_SOURCE tag"}, ""]);
     priv.$state = createElement2(["span", {class: "MONITOR_STATE tag"}, ""]);
     priv.$connect = tool_button("MONITOR_CONNECT is-primary", "yi-plug", "monitor connect",
         "EV_CONNECT", gobj, true);
@@ -680,7 +680,7 @@ function build_dom(gobj)
     );
 
     priv.$empty = createElement2(
-        ["div", {class: "MONITOR_EMPTY notification is-light"}, [
+        ["div", {class: "MONITOR_EMPTY notification"}, [
             ["p", {i18n: "scenario none watched"}, t("scenario none watched")]
         ]]
     );
@@ -978,9 +978,11 @@ function render_status(gobj)
     let st = gobj_current_state(gobj);
     let state_key = st === "ST_MONITORING" ? "monitor monitoring"
                   : st === "ST_CONNECTING" ? "monitor connecting" : "monitor disconnected";
-    let state_cls = st === "ST_MONITORING" ? "is-success"
-                  : st === "ST_CONNECTING" ? "is-warning" : "is-light";
-    priv.$state.className = `MONITOR_STATE tag ${state_cls}`;
+    /*  Disconnected is a plain tag: a bare `is-light` is Bulma's colour
+     *  LIGHT, near white in both themes, and pale text on it in dark.  */
+    let state_cls = st === "ST_MONITORING" ? " is-success"
+                  : st === "ST_CONNECTING" ? " is-warning" : "";
+    priv.$state.className = `MONITOR_STATE tag${state_cls}`;
     priv.$state.setAttribute("data-i18n", state_key);
     priv.$state.textContent = t(state_key);
 
@@ -1585,7 +1587,7 @@ function build_cards(gobj)
         return;
     }
     for(let y of priv.scenario.yunos) {
-        let $state = createElement2(["span", {class: "MONITOR_CARD_STATE tag is-light"}, ""]);
+        let $state = createElement2(["span", {class: "MONITOR_CARD_STATE tag"}, ""]);
         let $paused = createElement2(["span", {class: "MONITOR_CARD_PAUSED tag is-warning is-light",
             i18n: "monitor readings paused"}, t("monitor readings paused")]);
         let $live = card_button("MONITOR_CARD_LIVE", "EV_TOGGLE_LIVE", y.key, gobj);

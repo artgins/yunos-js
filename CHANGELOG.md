@@ -6,6 +6,18 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.96 (2026-10-19)
+
+- **Neutral tags and notices readable in dark.** `tag is-light` and
+  `notification is-light` with no colour are Bulma's colour LIGHT, near white
+  in both themes, so in dark they showed pale text on a pale box: 1.95 for
+  the tags (*Yunos ticked*, the yuno's state *Playing*, the monitor
+  disconnected, the kind of a treedb change) and 1.69 for the notices, where
+  4.5 is the floor. Without `is-light` they follow the theme: 7.41 in dark,
+  and in light the tags are identical (8.59) and the notices keep a grey box.
+  Coloured `is-warning is-light` and the like were fine and stay. Measured on
+  the deployed page in both themes.
+
 ## gui_treedb 0.17.159 + gobj-ui ^7.27.23 (2026-10-19)
 
 gobj-ui deploy round: 7.27.22 (the Developer window's **Line** view of the

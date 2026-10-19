@@ -386,19 +386,19 @@ function build_dom(gobj)
     $c.appendChild(priv.$status);
 
     priv.$no_users = createElement2(
-        ["div", {class: "USERS_NO_STORE notification is-light", style: "display:none;",
+        ["div", {class: "USERS_NO_STORE notification", style: "display:none;",
                  i18n: "no users in this yuno"}, t("no users in this yuno")]
     );
     $c.appendChild(priv.$no_users);
 
     priv.$notif = createElement2(
-        ["div", {class: "USERS_NOTICE notification is-light", style: "display:none;",
+        ["div", {class: "USERS_NOTICE notification", style: "display:none;",
                  i18n: "not connected to an agent"}, t("not connected to an agent")]
     );
     $c.appendChild(priv.$notif);
 
     priv.$pick = createElement2(
-        ["div", {class: "USERS_PICK notification is-light", style: "display:none;",
+        ["div", {class: "USERS_PICK notification", style: "display:none;",
                  i18n: "users pick a yuno"}, t("users pick a yuno")]
     );
     $c.appendChild(priv.$pick);

@@ -546,7 +546,7 @@ function build_dom(gobj)
     $c.appendChild(priv.$status);
 
     priv.$notif = createElement2(
-        ["div", {class: "STATNODES_NOTICE notification is-light", style: "display:none;",
+        ["div", {class: "STATNODES_NOTICE notification", style: "display:none;",
                  i18n: "not connected to an agent"},
             "Not connected"]
     );
