@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.160 + gobj-ui ^7.27.25 (2026-10-19)
+
+gobj-ui deploy round: the G6 graphs centre their root and reach a camera
+coordinate of 0 (`@antv/g-lite` 2.7.2, a single copy). The dependencies of
+both yunos were refreshed within their majors first (i18next 26.5.2,
+maplibre-gl 6.15.0, vitest 5.0.5, playwright 1.64.1; `npm audit` clean).
+Deployed to artgins.ytreedb.com, QA OK.
+
 ## gui_agent 0.29.98 + gobj-ui ^7.27.25 (2026-10-19)
 
 - **The gobj tree of a yuno opened on a blank canvas.** It took three
