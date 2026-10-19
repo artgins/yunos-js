@@ -49,9 +49,9 @@
  *      cards is opened.
  *
  *      Traces: what `set-gclass-trace` and `set-global-trace` set is
- *      saved by the yuno and survives a restart; what `set-gobj-trace`
- *      sets lasts until the yuno ends (the yuno saves it too, but
- *      re-applies only the gclass and global scopes when it starts).
+ *      saved by the yuno and survives a restart; so does what
+ *      `set-gobj-trace` sets on a named service (SDK 7.27.3+, saved under
+ *      its service name). On any other gobj it lasts until the yuno ends.
  *      They go to the yuno's log on its node, not to the Developer
  *      window.
  *

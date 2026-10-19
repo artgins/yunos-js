@@ -6,6 +6,18 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.102, gui_treedb 0.17.164 + gobj-ui ^7.27.28 (2026-10-19)
+
+- **The trace notes say what the yuno keeps** (gobj-ui 7.27.28, SDK 7.27.3):
+  a card says that a service's traces survive a restart, or that any other
+  gobj's end with the yuno; the gclass viewer that the gclass' survive. The
+  header of `C_AGENT_YUNO_TREE` says the same. Three new i18n keys in both
+  locales of both yunos.
+- Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live on
+  db_history_co^1630: the C_TRANGER card (a service) and a C_TIMER card each
+  carry their note; the C_TRANGER card reads `●` now that the backend (7.27.3)
+  answers `play_methods`. Console clean but for G6's two usual warnings.
+
 ## gui_agent 0.29.101, gui_treedb 0.17.163 + gobj-ui ^7.27.27 (2026-10-19)
 
 - **Each trace scope where it belongs** (gobj-ui 7.27.27). The gobj tree's
