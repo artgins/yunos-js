@@ -694,7 +694,8 @@ describe("the gobj tree of a yuno of the live view", () => {
     const reply = (mon, req, data, result = 0) => answer(mon, req, {data: data, result: result});
 
     const TREE_OPTIONS = '["fullname","shortname","gclass","name","parent","state","running",' +
-        '"playing","service","disabled","volatil","gobj_flags","gobj_trace_level","bottom_gobj","commands"]';
+        '"playing","service","disabled","volatil","gobj_flags","gobj_trace_level","bottom_gobj","commands",' +
+        '"play_methods"]';
     const cmd = (r) => r.command.replace(/^command-yuno id=2120 service=__yuno__ command=/, "");
 
     test("opens with the tree of the yuno, read through the view's transport", () => {

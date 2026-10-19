@@ -6,6 +6,22 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.100, gui_treedb 0.17.162 + gobj-ui ^7.27.26 (2026-10-19)
+
+- **The gobj tree has a minimap** (gobj-ui 7.27.26), from 20 cards on: the
+  tree of a yuno opens at actual size, and a db_history_co has 46 gobjs.
+  gui_treedb's graph keeps its own minimap, now drawn by the same module.
+- **gui_agent asks `view-gobj-tree` for `play_methods`**, which the C SDK
+  answers from the release after 7.27.1: whether the gobj's gclass has an
+  `mt_play` or an `mt_pause`. Most have neither, and their running gobjs
+  then read `● running` in green instead of `‖ running (paused)` in amber.
+  A yuno built before that SDK ignores the name, and its gobjs keep reading
+  paused until it is rebuilt.
+- Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live
+  on artgins.yunetacontrol.com: the tree of db_history_co^1630 opens with its
+  minimap; console clean but for G6's two usual warnings, on both planes and
+  on artgins.ytreedb.com.
+
 ## gui_agent 0.29.99, gui_treedb 0.17.161 (2026-10-19)
 
 The ranges of `package.json` caught up with what was installed (`ncu -u`):

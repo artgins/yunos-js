@@ -98,11 +98,13 @@ const TRACE_INFO_PARTS = ["gclass_levels", "global_levels", "gclass_on", "global
 /*  The three answers that make the tree.  */
 const TREE_PARTS = ["tree", "tree_gclass_on", "tree_global_on"];
 
-/*  What the view reads of each gobj (gobj2json()'s names).  */
+/*  What the view reads of each gobj (gobj2json()'s names). A yuno
+ *  built before `play_methods` existed ignores the name, and the view
+ *  then keeps calling a running gobj that does not play paused.  */
 const TREE_OPTIONS = JSON.stringify([
     "fullname", "shortname", "gclass", "name", "parent", "state", "running", "playing",
     "service", "disabled", "volatil", "gobj_flags", "gobj_trace_level", "bottom_gobj",
-    "commands"
+    "commands", "play_methods"
 ]);
 
 /***************************************************************
