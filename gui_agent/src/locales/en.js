@@ -176,6 +176,8 @@ const en = {
         "no file":            "No file",
         "cannot read the picked file":            "Cannot read the picked file",
         "close":             "Close",
+        "reload":            "Reload",
+        "new version available": "A new version is available",
         "save":              "Save",
         "delete":            "Delete",
         "edit":              "Edit",

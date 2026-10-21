@@ -180,6 +180,8 @@ const es = {
         "no file":            "Sin archivo",
         "cannot read the picked file":            "No se puede leer el archivo elegido",
         "close":             "Cerrar",
+        "reload":            "Recargar",
+        "new version available": "Hay una versión nueva",
         "save":              "Guardar",
         "delete":            "Eliminar",
         "edit":              "Editar",

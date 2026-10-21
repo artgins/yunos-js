@@ -527,6 +527,8 @@ const es = {
         "delete this key and every record it holds": "¿Borrar esta clave y todos los registros que contiene?",
         "views": "vistas",
         "close": "Cerrar",
+        "reload": "Recargar",
+        "new version available": "Hay una versión nueva",
         "realtime coming soon": "Tiempo real — próximamente",
         "open a key view": "Abre una vista de clave desde Claves",
         "clear": "Limpiar",

@@ -46,6 +46,7 @@ import {
  *  gui_agent / wattyzer.
  */
 import {register_c_yui_shell}  from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {register_c_yui_update_watch} from "@yuneta/gobj-ui/src/c_yui_update_watch.js";
 import {yui_install_start_watch} from "@yuneta/gobj-ui/src/yui_install.js";
 import {register_c_yui_nav}    from "@yuneta/gobj-ui/src/c_yui_nav.js";
 import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
@@ -127,6 +128,7 @@ function main()
 
     /*  Shell + nav stack (v2)  */
     register_c_yui_shell();
+    register_c_yui_update_watch();
     register_c_yui_nav();
     register_c_yui_window();     /*  host for the developer panel  */
     register_c_yui_window_manager(); /*  dock/taskbar for windows (Developer monitor)  */
@@ -242,6 +244,19 @@ function main()
             dock_corner:     "bottom-left",
             inline_selector: '[data-zone="bottom-sub"]'
         },
+        yuno
+    ));
+
+    /*------------------------------------------------*
+     *      Is this page still the deployed build? A bar says
+     *      so when it is not (the app also asks on every
+     *      EV_ON_OPEN). Outside the shell: it is the login's
+     *      too, the morning after.
+     *------------------------------------------------*/
+    gobj_start(gobj_create_service(
+        "__update_watch__",
+        "C_YUI_UPDATE_WATCH",
+        {},
         yuno
     ));
 

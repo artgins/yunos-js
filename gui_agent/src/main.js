@@ -53,6 +53,7 @@ import {register_c_yui_nav}    from "@yuneta/gobj-ui/src/c_yui_nav.js";
 import {register_c_yui_node}   from "@yuneta/gobj-ui/src/c_yui_node.js";
 import {register_c_yui_window} from "@yuneta/gobj-ui/src/c_yui_window.js";
 import {register_c_yui_window_manager} from "@yuneta/gobj-ui/src/c_yui_window_manager.js";
+import {register_c_yui_update_watch} from "@yuneta/gobj-ui/src/c_yui_update_watch.js";
 import {register_c_yui_gobj_tree_js} from "@yuneta/gobj-ui/src/c_yui_gobj_tree_js.js";
 import {register_c_yui_json}   from "@yuneta/gobj-ui/src/c_yui_json.js";
 
@@ -137,6 +138,7 @@ function main()
     register_c_yui_node();
     register_c_yui_window();     // legacy window host for the developer panel
     register_c_yui_window_manager(); // dock/taskbar for windows (Developer monitor)
+    register_c_yui_update_watch();   // "a new version is available"
     register_c_yui_gobj_tree_js();   // gobj tree of this yuno (Frontend view window)
     register_c_yui_json();           // lazy JSON tree viewer (console answers)
 
@@ -267,6 +269,19 @@ function main()
             dock_corner:     "bottom-left",
             inline_selector: '[data-zone="bottom-sub"]'
         },
+        yuno
+    ));
+
+    /*------------------------------------------------*
+     *      Is this page still the deployed build? A bar says
+     *      so when it is not (C_APP also asks on every
+     *      EV_ON_OPEN). Outside the shell: it is the login's
+     *      too, the morning after.
+     *------------------------------------------------*/
+    gobj_start(gobj_create_service(
+        "__update_watch__",
+        "C_YUI_UPDATE_WATCH",
+        {},
         yuno
     ));
 

@@ -796,6 +796,12 @@ function ac_login_refreshed(gobj, event, kw, src)
  ***************************************************************/
 function ac_on_open(gobj, event, kw, src)
 {
+    /*  A backend deploy often comes with a deploy of this SPA.  */
+    let update_watch = gobj_find_service("__update_watch__", true);
+    if(update_watch) {
+        gobj_send_event(update_watch, "EV_CHECK_BUILD", {}, gobj);
+    }
+
     let conn_id = (kw && kw.conn_id) || "";
     if(conn_id) {
         /*  Reached session → keep its tab across later transient drops. */

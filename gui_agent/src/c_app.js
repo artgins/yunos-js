@@ -737,6 +737,12 @@ function ac_on_open(gobj, event, kw, src)
     });
     yui_shell_set_connection_state(shell, true);    // control-center link up
 
+    /*  A backend deploy often comes with a deploy of this SPA.  */
+    let update_watch = gobj_find_service("__update_watch__", true);
+    if(update_watch) {
+        gobj_send_event(update_watch, "EV_CHECK_BUILD", {}, gobj);
+    }
+
     /*  Per-node workspaces: paint each workspace's fixed picker + per-node
      *  tabs from the persisted selection, then seed the live-node set (tab
      *  red state) once. No polling — later refreshes come from the picker's

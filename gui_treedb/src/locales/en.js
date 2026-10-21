@@ -523,6 +523,8 @@ const en = {
         "delete this key and every record it holds": "Delete this key and every record it holds?",
         "views": "views",
         "close": "Close",
+        "reload": "Reload",
+        "new version available": "A new version is available",
         "realtime coming soon": "Realtime — coming soon",
         "open a key view": "Open a key view from Keys",
         "clear": "Clear",

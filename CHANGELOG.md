@@ -6,6 +6,21 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.104, gui_treedb 0.17.166 + gobj-ui ^7.27.29 (2026-10-21)
+
+- **"A new version is available"** (gobj-ui 7.27.29, `C_YUI_UPDATE_WATCH`).
+  A tab opened before a deploy ran the old bundle until it was reloaded by
+  hand. Both yunos create the service in `main.js`, outside the shell (so it
+  covers the login too), and send it `EV_CHECK_BUILD` on every `EV_ON_OPEN`.
+  When the build the server hands out is another one, a bar says so, with the
+  new version, a reload button and a ✕. New i18n keys `new version available`
+  and `reload`.
+- The deploy scripts (local, untracked) upload with `rsync --delete-after
+  --delay-updates`: a page loaded during the upload never gets an
+  `index.html` whose chunks are not there yet.
+- Deployed (artgins.yunetacontrol.com and .ovh, artgins.ytreedb.com); QA
+  with login OK, console clean.
+
 ## gui_agent 0.29.103, gui_treedb 0.17.165 (2026-10-21)
 
 Dependencies caught up within their majors: i18next `^26.5.4`,
