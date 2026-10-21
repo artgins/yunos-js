@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.103, gui_treedb 0.17.165 (2026-10-21)
+
+Dependencies caught up within their majors: i18next `^26.5.4`,
+tabulator-tables `^6.7.0`, vite `^8.3.5`. Nothing either yuno uses changes:
+Tabulator 6.7.0 only touches the keyboard navigation of `selectableRange`
+(not used), i18next 26.5.4 keeps a `{{placeholder}}` that arrives inside an
+interpolated value literal, vite 8.3.5 is a build and dev-server patch.
+261 + 74 tests pass, `npm audit` clean. Deployed (artgins.yunetacontrol.com
+and .ovh, artgins.ytreedb.com), console clean.
+
 ## gui_agent 0.29.102, gui_treedb 0.17.164 + gobj-ui ^7.27.28 (2026-10-19)
 
 - **The trace notes say what the yuno keeps** (gobj-ui 7.27.28, SDK 7.27.3):
