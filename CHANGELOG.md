@@ -6,6 +6,28 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.106 + gobj-ui ^7.27.31 (2026-10-22)
+
+- Deployed by the round (artgins.yunetacontrol.com and .ovh; 267 tests). QA on
+  the deployed plane: every step OK. Console: only the two G6 warnings of gobj-ui's deliberate `drag-canvas`/`zoom-canvas` overrides (there since gobj-ui 7.23.9).
+
+- **The gobj tree window of a card has a name no other card can share.** It
+  was named `<node>-<key>`, and a node and a key may both hold a `-`, so node
+  `a` with key `b-c` and node `a-b` with key `c` got one name, and the second
+  tree was refused ("service ALREADY registered"); `clean_name()` also made
+  the keys `x^y` and `x_y` of one node read alike. Each part is now
+  percent-encoded and the two are joined by `~`. The saved size of a tree
+  window and its arrangement are kept under the new name, so the first
+  opening after the upgrade starts from the defaults. (Review V39.3.1)
+- gobj-ui 7.27.31: a gclass viewer reopened while a trace set of its gclass
+  is in flight opens locked until the answer.
+
+## gui_treedb 0.17.168 + gobj-ui ^7.27.31 (2026-10-22)
+
+- Deployed by the round (artgins.ytreedb.com; 74 tests). No code change in
+  this app. On load, logged out: the two G6 warnings above and the 401 of the
+  session check.
+
 ## package-lock.json committed (2026-10-22)
 
 - gui_agent and gui_treedb commit their `package-lock.json`; the repo used to
