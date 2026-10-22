@@ -248,7 +248,9 @@ once**. A paused yuno leaves its node's watch: the agent keeps one watch per
 requester and the next replaces it, so the watch is asked again without that
 yuno, and a node with no live yuno left is asked to stop (`watch-yuno-stats
 stop=1`), once. A paused yuno is not polled either. Its card keeps its last
-figures and shows a *Readings paused* tag. A reading of it that the watch
+figures and shows a *Readings paused* tag, and so does its node in the
+graph mode (0.29.105): figures that are not live never pass for live ones
+there either. A reading of it that the watch
 before the pause still pushes is dropped. **Read once** asks for that yuno
 only: `list-yunos id=<id>` and its two `stats-yuno`, live or paused. With the
 card paused and the Developer window's traffic in the **Line** view, each
@@ -273,19 +275,36 @@ sent on the live view's own transport, directly or through the control center:
   a count that included them would be every connection of the yuno.
 - **A card's trace levels:** `info-gclass-trace gclass=G`,
   `info-global-trace`, `get-gclass-trace gclass=G` and `get-global-trace`.
-  The card shows one row per level, with a box for *this gobj*
-  (`set-gobj-trace gobj=<full name> level=L set=1|0`) and one for *all of
-  the gclass* (`set-gclass-trace gclass=G level=L set=1|0`). After a set,
-  the tree and the levels are read again.
+  Each scope is set where it belongs (0.29.101, gobj-ui 7.27.27):
+  - the **card** sets the traces of *this gobj* only, one box per level
+    (`set-gobj-trace gobj=<full name> level=L set=1|0`);
+  - the **gclass viewer** (the card's GClass button) sets them for *every
+    gobj of the gclass* (`set-gclass-trace gclass=G level=L set=1|0`);
+  - the tree's **traces of the yuno** set them for the whole yuno
+    (`set-global-trace level=L set=1|0`), and then the root's gclass is read
+    again, because its answer carries the yuno's levels.
+
+  After a set, the tree and the levels are read again: the boxes show what
+  the backend answers, not the click.
 - **The GClass button:** `view-gclass gclass=G`. This is the backend's
   class, not a same-named one of the browser.
 
-A gclass trace is saved by the yuno and survives a restart. A gobj trace lasts
-until the yuno ends: the yuno saves it too, but at start-up it re-applies
-only the gclass and global scopes. The traces go to the yuno's log on its
-node, not to the Developer window. Nothing is read on a clock. A request made
-outside a session is answered at once with an error, and a window whose yuno
-leaves the scenario closes with it.
+What survives a restart of the yuno: a gclass trace and a global trace are
+saved by the yuno and set again at start-up. A gobj trace on a **named
+service** is saved under the service's name and set again at start-up too
+(SDK 7.27.3+). A gobj trace on any other gobj lasts until the yuno ends. The
+card and the gclass viewer each say which case applies (gobj-ui 7.27.28).
+The traces go to the yuno's log on its node, not to the Developer window.
+Nothing is read on a clock. A request made outside a session is answered at
+once with an error.
+
+Each request goes to the node of the tree's **own** yuno. A window closes
+when its yuno leaves the scenario, and also when the scenario changes so
+that its key names another yuno: another node, id or service, or another
+agent or control center (0.29.105). Before that, a tree kept open across
+such a change sent its commands to the yuno of the other node, and a
+`set-gclass-trace` there is saved. Each window is named by its card, so two
+cards of one yuno (two services) open two windows.
 
 **Actions** (0.24.0; run by the control center since 0.29.0). A scenario that
 declares actions gets their buttons — **Start**, **Pause**, **Resume**,

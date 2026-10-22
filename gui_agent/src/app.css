@@ -481,12 +481,31 @@
 }
 
 .MONITOR_NODE_WHERE {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
     font-size: 0.7rem;
     color: var(--bulma-text-weak);
+    margin-top: -0.15rem;
+}
+
+.MONITOR_NODE_WHERE_NAME {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    margin-top: -0.15rem;
+}
+
+/*  The "readings paused" tag of a graph node: a tag sized to the line
+ *  it shares with the node's name, not Bulma's 2em-high one.  */
+.MONITOR_NODE_PAUSED.tag {
+    flex: 0 0 auto;
+    height: auto;
+    padding: 0 0.4em;
+    font-size: 0.65rem;
+    margin-left: auto;
 }
 
 .MONITOR_URL_VIA:not(:empty) {

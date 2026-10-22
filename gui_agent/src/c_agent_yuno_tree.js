@@ -116,7 +116,7 @@ const TREE_OPTIONS = JSON.stringify([
  ***************************************************************/
 const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,  null,   "Subscriber of output events"),
-SDATA(data_type_t.DTP_DICT,     "yuno",         0,  "{}",   "The yuno of the scenario: {key, id, node, label}"),
+SDATA(data_type_t.DTP_DICT,     "yuno",         0,  "{}",   "The yuno of the scenario: {key, id, node, service, label}"),
 SDATA_END()
 ];
 
@@ -181,33 +181,12 @@ function mt_create(gobj)
  ***************************************************************/
 function mt_start(gobj)
 {
-    let priv = gobj.priv;
-    let y = gobj_read_attr(gobj, "yuno") || {};
-
     let shell = yui_shell_of(gobj);
     if(shell) {
         gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
 
-    priv.view = open_gobj_tree_view(gobj, {
-        name:           `${y.node || "local"}-${y.id}`,
-        source:         "remote",
-        yuno_name:      y.label || String(y.id || ""),
-        title_prefix:   y.label || String(y.id || ""),
-        title:          "gobj tree",
-        $header:        priv.$status,
-        on_close:       () => {
-            if(gobj_is_destroying(gobj)) {
-                return;
-            }
-            gobj_send_event(gobj, "EV_VIEW_CLOSED", {}, gobj);
-        },
-    });
-    if(!priv.view) {
-        log_error(`${gobj_short_name(gobj)}: cannot open the gobj tree of ${y.label || y.id}`);
-        return;
-    }
-    request_tree(gobj);
+    open_view(gobj);
 }
 
 /***************************************************************
@@ -244,6 +223,38 @@ function mt_destroy(gobj)
 
 
 
+
+/***************************************************************
+ *  The window, and the tree read into it. Named by the CARD (the
+ *  scenario's key), not by the yuno: two cards of one yuno (two
+ *  services) have a tree each, and the window is a service.
+ ***************************************************************/
+function open_view(gobj)
+{
+    let priv = gobj.priv;
+    let y = gobj_read_attr(gobj, "yuno") || {};
+
+    priv.view = open_gobj_tree_view(gobj, {
+        name:           `${y.node || "local"}-${y.key || y.id}`,
+        source:         "remote",
+        yuno_name:      y.label || String(y.id || ""),
+        title_prefix:   y.label || String(y.id || ""),
+        title:          "gobj tree",
+        $header:        priv.$status,
+        on_close:       () => {
+            if(gobj_is_destroying(gobj)) {
+                return;
+            }
+            gobj_send_event(gobj, "EV_VIEW_CLOSED", {}, gobj);
+        },
+    });
+    if(!priv.view) {
+        log_error(`${gobj_short_name(gobj)}: cannot open the gobj tree of ${y.label || y.id}`);
+        return -1;
+    }
+    request_tree(gobj);
+    return 0;
+}
 
 /***************************************************************
  *  A parameter of a command line: a value with a blank goes
@@ -641,12 +652,17 @@ function ac_view_closed(gobj, event, kw, src)
 }
 
 /************************************************************
- *  Asked to open again: bring the window to the front.
+ *  Asked to open again: bring the window to the front. With
+ *  none (it could not be opened), say so and open it now.
  ************************************************************/
 function ac_show_view(gobj, event, kw, src)
 {
     let priv = gobj.priv;
-    if(priv.view && priv.view.win) {
+    if(!priv.view) {
+        log_error(`${gobj_short_name(gobj)}: the gobj tree has no window, opening it again`);
+        return open_view(gobj);
+    }
+    if(priv.view.win) {
         gobj_send_event(priv.view.win, "EV_SHOW", {}, gobj);
     }
     return 0;

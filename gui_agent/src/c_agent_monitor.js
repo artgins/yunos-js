@@ -80,7 +80,8 @@
  *      yuno is left out of its node's watch (the watch is asked again
  *      without it; one per requester, the next replaces it, and a node
  *      with no live yuno left is asked to stop) and out of the polling,
- *      and its card keeps its last figures with a "readings paused" tag.
+ *      and its card keeps its last figures with a "readings paused" tag
+ *      -- the card of the cards mode and the node of the graph mode alike.
  *      A reading of it still pushed by the watch before is dropped. "Read
  *      once" asks the agent for that yuno only (`list-yunos id=<id>` and
  *      its two `stats-yuno`), whatever its state: three requests and three
@@ -91,14 +92,18 @@
  *
  *      GOBJ TREE. A third button of each card opens the gobj tree of
  *      that yuno in a window (C_AGENT_YUNO_TREE, a child of this view,
- *      one per yuno): its gobjs, what each is doing, and its trace
+ *      one per card): its gobjs, what each is doing, and its trace
  *      levels, which can be turned on and off per gobj or per gclass.
  *      It sends its commands through THIS view's transport: it
  *      publishes each line (EV_YUNO_TREE_REQUEST), this view sends it
  *      tagged `monitor_kind: "ytree"` and hands the answer back
- *      (EV_YUNO_TREE_ANSWER). Outside a session a request is answered
- *      with an error at once. A tree whose yuno leaves the scenario is
- *      closed with it.
+ *      (EV_YUNO_TREE_ANSWER) -- to the node of the tree's OWN yuno,
+ *      never to whatever yuno the scenario holds under that key now.
+ *      Outside a session a request is answered with an error at once.
+ *      A tree whose yuno leaves the scenario is closed with it, and so
+ *      is one whose key now names another yuno (another node, id or
+ *      service, or another agent or control center): its commands
+ *      would reach the wrong yuno, and a trace set there is saved.
  *
  *      RATES. A yuno's own `rxMsgsec`/`txMsgsec` is used when its service
  *      reports one (an application service -- yunovatios' gates, the
@@ -182,6 +187,7 @@ import {
 import i18next, {t} from "i18next";
 
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {fmt_date_time, date_time_format} from "@yuneta/gobj-ui/src/yui_date_text.js";
 import {
     yui_shell_confirm_yesno,
     yui_shell_confirm_danger,
@@ -224,6 +230,10 @@ const CARD_W = 208;
 const CARD_H = 148;
 const CHART_H = 220;
 const SVG_NS = "http://www.w3.org/2000/svg";
+
+/*  A time of today, in the app's language and on a clock of 24 hours
+ *  (gobj-ui's rule, yui_date_text.js): `hourCycle`, never `hour12`.  */
+const CLOCK_OPTIONS = {hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"};
 
 /*  One shape per meaning: start and resume are two different actions.  */
 const CONTROL_ICONS = {
@@ -883,6 +893,14 @@ function build_graph(gobj)
             $q
         ]]);
         let $err = createElement2(["div", {class: "MONITOR_NODE_ERROR has-text-danger"}, ""]);
+        let $paused = createElement2(["span", {class: "MONITOR_NODE_PAUSED tag is-warning is-light is-hidden",
+            i18n: "monitor readings paused"}, t("monitor readings paused")]);
+        let $where = createElement2(
+            ["div", {class: "MONITOR_NODE_WHERE" + (y.node ? "" : " is-hidden")}, [
+                ["span", {class: "MONITOR_NODE_WHERE_NAME is-family-monospace"}, y.node || ""],
+                $paused
+            ]]
+        );
         let $card = createElement2(
             ["div", {class: "MONITOR_NODE card",
                      style: `left:${pos.x}px; top:${pos.y}px; width:${CARD_W}px; height:${CARD_H}px;`}, [
@@ -891,8 +909,7 @@ function build_graph(gobj)
                     ["span", {class: "MONITOR_NODE_LABEL has-text-weight-bold"}, y.label],
                     ["span", {class: "MONITOR_NODE_ID is-family-monospace"}, y.id]
                 ]],
-                ["div", {class: "MONITOR_NODE_WHERE is-family-monospace" + (y.node ? "" : " is-hidden")},
-                    y.node || ""],
+                $where,
                 ["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_CPU"}, [
                     ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor cpu"}, t("monitor cpu")],
                     ["span", {class: "MONITOR_NODE_CPU_BAR"}, [$bar]],
@@ -911,7 +928,7 @@ function build_graph(gobj)
             ]]
         );
         $canvas.appendChild($card);
-        priv.cards[y.key] = {$card, $dot, $cpu, $bar, $rx, $tx, $q, $qrow, $err};
+        priv.cards[y.key] = {$card, $dot, $cpu, $bar, $rx, $tx, $q, $qrow, $err, $where, $paused};
     }
     priv.$graph.appendChild($canvas);
 }
@@ -939,6 +956,12 @@ function paint_card(gobj, id)
     c.$dot.setAttribute("aria-label", state_text);
     c.$dot.setAttribute("data-i18n-aria-label", /* i18n: C_AGENT_MONITOR_STATE_I18N_KEYS */ state_key);
     c.$dot.setAttribute("role", "img");
+
+    /*  A paused yuno keeps its last figures here too: they are not live.  */
+    let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === id) : null;
+    let live = !y || is_live(gobj, y);
+    show(c.$paused, !live);
+    show(c.$where, !!(y && y.node) || !live);
 
     c.$cpu.textContent = typeof m.cpu === "number" ? `${m.cpu} %` : "–";
     c.$bar.style.width = `${typeof m.cpu === "number" ? Math.max(0, Math.min(100, m.cpu)) : 0}%`;
@@ -1025,7 +1048,7 @@ function render_status(gobj)
     show(priv.$disconnect, st !== "ST_DISCONNECTED");
     show(priv.$updated, priv.last_update > 0);
     priv.$updated_time.textContent = priv.last_update
-        ? new Date(priv.last_update).toLocaleTimeString() : "";
+        ? date_time_format(i18next.language, CLOCK_OPTIONS).format(new Date(priv.last_update)) : "";
 
     let $et = priv.$error.querySelector(".MONITOR_ERROR_TEXT");
     let $ed = priv.$error.querySelector(".MONITOR_ERROR_DETAIL");
@@ -1740,9 +1763,14 @@ function adopt_scenario(gobj)
         }
     }
     priv.paused = paused;
+    /*  A tree is kept only while its key still names ITS yuno, on the
+     *  same transport: the same key on another node (the control center
+     *  keeps scenarios of many) is another yuno.  */
+    let new_where = next ? `${next.place}|${next.agent_url || ""}` : "";
     for(let key of Object.keys(priv.ytrees)) {
-        let still = next ? next.yunos.find((y) => y.key === key) : null;
-        if(!still) {
+        let still = (next && new_where === old_where) ? next.yunos.find((y) => y.key === key) : null;
+        let own = gobj_read_attr(priv.ytrees[key], "yuno") || {};
+        if(!still || pause_id(still) !== pause_id(own)) {
             drop_yuno_tree(gobj, key);
         }
     }
@@ -1759,7 +1787,6 @@ function adopt_scenario(gobj)
         }
         return;
     }
-    let new_where = `${next.place}|${next.agent_url || ""}`;
     if(st === "ST_DISCONNECTED" || new_where !== old_where) {
         gobj_send_event(gobj, "EV_CONNECT", {}, gobj);
     } else if(st === "ST_MONITORING") {
@@ -1815,7 +1842,7 @@ function show_runs_dialog(gobj, runs, scenario_id)
             (st.comment ? ` ${st.comment}` : "")).join("\n");
         return ["tr", {class: "MONITOR_RUN"}, [
             ["td", {class: "MONITOR_RUN_WHEN is-family-monospace"},
-                r.started_at ? new Date(r.started_at * 1000).toLocaleString(i18next.language || undefined) : ""],
+                r.started_at ? fmt_date_time(new Date(r.started_at * 1000), i18next.language) : ""],
             ["td", {class: "MONITOR_RUN_ACTION", i18n: /* i18n: C_AGENT_MONITOR_I18N_KEYS */ `monitor ${r.action}`},
                 t(/* i18n: C_AGENT_MONITOR_I18N_KEYS */ `monitor ${r.action}`)],
             ["td", {class: "MONITOR_RUN_USER"}, r.username || ""],
@@ -2307,6 +2334,9 @@ function ac_mt_command_answer(gobj, event, kw, src)
         if(!child || (a.ack && !failed_)) {
             return 0;   /*  closed meanwhile, or the control center's dispatch ack  */
         }
+        if(msg_iev_read_key(kw, "ytree_yuno") !== pause_id(gobj_read_attr(child, "yuno") || {})) {
+            return 0;   /*  asked by a tree of another yuno that had this key  */
+        }
         gobj_send_event(child, "EV_YUNO_TREE_ANSWER", {
             what:    msg_iev_read_key(kw, "ytree_what") || "",
             gclass:  msg_iev_read_key(kw, "ytree_gclass") || "",
@@ -2484,7 +2514,8 @@ function ac_open_yuno_tree(gobj, event, kw, src)
     let child = gobj_create(
         `ytree-${clean_name(y.key)}`,
         "C_AGENT_YUNO_TREE",
-        {yuno: {key: y.key, id: y.id, node: y.node || "", label: y.label || y.id}},
+        {yuno: {key: y.key, id: y.id, node: y.node || "", service: y.service || "",
+                label: y.label || y.id}},
         gobj
     );
     if(!child) {
@@ -2497,17 +2528,23 @@ function ac_open_yuno_tree(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  A gobj tree's command line, sent on this view's transport.
+ *  A gobj tree's command line, sent on this view's transport to
+ *  the node of the tree's OWN yuno: its line names that yuno's id.
  *  Outside a session it is answered at once, with an error.
  ***************************************************************/
 function ac_yuno_tree_request(gobj, event, kw, src)
 {
     let priv = gobj.priv;
-    let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === kw.key) : null;
-    if(!y || !kw.line) {
-        log_error(`${gobj_short_name(gobj)}: gobj tree request of no yuno or no line: '${kw.key}'`);
+    let child = priv.ytrees[kw.key];
+    if(!child || child !== src) {
+        log_error(`${gobj_short_name(gobj)}: '${gobj_short_name(src)}' is not the gobj tree of '${kw.key}'`);
         return -1;
     }
+    if(!kw.line) {
+        log_error(`${gobj_short_name(gobj)}: gobj tree request of no line: '${kw.key}'`);
+        return -1;
+    }
+    let y = gobj_read_attr(child, "yuno") || {};
     if(gobj_current_state(gobj) !== "ST_MONITORING") {
         gobj_send_event(src, "EV_YUNO_TREE_ANSWER", {
             what: kw.what, gclass: kw.gclass, seq: kw.seq,
@@ -2515,8 +2552,9 @@ function ac_yuno_tree_request(gobj, event, kw, src)
         }, gobj);
         return 0;
     }
-    send_request(gobj, kw.line, "ytree", y.key, y.node, {
-        ytree_what: kw.what, ytree_gclass: kw.gclass || "", ytree_seq: kw.seq
+    send_request(gobj, kw.line, "ytree", kw.key, y.node, {
+        ytree_what: kw.what, ytree_gclass: kw.gclass || "", ytree_seq: kw.seq,
+        ytree_yuno: pause_id(y)
     });
     return 0;
 }

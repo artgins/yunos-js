@@ -288,6 +288,11 @@ describe("the list of the control center's scenarios", () => {
             id: "stress", description: "sim -> gate", group: "", yunos: 2, runs: 3,
             updated_at: 1790000000, updated_by: "ana"
         }]);
+        /*  When it was saved: the clock of 24 hours, whatever the language  */
+        const col = gobj_read_attr(list, "tabulator").options.columns.find((c) => c.field === "updated_at");
+        const when = col.formatter({getData: () => gobj_read_attr(list, "tabulator").data[0]});
+        expect(when).toMatch(/\b\d{2}:\d{2}:\d{2}\b/);
+        expect(when).not.toMatch(/AM|PM/i);
 
         gobj_send_event(list, "EV_OPEN_SCENARIO", {scenario_id: "stress"}, list);
         let m = agent_config_get_monitor(config);
@@ -534,6 +539,10 @@ describe("the live view of a scenario the control center keeps", () => {
         answer(mon, r[0], {data: [{id: "stress.1", action: "start", username: "ana", result: 0,
                                    started_at: 1790000000, steps: []}]});
         expect(modals.map((m) => m.opts.logical_class)).toEqual(["MONITOR_RUNS_DIALOG"]);
+        /*  The clock of 24 hours, whatever the language (gobj-ui 7.26.52)  */
+        const when = modals[0].$content.querySelector(".MONITOR_RUN_WHEN").textContent;
+        expect(when).toMatch(/\b\d{2}:\d{2}:\d{2}\b/);
+        expect(when).not.toMatch(/AM|PM/i);
         expect(errors()).toEqual([]);
     });
 });
@@ -645,6 +654,26 @@ describe("a scenario that is not the control center's", () => {
         expect(logged.filter((l) => l.level === "warning")).toEqual([]);
     });
 
+    test("a yuno paused in the cards mode says so in the graph mode too", () => {
+        const mon = new_monitor();
+        const direct = Object.assign({}, SAVED, {agent_url: "wss://agent.example.com:1993",
+            view: {mode: "cards"}});
+        delete direct.node;
+        agent_config_set_monitor(config, {scenario: validate_scenario(direct).scenario, source: "local"});
+        gobj_send_event(mon, "EV_ON_OPEN", {}, mlink);
+        gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "gate"}, mon);
+        gobj_send_event(mon, "EV_SET_VIEW_MODE", {mode: "graph"}, mon);
+        const node = (key) => mon.priv.cards[key].$card;
+        const paused = (key) => node(key).querySelector(".MONITOR_NODE_PAUSED");
+        expect(paused("gate").classList.contains("is-hidden")).toBe(false);
+        expect(paused("gate").getAttribute("data-i18n")).toBe("monitor readings paused");
+        expect(paused("sim").classList.contains("is-hidden")).toBe(true);
+
+        gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "gate"}, mon);
+        expect(paused("gate").classList.contains("is-hidden")).toBe(true);
+        expect(errors()).toEqual([]);
+    });
+
     test("read once asks for one yuno, and its state paints that card only", () => {
         const mon = new_monitor();
         const direct = Object.assign({}, SAVED, {agent_url: "wss://agent.example.com:1993"});
@@ -661,6 +690,10 @@ describe("a scenario that is not the control center's", () => {
         answer(mon, sent[0], {data: [{id: "2120", yuno_running: true, yuno_playing: true}]});
         expect(mon.priv.model.gate.run).toBe("playing");
         expect(mon.priv.model.sim.run).toBe("unknown");
+        /*  "updated at": a clock of 24 hours, whatever the language  */
+        stats_answer(mon, sent[1], {data: {cpu: 3}});
+        expect(mon.priv.last_update).toBeGreaterThan(0);
+        expect(mon.priv.$updated_time.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
         expect(errors()).toEqual([]);
     });
 });
@@ -816,6 +849,70 @@ describe("the gobj tree of a yuno of the live view", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(mon.priv.ytrees.gate).toBe(undefined);
         expect(errors()).toEqual([]);
+    });
+
+    test("a tree whose key now names the yuno of another node is closed, not re-aimed", () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: "gate"}, mon);
+        const handle = tree_double.opened[tree_double.opened.length - 1];
+        const child = mon.priv.ytrees.gate;
+        expect(find("command-agent").filter((r) => /command=view-gobj-tree/.test(r.kw.cmd2agent))
+            .map((r) => r.kw.agent_id)).toEqual(["ctrl"]);
+
+        /*  the same yuno in another scenario: the tree stays  */
+        watch_saved(Object.assign({}, SAVED, {description: "the same yunos"}));
+        expect(mon.priv.ytrees.gate).toBe(child);
+
+        /*  `gate` is now the 2120 of another node: its tree is not that one  */
+        sent.length = 0;
+        watch_saved(Object.assign({}, SAVED, {node: "other"}));
+        expect(mon.priv.ytrees.gate).toBe(undefined);
+        expect(handle.closed).toBe(true);
+        expect(find("command-agent").filter((r) => /service=__yuno__ command=/.test(r.kw.cmd2agent)
+            && r.kw.agent_id === "other" && !/stats-yuno|list-yunos/.test(r.kw.cmd2agent))).toEqual([]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a request goes to the node of the tree that asks it, and only a tree asks", () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: "gate"}, mon);
+        const child = mon.priv.ytrees.gate;
+        sent.length = 0;
+        gobj_send_event(child, "EV_TREE_WANTED", {}, child);
+        expect(find("command-agent").map((r) => r.kw.agent_id)).toEqual(["ctrl", "ctrl", "ctrl"]);
+
+        sent.length = 0;
+        gobj_send_event(mon, "EV_YUNO_TREE_REQUEST", {key: "gate", what: "set", seq: 99,
+            line: "command-yuno id=2120 service=__yuno__ command=set-global-trace level=machine set=1"}, host);
+        expect(sent).toEqual([]);
+        expect(errors().some((m) => /not the gobj tree of 'gate'/.test(m))).toBe(true);
+    });
+
+    test("two cards of one yuno: each tree has its own window", () => {
+        const mon = new_monitor();
+        const two = Object.assign({}, SAVED, {
+            yunos: SAVED.yunos.concat([{key: "gate_tcp", id: "2120", service: "tcp"}])
+        });
+        expect(validate_scenario(two).ok).toBe(true);
+        watch_saved(two);
+        gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: "gate"}, mon);
+        gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: "gate_tcp"}, mon);
+        const names = tree_double.opened.slice(-2).map((h) => h.opts.name);
+        expect(names[0]).not.toBe(names[1]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("asked to show a window it does not have, the tree says so and opens one", () => {
+        const mon = open_gate();
+        const child = mon.priv.ytrees.gate;
+        child.priv.view = null;     /*  as when the window could not be opened  */
+        const opened = tree_double.opened.length;
+        gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: "gate"}, mon);
+        expect(errors().some((m) => /no window/.test(m))).toBe(true);
+        expect(tree_double.opened.length).toBe(opened + 1);
+        expect(child.priv.view).toBe(tree_double.opened[opened]);
     });
 
     test("a tree whose yuno leaves the scenario is closed with it", () => {

@@ -79,6 +79,7 @@ import {
 
 import i18next, {t} from "i18next";
 
+import {fmt_date_time} from "@yuneta/gobj-ui/src/yui_date_text.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {
     yui_shell_show_modal,
@@ -262,10 +263,11 @@ function mt_destroy(gobj)
 
 
 
-/*  A date in the language of the app, not of the browser.  */
+/*  A date in the language of the app, not of the browser, on a
+ *  clock of 24 hours (gobj-ui's fmt_date_time()).  */
 function fmt_time(secs)
 {
-    return new Date(secs * 1000).toLocaleString(i18next.language || undefined);
+    return fmt_date_time(new Date(secs * 1000), i18next.language);
 }
 
 function clear_node($n)

@@ -259,6 +259,11 @@ describe("reading a users store", () => {
         expect(v.priv.roles.map((r) => r.id)).toEqual(["controlcenter", "root"]);
         expect(v.priv.master).toBe(true);
         expect(gobj_read_attr(v, "tabulator").data.length).toBe(2);
+        /*  When it was created: the clock of 24 hours, whatever the language  */
+        const col = gobj_read_attr(v, "tabulator").options.columns.find((c) => c.field === "time");
+        const when = col.formatter({getValue: () => 1790000000});
+        expect(when).toMatch(/\b\d{2}:\d{2}:\d{2}\b/);
+        expect(when).not.toMatch(/AM|PM/i);
         expect(errors()).toEqual([]);
     });
 

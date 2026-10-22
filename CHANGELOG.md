@@ -6,6 +6,42 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.105 (2026-10-22)
+
+- **A gobj tree never sends to the yuno of another node.** The live view
+  kept a tree open across a change of scenario when only its `key` matched,
+  and sent the tree's lines to the node of whatever yuno the NEW scenario
+  held under that key. The key defaults to the yuno id, so two
+  control-center scenarios with the same id on two nodes collided: the
+  status line said `ctrl · 2120`, and a `set-gclass-trace` reached the
+  other node's yuno, where the trace is saved and survives a restart. Now a
+  tree is closed when its key names another yuno (node, id, service) or
+  the scenario moves to another agent or control center, and each request
+  goes to the node of the tree's OWN yuno; a request from a gobj that is not
+  that key's tree is refused with an error, and an answer asked by an older
+  tree of that key is dropped.
+- **Two cards of one yuno open two trees.** The window was the service
+  `gobj-tree-win-<node>-<id>`, so a second card of the same yuno id (another
+  `service`) failed with *"service ALREADY registered"*, and its button then
+  did nothing, silently, even after the first was closed. The window is now
+  named by the card's key, and a tree asked to show a window it does not
+  have logs an error and opens one.
+- **A paused yuno says so in the graph mode too.** A yuno paused in the
+  cards mode showed its frozen figures in the graph as if they were live.
+  Its graph node now carries the same *readings paused* tag (existing key
+  `monitor readings paused`).
+- **Times on a clock of 24 hours, in the app's language** (gobj-ui 7.26.52's
+  rule): the "updated at" of the live view, the runs of a scenario, the
+  *updated* column of the scenarios list and the *created* time of a user
+  were written in the browser's format (12 hours in English). They go
+  through `fmt_date_time()` / `date_time_format()` of
+  `yui_date_text.js` now.
+- README: the gobj-tree section says what each trace scope sets since
+  0.29.101 and what survives a restart since SDK 7.27.3 (a named service's
+  gobj trace does).
+- Tests pin each point (`c_scenarios.wiring.test.js`,
+  `c_agent_users.wiring.test.js`): 266 pass.
+
 ## gui_treedb 0.17.167 (2026-10-22)
 
 - **A Rows card reopens when old rows of its key were purged.** SDK 7.27.5's

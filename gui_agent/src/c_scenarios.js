@@ -51,6 +51,7 @@ import {
 
 import i18next, {t} from "i18next";
 
+import {fmt_date_time} from "@yuneta/gobj-ui/src/yui_date_text.js";
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
@@ -215,12 +216,13 @@ function clear_node($n)
     }
 }
 
+/*  A date in the language of the app, on a clock of 24 hours.  */
 function fmt_time(secs)
 {
     if(!secs) {
         return "";
     }
-    return new Date(secs * 1000).toLocaleString(i18next.language || undefined);
+    return fmt_date_time(new Date(secs * 1000), i18next.language);
 }
 
 /***************************************************************
