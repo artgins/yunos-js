@@ -6,6 +6,20 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.110, gui_treedb 0.17.172 (2026-10-22)
+
+Dependencies caught up within their majors: i18next `^26.5.6`,
+tabulator-tables `^6.7.1`, `@rollup/plugin-terser` `^1.0.2`. Nothing either
+yuno uses changes: i18next 26.5.5/26.5.6 deep-copies the store of
+`cloneInstance({forkResourceStore: true})` and keeps literal a
+`{{placeholder}}` inside an unescaped `{{- var}}` value (neither is used);
+Tabulator 6.7.1 fixes Enter moving two rows with `selectableRange` (not
+used); the terser plugin is a build patch. 274 + 74 tests pass, `npm audit`
+clean. Deployed (artgins.yunetacontrol.com and .ovh, artgins.ytreedb.com):
+gui_agent QA OK on both planes, 0 console messages of concern; gui_treedb
+serves the new bundle, and its console shows only the 401 of
+`/auth/refresh` before login.
+
 ## gui_agent 0.29.109, gui_treedb 0.17.171 + gobj-ui ^7.27.34 (2026-10-22)
 
 - Deployed by the round (274 and 74 tests). gobj-ui 7.27.34: a gclass viewer
