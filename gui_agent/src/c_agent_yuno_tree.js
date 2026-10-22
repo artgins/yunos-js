@@ -28,7 +28,11 @@
  *                          scope; G is then the root's gclass, whose
  *                          answer carries the yuno's levels)
  *                          one per level; when the last one is answered
- *                          the tree and the levels of G are read again
+ *                          the tree and the levels of G are read again,
+ *                          and their answers carry the set's `set_id`
+ *                          (gobj-ui 7.27.33): a read asked before the set
+ *                          and answered after it says `set_id: null`, so
+ *                          it does not unlock what the set locked
  *          the gclass      view-gclass gclass=G
  *
  *      It has no transport of its own: the scenario's transport is the
@@ -125,8 +129,9 @@ let PRIVATE_DATA = {
     seq:        0,      /*  number of the last request batch  */
     tree_seq:   0,      /*  the tree request whose answers are wanted  */
     tree_parts: {},     /*  what = answer of the tree request in flight: {result, comment, data}  */
-    info:       {},     /*  gclass -> {seq, parts, error}  */
-    sets:       null,   /*  the trace set in flight: {seq, gclass, pending, failed}  */
+    tree_set_id: null,  /*  the set the tree read in flight follows (its answer says so), or null  */
+    info:       {},     /*  gclass -> {seq, parts, error, set_id}  */
+    sets:       null,   /*  the trace set in flight: {seq, gclass, pending, failed, set_id}  */
     error:      null,   /*  {key} or {text} shown in the status line  */
     own_traces: 0,      /*  gobjs with traces of their own, in the last tree  */
     gclass_traces: 0,   /*  gclasses that trace, when the tree was read  */
@@ -233,10 +238,24 @@ function mt_destroy(gobj)
  *  joined by one; and clean_name() turns a `^` into the `_` another
  *  may hold. Each part is percent-encoded (a `^` is `%5E`, a `~`
  *  `%7E`), and a `~` joins them: an encoded part never holds one.
+ *
+ *  gobj-js registers and finds a service by its name LOWERCASED, so
+ *  the keys `Gate` and `gate`, or the nodes `Central` and `central`,
+ *  were one window (REV-CLOUD V40.3.2). An uppercase letter is
+ *  written `!` + the letter in lowercase (`Gate` -> `!gate`), and a
+ *  `!` of the part itself is percent-encoded (`%21`): `!` starts no
+ *  other token, so two parts that differ only in case still differ
+ *  once lowercased. The name is used as it is: gobj-ui 7.27.33 finds
+ *  the tree's canvas whatever characters the name holds.
  ***************************************************************/
 function window_name(y)
 {
-    let part = (s) => encodeURIComponent(String(s)).replace(/~/g, "%7E");
+    let part = (s) => Array.from(String(s), (c) => {
+        if(c >= "A" && c <= "Z") {
+            return "!" + c.toLowerCase();
+        }
+        return encodeURIComponent(c).replace(/!/g, "%21").replace(/~/g, "%7E");
+    }).join("");
     return `${part(y.node || "local")}~${part(y.key || y.id)}`;
 }
 
@@ -322,9 +341,15 @@ function request(gobj, what, line, gclass, seq)
     });
 }
 
-function request_tree(gobj)
+/*  `set_id`: the set this read follows (the tree's number of it), echoed
+ *  in the answer. A read that overtakes one owed to a set is after that
+ *  set too, so it inherits the number.  */
+function request_tree(gobj, set_id)
 {
     let priv = gobj.priv;
+    if(set_id !== undefined && set_id !== null) {
+        priv.tree_set_id = set_id;
+    }
     priv.tree_seq = ++priv.seq;
     priv.tree_parts = {};
     request(gobj, "tree", yuno_command(gobj, "view-gobj-tree", {options: TREE_OPTIONS}),
@@ -333,11 +358,15 @@ function request_tree(gobj)
     request(gobj, "tree_global_on", yuno_command(gobj, "get-global-trace", {}), "", priv.tree_seq);
 }
 
-function request_trace_info(gobj, gclass)
+function request_trace_info(gobj, gclass, set_id)
 {
     let priv = gobj.priv;
     let seq = ++priv.seq;
-    priv.info[gclass] = {seq: seq, parts: {}, error: ""};
+    let owed = priv.info[gclass] ? priv.info[gclass].set_id : null;
+    if(set_id !== undefined && set_id !== null) {
+        owed = set_id;
+    }
+    priv.info[gclass] = {seq: seq, parts: {}, error: "", set_id: owed};
     request(gobj, "gclass_levels", yuno_command(gobj, "info-gclass-trace", {gclass: gclass}), gclass, seq);
     request(gobj, "global_levels", yuno_command(gobj, "info-global-trace", {}), gclass, seq);
     request(gobj, "gclass_on", yuno_command(gobj, "get-gclass-trace", {gclass: gclass}), gclass, seq);
@@ -418,7 +447,9 @@ function tree_answer(gobj, kw, failed)
     let tree = priv.tree_parts.tree;
     let gon = priv.tree_parts.tree_gclass_on;
     let glon = priv.tree_parts.tree_global_on;
+    let set_id = priv.tree_set_id;
     priv.tree_parts = {};
+    priv.tree_set_id = null;
     if(tree.failed || !tree.data || typeof tree.data !== "object") {
         set_error(gobj, tree.failed ? tree.error : {key: "monitor no answer"});
         return;
@@ -439,7 +470,7 @@ function tree_answer(gobj, kw, failed)
     set_error(gobj, (gon.failed || glon.failed) ? (gon.failed ? gon.error : glon.error) : null);
 
     if(priv.view && priv.view.tree) {
-        gobj_send_event(priv.view.tree, "EV_LOAD_TREE", {tree: tree.data}, gobj);
+        gobj_send_event(priv.view.tree, "EV_LOAD_TREE", {tree: tree.data, set_id: set_id}, gobj);
     }
 }
 
@@ -494,7 +525,7 @@ function trace_info_answer(gobj, kw, failed)
     if(!info.error && have < TRACE_INFO_PARTS.length) {
         return;
     }
-    let out = {gclass: kw.gclass, error: info.error};
+    let out = {gclass: kw.gclass, error: info.error, set_id: info.set_id};
     for(let p of TRACE_INFO_PARTS) {
         out[p] = info.parts[p];
     }
@@ -532,7 +563,7 @@ function ac_trace_info_wanted(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: trace levels wanted of no gclass`);
         return -1;
     }
-    request_trace_info(gobj, kw.gclass);
+    request_trace_info(gobj, kw.gclass, kw.set_id);
     return 0;
 }
 
@@ -569,7 +600,8 @@ function ac_set_trace_level(gobj, event, kw, src)
         lines.push(line);
     }
     let seq = ++priv.seq;
-    priv.sets = {seq: seq, gclass: kw.gclass, pending: lines.length, failed: []};
+    priv.sets = {seq: seq, gclass: kw.gclass, pending: lines.length, failed: [],
+                 set_id: (kw.set_id !== undefined)? kw.set_id: null};
     for(let line of lines) {
         request(gobj, "set", line, kw.gclass, seq);
     }
@@ -632,8 +664,8 @@ function ac_answer(gobj, event, kw, src)
             set_error(gobj, s.failed.length ? {text: s.failed.join("; ")} : null);
             /*  Whatever was answered, what is on screen is read again:
              *  the boxes show the backend, never the click.  */
-            request_tree(gobj);
-            request_trace_info(gobj, s.gclass);
+            request_tree(gobj, s.set_id);
+            request_trace_info(gobj, s.gclass, s.set_id);
             return 0;
         }
 

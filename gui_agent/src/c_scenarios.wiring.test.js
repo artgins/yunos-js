@@ -779,7 +779,7 @@ describe("the gobj tree of a yuno of the live view", () => {
             gclass: "C_TCP", error: "",
             gclass_levels: {traffic: "dump", connections: "conn"},
             global_levels: {machine: "machine"},
-            gclass_on: [], global_on: ["machine"]
+            gclass_on: [], global_on: ["machine"], set_id: null
         }]);
         expect(errors()).toEqual([]);
     });
@@ -823,6 +823,102 @@ describe("the gobj tree of a yuno of the live view", () => {
         expect(lines().map(cmd).slice(3))
             .toEqual(["info-gclass-trace gclass=C_YUNO", "info-global-trace",
                       "get-gclass-trace gclass=C_YUNO", "get-global-trace"]);
+        expect(errors()).toEqual([]);
+    });
+
+    /*  gobj-ui 7.27.33: an answer says which set it follows, so a read
+     *  asked BEFORE a set and answered after it cannot unlock what the
+     *  set locked (REV-CLOUD V40.2).  */
+    test("the answers read after a set carry its set_id; any other read, null", () => {
+        const mon = open_gate();
+        const child = mon.priv.ytrees.gate;
+        const [tree, gon, glon] = lines();
+        reply(mon, tree, TREE);
+        reply(mon, gon, []);
+        reply(mon, glon, []);
+        expect(tree_double.got.map((g) => [g.event, g.kw.set_id])).toEqual([["EV_LOAD_TREE", null]]);
+        const infos = () => tree_double.got.filter((g) => g.event === "EV_TRACE_INFO")
+            .map((g) => [g.kw.gclass, g.kw.set_id]);
+        const answer_info = (reqs) => {
+            reply(mon, reqs[0], [{gclass: "C_TCP", trace_levels: {traffic: "dump"}}]);
+            reply(mon, reqs[1], [{trace_levels: {machine: "machine"}}]);
+            reply(mon, reqs[2], []);
+            reply(mon, reqs[3], []);
+        };
+
+        /*  a card is opened: its read is asked, not answered yet  */
+        sent.length = 0;
+        gobj_send_event(child, "EV_TRACE_INFO_WANTED", {gclass: "C_TCP"}, child);
+        const card_read = lines();
+        expect(card_read.length).toBe(4);
+
+        /*  a box is ticked before the answer  */
+        sent.length = 0;
+        gobj_send_event(child, "EV_SET_TRACE_LEVEL", {scope: "gobj", gobj: "C_YUNO^gate`C_TCP^tcp1",
+            gclass: "C_TCP", levels: ["machine"], set: true, set_id: 7}, child);
+        const set = lines();
+        expect(set.map(cmd)).toEqual(["set-gobj-trace gobj=C_YUNO^gate`C_TCP^tcp1 level=machine set=1"]);
+
+        /*  the card's read arrives: it is no set's  */
+        tree_double.got.length = 0;
+        answer_info(card_read);
+        expect(infos()).toEqual([["C_TCP", null]]);
+
+        /*  the set is answered: the tree and C_TCP are read again, as the set's  */
+        sent.length = 0;
+        reply(mon, set[0], []);
+        const after = lines();
+        expect(after.length).toBe(7);
+        tree_double.got.length = 0;
+        reply(mon, after[0], TREE);
+        reply(mon, after[1], []);
+        reply(mon, after[2], []);
+        answer_info(after.slice(3));
+        expect(tree_double.got.map((g) => [g.event, g.kw.set_id]))
+            .toEqual([["EV_LOAD_TREE", 7], ["EV_TRACE_INFO", 7]]);
+
+        /*  the viewer's own read after a set of the yuno's scope carries it too  */
+        sent.length = 0;
+        tree_double.got.length = 0;
+        gobj_send_event(child, "EV_TRACE_INFO_WANTED", {gclass: "C_TCP", set_id: 8}, child);
+        answer_info(lines());
+        expect(infos()).toEqual([["C_TCP", 8]]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a read asked again before the set's own read is answered keeps the set's number", () => {
+        const mon = open_gate();
+        const child = mon.priv.ytrees.gate;
+        const [tree, gon, glon] = lines();
+        reply(mon, tree, TREE);
+        reply(mon, gon, []);
+        reply(mon, glon, []);
+
+        sent.length = 0;
+        gobj_send_event(child, "EV_SET_TRACE_LEVEL", {scope: "gclass", gobj: "",
+            gclass: "C_TCP", levels: ["traffic"], set: true, set_id: 3}, child);
+        const set = lines();
+        sent.length = 0;
+        reply(mon, set[0], []);
+        expect(lines().length).toBe(7);     /*  the set's reads, not answered yet  */
+
+        /*  Refresh and the card, pressed now: their reads overtake the
+         *  set's -- and are after the set, so they answer it  */
+        sent.length = 0;
+        gobj_send_event(child, "EV_TREE_WANTED", {}, child);
+        gobj_send_event(child, "EV_TRACE_INFO_WANTED", {gclass: "C_TCP"}, child);
+        const again = lines();
+        expect(again.length).toBe(7);
+        tree_double.got.length = 0;
+        reply(mon, again[0], TREE);
+        reply(mon, again[1], []);
+        reply(mon, again[2], []);
+        reply(mon, again[3], [{gclass: "C_TCP", trace_levels: {traffic: "dump"}}]);
+        reply(mon, again[4], [{trace_levels: {machine: "machine"}}]);
+        reply(mon, again[5], []);
+        reply(mon, again[6], []);
+        expect(tree_double.got.map((g) => [g.event, g.kw.set_id]))
+            .toEqual([["EV_LOAD_TREE", 3], ["EV_TRACE_INFO", 3]]);
         expect(errors()).toEqual([]);
     });
 
@@ -909,11 +1005,17 @@ describe("the gobj tree of a yuno of the live view", () => {
      *  both may hold a `-` (NAME_RE), and a `^` that clean_name() turns
      *  into the `_` another may hold: none of these pairs may share a
      *  name ("service ALREADY registered", the second tree not opened).  */
+    /*  gobj-js registers and finds a service by its name LOWERCASED, so
+     *  two names that differ only in case are one service too: the keys
+     *  `Gate` and `gate` of one node, or of the nodes `Central` and
+     *  `central` (REV-CLOUD V40.3.2).  */
     test("two cards whose node and key read alike still get two windows", () => {
         const window_name = (h) => clean_name(h.opts.name);
         for(const [one, two] of [
             [{key: "b-c", id: "2120", node: "a"},   {key: "c", id: "2121", node: "a-b"}],
             [{key: "x^y", id: "2120", node: "n"},   {key: "x_y", id: "2121", node: "n"}],
+            [{key: "Gate", id: "2120", node: "n"},  {key: "gate", id: "2121", node: "n"}],
+            [{key: "Gate", id: "2120", node: "Central"}, {key: "gate", id: "2121", node: "central"}],
         ]) {
             const mon = new_monitor();
             const sc = Object.assign({}, SAVED, {yunos: [one, two], links: [],
@@ -924,7 +1026,8 @@ describe("the gobj tree of a yuno of the live view", () => {
             gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: one.key}, mon);
             gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: two.key}, mon);
             const names = tree_double.opened.slice(-2).map(window_name);
-            expect(names[0]).not.toBe(names[1]);
+            expect(names[0].toLowerCase(), JSON.stringify([one, two]))
+                .not.toBe(names[1].toLowerCase());
             /*  what clean_name() would change is not in it  */
             expect(names.map((n) => tree_double.opened.slice(-2)
                 .some((h) => h.opts.name === n))).toEqual([true, true]);
