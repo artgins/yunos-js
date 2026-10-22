@@ -28,6 +28,7 @@
  *          node scripts/qa.mjs --url https://artgins.yunetacontrol.ovh
  *          node scripts/qa.mjs --no-login              # login screen only
  *          node scripts/qa.mjs --check schemaback      # the schema editor's ← = browser Back
+ *          node scripts/qa.mjs --check gobjtree        # a card's gobj tree opens and draws its canvas
  *
  *      Routes are hash routes of the shell, given without the '#':
  *
@@ -265,8 +266,74 @@ async function check_schemaback(page, args, step, out_dir)
     return ok;
 }
 
+/*
+ *  --check gobjtree: the gobj tree of a card opens and draws its canvas.
+ *  0.29.106 named the tree window `<node>~<key>`; gobj-ui looked the
+ *  canvas up with a selector built from that name, so every tree window
+ *  logged "no canvas mount" and a `^` (`%5E`) made it fail to open --
+ *  deployed twice, because nothing opened a tree on the deployed plane.
+ *  It marks a running yuno in the Yunos tab (the SCHEMA_NODE /
+ *  SCHEMA_YUNO of --check schemaback: what is marked lives in this run's
+ *  own browser context, which ends with it), shows the live view as cards,
+ *  opens the tree of the first card, and closes the window.
+ */
+async function check_gobjtree(page, args, step, out_dir)
+{
+    const yuno_box = () => page.locator(".tabulator-row", {hasText: SCHEMA_YUNO})
+        .locator("input.STATNODES_SEL").first();
+    await page.evaluate(() => { window.location.hash = "#/scenarios/yunos"; });
+    await page.waitForSelector(".tabulator-row", {timeout: DEFAULTS.TIMEOUT});
+    const $node = page.locator(".tabulator-row", {hasText: SCHEMA_NODE}).first();
+    await $node.locator(".tabulator-data-tree-control").first().click().catch(() => {});
+    await page.waitForTimeout(800);
+    if(!await yuno_box().count()) {
+        step("check gobjtree", false, `no '${SCHEMA_YUNO}' under '${SCHEMA_NODE}' in the Yunos tab`);
+        return false;
+    }
+    if(!await yuno_box().isChecked()) {
+        await yuno_box().click();
+        await page.waitForTimeout(1500);
+    }
+    await page.evaluate(() => { window.location.hash = "#/scenarios/live"; });
+    await page.locator("select.MONITOR_MODE").waitFor({timeout: DEFAULTS.TIMEOUT});
+    await page.locator("select.MONITOR_MODE").selectOption("cards");
+    const $btn = page.locator(".MONITOR_CARD_TREE").first();
+    try {
+        await $btn.waitFor({timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        step("check gobjtree", false, "no card with a gobj tree button in the scenario watched");
+        return false;
+    }
+    await $btn.click();
+
+    let ok = true;
+    let detail = "";
+    try {
+        await page.waitForFunction(() => [...document.querySelectorAll(
+            '.C_YUI_GOBJ_TREE_JS [id^="gobj-tree-canvas-"]')].some(
+            ($c) => $c.querySelector("canvas") && $c.clientWidth > 0 && $c.clientHeight > 0),
+            null, {timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        ok = false;
+        detail = "no tree window with a drawn canvas";
+    }
+    await page.screenshot({path: join(out_dir, "check_gobjtree.png"), fullPage: true});
+    step("check gobjtree: the tree window draws its canvas", ok, detail);
+
+    const $close = page.locator(".C_YUI_WINDOW", {has: page.locator(".C_YUI_GOBJ_TREE_JS")})
+        .locator(".WINDOW_CLOSE").first();
+    if(await $close.count()) {
+        await $close.click();
+        await page.waitForTimeout(800);
+    }
+    const left = await page.locator(".C_YUI_GOBJ_TREE_JS").count();
+    step("check gobjtree: the window is closed again", left === 0, left? `${left} still open`: "");
+    return ok && left === 0;
+}
+
 const CHECKS = {
     schemaback: check_schemaback,
+    gobjtree: check_gobjtree,
 };
 
 

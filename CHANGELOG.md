@@ -6,6 +6,33 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.108, gui_treedb 0.17.170 + gobj-ui ^7.27.33 (2026-10-22)
+
+- Deployed by the round (274 and 74 tests). QA on the deployed plane:
+  `--check gobjtree` opens the tree of `db_history_ce^1620` (a key with a
+  `^`) and its canvas is drawn; 0 console messages of concern.
+
+- **gobj-ui 7.27.33: the tree window finds its canvas again.** Since 0.29.106
+  every tree window logged "no canvas mount" and its canvas never followed
+  the window (the `~` of its name read as a CSS combinator), and a `^` in
+  the node or key (`%5E`) made it fail to open, leaving a window behind that
+  refused every later open of that card. (Review V40.3.1)
+- **Two cards whose keys differ only in case get two gobj tree windows.**
+  gobj-js registers a service by its name lowercased, so the keys `Gate` and
+  `gate` of one node shared a window name and the second tree was refused
+  ("service ALREADY registered"). An uppercase letter is now written `!` +
+  the letter in lowercase (`Gate` -> `!gate`), a `!` of the name itself is
+  percent-encoded. The name changes again for a node or key with an
+  uppercase letter, so such a window opens once at its default size and
+  arrangement. (Review V40.3.2)
+- **A read asked before a trace set no longer unlocks what the set locked.**
+  The tree and trace info read after a set carry the set's `set_id`
+  (gobj-ui 7.27.33); every other answer says `set_id: null`. (Review V40.2)
+- New test `c_agent_yuno_tree.window.wiring.test.js`: the tree window through
+  the real gobj-ui, with names holding `~`, `%5E`, `.` and `!`. New QA check
+  `--check gobjtree` on the deployed plane: nothing opened a tree there, so
+  the regression went out twice.
+
 ## gui_agent 0.29.107, gui_treedb 0.17.169 + gobj-ui ^7.27.32 (2026-10-22)
 
 - Deployed by the round (267 and 74 tests). gobj-ui 7.27.32 replaces G6's
