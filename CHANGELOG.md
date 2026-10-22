@@ -6,6 +6,19 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.109, gui_treedb 0.17.171 + gobj-ui ^7.27.34 (2026-10-22)
+
+- Deployed by the round (274 and 74 tests). gobj-ui 7.27.34: a gclass viewer
+  no longer stays locked when a newer trace set of the gclass it waits for
+  overtakes the read it waited for (review V41.2.1).
+- **The QA fails on a console message of concern.** It printed their count
+  and exited 0, so a page that logged an ERROR passed (REV-CLOUD V41.1). A
+  last step, "console has nothing of concern", now fails the run; and
+  `--check gobjtree` fails when the console says anything after the click,
+  because a canvas looked up by a broken selector is still drawn by G6 and
+  the only sign was the ERROR "no canvas mount". On the deployed plane:
+  `--check gobjtree --check schemaback`, every step OK, 0 of concern.
+
 ## gui_agent 0.29.108, gui_treedb 0.17.170 + gobj-ui ^7.27.33 (2026-10-22)
 
 - Deployed by the round (274 and 74 tests). QA on the deployed plane:

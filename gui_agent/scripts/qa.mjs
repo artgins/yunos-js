@@ -304,6 +304,7 @@ async function check_gobjtree(page, args, step, out_dir)
         step("check gobjtree", false, "no card with a gobj tree button in the scenario watched");
         return false;
     }
+    const before = args.problems.length;
     await $btn.click();
 
     let ok = true;
@@ -316,6 +317,14 @@ async function check_gobjtree(page, args, step, out_dir)
     } catch(e) {
         ok = false;
         detail = "no tree window with a drawn canvas";
+    }
+    /*  Drawn is not enough: with a canvas looked up by a broken selector
+     *  G6 still draws (it finds its container by id), and the only sign
+     *  was the ERROR "no canvas mount" -- no resize, no observer.  */
+    const said = args.problems.slice(before);
+    if(ok && said.length) {
+        ok = false;
+        detail = `the console said ${said.length} thing(s) on open: ${said[0]}`;
     }
     await page.screenshot({path: join(out_dir, "check_gobjtree.png"), fullPage: true});
     step("check gobjtree: the tree window draws its canvas", ok, detail);
@@ -461,6 +470,7 @@ async function main() {
                 step("shell renders content", connected);
                 failed ||= !connected;
 
+                args.problems = problems;
                 for(const name of args.checks) {
                     const fn = CHECKS[name];
                     if(!fn) {
@@ -488,6 +498,13 @@ async function main() {
         }
 
         await page.screenshot({path: join(out_dir, "final.png"), fullPage: true});
+
+        /*  A message of concern fails the run: a page that loads and
+         *  logs an ERROR is not a clean deploy, and printing the count
+         *  without failing let one through (REV-CLOUD V41.1).  */
+        step("console has nothing of concern", problems.length === 0,
+            problems.length ? `${problems.length}, the first: ${problems[0]}` : "");
+        failed ||= problems.length > 0;
     } catch(e) {
         step("run", false, e.message);
         failed = true;
