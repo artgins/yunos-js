@@ -288,6 +288,9 @@ And to install the new versions::
 
     npm install
 
+Commit `package.json` and `package-lock.json` together. A fresh checkout
+installs with `npm ci`, which installs exactly what the lockfile holds.
+
 ## Update app version
 
 gui_treedb has its own version line (like gui_agent), not tied to

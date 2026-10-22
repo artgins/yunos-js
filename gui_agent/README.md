@@ -956,7 +956,7 @@ key used and not defined.
 
 ```bash
 cd yunos/js/gui_agent
-npm install
+npm ci             # exactly what package-lock.json holds
 npm run dev        # vite dev server
 npm run build      # production bundle into dist/
 npm test           # unit tests of src/agent_helpers.js (vitest)

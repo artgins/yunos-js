@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## package-lock.json committed (2026-10-22)
+
+- gui_agent and gui_treedb commit their `package-lock.json`; the repo used to
+  ignore it. Without it every `npm install` took the newest version inside
+  each range, the indirect dependencies included: one commit could give two
+  bundles, and a bad release of any package went out with the next deploy
+  without showing in any diff. The lockfiles are the ones of the last install
+  (the deployed bundles) and match `node_modules` package by package; `npm ci`
+  from them builds gui_agent's `dist/` byte for byte. No app version moves:
+  the bundles do not change.
+
 ## gui_agent 0.29.105 + gobj-ui ^7.27.30 (2026-10-22)
 
 - Deployed by the round (artgins.yunetacontrol.com and .ovh; 266 tests). QA on
