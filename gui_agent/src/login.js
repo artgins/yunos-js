@@ -17,6 +17,7 @@
 import {t} from "i18next";
 
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
+import {yui_update_watch_language_changed} from "@yuneta/gobj-ui/src/c_yui_update_watch.js";
 
 import {current_theme, toggle_theme} from "./theme.js";
 import {switch_locale, current_locale} from "./locales/locales.js";
@@ -270,6 +271,7 @@ function wire_quick(root, api)
     lang_btn.addEventListener("click", function() {
         switch_locale(current_locale() === "es" ? "en" : "es");
         paint_i18n(root);
+        yui_update_watch_language_changed();   /*  its bar hangs off the body: no shell here  */
         paint_quick(root);
         if(api && api.repaint_error) {
             api.repaint_error();    /*  composed errors carry no data-i18n  */

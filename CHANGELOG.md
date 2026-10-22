@@ -8,6 +8,11 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## gui_agent 0.29.105 (2026-10-22)
 
+- **The "new version" bar follows the login's language button.** On the
+  login screen there is no shell, so the bar of `C_YUI_UPDATE_WATCH` (it
+  hangs off the body) kept the language it was drawn in. The button now calls
+  `yui_update_watch_language_changed()` (gobj-ui 7.27.30).
+
 - **A gobj tree never sends to the yuno of another node.** The live view
   kept a tree open across a change of scenario when only its `key` matched,
   and sent the tree's lines to the node of whatever yuno the NEW scenario
@@ -43,6 +48,11 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   `c_agent_users.wiring.test.js`): 266 pass.
 
 ## gui_treedb 0.17.167 (2026-10-22)
+
+- **The "new version" bar follows the login's language button.** On the
+  login screen there is no shell, so the bar of `C_YUI_UPDATE_WATCH` (it
+  hangs off the body) kept the language it was drawn in. The button now calls
+  `yui_update_watch_language_changed()` (gobj-ui 7.27.30).
 
 - **A Rows card reopens when old rows of its key were purged.** SDK 7.27.5's
   `C_TRANGER` closes an iterator whose key lost rows to the retention, and
