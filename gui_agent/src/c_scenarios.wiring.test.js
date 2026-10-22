@@ -98,6 +98,7 @@ const {
     gobj_start, gobj_send_event, gobj_current_state, gobj_change_state,
     gobj_read_attr,
     gobj_name,
+    clean_name,
     register_c_timer,
     set_log_callback,
 } = await import("@yuneta/gobj-js");
@@ -901,6 +902,33 @@ describe("the gobj tree of a yuno of the live view", () => {
         gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: "gate_tcp"}, mon);
         const names = tree_double.opened.slice(-2).map((h) => h.opts.name);
         expect(names[0]).not.toBe(names[1]);
+        expect(errors()).toEqual([]);
+    });
+
+    /*  The window is a SERVICE, named by the card's node and key, and
+     *  both may hold a `-` (NAME_RE), and a `^` that clean_name() turns
+     *  into the `_` another may hold: none of these pairs may share a
+     *  name ("service ALREADY registered", the second tree not opened).  */
+    test("two cards whose node and key read alike still get two windows", () => {
+        const window_name = (h) => clean_name(h.opts.name);
+        for(const [one, two] of [
+            [{key: "b-c", id: "2120", node: "a"},   {key: "c", id: "2121", node: "a-b"}],
+            [{key: "x^y", id: "2120", node: "n"},   {key: "x_y", id: "2121", node: "n"}],
+        ]) {
+            const mon = new_monitor();
+            const sc = Object.assign({}, SAVED, {yunos: [one, two], links: [],
+                actions: {start: [{yuno: one.key, command: "x"}]}});
+            const v = validate_scenario(sc);
+            expect(v.ok, JSON.stringify(v.error)).toBe(true);
+            watch_saved(sc);
+            gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: one.key}, mon);
+            gobj_send_event(mon, "EV_OPEN_YUNO_TREE", {key: two.key}, mon);
+            const names = tree_double.opened.slice(-2).map(window_name);
+            expect(names[0]).not.toBe(names[1]);
+            /*  what clean_name() would change is not in it  */
+            expect(names.map((n) => tree_double.opened.slice(-2)
+                .some((h) => h.opts.name === n))).toEqual([true, true]);
+        }
         expect(errors()).toEqual([]);
     });
 

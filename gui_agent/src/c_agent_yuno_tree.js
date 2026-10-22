@@ -225,6 +225,22 @@ function mt_destroy(gobj)
 
 
 /***************************************************************
+ *  The window's name: the card's node and key, each written so that
+ *  no two cards share it. The window is a SERVICE (a second one of
+ *  the same name is refused), and its name also keys the size and
+ *  the arrangement the reader left. A node and a key may both hold
+ *  a `-` (NAME_RE), so `a` + `b-c` and `a-b` + `c` read alike when
+ *  joined by one; and clean_name() turns a `^` into the `_` another
+ *  may hold. Each part is percent-encoded (a `^` is `%5E`, a `~`
+ *  `%7E`), and a `~` joins them: an encoded part never holds one.
+ ***************************************************************/
+function window_name(y)
+{
+    let part = (s) => encodeURIComponent(String(s)).replace(/~/g, "%7E");
+    return `${part(y.node || "local")}~${part(y.key || y.id)}`;
+}
+
+/***************************************************************
  *  The window, and the tree read into it. Named by the CARD (the
  *  scenario's key), not by the yuno: two cards of one yuno (two
  *  services) have a tree each, and the window is a service.
@@ -235,7 +251,7 @@ function open_view(gobj)
     let y = gobj_read_attr(gobj, "yuno") || {};
 
     priv.view = open_gobj_tree_view(gobj, {
-        name:           `${y.node || "local"}-${y.key || y.id}`,
+        name:           window_name(y),
         source:         "remote",
         yuno_name:      y.label || String(y.id || ""),
         title_prefix:   y.label || String(y.id || ""),
