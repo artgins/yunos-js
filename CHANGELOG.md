@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 0.17.167 (2026-10-22)
+
+- **A Rows card reopens when old rows of its key were purged.** SDK 7.27.5's
+  `C_TRANGER` closes an iterator whose key lost rows to the retention, and
+  answers *"... old rows of its key '%s' were purged since it opened: open
+  it again"*. The card did not know that wording: the whole-topic card
+  (several keys, `from_rowid=-100`) showed an error instead of reopening,
+  and the next request sent the dead id again (*"Iterator not found"*).
+  `iterator_is_gone()` now knows the four wordings; `rows_page.test.js`
+  pins the new one.
+
 ## gui_agent 0.29.104, gui_treedb 0.17.166 + gobj-ui ^7.27.29 (2026-10-21)
 
 - **"A new version is available"** (gobj-ui 7.27.29, `C_YUI_UPDATE_WATCH`).

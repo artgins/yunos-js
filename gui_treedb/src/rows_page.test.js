@@ -33,7 +33,8 @@ describe("the kw of get-page", () => {
 
 /*
  *  A Rows card whose iterator the backend no longer holds -- the backend
- *  restarted, the topic was closed, the key was deleted -- rejected its page
+ *  restarted, the topic was closed, the key was deleted, old rows of its key
+ *  were purged -- rejected its page
  *  and stayed on the error. These are
  *  the answers that mean "open it again".
  */
@@ -44,6 +45,10 @@ describe("an answer that says the iterator is gone", () => {
             "tr^x: iterator 'it' closed, its key 'D' was deleted: open it again")).toBe(true);
         expect(iterator_is_gone(
             "tr^x: iterator was already closed with its topic: 'it'")).toBe(true);
+        /*  SDK 7.27.5: rows of its key purged by the retention  */
+        expect(iterator_is_gone(
+            "tr^x: iterator 'it' closed, old rows of its key 'D' were purged since it opened: " +
+            "open it again")).toBe(true);
     });
 
     test("any other failure is not a reason to re-open", () => {

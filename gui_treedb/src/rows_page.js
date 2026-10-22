@@ -30,14 +30,16 @@ function get_page_kw(o)
 /***************************************************************
  *  Does a failed get-page say the iterator is GONE (so the card
  *  must open a new one) rather than that the page was refused?
- *  The three wordings C_TRANGER answers with: an id it does not
- *  hold, an iterator closed with its topic, and one closed because
- *  its key was deleted.
+ *  The four wordings C_TRANGER answers with: an id it does not
+ *  hold, an iterator closed with its topic, one closed because its
+ *  key was deleted, and one closed because old rows of its key were
+ *  purged since it opened (SDK 7.27.5).
  ***************************************************************/
 const GONE = [
     /iterator not found/i,
     /was already closed with its topic/i,
     /was deleted: open it again/i,
+    /were purged since it opened: open it again/i,
 ];
 
 function iterator_is_gone(comment)
