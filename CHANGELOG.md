@@ -6,7 +6,10 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
-## gui_agent 0.29.105 (2026-10-22)
+## gui_agent 0.29.105 + gobj-ui ^7.27.30 (2026-10-22)
+
+- Deployed by the round (artgins.yunetacontrol.com and .ovh; 266 tests). QA on
+  both planes (`/scenarios/live`, `/users/nodes`): console clean.
 
 - **The "new version" bar follows the login's language button.** On the
   login screen there is no shell, so the bar of `C_YUI_UPDATE_WATCH` (it
@@ -47,7 +50,9 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 - Tests pin each point (`c_scenarios.wiring.test.js`,
   `c_agent_users.wiring.test.js`): 266 pass.
 
-## gui_treedb 0.17.167 (2026-10-22)
+## gui_treedb 0.17.167 + gobj-ui ^7.27.30 (2026-10-22)
+
+- Deployed by the round (artgins.ytreedb.com; 74 tests). Console clean on load.
 
 - **The "new version" bar follows the login's language button.** On the
   login screen there is no shell, so the bar of `C_YUI_UPDATE_WATCH` (it
