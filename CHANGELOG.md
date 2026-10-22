@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.107, gui_treedb 0.17.169 + gobj-ui ^7.27.32 (2026-10-22)
+
+- Deployed by the round (267 and 74 tests). gobj-ui 7.27.32 replaces G6's
+  `drag-canvas`/`zoom-canvas` without the two "has been registered before"
+  warnings, so the gui_agent QA on the deployed plane passes with 0 messages
+  of concern (it failed on them every run). gui_treedb on load, logged out:
+  only the 401 of the session check. No code change in either app.
+
 ## gui_agent 0.29.106 + gobj-ui ^7.27.31 (2026-10-22)
 
 - Deployed by the round (artgins.yunetacontrol.com and .ovh; 267 tests). QA on
