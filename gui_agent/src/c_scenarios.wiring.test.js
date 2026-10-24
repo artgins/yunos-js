@@ -231,6 +231,11 @@ beforeEach(() => {
     sent.length = 0;
 });
 
+function warnings()
+{
+    return logged.filter((l) => l.level === "warning").map((l) => l.msg);
+}
+
 function errors()
 {
     return logged.filter((l) => l.level === "error").map((l) => l.msg);
@@ -430,6 +435,33 @@ describe("the live view of a scenario the control center keeps", () => {
         gobj_publish_event(test_shell.shell, "EV_ROUTE_CHANGED",
             {route: "/scenarios/list", base: "/scenarios/list", subpath: ""});
         expect(find("scenarios")).toEqual([]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a gate's queue comes from its queue_service: watched, on the card and in its own chart", () => {
+        const QS = JSON.parse(JSON.stringify(SAVED));
+        QS.yunos[1].queue_service = "__output_side__";
+        const mon = new_monitor();
+        watch_saved(QS);
+        /*  The control center builds the watch; a gate born with its row  */
+        expect(mon.priv.has_queue.gate).toBe(true);
+        const push = (data) => gobj_send_event(mon, "EV_YUNO_STATS", {
+            data: data,
+            __md_iev__: {monitor_kind: "watch", monitor_gen: mon.priv.generation, monitor_node: "ctrl"}
+        }, link);
+        /*  The gate's own counters say no queue; its __output_side__ says 1200  */
+        push({yuno_id: "2120", kind: "app", service: "", result: 0, data: {rxMsgsec: 7000}});
+        push({yuno_id: "2120", kind: "app", service: "__output_side__", result: 0,
+              data: {msgs_in_queue: 1200}});
+        push({yuno_id: "2120", kind: "app", service: "", result: 0, data: {rxMsgsec: 7100}});
+        expect(mon.priv.model.gate.queue).toBe(1200);
+        expect(mon.priv.model.gate.rx).toBe(7100);
+        expect(mon.priv.cards.gate.$q.textContent).toBe("1200");
+        expect(mon.priv.cards.gate.$qrow.classList.contains("MONITOR_NODE_QUEUE--busy")).toBe(true);
+        /*  The queue chart has the gate's series  */
+        expect(mon.priv.queue_chart).not.toBe(null);
+        expect(mon.priv.$queue_chart.classList.contains("is-hidden")).toBe(false);
+        expect(warnings().filter((w) => /no card/.test(w))).toEqual([]);
         expect(errors()).toEqual([]);
     });
 

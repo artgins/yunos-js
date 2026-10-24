@@ -377,6 +377,11 @@ function validate_yuno(y, place, default_node, seen)
     if(y.service !== undefined && !(y.service === "" || is_name(y.service))) {
         return fail("scenario bad service", key);
     }
+    /*  The service whose stats say its queue, when it is not `service`:
+     *  a gate's queue is its __output_side__'s  */
+    if(y.queue_service !== undefined && !(y.queue_service === "" || is_name(y.queue_service))) {
+        return fail("scenario bad queue service", key);
+    }
     let node = "";
     if(y.node !== undefined && y.node !== "") {
         if(place === "direct") {
@@ -397,7 +402,8 @@ function validate_yuno(y, place, default_node, seen)
         id: id,
         label: (typeof y.label === "string" && y.label.trim()) ? y.label.trim() : key,
         rate: rate,
-        service: (y.service || "").trim()
+        service: (y.service || "").trim(),
+        queue_service: (y.queue_service || "").trim()
     };
     if(node) {
         yuno.node = node;
@@ -471,6 +477,9 @@ function scenario_document(scenario)
             let out = {key: y.key, id: y.id, label: y.label, rate: y.rate};
             if(y.service) {
                 out.service = y.service;
+            }
+            if(y.queue_service) {
+                out.queue_service = y.queue_service;
             }
             if(y.node && y.node !== scenario.node) {
                 out.node = y.node;
@@ -651,11 +660,24 @@ const lines = {
     yuno:   (y) => `list-yunos id=${y.id}`,
     /*  The agent pushes the readings (EV_YUNO_STATS) instead of being
      *  asked every period: one watch per requester, replaced by the next.  */
+    queue:  (y) => `stats-yuno id=${y.id} service=${y.queue_service}`,
     watch:  (yunos, period_ms) => "watch-yuno-stats ids=" +
-        unique(yunos.map((y) => y.service ? `${y.id}:${y.service}` : y.id)).join(",") +
+        unique([].concat(...yunos.map((y) => {
+            let ids = [y.service ? `${y.id}:${y.service}` : y.id];
+            if(queue_elsewhere(y)) {
+                ids.push(`${y.id}:${y.queue_service}`);
+            }
+            return ids;
+        }))).join(",") +
         ` period=${period_ms}`,
     unwatch: () => "watch-yuno-stats stop=1"
 };
+
+/*  Is a yuno's queue another service's than its counters'?  */
+function queue_elsewhere(y)
+{
+    return !!(y && y.queue_service && y.queue_service !== (y.service || ""));
+}
 
 function unique(list)
 {
@@ -1062,6 +1084,7 @@ export {
     validate_scenario,
     layout_graph,
     only_emitters,
+    queue_elsewhere,
     pick_rate,
     prune_history,
     cpu_level,

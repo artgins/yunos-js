@@ -261,6 +261,7 @@ import {
     validate_scenario,
     layout_graph,
     only_emitters,
+    queue_elsewhere,
     pick_rate,
     prune_history,
     cpu_level,
@@ -385,6 +386,7 @@ let PRIVATE_DATA = {
     editing:        false,
     rate_chart:     null,
     cpu_chart:      null,
+    queue_chart:    null,
     cards:          {},     /*  yuno key -> element refs of its card  */
     edge_labels:    [],     /*  [{from, to, $text}]  */
     control:        null,   /*  last control: {control, ok, text}  */
@@ -790,7 +792,17 @@ function build_dom(gobj)
     priv.$cards = createElement2(["div", {class: "MONITOR_CARDS"}, []]);
 
     priv.$rate_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
+    priv.$queue_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
     priv.$cpu_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
+    /*  The queues: what a test watches -- one that grows is a load the
+     *  receiver does not hold. Shown when a yuno of the scenario has one.  */
+    priv.$queue_chart = createElement2(
+        ["div", {class: "MONITOR_CHART MONITOR_CHART_QUEUE box"}, [
+            ["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor messages in queue"},
+                t("monitor messages in queue")],
+            priv.$queue_box
+        ]]
+    );
     priv.$held = createElement2(
         ["p", {class: "MONITOR_CHARTS_HELD"}, [
             ["span", {class: "MONITOR_CHARTS_HELD_TEXT tag is-warning"}, ""]
@@ -803,6 +815,7 @@ function build_dom(gobj)
                     t("monitor messages per second")],
                 priv.$rate_box
             ]],
+            priv.$queue_chart,
             ["div", {class: "MONITOR_CHART MONITOR_CHART_CPU box"}, [
                 ["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor cpu of one core"},
                     t("monitor cpu of one core")],
@@ -834,11 +847,12 @@ function new_model()
         rx:         null,
         tx:         null,
         queue:      null,
+        queue_t:    0,          /*  performance.now() of the queue's reading  */
         data:       null,       /*  the service stats, whole (cards mode)  */
         app_t:      0,
         prev_rx:    null,
         prev_tx:    null,
-        errors:     {cpu: null, app: null}  /*  {key} or {text} per reading kind  */
+        errors:     {cpu: null, app: null, queue: null}  /*  {key} or {text} per reading kind  */
     };
 }
 
@@ -861,7 +875,7 @@ function reset_model(gobj)
 function destroy_charts(gobj)
 {
     let priv = gobj.priv;
-    for(let k of ["rate_chart", "cpu_chart"]) {
+    for(let k of ["rate_chart", "cpu_chart", "queue_chart"]) {
         let ch = priv[k];
         if(ch) {
             priv[k] = null;
@@ -873,6 +887,7 @@ function destroy_charts(gobj)
     }
     clear_node(priv.$rate_box);
     clear_node(priv.$cpu_box);
+    clear_node(priv.$queue_box);
 }
 
 function gobj_start_charts(gobj)
@@ -885,7 +900,7 @@ function gobj_start_charts(gobj)
     /*  Both charts start at zero: a rate or a cpu drawn from its own
      *  minimum turns a flat line into a cliff.  */
     let from_zero = {y: {range: (u, min, max) => [0, max > 0 ? max * 1.1 : 1]}};
-    let make = (name, $box, prefix) => {
+    let make = (name, $box, prefix, yunos) => {
         let $host = createElement2(["div", {class: "MONITOR_CHART_HOST"}, []]);
         $box.appendChild($host);
         let chart = gobj_create_pure_child(name, "C_YUI_UPLOT", {
@@ -894,13 +909,17 @@ function gobj_start_charts(gobj)
             height:     CHART_H,
             scales:     from_zero
         }, gobj);
-        for(let y of priv.scenario.yunos) {
+        for(let y of yunos) {
             gobj_send_event(chart, "EV_ADD_SERIE", {id: prefix + y.key, label: y.label}, gobj);
         }
         return chart;
     };
-    priv.rate_chart = make("rate_chart", priv.$rate_box, "rate:");
-    priv.cpu_chart = make("cpu_chart", priv.$cpu_box, "cpu:");
+    priv.rate_chart = make("rate_chart", priv.$rate_box, "rate:", priv.scenario.yunos);
+    priv.cpu_chart = make("cpu_chart", priv.$cpu_box, "cpu:", priv.scenario.yunos);
+    /*  A series per yuno that has a queue: known by its readings  */
+    let queued = priv.scenario.yunos.filter((y) => queue_elsewhere(y) || priv.has_queue[y.key]);
+    show(priv.$queue_chart, queued.length > 0);
+    priv.queue_chart = queued.length ? make("queue_chart", priv.$queue_box, "queue:", queued) : null;
     load_charts(gobj);
 }
 
@@ -919,6 +938,9 @@ function load_charts(gobj)
     }
     if(priv.cpu_chart) {
         gobj_send_event(priv.cpu_chart, "EV_LOAD_DATA", priv.rows, gobj);
+    }
+    if(priv.queue_chart) {
+        gobj_send_event(priv.queue_chart, "EV_LOAD_DATA", priv.rows, gobj);
     }
 }
 
@@ -1077,17 +1099,21 @@ function paint_card(gobj, id)
     c.$tx.textContent = fmt_rate(m.tx);
     let has_queue = typeof m.queue === "number";
     show(c.$qrow, has_queue);
-    if(has_queue !== !!priv.has_queue[id]) {
+    /*  A queue that holds messages is what a test watches  */
+    c.$qrow.classList.toggle("MONITOR_NODE_QUEUE--busy", has_queue && m.queue > 0);
+    /*  A gate's queue_service always has a queue row, read or not yet  */
+    let sized = has_queue || queue_elsewhere(y);
+    if(sized !== !!priv.has_queue[id]) {
         /*  The card was sized for the other: laid out again, once, on the
          *  next turn (not in the middle of a paint)  */
-        priv.has_queue[id] = has_queue;
+        priv.has_queue[id] = sized;
         if(!priv.relayout_posted) {
             priv.relayout_posted = true;
             gobj_post_event(gobj, "EV_RELAYOUT", {}, gobj);
         }
     }
     c.$q.textContent = typeof m.queue === "number" ? String(m.queue) : "";
-    let err = m.errors.cpu || m.errors.app;
+    let err = m.errors.cpu || m.errors.app || m.errors.queue;
     if(err && err.key) {
         c.$err.setAttribute("data-i18n", err.key);
         c.$err.textContent = t(err.key);
@@ -1460,6 +1486,7 @@ function poll_tick(gobj)
             for(let y of priv.scenario.yunos) {
                 gap["cpu:" + y.key] = null;
                 gap["rate:" + y.key] = null;
+                gap["queue:" + y.key] = null;
             }
             priv.rows.push(gap);
         }
@@ -1471,6 +1498,7 @@ function poll_tick(gobj)
             let rate = y.rate === "tx" ? m.tx : m.rx;
             row["cpu:" + y.key] = (fresh_cpu && typeof m.cpu === "number") ? m.cpu : null;
             row["rate:" + y.key] = (fresh_app && typeof rate === "number") ? Math.round(rate) : null;
+            row["queue:" + y.key] = (m.queue_t > fresh_from && typeof m.queue === "number") ? m.queue : null;
         }
         priv.rows.push(row);
         let config = gobj_read_attr(gobj, "config_svc");
@@ -1514,6 +1542,9 @@ function poll_requests(gobj, only_node)
         for(let y of live) {
             send_request(gobj, lines.cpu(y), "cpu", y.key, y.node);
             send_request(gobj, lines.app(y), "app", y.key, y.node);
+            if(queue_elsewhere(y)) {
+                send_request(gobj, lines.queue(y), "queue", y.key, y.node);
+            }
         }
     }
 }
@@ -1714,6 +1745,9 @@ function read_yuno(gobj, y)
     send_request(gobj, lines.yuno(y), "yunos", y.key, y.node);
     send_request(gobj, lines.cpu(y), "cpu", y.key, y.node);
     send_request(gobj, lines.app(y), "app", y.key, y.node);
+    if(queue_elsewhere(y)) {
+        send_request(gobj, lines.queue(y), "queue", y.key, y.node);
+    }
 }
 
 function arm_poll(gobj)
@@ -1969,7 +2003,7 @@ function paint_stats_card(gobj, key)
         c.$body.innerHTML = `<p class="MONITOR_CARD_EMPTY has-text-grey is-size-7">` +
             `${esc(t("no statistics"))}</p>`;
     }
-    let err = m.errors.cpu || m.errors.app;
+    let err = m.errors.cpu || m.errors.app || m.errors.queue;
     if(err && err.key) {
         c.$err.setAttribute("data-i18n", err.key);
         c.$err.textContent = t(err.key);
@@ -2034,6 +2068,13 @@ function adopt_scenario(gobj)
     priv.charts_held = false;
     priv.stop_at = 0;
     priv.has_queue = {};
+    /*  A yuno that names its queue's service has one: its card is born
+     *  with the row  */
+    for(let y of (next ? next.yunos : [])) {
+        if(queue_elsewhere(y)) {
+            priv.has_queue[y.key] = true;
+        }
+    }
     priv.editing = false;
     reset_model(gobj);
     gobj_start_charts(gobj);
@@ -2556,7 +2597,7 @@ function ac_mt_stats_answer(gobj, event, kw, src)
         return 0;   /*  asked for the scenario shown before  */
     }
     let m = priv.model[id];
-    if(!m || (kind !== "cpu" && kind !== "app")) {
+    if(!m || (kind !== "cpu" && kind !== "app" && kind !== "queue")) {
         log_warning(`${gobj_short_name(gobj)}: stats answer of no reading (${kind}, ${id})`);
         return 0;
     }
@@ -2582,9 +2623,14 @@ function apply_reading(gobj, id, kind, result, comment, data_)
     m.errors[kind] = null;
     clear_reading_error(gobj);
     let data = data_ || {};
+    let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === id) : null;
     if(kind === "cpu") {
         m.cpu = typeof data.cpu === "number" ? data.cpu : null;
         m.cpu_t = now;
+    } else if(kind === "queue") {
+        /*  Its queue's service: only the queue is taken from it  */
+        m.queue = typeof data.msgs_in_queue === "number" ? data.msgs_in_queue : null;
+        m.queue_t = now;
     } else {
         let rx = pick_rate(data, "rx", m.prev_rx, now);
         let tx = pick_rate(data, "tx", m.prev_tx, now);
@@ -2592,7 +2638,10 @@ function apply_reading(gobj, id, kind, result, comment, data_)
         m.prev_rx = rx.prev;
         m.tx = tx.rate;
         m.prev_tx = tx.prev;
-        m.queue = typeof data.msgs_in_queue === "number" ? data.msgs_in_queue : null;
+        if(!queue_elsewhere(y)) {
+            m.queue = typeof data.msgs_in_queue === "number" ? data.msgs_in_queue : null;
+            m.queue_t = now;
+        }
         m.data = data;
         m.app_t = now;
     }
@@ -2725,13 +2774,15 @@ function ac_mt_command_answer(gobj, event, kw, src)
         }
         return 0;
     }
-    if(kind === "cpu" || kind === "app") {
+    if(kind === "cpu" || kind === "app" || kind === "queue") {
         let id = a.key;
         let m = priv.model[id];
         if(m && typeof kw.result === "number" && kw.result < 0) {
             m.errors[kind] = kw.comment ? {text: kw.comment} : {key: "monitor no answer"};
             if(kind === "cpu") {
                 m.cpu = null;
+            } else if(kind === "queue") {
+                m.queue = null;
             } else {
                 m.rx = null;
                 m.tx = null;
@@ -2786,7 +2837,17 @@ function ac_yuno_stats(gobj, event, kw, src)
             paint_card(gobj, y.key);
             hit = true;
         } else if(d.kind === "cpu" || (d.kind === "app" && (y.service || "") === (d.service || ""))) {
+            /*  The cpu comes once per watched service: the yuno's is the same  */
+            if(d.kind === "cpu" && queue_elsewhere(y) && (d.service || "") === y.queue_service) {
+                hit = true;
+                continue;
+            }
             apply_reading(gobj, y.key, d.kind, d.result, d.comment, d.data);
+            hit = true;
+        } else if(d.kind === "app" && queue_elsewhere(y) && d.service === y.queue_service) {
+            apply_reading(gobj, y.key, "queue", d.result, d.comment, d.data);
+            hit = true;
+        } else if(d.kind === "state" && queue_elsewhere(y)) {
             hit = true;
         }
     }
@@ -3206,6 +3267,7 @@ function ac_relayout(gobj, event, kw, src)
     priv.relayout_posted = false;
     build_graph(gobj);
     paint_all_cards(gobj);
+    gobj_start_charts(gobj);    /*  a yuno with a queue has its series  */
     return 0;
 }
 

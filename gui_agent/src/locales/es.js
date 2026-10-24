@@ -1075,6 +1075,8 @@ const es = {
         "scenario bad id": "El id de un escenario son letras, dígitos y _ . @ -, sin empezar por punto, 200 como mucho:",
         "scenario bad max_run": "max_run son los segundos que puede correr un start antes de que el control center lo pare, de 0 (sin límite) a 604800:",
         "monitor stops at": "se para a las",
+        "scenario bad queue service": "queue_service tiene que ser un nombre de servicio (sin espacios), en la yuno:",
+        "monitor messages in queue": "Mensajes en cola",
         "scenario bad view": "view.mode es graph o cards:",
         "scenario bad action": "Una acción es start, pause, resume, stop o report, con una lista de pasos:",
         "scenario bad step": "Un paso nombra un yuno del escenario (su key) y, si hace falta, un servicio:",

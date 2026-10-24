@@ -6,6 +6,20 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.0.4 (2026-10-24)
+
+- **A gate's queue is watched where it is: `queue_service`.** A yuno of a
+  scenario can name the service that holds its output queue -- a gate's
+  queue towards its store is `__output_side__`, not its main service, which
+  reports none. The view reads it with the yuno (`watch-yuno-stats
+  ids=<id>,<id>:<queue_service>`, and `stats-yuno ... service=<queue_service>`
+  when polling), shows it on the card from the start (the card is sized
+  for it), paints a queue that is not empty in the warning colour, and
+  draws every queue in a chart of its own, **Messages in queue**, between
+  the message and the CPU charts. These are the queues to watch: a gate
+  whose store does not keep up fills it. Needs controlcenter 7.27.21 (which
+  accepts the key and adds the service to `watch-scenario`).
+
 ## gui_agent 1.0.3 (2026-10-24)
 
 - **A card is as high as its rows.** Each row a card does not show takes 24

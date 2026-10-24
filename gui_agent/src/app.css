@@ -418,6 +418,13 @@
     background: var(--bulma-danger);
 }
 
+/*  A queue holding messages: what a test watches  */
+.MONITOR_NODE_QUEUE--busy .MONITOR_NODE_KEY,
+.MONITOR_NODE_QUEUE--busy .MONITOR_NODE_QUEUE_VALUE {
+    color: var(--bulma-warning-on-scheme);
+    font-weight: 700;
+}
+
 .MONITOR_NODE_ERROR {
     font-size: 0.7rem;
     overflow: hidden;

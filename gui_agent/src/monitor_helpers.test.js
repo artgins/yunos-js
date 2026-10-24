@@ -25,6 +25,7 @@ import {
     validate_scenario,
     layout_graph,
     only_emitters,
+    queue_elsewhere,
     pick_rate,
     prune_history,
     cpu_level,
@@ -568,5 +569,26 @@ describe("only_emitters", () => {
     });
     it("none in a scenario with no links: the flow is not known", () => {
         expect(only_emitters(["a", "b"], [])).toEqual([]);
+    });
+});
+
+describe("queue_service", () => {
+    const base = () => JSON.parse(JSON.stringify(SCENARIO_TEMPLATE));
+    it("a yuno's queue may be another service's: validated, kept, and watched too", () => {
+        let raw = base();
+        raw.yunos[1].queue_service = "__output_side__";
+        let r = validate_scenario(raw);
+        expect(r.ok).toBe(true);
+        let gate = r.scenario.yunos[1];
+        expect(queue_elsewhere(gate)).toBe(true);
+        expect(scenario_document(r.scenario).yunos[1].queue_service).toBe("__output_side__");
+        expect(lines.watch([gate], 2000)).toBe("watch-yuno-stats ids=2120,2120:__output_side__ period=2000");
+        expect(lines.queue(gate)).toBe("stats-yuno id=2120 service=__output_side__");
+        expect(queue_elsewhere(r.scenario.yunos[0])).toBe(false);
+    });
+    it("refuses one that is no service name", () => {
+        let raw = base();
+        raw.yunos[1].queue_service = "a b";
+        expect(validate_scenario(raw).error.key).toBe("scenario bad queue service");
     });
 });
