@@ -36,6 +36,24 @@
  *      turns its write controls off. An agent too old to answer the
  *      question leaves the controls on; the yuno refuses if it must.
  *
+ *      ROLES. The same tab has a second view, `<base>/roles` (a link, and
+ *      what an F5 restores): the roles of the store, what each grants or
+ *      denies and for what (its `parameters`, the scope: `scenario_id=x`
+ *      lets a permission be used on scenario x only), and its users. A
+ *      role is opened in a sheet and edited there: description, realm,
+ *      service, its permission, more permissions each with its own scope
+ *      if it needs one, disabled. The permissions of the service and the
+ *      keys each may be scoped on are read with `authzs` of that service
+ *      (C_AUTHZ grants nothing on a key the permission does not declare),
+ *      and a role that names one it does not declare is refused before it
+ *      is sent. Written on the treedb, as the links are:
+ *          create-node / update-node topic_name=roles record={...}
+ *          delete-node topic_name=roles record={id}
+ *      with every column the sheet edits and nothing else -- the hooks
+ *      and the fkey are links. A seed role (immutable) is read-only, and
+ *      a role that has users or child roles is not deleted: they are
+ *      taken from it first.
+ *
  *      Authentication is not here: the identities live in the IdP. What
  *      is written here is who, of those identities, this yuno lets in,
  *      and with which roles.
@@ -80,7 +98,7 @@ import {
 import i18next, {t} from "i18next";
 
 import {fmt_date_time} from "@yuneta/gobj-ui/src/yui_date_text.js";
-import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {
     yui_shell_show_modal,
     yui_shell_confirm_yesno,
@@ -97,6 +115,11 @@ import {
     authz_service_of,
     user_rows,
     role_rows,
+    role_grants,
+    format_scope,
+    role_problem,
+    role_record,
+    ROLE_PROBLEM_I18N_KEYS,
     roles_change,
     role_parent_ref,
     user_child_ref,
@@ -132,6 +155,7 @@ SDATA(data_type_t.DTP_STRING,   "yuno_label",  0,  "",       "Yuno label role^na
 SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,     "Root HTMLElement"),
 SDATA(data_type_t.DTP_POINTER,  "tabulator",   0,  null,     "Tabulator instance"),
 SDATA(data_type_t.DTP_POINTER,  "link_svc",    0,  null,     "C_AGENT_LINK service"),
+SDATA(data_type_t.DTP_STRING,   "base_route",  0,  "",       "This tab's route: `<base>/roles` is its view of the roles"),
 SDATA_END()
 ];
 
@@ -169,6 +193,11 @@ function mt_create(gobj)
     priv.message = null;    /*  {kind: "ok"|"error"|"info", key?, text?}  */
     priv.sheet = null;      /*  the user sheet open: {username, modal, $roles}  */
     priv.new_dialog = null; /*  the new user dialog open  */
+    priv.view = "users";    /*  users | roles: the route's subpath says which  */
+    priv.services = [];     /*  the services of the yuno (`services`)  */
+    priv.authzs = {};       /*  service -> its `authzs`: permissions and the keys each may be scoped on  */
+    priv.role_sheet = null; /*  the role sheet open: {role_id ("" = new), modal, $error}  */
+    priv.roles_table_id = `users_roles_table_${gobj_name(gobj)}`;
 
     /*
      *  CHILD subscription model
@@ -203,11 +232,13 @@ function mt_start(gobj)
 
     build_dom(gobj);
     create_table(gobj);
+    create_roles_table(gobj);
     render(gobj);
 
     let shell = yui_shell_of(gobj);
     if(shell) {
         gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+        gobj_subscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
     }
 
     let link = gobj_read_attr(gobj, "link_svc");
@@ -229,6 +260,7 @@ function mt_stop(gobj)
     let shell = yui_shell_of(gobj);
     if(shell) {
         gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+        gobj_unsubscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
     }
 }
 
@@ -245,6 +277,15 @@ function mt_destroy(gobj)
             log_warning(`${gobj_short_name(gobj)}: cannot destroy the table: ${e}`);
         }
         gobj_write_attr(gobj, "tabulator", null);
+    }
+    let roles_table = gobj.priv.roles_table;
+    if(roles_table) {
+        try {
+            roles_table.destroy();
+        } catch(e) {
+            log_warning(`${gobj_short_name(gobj)}: cannot destroy the roles table: ${e}`);
+        }
+        gobj.priv.roles_table = null;
     }
     let $c = gobj_read_attr(gobj, "$container");
     if($c && $c.parentNode) {
@@ -332,7 +373,18 @@ function build_dom(gobj)
     attach_clear($search, $input);
 
     priv.$new = createElement2(button_spec("USERS_NEW", "yi-plus", "new user", true, "is-link"));
-    priv.$new.addEventListener("click", () => gobj_send_event(gobj, "EV_NEW_USER", {}, gobj));
+    priv.$new.addEventListener("click", () => gobj_send_event(gobj,
+        priv.view === "roles" ? "EV_NEW_ROLE" : "EV_NEW_USER", {}, gobj));
+
+    /*  The two views of the store: a pressed button says which is shown  */
+    priv.$show_users = createElement2(button_spec("USERS_VIEW_USERS", "yi-user", "users", true));
+    priv.$show_users.addEventListener("click", () =>
+        gobj_send_event(gobj, "EV_SHOW_VIEW", {view: "users"}, gobj));
+    priv.$show_roles = createElement2(button_spec("USERS_VIEW_ROLES", "yi-user-shield", "roles", true));
+    priv.$show_roles.addEventListener("click", () =>
+        gobj_send_event(gobj, "EV_SHOW_VIEW", {view: "roles"}, gobj));
+    let $views = createElement2(["div", {class: "USERS_VIEWS buttons has-addons mb-0"},
+        [priv.$show_users, priv.$show_roles]]);
 
     priv.$refresh = createElement2(button_spec("USERS_REFRESH", "yi-arrows-rotate", "refresh", false));
     priv.$refresh.addEventListener("click", () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj));
@@ -348,6 +400,7 @@ function build_dom(gobj)
                  style: "gap:0.5rem;"}, [
             ["div", {class: "USERS_TITLE is-flex is-align-items-center",
                      style: "gap:0.5rem; min-width:0;"}, [priv.$heading, priv.$badge]],
+            $views,
             $search,
             ["div", {class: "USERS_ACTIONS is-flex is-align-items-center",
                      style: "gap:0.5rem; margin-left:auto;"}, [priv.$new, priv.$refresh]]
@@ -374,13 +427,21 @@ function build_dom(gobj)
     );
     $c.appendChild(priv.$tablewrap);
 
+    priv.$roleswrap = createElement2(
+        ["div", {class: "USERS_ROLES_TABLEWRAP", style: "flex:1; min-height:0; display:none;"}, [
+            ["div", {class: "USERS_ROLES_TABLE", id: priv.roles_table_id}, []]
+        ]]
+    );
+    $c.appendChild(priv.$roleswrap);
+
     priv.$count = createElement2(["span", {class: "USERS_STATUS_COUNT has-text-weight-medium"}, ""]);
     priv.$state = createElement2(["span", {class: "USERS_STATUS_STATE"}, ""]);
     priv.$status = createElement2(
         ["div", {class: "USERS_STATUS is-size-7 has-text-grey is-flex", style: "gap:0.5rem;"}, [
             ["span", {}, [
                 priv.$count,
-                ["span", {class: "USERS_STATUS_LABEL ml-1", i18n: "users"}, t("users")]
+                priv.$count_label = createElement2(
+                    ["span", {class: "USERS_STATUS_LABEL ml-1", i18n: "users"}, t("users")])
             ]],
             priv.$state
         ]]
@@ -513,19 +574,141 @@ function set_table_data(gobj)
 function apply_filter(gobj)
 {
     let priv = gobj.priv;
+    let term = String(priv.$input.value || "").trim().toLowerCase();
     let table = gobj_read_attr(gobj, "tabulator");
-    if(!table || !table._ready) {
+    if(table && table._ready) {
+        if(term) {
+            table.setFilter((data) => {
+                return String(data.id).toLowerCase().includes(term) ||
+                    data.roles.some((r) => r.toLowerCase().includes(term));
+            });
+        } else {
+            table.clearFilter();
+        }
+    }
+    let roles_table = priv.roles_table;
+    if(roles_table && roles_table._ready) {
+        if(term) {
+            roles_table.setFilter((r) => {
+                return [r.id, r.description, r.service].concat(r.users)
+                    .concat(role_grants(r).map((g) => g.permission))
+                    .some((x) => String(x).toLowerCase().includes(term));
+            });
+        } else {
+            roles_table.clearFilter();
+        }
+    }
+}
+
+/***************************************************************
+ *  The roles table: what each role grants and for what, and who
+ *  holds it. A click on a row opens its sheet.
+ ***************************************************************/
+function make_role_columns(gobj)
+{
+    function grants_formatter(cell)
+    {
+        let grants = role_grants(cell.getData());
+        if(!grants.length) {
+            return `<span class="USERS_ROLE_NO_GRANTS has-text-grey">${esc(t("role grants nothing"))}</span>`;
+        }
+        return grants.map((g) => {
+            let scope = format_scope(g.scope);
+            return `<div class="USERS_ROLE_GRANT">` +
+                (g.deny ? `<span class="USERS_ROLE_GRANT_DENY tag is-danger is-light mr-1">` +
+                          `${esc(t("deny"))}</span>` : "") +
+                `<span class="USERS_ROLE_GRANT_PERMISSION is-family-monospace">${esc(g.permission)}</span>` +
+                (scope ? ` <span class="USERS_ROLE_GRANT_SCOPE has-text-grey is-family-monospace">` +
+                         `${esc(t("only"))} ${esc(scope)}</span>` : "") +
+                `</div>`;
+        }).join("");
+    }
+
+    function users_formatter(cell)
+    {
+        let users = cell.getValue() || [];
+        if(!users.length) {
+            return `<span class="USERS_ROLE_NO_USERS has-text-grey">${esc(t("nobody"))}</span>`;
+        }
+        return `<span class="USERS_ROLE_USERS">${esc(users.join(", "))}</span>`;
+    }
+
+    function status_formatter(cell)
+    {
+        let r = cell.getData();
+        let s = r.disabled
+            ? `<span class="USERS_DISABLED has-text-danger">${esc(t("disabled"))}</span>`
+            : `<span class="USERS_ENABLED has-text-success">${esc(t("enabled"))}</span>`;
+        if(r.immutable) {
+            s += ` <span class="USERS_PROTECTED has-text-grey" title="${escapeHtml(t("protected role"))}">` +
+                `${esc(t("protected"))}</span>`;
+        }
+        return s;
+    }
+
+    return [
+        {title: t("role"), field: "id", widthGrow: 2, minWidth: 120, responsive: 0,
+            sorter: "alphanum", variableHeight: true, cssClass: "USERS_CELL_WRAP",
+            formatter: (cell) =>
+                `<span class="USERS_ROLE_NAME has-text-weight-semibold">${esc(cell.getValue())}</span>`},
+        {title: t("grants"), field: "permission", widthGrow: 4, minWidth: 180, responsive: 0,
+            headerSort: false, variableHeight: true, cssClass: "USERS_CELL_WRAP",
+            formatter: grants_formatter},
+        {title: t("users"), field: "users", widthGrow: 2, minWidth: 110, responsive: 1,
+            headerSort: false, variableHeight: true, cssClass: "USERS_CELL_WRAP",
+            formatter: users_formatter},
+        {title: t("description"), field: "description", widthGrow: 3, minWidth: 140, responsive: 2,
+            variableHeight: true, cssClass: "USERS_CELL_WRAP"},
+        {title: t("service"), field: "service", widthGrow: 1, minWidth: 100, responsive: 3},
+        {title: t("status"), field: "disabled", widthGrow: 1, minWidth: 130, responsive: 4,
+            variableHeight: true, cssClass: "USERS_CELL_WRAP", formatter: status_formatter}
+    ];
+}
+
+function create_roles_table(gobj)
+{
+    let priv = gobj.priv;
+    let table = new Tabulator(`#${priv.roles_table_id}`, {
+        ...yui_tabulator_lang(t),
+        index:            "id",
+        layout:           "fitColumns",
+        responsiveLayout: "hide",
+        maxHeight:        "100%",
+        placeholder:      t("no roles in this store"),
+        columnDefaults:   {headerHozAlign: "left", resizable: true},
+        columns:          make_role_columns(gobj),
+        initialSort:      [{column: "id", dir: "asc"}]
+    });
+    table._ready = false;
+    table.on("tableBuilt", function() {
+        table._ready = true;
+        if(table._pendingData !== undefined) {
+            table.setData(table._pendingData);
+            delete table._pendingData;
+        }
+    });
+    table.on("rowClick", function(e, row) {
+        let r = row.getData();
+        if(r && r.id) {
+            gobj_send_event(gobj, "EV_OPEN_ROLE", {role_id: r.id}, gobj);
+        }
+    });
+    priv.roles_table = table;
+}
+
+function set_roles_data(gobj)
+{
+    let table = gobj.priv.roles_table;
+    if(!table) {
         return;
     }
-    let term = String(priv.$input.value || "").trim().toLowerCase();
-    if(term) {
-        table.setFilter((data) => {
-            return String(data.id).toLowerCase().includes(term) ||
-                data.roles.some((r) => r.toLowerCase().includes(term));
-        });
-    } else {
-        table.clearFilter();
+    let data = gobj.priv.roles;
+    if(!table._ready) {
+        table._pendingData = data;
+        return;
     }
+    table.setData(data);
+    apply_filter(gobj);
 }
 
 /***************************************************************
@@ -561,7 +744,32 @@ function render(gobj)
     }
     priv.$toolbar.style.display = connected ? "" : "none";
     priv.$no_users.style.display = (connected && no_store) ? "" : "none";
-    priv.$tablewrap.style.display = (connected && !no_store) ? "" : "none";
+    let roles_view = priv.view === "roles";
+    priv.$tablewrap.style.display = (connected && !no_store && !roles_view) ? "" : "none";
+    priv.$roleswrap.style.display = (connected && !no_store && roles_view) ? "" : "none";
+    priv.$show_users.classList.toggle("is-selected", !roles_view);
+    priv.$show_users.classList.toggle("is-link", !roles_view);
+    priv.$show_users.setAttribute("aria-pressed", roles_view ? "false" : "true");
+    priv.$show_roles.classList.toggle("is-selected", roles_view);
+    priv.$show_roles.classList.toggle("is-link", roles_view);
+    priv.$show_roles.setAttribute("aria-pressed", roles_view ? "true" : "false");
+    let new_key = roles_view ? "new role" : "new user";
+    priv.$new.setAttribute("title", t(new_key));
+    priv.$new.setAttribute("data-i18n-title", new_key);
+    priv.$new.setAttribute("aria-label", t(new_key));
+    priv.$new.setAttribute("data-i18n-aria-label", new_key);
+    let $new_label = priv.$new.querySelector("span[i18n], span[data-i18n]");
+    if($new_label) {
+        $new_label.setAttribute("data-i18n", new_key);
+        $new_label.textContent = t(new_key);
+    }
+    let search_key = roles_view ? "search roles" : "search users";
+    priv.$input.setAttribute("placeholder", t(search_key));
+    priv.$input.setAttribute("data-i18n-placeholder", search_key);
+    priv.$input.setAttribute("title", t(search_key));
+    priv.$input.setAttribute("data-i18n-title", search_key);
+    priv.$input.setAttribute("aria-label", t(search_key));
+    priv.$input.setAttribute("data-i18n-aria-label", search_key);
     priv.$status.style.display = (connected && !no_store) ? "" : "none";
     priv.$replica.style.display = (connected && priv.master === false) ? "" : "none";
 
@@ -576,7 +784,10 @@ function render(gobj)
         ));
     }
 
-    priv.$count.textContent = `${priv.users.length}`;
+    priv.$count.textContent = `${roles_view ? priv.roles.length : priv.users.length}`;
+    let count_key = roles_view ? "roles" : "users";
+    priv.$count_label.setAttribute("data-i18n", count_key);
+    priv.$count_label.textContent = t(count_key);
     let state_key = "";
     if(state === "ST_LOADING") {
         state_key = "loading";
@@ -633,6 +844,10 @@ function close_dialogs(gobj)
         priv.new_dialog.modal.close();
     }
     priv.new_dialog = null;
+    if(priv.role_sheet && priv.role_sheet.modal) {
+        priv.role_sheet.modal.close();
+    }
+    priv.role_sheet = null;
 }
 
 /***************************************************************
@@ -784,6 +999,11 @@ function batch_answer(gobj, req, kw)
         /*  An agent older than `treedb-info` cannot say: not known is not
          *  a failure of the read, and leaves the write controls on.  */
         priv.master = null;
+    } else if(r.op === "authzs") {
+        /*  What the service declares is a help of the role sheet: not
+         *  known, the sheet does not check it and the service refuses.  */
+        log_warning(`${gobj_short_name(gobj)}: authzs of '${r.service}' not read: ` +
+            `${kw.comment || "no comment"}`);
     } else {
         b.failures.push({op: r.op, text: kw.comment || ""});
     }
@@ -806,6 +1026,11 @@ function take_answer(gobj, r, kw)
     switch(r.op) {
         case "services":
             priv.authz = authz_service_of(kw.data);
+            priv.services = (Array.isArray(kw.data) ? kw.data : [])
+                .map((sv) => sv && sv.service).filter((x) => typeof x === "string" && x);
+            break;
+        case "authzs":
+            priv.authzs[r.service] = Array.isArray(kw.data) ? kw.data : [];
             break;
         case "users":
             priv.users = user_rows(kw.data);
@@ -859,6 +1084,7 @@ function end_batch(gobj)
         priv.loaded = true;
         gobj_change_state(gobj, "ST_READY");
         set_table_data(gobj);
+        set_roles_data(gobj);
         render(gobj);
         return;
     }
@@ -903,8 +1129,159 @@ function load(gobj)
             {op: "master", line: line_of(g, AUTHZ_TREEDB, "treedb-info")}
         ];
     });
+    /*  What the services of the roles declare, once per service  */
+    stages.push((g) => {
+        let wanted = {};
+        for(let r of g.priv.roles) {
+            if(r.service && g.priv.services.indexOf(r.service) >= 0 && !g.priv.authzs[r.service]) {
+                wanted[r.service] = true;
+            }
+        }
+        return Object.keys(wanted).map((svc) => ({op: "authzs", service: svc, line: line_of(g, svc, "authzs")}));
+    });
     start_batch(gobj, "load", stages, "ST_LOADING");
     render(gobj);
+}
+
+function find_role(gobj, role_id)
+{
+    return gobj.priv.roles.find((r) => r.id === role_id) || null;
+}
+
+/***************************************************************
+ *  A role's sheet: its fields, its grants -- the permission, more
+ *  permissions each with its own scope if it needs one -- and what
+ *  the service declares. `role` null is a new one.
+ ***************************************************************/
+function role_input(cls, key, value, extra)
+{
+    let $i = createElement2(["input", Object.assign({
+        class: `${cls} input`, type: "text", autocomplete: "off",
+        title: t(key), "data-i18n-title": key,
+        "aria-label": t(key), "data-i18n-aria-label": key
+    }, extra || {})]);
+    $i.value = value || "";
+    return $i;
+}
+
+function role_check(cls, key, checked)
+{
+    let $cb = createElement2(["input", {
+        class: cls, type: "checkbox",
+        title: t(key), "data-i18n-title": key,
+        "aria-label": t(key), "data-i18n-aria-label": key
+    }]);
+    $cb.checked = !!checked;
+    return $cb;
+}
+
+/*  A labelled field: the <label> wraps its control, which names it.  */
+function role_field(cls, key, $control, help_key)
+{
+    let parts = [["span", {class: "is-block mb-1 has-text-weight-semibold", i18n: key}, t(key)], $control];
+    if(help_key) {
+        parts.push(["span", {class: "is-block is-size-7 has-text-grey mt-1", i18n: help_key}, t(help_key)]);
+    }
+    return createElement2(["label", {class: `${cls} is-block mb-3`}, parts]);
+}
+
+/*  One row of "more permissions": permission, deny, its own scope.  */
+function role_entry_row(entry, datalist_id, locked)
+{
+    let $perm = role_input("USERS_ROLE_ENTRY_PERMISSION", "permission", entry.permission,
+        {list: datalist_id, placeholder: t("permission")});
+    let $deny = role_check("USERS_ROLE_ENTRY_DENY", "deny", entry.deny);
+    let $scope = role_input("USERS_ROLE_ENTRY_SCOPE", "own scope",
+        entry.parameters !== undefined ? format_scope(entry.parameters) : "",
+        {placeholder: t("own scope placeholder")});
+    let $remove = createElement2(button_spec("USERS_ROLE_ENTRY_REMOVE", "yi-xmark", "remove permission", false));
+    for(let $x of [$perm, $deny, $scope, $remove]) {
+        $x.disabled = !!locked;
+    }
+    let $row = createElement2(
+        ["div", {class: "USERS_ROLE_ENTRY is-flex is-flex-wrap-wrap is-align-items-center mb-2",
+                 style: "gap:0.5rem;"}, [
+            ["div", {style: "flex:2 1 10rem; min-width:0;"}, [$perm]],
+            ["label", {class: "USERS_ROLE_ENTRY_DENY_LABEL checkbox"}, [
+                $deny, ["span", {class: "ml-1", i18n: "deny"}, t("deny")]
+            ]],
+            ["div", {style: "flex:3 1 12rem; min-width:0;"}, [$scope]],
+            $remove
+        ]]
+    );
+    /*  Widget plumbing: a row of the form, not an action  */
+    $remove.addEventListener("click", () => $row.remove());
+    return $row;
+}
+
+/*  What the service of the role declares: its permissions and the keys
+ *  each may be scoped on -- the help of the grants.  */
+function declared_help(gobj, service)
+{
+    let declared = gobj.priv.authzs[service];
+    if(!Array.isArray(declared)) {
+        return createElement2(["p", {class: "USERS_ROLE_DECLARED is-size-7 has-text-grey mb-3",
+            i18n: "permissions of the service not known"}, t("permissions of the service not known")]);
+    }
+    let items = declared.map((d) => {
+        let keys = (Array.isArray(d.parameters) ? d.parameters : []).map((p) => p && p.id).filter((x) => x);
+        return ["li", {class: "USERS_ROLE_DECLARED_ITEM"}, [
+            ["span", {class: "is-family-monospace has-text-weight-semibold"}, d.id],
+            ["span", {class: "has-text-grey ml-2"}, d.description || ""],
+            keys.length
+                ? ["span", {class: "USERS_ROLE_DECLARED_KEYS ml-2"}, [
+                    ["span", {class: "tag is-info is-light mr-1", i18n: "may be scoped on"}, t("may be scoped on")],
+                    ["span", {class: "is-family-monospace"}, keys.join(", ")]
+                  ]]
+                : ["span", {class: "USERS_ROLE_DECLARED_NOKEYS tag is-light ml-2", i18n: "not scoped"}, t("not scoped")]
+        ]];
+    });
+    return createElement2(["details", {class: "USERS_ROLE_DECLARED is-size-7 mb-3", open: "open"}, [
+        ["summary", {class: "has-text-weight-semibold", i18n: "permissions of the service"},
+            t("permissions of the service")],
+        ["ul", {class: "mt-1"}, items]
+    ]]);
+}
+
+/*  The form as it is now: what EV_SAVE_ROLE carries (plain data).  */
+function read_role_form(sheet)
+{
+    let f = sheet.fields;
+    let entries = [];
+    sheet.$entries.querySelectorAll(".USERS_ROLE_ENTRY").forEach(($row) => {
+        entries.push({
+            permission: $row.querySelector(".USERS_ROLE_ENTRY_PERMISSION").value,
+            deny:       $row.querySelector(".USERS_ROLE_ENTRY_DENY").checked,
+            scope_text: $row.querySelector(".USERS_ROLE_ENTRY_SCOPE").value
+        });
+    });
+    return {
+        id:          f.$id.value,
+        description: f.$description.value,
+        realm_id:    f.$realm.value,
+        service:     f.$service.value,
+        permission:  f.$permission.value,
+        deny:        f.$deny.checked,
+        scope_text:  f.$scope.value,
+        disabled:    f.$disabled.checked,
+        entries:     entries
+    };
+}
+
+function show_role_error(gobj, key, detail)
+{
+    let sheet = gobj.priv.role_sheet;
+    if(!sheet) {
+        return;
+    }
+    let $e = sheet.$error;
+    clear_node($e);
+    $e.appendChild(createElement2(["span", {i18n: /* i18n: ROLE_PROBLEM_I18N_KEYS */ key},
+        t(/* i18n: ROLE_PROBLEM_I18N_KEYS */ key)]));
+    if(detail) {
+        $e.appendChild(createElement2(["span", {class: "is-family-monospace ml-2"}, detail]));
+    }
+    $e.style.display = "";
 }
 
 /***************************************************************
@@ -1360,6 +1737,285 @@ function ac_delete_confirmed(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  Users or roles: a POSITION, so it is the route (`<base>/roles`).
+ *  The buttons move the route; the route moves the view.
+ ***************************************************************/
+function ac_show_view(gobj, event, kw, src)
+{
+    let view = kw && kw.view === "roles" ? "roles" : "users";
+    let base = gobj_read_str_attr(gobj, "base_route");
+    let shell = yui_shell_of(gobj);
+    if(base && shell) {
+        yui_shell_navigate(shell, view === "roles" ? `${base}/roles` : base, {push: true});
+        return 0;
+    }
+    /*  A tab with no route of its own: the view is all there is  */
+    return apply_view(gobj, view);
+}
+
+function ac_route_changed(gobj, event, kw, src)
+{
+    let base = gobj_read_str_attr(gobj, "base_route");
+    if(!base || !kw || kw.base !== base) {
+        return 0;   /*  not this tab  */
+    }
+    let seg = String(kw.subpath || "").split("/")[0];
+    return apply_view(gobj, seg === "roles" ? "roles" : "users");
+}
+
+function apply_view(gobj, view)
+{
+    let priv = gobj.priv;
+    if(priv.view === view) {
+        return 0;
+    }
+    priv.view = view;
+    render(gobj);
+    apply_filter(gobj);
+    /*  A table drawn while hidden has no width: redraw the one shown  */
+    let table = view === "roles" ? priv.roles_table : gobj_read_attr(gobj, "tabulator");
+    if(table && table._ready) {
+        table.redraw(true);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  The sheet of a role, or of a new one (`role_id` absent).
+ ***************************************************************/
+function ac_open_role(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let is_new = event === "EV_NEW_ROLE";
+    let role = is_new ? null : find_role(gobj, kw && kw.role_id);
+    let shell = yui_shell_of(gobj);
+    if((!is_new && !role) || !shell) {
+        log_error(`${gobj_short_name(gobj)}: ${event} of no role shown: '${kw && kw.role_id}'`);
+        return -1;
+    }
+    close_dialogs(gobj);
+
+    let r = role || {id: "", description: "", realm_id: gobj_yuno_realm_guess(gobj), service: "",
+                     permission: "", deny: false, permissions: [], parameters: {}, disabled: false,
+                     users: [], children: [], immutable: false};
+    let locked = !can_write(gobj) || r.immutable;
+    let datalist_id = `users_role_perms_${gobj_name(gobj)}`;
+    let declared = priv.authzs[r.service];
+    let $datalist = createElement2(["datalist", {id: datalist_id},
+        (Array.isArray(declared) ? declared : []).map((d) => ["option", {value: d.id}, ""])]);
+
+    let fields = {
+        $id:          role_input("USERS_ROLE_ID_INPUT", "role id", r.id),
+        $description: role_input("USERS_ROLE_DESCRIPTION", "description", r.description),
+        $realm:       role_input("USERS_ROLE_REALM", "realm", r.realm_id),
+        $service:     role_input("USERS_ROLE_SERVICE", "service", r.service, {list: `${datalist_id}_svc`}),
+        $permission:  role_input("USERS_ROLE_PERMISSION", "permission", r.permission, {list: datalist_id}),
+        $deny:        role_check("USERS_ROLE_DENY", "deny", r.deny),
+        $scope:       role_input("USERS_ROLE_SCOPE", "role scope", format_scope(r.parameters),
+                                 {placeholder: t("role scope placeholder")}),
+        $disabled:    role_check("USERS_ROLE_DISABLED", "disabled", r.disabled)
+    };
+    fields.$id.disabled = !is_new;
+    for(let k of Object.keys(fields)) {
+        if(k !== "$id") {
+            fields[k].disabled = locked;
+        }
+    }
+    let $svc_list = createElement2(["datalist", {id: `${datalist_id}_svc`},
+        priv.services.map((svc) => ["option", {value: svc}, ""])]);
+
+    let $entries = createElement2(["div", {class: "USERS_ROLE_ENTRIES"}, []]);
+    for(let e of r.permissions) {
+        $entries.appendChild(role_entry_row(e, datalist_id, locked));
+    }
+    let $add = createElement2(button_spec("USERS_ROLE_ADD_ENTRY", "yi-plus", "add permission", true));
+    $add.disabled = locked;
+    /*  Widget plumbing: a row of the form, not an action  */
+    $add.addEventListener("click", () =>
+        $entries.appendChild(role_entry_row({permission: "", deny: false}, datalist_id, false)));
+
+    let $error = createElement2(["p", {class: "USERS_ROLE_ERROR has-text-danger mb-2",
+                                       style: "display:none;"}, ""]);
+
+    let facts = [];
+    if(!is_new) {
+        facts.push(["p", {class: "USERS_ROLE_HOLDERS mb-2"}, [
+            ["span", {class: "has-text-weight-semibold mr-2", i18n: "users"}, t("users")],
+            r.users.length
+                ? ["span", {}, r.users.join(", ")]
+                : ["span", {class: "has-text-grey", i18n: "nobody"}, t("nobody")]
+        ]]);
+    }
+    if(r.immutable) {
+        facts.push(["p", {class: "USERS_ROLE_PROTECTED has-text-grey mb-2", i18n: "protected role"},
+            t("protected role")]);
+    }
+
+    let $delete = createElement2(button_spec("USERS_ROLE_DELETE", "yi-trash", "delete role", true,
+        "is-danger is-outlined"));
+    let in_use = r.users.length > 0 || r.children.length > 0;
+    $delete.disabled = is_new || locked || in_use;
+    if(in_use && !is_new) {
+        /*  Why it cannot be deleted, where the eye lands  */
+        $delete.setAttribute("title", t("role in use"));
+        $delete.setAttribute("data-i18n-title", "role in use");
+    }
+    $delete.style.marginRight = "auto";
+    if(is_new) {
+        $delete.style.display = "none";
+    }
+    $delete.addEventListener("click", () =>
+        gobj_send_event(gobj, "EV_DELETE_ROLE", {role_id: r.id}, gobj));
+
+    let save_key = is_new ? "create role" : "save role";
+    let $save = createElement2(button_spec("USERS_ROLE_SAVE", is_new ? "yi-plus" : "yi-floppy-disk",
+        save_key, true, "is-link"));
+    $save.disabled = locked;
+
+    let $content = createElement2(
+        ["div", {class: "USERS_ROLE_SHEET box"}, [
+            ["div", {class: "USERS_ROLE_FACTS"}, facts],
+            role_field("USERS_ROLE_ID_FIELD", "role id", fields.$id),
+            role_field("USERS_ROLE_DESCRIPTION_FIELD", "description", fields.$description),
+            ["div", {class: "USERS_ROLE_WHERE is-flex is-flex-wrap-wrap", style: "gap:0 1rem;"}, [
+                ["div", {style: "flex:1 1 12rem; min-width:0;"},
+                    [role_field("USERS_ROLE_SERVICE_FIELD", "service", fields.$service, "role service help")]],
+                ["div", {style: "flex:1 1 12rem; min-width:0;"},
+                    [role_field("USERS_ROLE_REALM_FIELD", "realm", fields.$realm, "role realm help")]]
+            ]],
+            declared_help(gobj, r.service),
+            ["div", {class: "USERS_ROLE_MAIN is-flex is-flex-wrap-wrap is-align-items-flex-end mb-1",
+                     style: "gap:0 1rem;"}, [
+                ["div", {style: "flex:2 1 12rem; min-width:0;"},
+                    [role_field("USERS_ROLE_PERMISSION_FIELD", "permission", fields.$permission)]],
+                ["label", {class: "USERS_ROLE_DENY_LABEL checkbox mb-3"}, [
+                    fields.$deny, ["span", {class: "ml-1", i18n: "deny"}, t("deny")]
+                ]]
+            ]],
+            role_field("USERS_ROLE_SCOPE_FIELD", "role scope", fields.$scope, "role scope help"),
+            ["p", {class: "USERS_ROLE_ENTRIES_TITLE has-text-weight-semibold mb-1", i18n: "more permissions"},
+                t("more permissions")],
+            ["p", {class: "is-size-7 has-text-grey mb-2", i18n: "more permissions help"},
+                t("more permissions help")],
+            $entries,
+            ["div", {class: "mb-3"}, [$add]],
+            ["label", {class: "USERS_ROLE_DISABLED_LABEL checkbox is-block mb-3"}, [
+                fields.$disabled, ["span", {class: "ml-2", i18n: "role disabled"}, t("role disabled")]
+            ]],
+            $error,
+            $datalist,
+            $svc_list,
+            ["div", {class: "USERS_ROLE_FOOT is-flex is-flex-wrap-wrap is-align-items-center " +
+                            "is-justify-content-flex-end", style: "gap:0.5rem;"}, [$delete, $save]]
+        ]]
+    );
+
+    let sheet = {role_id: r.id, is_new: is_new, modal: null, $error: $error,
+                 fields: fields, $entries: $entries};
+    $save.addEventListener("click", () =>
+        gobj_send_event(gobj, "EV_SAVE_ROLE", {is_new: is_new, form: read_role_form(sheet)}, gobj));
+    sheet.modal = yui_shell_show_modal(shell, $content, {
+        dialog:        true,
+        wide:          true,
+        logical_class: "USERS_ROLE_DIALOG",
+        title:         is_new ? "new role" : "role",
+        title_prefix:  is_new ? (gobj_read_str_attr(gobj, "yuno_label") || "") : r.id,
+        t:             t,
+        on_close:      function() {
+            if(priv.role_sheet === sheet) {
+                priv.role_sheet = null;
+            }
+        }
+    });
+    priv.role_sheet = sheet;
+    if(is_new) {
+        fields.$id.focus();
+    }
+    return 0;
+}
+
+/*  A new role starts in the realm the other roles of the store use.  */
+function gobj_yuno_realm_guess(gobj)
+{
+    let realms = gobj.priv.roles.map((r) => r.realm_id).filter((x) => x && x !== "*");
+    return realms[0] || "*";
+}
+
+/***************************************************************
+ *  Write the role of the sheet: checked here first against what the
+ *  service declares (a scope on a key it does not declare grants
+ *  nothing), then created or updated with every column it edits.
+ ***************************************************************/
+function ac_save_role(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let form = kw && kw.form;
+    if(!form) {
+        log_error(`${gobj_short_name(gobj)}: EV_SAVE_ROLE without a form`);
+        return -1;
+    }
+    let problem = role_problem(form, priv.authzs[(form.service || "").trim()] || null);
+    if(!problem && kw.is_new && find_role(gobj, (form.id || "").trim())) {
+        problem = {key: "role already exists", detail: form.id};
+    }
+    if(problem) {
+        show_role_error(gobj, problem.key, problem.detail);
+        return 0;
+    }
+    close_dialogs(gobj);
+    let record = role_record(form);
+    let command = kw.is_new ? "create-node" : "update-node";
+    start_batch(gobj, "write", [
+        (g) => [{op: command, line: line_of(g, AUTHZ_TREEDB, command),
+                 kw: {topic_name: "roles", record: record}}]
+    ], "ST_WRITING");
+    render(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  Deleting a role is final: asked in red. One with users or child
+ *  roles is not offered (the sheet's button is off).
+ ***************************************************************/
+function ac_delete_role(gobj, event, kw, src)
+{
+    let role = find_role(gobj, kw && kw.role_id);
+    let shell = yui_shell_of(gobj);
+    if(!role || !shell) {
+        log_error(`${gobj_short_name(gobj)}: EV_DELETE_ROLE of no role shown: '${kw && kw.role_id}'`);
+        return -1;
+    }
+    if(role.users.length || role.children.length || role.immutable) {
+        log_error(`${gobj_short_name(gobj)}: EV_DELETE_ROLE of a role in use or protected: '${role.id}'`);
+        return -1;
+    }
+    close_dialogs(gobj);
+    let $msg = createElement2(["div", {class: "USERS_CONFIRM_DELETE_ROLE"}, [
+        ["p", {i18n: "confirm delete role"}, t("confirm delete role")],
+        ["p", {class: "has-text-weight-semibold mt-2"}, role.id]
+    ]]);
+    yui_shell_confirm_danger(shell, $msg, {
+        t: t, logical_class: "USERS_CONFIRM_DELETE_ROLE_DIALOG",
+        confirm_label: "delete role", cancel_label: "cancel"
+    }).then((yes) => {
+        if(yes) {
+            gobj_send_event(gobj, "EV_DELETE_ROLE_CONFIRMED", {role_id: role.id}, gobj);
+        }
+    });
+    return 0;
+}
+
+function ac_delete_role_confirmed(gobj, event, kw, src)
+{
+    start_batch(gobj, "write", [
+        (g) => [{op: "delete-node", line: line_of(g, AUTHZ_TREEDB, "delete-node"),
+                 kw: {topic_name: "roles", record: {id: kw.role_id}}}]
+    ], "ST_WRITING");
+    render(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  A write asked for (a dialog answered, a sheet button) when the
  *  tab is no longer READY: the session dropped or another write is
  *  in flight. Nothing is sent, and the operator is told.
@@ -1391,6 +2047,16 @@ function ac_language_changed(gobj, event, kw, src)
             table.setColumns(make_columns(gobj));
         } catch(e) {
             log_error(`${gobj_short_name(gobj)}: cannot re-render the table: ${e}`);
+        }
+    }
+    let roles_table = gobj.priv.roles_table;
+    if(roles_table) {
+        yui_tabulator_relocalize(roles_table, t);
+        try {
+            roles_table.options.placeholder = t("no roles in this store");
+            roles_table.setColumns(make_role_columns(gobj));
+        } catch(e) {
+            log_error(`${gobj_short_name(gobj)}: cannot re-render the roles table: ${e}`);
         }
     }
     render(gobj);
@@ -1429,12 +2095,18 @@ function create_gclass(gclass_name)
         ["EV_DISABLE_USER",      ac_not_sent,          null],
         ["EV_DISABLE_CONFIRMED", ac_not_sent,          null],
         ["EV_DELETE_USER",       ac_not_sent,          null],
-        ["EV_DELETE_CONFIRMED",  ac_not_sent,          null]
+        ["EV_DELETE_CONFIRMED",  ac_not_sent,          null],
+        ["EV_NEW_ROLE",          ac_not_sent,          null],
+        ["EV_SAVE_ROLE",         ac_not_sent,          null],
+        ["EV_DELETE_ROLE",       ac_not_sent,          null],
+        ["EV_DELETE_ROLE_CONFIRMED", ac_not_sent,      null]
     ];
     const always = [
         ["EV_MT_COMMAND_ANSWER", ac_mt_command_answer, null],
         ["EV_LANGUAGE_CHANGED",  ac_language_changed,  null],
-        ["EV_CANCEL_DIALOG",     ac_cancel_dialog,     null]
+        ["EV_CANCEL_DIALOG",     ac_cancel_dialog,     null],
+        ["EV_SHOW_VIEW",         ac_show_view,         null],
+        ["EV_ROUTE_CHANGED",     ac_route_changed,     null]
     ];
 
     /*---------------------------------------------*
@@ -1450,7 +2122,8 @@ function create_gclass(gclass_name)
         ["ST_LOADING", [
             ["EV_ON_CLOSE",          ac_on_close,          null],
             ["EV_TIMEOUT",           ac_timeout,           null],
-            ["EV_OPEN_USER",         ac_open_user,         null]
+            ["EV_OPEN_USER",         ac_open_user,         null],
+            ["EV_OPEN_ROLE",         ac_open_role,         null]
         ].concat(always, not_sent)],
         ["ST_READY", [
             ["EV_ON_CLOSE",          ac_on_close,          null],
@@ -1463,12 +2136,18 @@ function create_gclass(gclass_name)
             ["EV_DISABLE_USER",      ac_disable_user,      null],
             ["EV_DISABLE_CONFIRMED", ac_disable_confirmed, null],
             ["EV_DELETE_USER",       ac_delete_user,       null],
-            ["EV_DELETE_CONFIRMED",  ac_delete_confirmed,  null]
+            ["EV_DELETE_CONFIRMED",  ac_delete_confirmed,  null],
+            ["EV_OPEN_ROLE",         ac_open_role,         null],
+            ["EV_NEW_ROLE",          ac_open_role,         null],
+            ["EV_SAVE_ROLE",         ac_save_role,         null],
+            ["EV_DELETE_ROLE",       ac_delete_role,       null],
+            ["EV_DELETE_ROLE_CONFIRMED", ac_delete_role_confirmed, null]
         ].concat(always)],
         ["ST_WRITING", [
             ["EV_ON_CLOSE",          ac_on_close,          null],
             ["EV_TIMEOUT",           ac_timeout,           null],
-            ["EV_OPEN_USER",         ac_open_user,         null]
+            ["EV_OPEN_USER",         ac_open_user,         null],
+            ["EV_OPEN_ROLE",         ac_open_role,         null]
         ].concat(always, not_sent)],
         ["ST_NO_USERS", [
             ["EV_ON_CLOSE",          ac_on_close,          null],
@@ -1495,7 +2174,14 @@ function create_gclass(gclass_name)
         ["EV_DISABLE_USER",      0],
         ["EV_DISABLE_CONFIRMED", 0],
         ["EV_DELETE_USER",       0],
-        ["EV_DELETE_CONFIRMED",  0]
+        ["EV_DELETE_CONFIRMED",  0],
+        ["EV_SHOW_VIEW",         0],
+        ["EV_ROUTE_CHANGED",     0],
+        ["EV_OPEN_ROLE",         0],
+        ["EV_NEW_ROLE",          0],
+        ["EV_SAVE_ROLE",         0],
+        ["EV_DELETE_ROLE",       0],
+        ["EV_DELETE_ROLE_CONFIRMED", 0]
     ];
 
     __gclass__ = gclass_create(

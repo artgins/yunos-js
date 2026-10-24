@@ -31,6 +31,8 @@
  *          node scripts/qa.mjs --check gobjtree        # a card's gobj tree opens and draws its canvas
  *          node scripts/qa.mjs --check chartsheld      # a stopped scenario's charts hold (renfe-20k-hidraulia)
  *          node scripts/qa.mjs --check controlhelp     # each control of a scenario says what it does
+ *          node scripts/qa.mjs --check roles           # the roles of a store: what each grants, its sheet
+ *          node scripts/qa.mjs --check roleswrite      # a role created, edited and deleted (leaves none)
  *
  *      Routes are hash routes of the shell, given without the '#':
  *
@@ -426,11 +428,172 @@ async function check_controlhelp(page, args, step, out_dir)
     return bad.length === 0;
 }
 
+/*
+ *  --check roles: the Roles view of a users store (ROLES_NODE /
+ *  ROLES_YUNO, the control center of artgins): a route of its own
+ *  (`<tab>/roles`, kept by a reload), every role with what it grants and
+ *  for what, and a role's sheet saying what its service declares. Read
+ *  only: nothing is saved.
+ */
+const ROLES_NODE = process.env.QA_ROLES_NODE || "artgins";
+const ROLES_YUNO = process.env.QA_ROLES_YUNO || "controlcenter";
+const ROLES_ROLE = process.env.QA_ROLES_ROLE || "renfe-20k-operator";
+
+async function check_roles(page, args, step, out_dir)
+{
+    const yuno_box = () => page.locator(".tabulator-row", {hasText: ROLES_YUNO})
+        .locator("input.STATNODES_SEL").first();
+    await page.evaluate(() => { window.location.hash = "#/users/nodes"; });
+    await page.waitForSelector(".tabulator-row", {timeout: DEFAULTS.TIMEOUT});
+    const $node = page.locator(".tabulator-row", {hasText: ROLES_NODE}).first();
+    await $node.locator(".tabulator-data-tree-control").first().click().catch(() => {});
+    await page.waitForTimeout(800);
+    if(!await yuno_box().count()) {
+        step("check roles", false, `no '${ROLES_YUNO}' under '${ROLES_NODE}' in the picker`);
+        return false;
+    }
+    if(!await yuno_box().isChecked()) {
+        await yuno_box().click();
+        await page.waitForTimeout(1500);
+    }
+    const tab = await page.evaluate((yuno) => {
+        const as = [...document.querySelectorAll("a[href^='#/users/node/']")];
+        const a = as.find((x) => (x.textContent || "").includes(yuno));
+        return a? a.getAttribute("href"): null;
+    }, ROLES_YUNO);
+    if(!tab) {
+        step("check roles", false, `no tab for '${ROLES_YUNO}' after selecting it`);
+        return false;
+    }
+    await page.evaluate((h) => { window.location.hash = h; }, `${tab}/roles`);
+    const $row = page.locator(".USERS_ROLES_TABLE .tabulator-row", {hasText: ROLES_ROLE}).first();
+    try {
+        await $row.waitFor({timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        step("check roles", false, `no role '${ROLES_ROLE}' in the roles view`);
+        return false;
+    }
+    const grants = await $row.locator(".USERS_ROLE_GRANT").allInnerTexts();
+    const scoped = grants.length > 0 && grants.every((g) => /scenario_id=/.test(g));
+    step(`check roles: '${ROLES_ROLE}' says what it grants and for what`, scoped, grants.join(" | "));
+
+    await $row.click();
+    let sheet_ok = false;
+    try {
+        await page.locator(".USERS_ROLE_SHEET").waitFor({timeout: DEFAULTS.TIMEOUT});
+        const declared = await page.locator(".USERS_ROLE_DECLARED").textContent();
+        sheet_ok = /scenario_id/.test(declared) &&
+            await page.locator(".USERS_ROLE_SHEET input.USERS_ROLE_SCOPE").inputValue() !== "";
+    } catch(e) {
+        sheet_ok = false;
+    }
+    await page.screenshot({path: join(out_dir, "check_roles_sheet.png"), fullPage: true});
+    step("check roles: its sheet says what the service declares", sheet_ok, "");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+
+    await page.reload();
+    await page.waitForTimeout(4000);
+    const kept = await page.locator(".USERS_ROLES_TABLE .tabulator-row", {hasText: ROLES_ROLE}).count();
+    await page.screenshot({path: join(out_dir, "check_roles_reload.png"), fullPage: true});
+    step("check roles: a reload keeps the roles view", kept > 0,
+        await page.evaluate(() => decodeURIComponent(window.location.hash)));
+    return scoped && sheet_ok && kept > 0;
+}
+
+/*
+ *  --check roleswrite: a role written from its sheet reaches the store.
+ *  Creates `qa-tmp-<time>` (read-scenarios on a scenario that does not
+ *  exist: it lets nobody see anything, and nobody holds it), edits its
+ *  description, then deletes it -- the store is left as it was found.
+ */
+async function open_roles_tab(page)
+{
+    const yuno_box = () => page.locator(".tabulator-row", {hasText: ROLES_YUNO})
+        .locator("input.STATNODES_SEL").first();
+    await page.evaluate(() => { window.location.hash = "#/users/nodes"; });
+    await page.waitForSelector(".tabulator-row", {timeout: DEFAULTS.TIMEOUT});
+    const $node = page.locator(".tabulator-row", {hasText: ROLES_NODE}).first();
+    await $node.locator(".tabulator-data-tree-control").first().click().catch(() => {});
+    await page.waitForTimeout(800);
+    if(!await yuno_box().isChecked()) {
+        await yuno_box().click();
+        await page.waitForTimeout(1500);
+    }
+    const tab = await page.evaluate((yuno) => {
+        const as = [...document.querySelectorAll("a[href^='#/users/node/']")];
+        const a = as.find((x) => (x.textContent || "").includes(yuno));
+        return a? a.getAttribute("href"): null;
+    }, ROLES_YUNO);
+    await page.evaluate((h) => { window.location.hash = h; }, `${tab}/roles`);
+    await page.locator(".USERS_ROLES_TABLE .tabulator-row").first().waitFor({timeout: DEFAULTS.TIMEOUT});
+}
+
+async function check_roleswrite(page, args, step, out_dir)
+{
+    const id = `qa-tmp-${Date.now()}`;
+    const row = () => page.locator(".USERS_ROLES_TABLE .tabulator-row", {hasText: id});
+    await open_roles_tab(page);
+
+    await page.locator(".USERS_NEW").click();
+    await page.locator(".USERS_ROLE_SHEET").waitFor({timeout: DEFAULTS.TIMEOUT});
+    await page.fill(".USERS_ROLE_SHEET .USERS_ROLE_ID_INPUT", id);
+    await page.fill(".USERS_ROLE_SHEET .USERS_ROLE_DESCRIPTION", "QA temporary role");
+    await page.fill(".USERS_ROLE_SHEET .USERS_ROLE_SERVICE", "controlcenter");
+    await page.fill(".USERS_ROLE_SHEET .USERS_ROLE_PERMISSION", "read-scenarios");
+    await page.fill(".USERS_ROLE_SHEET .USERS_ROLE_SCOPE", "scenario_id=qa-no-such-scenario");
+    await page.locator(".USERS_ROLE_SHEET .USERS_ROLE_SAVE").click();
+    let created = false;
+    try {
+        await row().first().waitFor({timeout: DEFAULTS.TIMEOUT});
+        created = /scenario_id=qa-no-such-scenario/.test(await row().first().innerText());
+    } catch(e) {
+        created = false;
+    }
+    step("check roleswrite: a new role reaches the store", created, id);
+    if(!created) {
+        await page.screenshot({path: join(out_dir, "check_roleswrite.png"), fullPage: true});
+        return false;
+    }
+
+    await row().first().click();
+    await page.locator(".USERS_ROLE_SHEET").waitFor({timeout: DEFAULTS.TIMEOUT});
+    await page.fill(".USERS_ROLE_SHEET .USERS_ROLE_DESCRIPTION", "QA temporary role, edited");
+    await page.locator(".USERS_ROLE_SHEET .USERS_ROLE_SAVE").click();
+    let edited = false;
+    try {
+        await page.locator(".USERS_ROLES_TABLE .tabulator-row", {hasText: "edited"}).first()
+            .waitFor({timeout: DEFAULTS.TIMEOUT});
+        edited = true;
+    } catch(e) {
+        edited = false;
+    }
+    step("check roleswrite: an edited role is saved", edited, "");
+
+    await row().first().click();
+    await page.locator(".USERS_ROLE_SHEET").waitFor({timeout: DEFAULTS.TIMEOUT});
+    await page.locator(".USERS_ROLE_SHEET .USERS_ROLE_DELETE").click();
+    await page.locator(".USERS_CONFIRM_DELETE_ROLE_DIALOG button.is-danger").click()
+        .catch(async () => {
+            await page.getByRole("button", {name: /delete role|borrar rol/i}).last().click();
+        });
+    let gone = false;
+    for(let i = 0; i < 20 && !gone; i++) {
+        await page.waitForTimeout(500);
+        gone = (await row().count()) === 0;
+    }
+    await page.screenshot({path: join(out_dir, "check_roleswrite.png"), fullPage: true});
+    step("check roleswrite: the role is deleted again", gone, gone? "" : `${id} is still there: delete it`);
+    return created && edited && gone;
+}
+
 const CHECKS = {
     schemaback: check_schemaback,
     gobjtree: check_gobjtree,
     chartsheld: check_chartsheld,
     controlhelp: check_controlhelp,
+    roles: check_roles,
+    roleswrite: check_roleswrite,
 };
 
 

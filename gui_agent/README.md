@@ -119,6 +119,16 @@ command-yuno id=<yuno> service=<treedb> command=print-tranger expanded=1 path=to
 
 ## Scenarios: yunos watched, and run, together
 
+**A link to a scenario**: `#/scenarios/live/<id>` opens the saved scenario
+`<id>` (after the login, which keeps the hash). **A user who may see one
+scenario only** (a role scoped by `scenario_id`, SDK 7.27.15): the control
+center answers `my-permissions` before the shell is built, and without
+`command-agent` the shell is Scenarios only -- its list (that scenario alone)
+and the live view, watched with `watch-scenario` (the control center builds the
+agents' watch); the actions need `run-scenarios` on it, edit and delete
+`write-scenarios`. The controls of a scenario say what they run in their
+tooltip, and the charts of a stopped or paused one hold its last run.
+
 A **scenario** is a set of yunos — the ones a test involves, or just the ones
 worth watching together —, how the messages flow between them and the
 commands of its actions. The control center keeps them
@@ -872,6 +882,41 @@ shown above the table. States: `ST_IDLE` (no session), `ST_LOADING`,
 row opened while the store is being read or written opens its sheet
 read-only; a dialog answered when the tab is not READY sends nothing and says
 so.
+
+### Roles: what each one grants, and for what
+
+The same tab has a second view, **Roles** (`<tab>/roles`, a route: a link, and
+what a reload keeps; the *Users* / *Roles* buttons move it). A table of the
+roles of the store: what each GRANTS -- its `permission`, and each entry of its
+`permissions`, a red *Deny* tag on a denied one -- and **for what**, its scope
+(`only scenario_id=renfe-20k-hidraulia`); who holds it; its service; enabled or
+not, protected (a seed role). A click opens its **sheet**:
+
+- id (fixed once created), description, **service** and **realm**;
+- **Permissions of the service**: what the service declares (`authzs` of it,
+  read once per service of the roles), each permission with the keys it may be
+  scoped on -- `read-scenarios` *may be scoped on* `scenario_id`,
+  `command-agent` *not scoped*. C_AUTHZ grants nothing on a key a permission
+  does not declare (SDK 7.27.15), so the sheet refuses one before it is sent;
+- the **permission** and *Deny*, the role's **scope** as text,
+  `scenario_id=a,b; key=v` (empty: no limit), and **more permissions**, each
+  with *Deny* and its own scope (empty: the role's);
+- *Role disabled*, *Save role* / *Create role*, *Delete role* -- confirmed in
+  red, and off for a role that has users or child roles (take it from them
+  first) and for a seed role.
+
+| Action | Sent to the yuno (`treedb_authzs`) |
+|---|---|
+| read | `roles` (service `authz`), `authzs` of each service the roles name |
+| create | `create-node topic_name=roles record={...}` |
+| save | `update-node topic_name=roles record={...}`: every column the sheet edits, nothing else (users and child roles are links) |
+| delete | `delete-node topic_name=roles record={id}` |
+
+So letting a user run a scenario it can only watch is a role, not a code
+change: with `renfe-20k-viewer` (read) and `renfe-20k-operator` (read and run)
+in the store, the user's sheet gives or takes the second with one checkbox.
+`scripts/qa.mjs --check roles` reads the view; `--check roleswrite` creates,
+edits and deletes a `qa-tmp-*` role and leaves the store as it found it.
 
 ## Every action crosses the FSM
 

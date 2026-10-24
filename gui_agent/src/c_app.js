@@ -401,7 +401,7 @@ const WORKSPACES = {
      *  each control center: a store per yuno, so a tab per yuno, from the
      *  same tree picker, asked whether each yuno keeps users.  */
     users:      {min_version: "7.7.0", tab_gclass: "C_AGENT_USERS", unit: "yuno",
-                 authz_check: true}
+                 authz_check: true, routed: true}
 };
 
 function picker_route(ws)

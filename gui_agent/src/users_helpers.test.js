@@ -13,6 +13,11 @@ import {
     session_count,
     user_rows,
     role_rows,
+    role_grants,
+    format_scope,
+    parse_scope,
+    role_problem,
+    role_record,
     roles_change,
     role_parent_ref,
     user_child_ref,
@@ -112,10 +117,93 @@ describe("role_rows", () => {
             {id: "root", description: "Super-Owner of system", service: "*", realm_id: "*"},
             {id: "controlcenter", disabled: true, service: "controlcenter"}
         ];
-        expect(role_rows(data)).toEqual([
-            {id: "controlcenter", description: "", disabled: true, service: "controlcenter", realm_id: ""},
-            {id: "root", description: "Super-Owner of system", disabled: false, service: "*", realm_id: "*"}
+        expect(role_rows(data).map((r) => [r.id, r.description, r.disabled, r.service, r.realm_id])).toEqual([
+            ["controlcenter", "", true, "controlcenter", ""],
+            ["root", "Super-Owner of system", false, "*", "*"]
         ]);
+    });
+
+    it("carries what it grants, its users and whether it is a seed", () => {
+        let [r] = role_rows([{
+            id: "op", permission: "run-scenarios", deny: false,
+            permissions: [{permission: "read-scenarios"}, "junk", {permission: "x", deny: true, parameters: {k: "v"}}],
+            parameters: {scenario_id: ["s1"]},
+            users: [{id: "esg@h.eu", topic_name: "users"}], roles: [],
+            __md_treedb__: {immutable: true}
+        }]);
+        expect(r.permissions).toEqual([
+            {permission: "read-scenarios", deny: false},
+            {permission: "x", deny: true, parameters: {k: "v"}}
+        ]);
+        expect(r.users).toEqual(["esg@h.eu"]);
+        expect(r.immutable).toBe(true);
+        expect(r.parameters).toEqual({scenario_id: ["s1"]});
+    });
+});
+
+describe("role_grants", () => {
+    it("one line per permission; an entry without a scope takes the role's", () => {
+        let role = {permission: "run-scenarios", deny: false, parameters: {scenario_id: ["s1"]},
+            permissions: [{permission: "read-scenarios", deny: false},
+                          {permission: "write-scenarios", deny: true, parameters: {scenario_id: ["s2"]}}]};
+        expect(role_grants(role)).toEqual([
+            {permission: "run-scenarios", deny: false, scope: {scenario_id: ["s1"]}, own_scope: false},
+            {permission: "read-scenarios", deny: false, scope: {scenario_id: ["s1"]}, own_scope: false},
+            {permission: "write-scenarios", deny: true, scope: {scenario_id: ["s2"]}, own_scope: true}
+        ]);
+    });
+});
+
+describe("scope as text", () => {
+    it("reads and writes `key=v1,v2; key2=v3`", () => {
+        expect(format_scope({scenario_id: ["a", "b"], k: "v"})).toBe("scenario_id=a,b; k=v");
+        expect(format_scope({})).toBe("");
+        expect(parse_scope(" scenario_id = a , b ; k=v ")).toEqual({ok: true, scope: {scenario_id: ["a", "b"], k: ["v"]}});
+        expect(parse_scope("")).toEqual({ok: true, scope: {}});
+    });
+    it("refuses what is not a scope", () => {
+        expect(parse_scope("a b=1").key).toBe("scope bad syntax");
+        expect(parse_scope("=1").key).toBe("scope bad syntax");
+        expect(parse_scope("k=, ,").key).toBe("scope without values");
+    });
+});
+
+describe("role_problem / role_record", () => {
+    const declared = [
+        {id: "command-agent", parameters: []},
+        {id: "read-scenarios", parameters: [{id: "scenario_id"}]},
+        {id: "run-scenarios", parameters: [{id: "scenario_id"}]}
+    ];
+    const form = {id: "op", description: "Runs s1", realm_id: "*", service: "controlcenter",
+        permission: "run-scenarios", deny: false, scope_text: "scenario_id=s1",
+        entries: [{permission: "read-scenarios", deny: false, scope_text: ""}]};
+
+    it("a good role passes, and its record is what the sheet edits", () => {
+        expect(role_problem(form, declared)).toBe(null);
+        expect(role_record(form)).toEqual({
+            id: "op", description: "Runs s1", disabled: false, realm_id: "*", service: "controlcenter",
+            permission: "run-scenarios", deny: false,
+            permissions: [{permission: "read-scenarios", deny: false}],
+            parameters: {scenario_id: ["s1"]}
+        });
+    });
+    it("says why one cannot be written", () => {
+        let p = (patch) => role_problem(Object.assign({}, form, patch), declared);
+        expect(p({id: ""}).key).toBe("role id required");
+        expect(p({id: "a b"}).key).toBe("role id bad chars");
+        expect(p({description: " "}).key).toBe("role description required");
+        expect(p({permission: "", entries: []}).key).toBe("role grants nothing");
+        expect(p({permission: "drop-agent"})).toEqual({key: "permission not of the service", detail: "drop-agent"});
+        /*  A scope on a key the permission does not declare: C_AUTHZ would
+         *  grant nothing with it  */
+        expect(p({permission: "command-agent"})).toEqual({key: "scope key not declared", detail: "command-agent: scenario_id"});
+        expect(p({entries: [{permission: "read-scenarios", scope_text: "node=x"}]}))
+            .toEqual({key: "scope key not declared", detail: "read-scenarios: node"});
+        expect(p({scope_text: "scenario_id"}).key).toBe("scope bad syntax");
+    });
+    it("with no declaration known, names and keys are left to the service", () => {
+        expect(role_problem(Object.assign({}, form, {permission: "anything"}), null)).toBe(null);
+        expect(role_problem(Object.assign({}, form, {permission: "*"}), declared)).toBe(null);
     });
 });
 

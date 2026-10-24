@@ -6,6 +6,30 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.116 (2026-10-24)
+
+- **Users has a Roles view**: `<tab>/roles` (a route; the *Users* / *Roles*
+  buttons move it). Every role of the store with what it grants or denies
+  and for what -- its scope, `only scenario_id=renfe-20k-hidraulia` -- who
+  holds it, its service, enabled or not, protected. Its **sheet** edits it:
+  description, service, realm, the permission and *Deny*, the role's scope as
+  text (`scenario_id=a,b`), more permissions each with its own scope, and
+  *Role disabled*; *Create role*, *Save role*, *Delete role* (red, and off
+  for a role with users or child roles, or a seed). The sheet lists what the
+  service declares (`authzs`: each permission and the keys it may be scoped
+  on) and refuses a scope on a key the permission does not declare, which
+  C_AUTHZ would ignore. Written with `create-node` / `update-node` /
+  `delete-node` of `roles` on `treedb_authzs`, every column the sheet edits
+  and nothing else. Pure helpers in `users_helpers.js` (`role_grants`,
+  `format_scope`, `parse_scope`, `role_problem`, `role_record`; keys in
+  `ROLE_PROBLEM_I18N_KEYS`), tested; wiring tests of the view, the sheet,
+  the save, the create and the delete.
+- QA: `--check roles` (the view, a role's grants and sheet, a reload keeps
+  the view) and `--check roleswrite` (creates, edits and deletes a `qa-tmp-*`
+  role: the store is left as found). Both pass on artgins.yunetacontrol.com
+  against the control center 1996, with `--check controlhelp` and
+  `--check chartsheld`; the console has nothing of concern.
+
 ## gui_agent 0.29.115 (2026-10-24)
 
 - **The controls of a scenario say what they do.** Their tooltip (title and

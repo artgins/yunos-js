@@ -37,8 +37,12 @@ vi.mock("@yuneta/gobj-ui/src/shell_modals.js", () => ({
 }));
 
 const test_shell = {shell: null};
+const navigated = [];
 vi.mock("@yuneta/gobj-ui/src/c_yui_shell.js", () => ({
     yui_shell_of: () => test_shell.shell,
+    yui_shell_navigate: (shell, route) => {
+        navigated.push(route);
+    },
 }));
 
 vi.mock("@yuneta/gobj-ui/src/yui_tabulator_i18n.js", () => ({
@@ -69,6 +73,7 @@ vi.mock("tabulator-tables", () => ({
         setFilter() {}
         clearFilter() {}
         setColumns() {}
+        redraw() {}
         destroy() {}
     }
 }));
@@ -77,7 +82,7 @@ const {
     SDATA, SDATA_END, data_type_t, event_flag_t,
     gclass_create,
     gobj_start_up, gobj_create_yuno, gobj_create, gobj_create_service,
-    gobj_start, gobj_send_event, gobj_current_state, gobj_change_state,
+    gobj_start, gobj_send_event, gobj_publish_event, gobj_current_state, gobj_change_state,
     gobj_read_attr,
     register_c_timer,
     set_log_callback,
@@ -111,7 +116,8 @@ beforeAll(() => {
     register_c_agent_users();
 
     gclass_create("C_TEST_HOST", [], [["ST_IDLE", []]], {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
-    gclass_create("C_TEST_SHELL", [["EV_LANGUAGE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT]],
+    gclass_create("C_TEST_SHELL", [["EV_LANGUAGE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT],
+                                   ["EV_ROUTE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT]],
         [["ST_IDLE", []]], {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
     gclass_create("C_TEST_IEV", [], [["ST_SESSION", []], ["ST_DISCONNECTED", []]],
         {mt_command_parser: iev_command_parser}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
@@ -143,6 +149,7 @@ beforeEach(() => {
     modals.length = 0;
     confirm.answer = true;
     confirm.asked.length = 0;
+    navigated.length = 0;
     gobj_change_state(iev, "ST_SESSION");
 });
 
@@ -213,7 +220,14 @@ const USERS = [
 ];
 const ROLES = [
     {id: "root", description: "Super-Owner of system", service: "*", realm_id: "*"},
-    {id: "controlcenter", description: "Controlcenter", service: "controlcenter"}
+    {id: "controlcenter", description: "Controlcenter", service: "controlcenter",
+     permission: "*", users: ["users^yuneta_agent@artgins.com"]}
+];
+/*  What the controlcenter declares (`authzs` of the service)  */
+const AUTHZS = [
+    {id: "command-agent", description: "Command an agent", parameters: []},
+    {id: "read-scenarios", description: "Read scenarios", parameters: [{id: "scenario_id"}]},
+    {id: "run-scenarios", description: "Run scenarios", parameters: [{id: "scenario_id"}]}
 ];
 
 /*  Take a new tab to READY, the store read and this yuno its master.  */
@@ -226,6 +240,9 @@ function ready_view(master = true)
     reply(v, users, {data: USERS});
     reply(v, roles, {data: ROLES});
     reply(v, info, {data: {master: master}});
+    /*  then what the services of the roles declare: one, controlcenter  */
+    expect(sent.slice(4).map((r) => [service_of(r), inner(r)])).toEqual([["controlcenter", "authzs"]]);
+    reply(v, sent[4], {data: AUTHZS});
     expect(gobj_current_state(v)).toBe("ST_READY");
     sent.length = 0;
     return v;
@@ -252,8 +269,12 @@ describe("reading a users store", () => {
         reply(v, sent[2], {data: ROLES});
         expect(gobj_current_state(v)).toBe("ST_LOADING");
         reply(v, sent[3], {data: {master: true}});
+        expect(gobj_current_state(v)).toBe("ST_LOADING");
+        reply(v, sent[4], {data: AUTHZS});
 
         expect(gobj_current_state(v)).toBe("ST_READY");
+        expect(v.priv.authzs.controlcenter.map((a) => a.id))
+            .toEqual(["command-agent", "read-scenarios", "run-scenarios"]);
         expect(v.priv.users.map((u) => u.id)).toEqual(["yuneta", "claudia@artgins.com"]);
         expect(v.priv.users[0].immutable).toBe(true);
         expect(v.priv.roles.map((r) => r.id)).toEqual(["controlcenter", "root"]);
@@ -281,7 +302,11 @@ describe("reading a users store", () => {
         reply(v, sent[1], {data: USERS});
         reply(v, sent[2], {data: ROLES});
         reply(v, sent[3], {result: -1, comment: "command not available"});
+        /*  A service that does not say what it declares is not a failure
+         *  either: the role sheet does not check it  */
+        reply(v, sent[4], {result: -1, comment: "command not available"});
         expect(gobj_current_state(v)).toBe("ST_READY");
+        expect(v.priv.authzs.controlcenter).toBe(undefined);
         expect(v.priv.master).toBe(null);
         expect(v.priv.message).toBe(null);
     });
@@ -442,6 +467,82 @@ describe("writing users", () => {
         gobj_send_event(v, "EV_OPEN_USER", {username: "yuneta"}, v);
         expect(modals[0].closed).toBe(true);
         expect(modals.length).toBe(2);
+        expect(errors()).toEqual([]);
+    });
+});
+
+describe("the roles of the store", () => {
+
+    const FORM = {id: "op", description: "Runs s1", realm_id: "*", service: "controlcenter",
+        permission: "run-scenarios", deny: false, scope_text: "scenario_id=s1", disabled: false,
+        entries: [{permission: "read-scenarios", deny: false, scope_text: ""}]};
+
+    test("the roles view is a route: the buttons move it, the route shows it", () => {
+        const v = gobj_create(`users_${++n_views}`, "C_AGENT_USERS",
+            {node: NODE, yuno_id: YUNO, yuno_label: "cc", base_route: "/users/node/x"}, host);
+        gobj_start(v);
+        gobj_send_event(v, "EV_SHOW_VIEW", {view: "roles"}, v);
+        expect(navigated).toEqual(["/users/node/x/roles"]);
+        expect(v.priv.view).toBe("users");      /*  the route decides  */
+        gobj_publish_event(test_shell.shell, "EV_ROUTE_CHANGED",
+            {route: "/users/node/x/roles", base: "/users/node/x", subpath: "roles"});
+        expect(v.priv.view).toBe("roles");
+        expect(v.priv.$roleswrap.style.display).not.toBe("none");
+        gobj_publish_event(test_shell.shell, "EV_ROUTE_CHANGED",
+            {route: "/users/node/y/roles", base: "/users/node/y", subpath: "roles"});
+        expect(v.priv.view).toBe("roles");      /*  another tab's route  */
+        gobj_publish_event(test_shell.shell, "EV_ROUTE_CHANGED",
+            {route: "/users/node/x", base: "/users/node/x", subpath: ""});
+        expect(v.priv.view).toBe("users");
+        expect(errors()).toEqual([]);
+    });
+
+    test("a role is saved with every column the sheet edits, and the store read again", () => {
+        const v = ready_view();
+        gobj_send_event(v, "EV_OPEN_ROLE", {role_id: "controlcenter"}, v);
+        expect(modals.length).toBe(1);
+        gobj_send_event(v, "EV_SAVE_ROLE", {is_new: false, form: Object.assign({}, FORM, {id: "controlcenter"})}, v);
+        expect(sent.map((r) => [service_of(r), inner(r)])).toEqual([["treedb_authzs", "update-node"]]);
+        expect(sent[0].kw.topic_name).toBe("roles");
+        expect(sent[0].kw.record).toEqual({
+            id: "controlcenter", description: "Runs s1", disabled: false, realm_id: "*",
+            service: "controlcenter", permission: "run-scenarios", deny: false,
+            permissions: [{permission: "read-scenarios", deny: false}],
+            parameters: {scenario_id: ["s1"]}
+        });
+        reply(v, sent[0], {comment: "Node update!"});
+        expect(gobj_current_state(v)).toBe("ST_LOADING");
+        expect(errors()).toEqual([]);
+    });
+
+    test("a new role is created; one that names a key its permission does not declare is not sent", () => {
+        const v = ready_view();
+        gobj_send_event(v, "EV_NEW_ROLE", {}, v);
+        expect(modals[0].opts.title).toBe("new role");
+        gobj_send_event(v, "EV_SAVE_ROLE", {is_new: true,
+            form: Object.assign({}, FORM, {permission: "command-agent"})}, v);
+        expect(sent).toEqual([]);
+        expect(v.priv.role_sheet.$error.textContent).toMatch(/command-agent: scenario_id/);
+        gobj_send_event(v, "EV_SAVE_ROLE", {is_new: true, form: Object.assign({}, FORM, {id: "root"})}, v);
+        expect(sent).toEqual([]);   /*  exists already  */
+        gobj_send_event(v, "EV_SAVE_ROLE", {is_new: true, form: FORM}, v);
+        expect(sent.map(inner)).toEqual(["create-node"]);
+        expect(sent[0].kw.record.id).toBe("op");
+        expect(errors()).toEqual([]);
+    });
+
+    test("delete: asked in red; a role with users is not deleted", async () => {
+        const v = ready_view();
+        gobj_send_event(v, "EV_DELETE_ROLE", {role_id: "controlcenter"}, v);
+        expect(confirm.asked).toEqual([]);
+        expect(errors().length).toBe(1);
+        logged.length = 0;
+        gobj_send_event(v, "EV_DELETE_ROLE", {role_id: "root"}, v);
+        expect(confirm.asked.map((a) => a.kind)).toEqual(["danger"]);
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(sent.map(inner)).toEqual(["delete-node"]);
+        expect(sent[0].kw).toMatchObject({topic_name: "roles", record: {id: "root"}});
         expect(errors()).toEqual([]);
     });
 });
