@@ -6,6 +6,19 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.113 (2026-10-24)
+
+- **A run that failed with no step done changes nothing.** 0.29.112 read any
+  failed run as "state not known" and let the charts follow: the newest run
+  of `renfe-20k-hidraulia` was a `start` refused at its first step (its
+  yunos were down), so the stopped scenario kept scrolling. Now such a run
+  is skipped and the one before it decides; a run, or a control from here,
+  that failed half way still leaves the state not known.
+- QA: `node scripts/qa.mjs --check chartsheld` opens a stopped scenario
+  (`QA_HELD_SCENARIO`, default `renfe-20k-hidraulia`), waits for the held
+  note and checks the messages chart is not redrawn over 6 s; read only.
+  Passed on artgins.yunetacontrol.com.
+
 ## gui_agent 0.29.112 (2026-10-24)
 
 - **The charts of a stopped scenario hold.** The live view of a scenario

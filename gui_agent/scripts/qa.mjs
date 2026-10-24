@@ -29,6 +29,7 @@
  *          node scripts/qa.mjs --no-login              # login screen only
  *          node scripts/qa.mjs --check schemaback      # the schema editor's ← = browser Back
  *          node scripts/qa.mjs --check gobjtree        # a card's gobj tree opens and draws its canvas
+ *          node scripts/qa.mjs --check chartsheld      # a stopped scenario's charts hold (renfe-20k-hidraulia)
  *
  *      Routes are hash routes of the shell, given without the '#':
  *
@@ -340,9 +341,65 @@ async function check_gobjtree(page, args, step, out_dir)
     return ok && left === 0;
 }
 
+/*
+ *  --check chartsheld: the charts of a STOPPED scenario take no rows.
+ *  Opens HELD_SCENARIO from the list (a scenario of the control center
+ *  whose last run is a stop: the yunos of renfe-20k-hidraulia are left up
+ *  and idle between runs), waits for the held note, and checks that the
+ *  messages chart holds the same number of points over a few periods.
+ *  Read only: it runs no action.
+ */
+const HELD_SCENARIO = process.env.QA_HELD_SCENARIO || "renfe-20k-hidraulia";
+
+async function check_chartsheld(page, args, step, out_dir)
+{
+    await page.evaluate(() => { window.location.hash = "#/scenarios/list"; });
+    const $row = page.locator(".tabulator-row", {hasText: HELD_SCENARIO}).first();
+    try {
+        await $row.waitFor({timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        step("check chartsheld", false, `no scenario '${HELD_SCENARIO}' in the list`);
+        return false;
+    }
+    await $row.click();
+    await page.evaluate(() => { window.location.hash = "#/scenarios/live"; });
+    let ok = true;
+    let detail = "";
+    try {
+        await page.locator(".MONITOR_CHARTS_HELD").waitFor({state: "visible", timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        ok = false;
+        detail = "no held note: the scenario is not stopped, or its runs were not read";
+        /*  What decided it: the runs, in a screenshot.  */
+        await page.locator(".MONITOR_RUNS").click().catch(() => {});
+        await page.waitForTimeout(2500);
+        await page.screenshot({path: join(out_dir, "check_chartsheld_runs.png"), fullPage: false});
+    }
+    const points = () => page.evaluate(() => {
+        const $c = document.querySelector(".MONITOR_CHART_RATE canvas");
+        return $c ? $c.toDataURL().length : -1;
+    });
+    if(ok) {
+        await page.waitForTimeout(3000);
+        const a = await points();
+        await page.waitForTimeout(6000);
+        const b = await points();
+        if(a !== b) {
+            ok = false;
+            detail = "the messages chart was redrawn while held";
+        } else {
+            detail = await page.locator(".MONITOR_CHARTS_HELD_TEXT").innerText();
+        }
+    }
+    await page.screenshot({path: join(out_dir, "check_chartsheld.png"), fullPage: true});
+    step("check chartsheld: a stopped scenario's charts hold", ok, detail);
+    return ok;
+}
+
 const CHECKS = {
     schemaback: check_schemaback,
     gobjtree: check_gobjtree,
+    chartsheld: check_chartsheld,
 };
 
 

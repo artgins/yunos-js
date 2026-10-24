@@ -510,9 +510,19 @@ function run_state_of_action(action)
     return null;
 }
 
+/*  Did any step of a run (or of a control) do its work? A step that
+ *  was not sent has no result.  */
+function some_step_done(steps)
+{
+    return (Array.isArray(steps) ? steps : []).some((st) =>
+        !!st && typeof st.result === "number" && st.result >= 0);
+}
+
 /*  The same, from the runs the control center keeps, newest first:
- *  the last one that was not a report decides. No such run is a
- *  scenario never started: stopped.  */
+ *  the last one that was not a report decides. One that failed with no
+ *  step done changed nothing (the one before it decides); one that
+ *  failed half way left it not known. No such run is a scenario never
+ *  started: stopped.  */
 function run_state_of_runs(runs)
 {
     let list = Array.isArray(runs) ? runs : [];
@@ -521,6 +531,9 @@ function run_state_of_runs(runs)
             continue;
         }
         if(typeof r.result === "number" && r.result < 0) {
+            if(!some_step_done(r.steps)) {
+                continue;
+            }
             return null;
         }
         return run_state_of_action(r.action);
@@ -994,6 +1007,7 @@ export {
     scenario_controls,
     run_state_of_action,
     run_state_of_runs,
+    some_step_done,
     charts_follow,
     action_steps,
     scenario_document,

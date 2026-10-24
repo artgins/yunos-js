@@ -139,7 +139,8 @@
  *      stopped. The control center's runs say it (`scenario-runs`, the
  *      newest that is not a report; none = never started = stopped),
  *      asked on entering a session and when the tab shows again; a
- *      control ended here says it at once (one that failed: not known).
+ *      control ended here says it at once. One that failed with no step
+ *      done changed nothing; one that failed half way: not known.
  *      While it is stopped or paused the charts take no rows -- the
  *      cards stay live -- so the last run stays on screen instead of
  *      scrolling away under zeros and cpu noise; the next row after a
@@ -220,6 +221,7 @@ import {
     scenario_controls,
     run_state_of_action,
     run_state_of_runs,
+    some_step_done,
     charts_follow,
     action_steps,
     scenario_document,
@@ -2144,7 +2146,8 @@ function control_over(gobj, ok, text_key)
     if(text_key) {
         c.text_key = text_key;
     }
-    if(c.control !== "report") {
+    /*  A control that failed with no step done changed nothing.  */
+    if(c.control !== "report" && (c.ok || some_step_done(c.outputs))) {
         gobj.priv.run_state = c.ok ? run_state_of_action(c.control) : null;
         gobj.priv.run_state_asked = false;
     }

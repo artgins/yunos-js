@@ -11,6 +11,7 @@ import {
     scenario_controls,
     run_state_of_action,
     run_state_of_runs,
+    some_step_done,
     charts_follow,
     action_steps,
     scenario_document,
@@ -504,7 +505,10 @@ describe("run state and charts", () => {
             {action: "start", result: 0}])).toBe("stopped");
         expect(run_state_of_runs([{action: "start", result: 0}, {action: "stop", result: 0}]))
             .toBe("running");
-        expect(run_state_of_runs([{action: "stop", result: -1}])).toBe(null);
+        expect(run_state_of_runs([{action: "stop", result: -1,
+            steps: [{result: 0}, {result: -1}, {}]}])).toBe(null);
+        expect(run_state_of_runs([{action: "start", result: -1, steps: [{result: -1}, {}]},
+            {action: "stop", result: 0}])).toBe("stopped");
         expect(run_state_of_runs([])).toBe("stopped");
         expect(run_state_of_runs(null)).toBe("stopped");
     });
@@ -516,5 +520,11 @@ describe("run state and charts", () => {
         expect(charts_follow(can, "running")).toBe(true);
         expect(charts_follow(can, "stopped")).toBe(false);
         expect(charts_follow(can, "paused")).toBe(false);
+    });
+
+    it("a step is done when it answered without error; one not sent is not", () => {
+        expect(some_step_done([{result: -1}, {}])).toBe(false);
+        expect(some_step_done([{result: -1}, {result: 0}])).toBe(true);
+        expect(some_step_done(undefined)).toBe(false);
     });
 });
