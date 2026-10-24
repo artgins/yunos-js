@@ -128,6 +128,13 @@ and the live view, watched with `watch-scenario` (the control center builds the
 agents' watch); the actions need `run-scenarios` on it, edit and delete
 `write-scenarios`. The controls of a scenario say what they run in their
 tooltip, and the charts of a stopped or paused one hold its last run.
+**Permissions follow without a reload** (1.0.0, SDK 7.27.16): the control
+center publishes `EV_PERMISSIONS_CHANGED` when a role changes or is given or
+taken; the link subscribes to it on the service `controlcenter`, C_APP asks
+`my-permissions` again, the live view builds its controls again and the list
+is read again; a user who goes from watching to commanding the agents gets
+the other shell. `scripts/qa.mjs --check permlive` (with `QA_PERM_OFF` /
+`QA_PERM_ON` commands that take and give the role) checks it on the page.
 
 A **scenario** is a set of yunos — the ones a test involves, or just the ones
 worth watching together —, how the messages flow between them and the

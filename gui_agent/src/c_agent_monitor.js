@@ -487,6 +487,7 @@ function mt_start(gobj)
     let config = gobj_read_attr(gobj, "config_svc");
     if(config) {
         gobj_subscribe_event(config, "EV_MONITOR_SCENARIO_CHANGED", {}, gobj);
+        gobj_subscribe_event(config, "EV_CC_PERMISSIONS_CHANGED", {}, gobj);
     }
     let cc_link = gobj_read_attr(gobj, "cc_link_svc");
     if(cc_link) {
@@ -532,6 +533,7 @@ function mt_stop(gobj)
     let config = gobj_read_attr(gobj, "config_svc");
     if(config) {
         gobj_unsubscribe_event(config, "EV_MONITOR_SCENARIO_CHANGED", {}, gobj);
+        gobj_unsubscribe_event(config, "EV_CC_PERMISSIONS_CHANGED", {}, gobj);
     }
     let cc_link = gobj_read_attr(gobj, "cc_link_svc");
     if(cc_link) {
@@ -3119,6 +3121,16 @@ function ac_scenario_changed(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  What the user may do changed: the controls it is offered are
+ *  built again (the actions, edit and delete, a card's tools).
+ ***************************************************************/
+function ac_permissions_changed(gobj, event, kw, src)
+{
+    render_all(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  The shell moved. On this view's route, the subpath is the saved
  *  scenario to show: one that is not the one shown is asked of the
  *  control center (a link sent to somebody, a reload, Back); none is
@@ -3348,6 +3360,7 @@ function create_gclass(gclass_name)
         ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,   null],
         ["EV_LANGUAGE_CHANGED",     ac_language_changed,    null],
         ["EV_ROUTE_CHANGED",        ac_route_changed,       null],
+        ["EV_CC_PERMISSIONS_CHANGED", ac_permissions_changed, null],
         /*  a gobj tree stays open across a drop: its requests are
          *  answered in any state  */
         ["EV_OPEN_YUNO_TREE",       ac_open_yuno_tree,      null],
@@ -3408,6 +3421,7 @@ function create_gclass(gclass_name)
         ["EV_SAVE_SCENARIO",        0],
         ["EV_LANGUAGE_CHANGED",     0],
         ["EV_ROUTE_CHANGED",        0],
+        ["EV_CC_PERMISSIONS_CHANGED", 0],
         ["EV_TEST_CONTROL",         0],
         ["EV_TEST_CONFIRMED",       0],
         ["EV_PROPOSE_LINKS",        0],

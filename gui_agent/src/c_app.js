@@ -174,6 +174,8 @@ function mt_create(gobj)
     gobj_subscribe_event(link, "EV_ON_CLOSE", {}, gobj);
     /*  list-agents answers keep the live-node set fresh (tab red state). */
     gobj_subscribe_event(link, "EV_MT_COMMAND_ANSWER", {}, gobj);
+    /*  What the user may do changed in the control center: asked again  */
+    gobj_subscribe_event(link, "EV_PERMISSIONS_CHANGED", {}, gobj);
 
     /*  The Monitor's DIRECT link to one agent — child of the yuno too, and
      *  only its view subscribes to it. Started with the session, emptied
@@ -763,10 +765,28 @@ function permissions_answered(gobj, kw)
         perms = kw.data;
     }
     agent_config_set_permissions(config, perms);
+    let viewer = !agent_config_may(config, "command-agent");
     if(!priv.shell) {
-        priv.viewer = !agent_config_may(config, "command-agent");
+        priv.viewer = viewer;
+        open_session(gobj);
+    } else if(viewer !== priv.viewer) {
+        /*  The shell is built for one or the other: built again  */
+        log_info(`${gobj_short_name(gobj)}: the user ${viewer ? "may not" : "may"} command ` +
+            `the agents now: the shell is built again`);
+        priv.viewer = viewer;
+        destroy_shell(gobj);
         open_session(gobj);
     }
+    return 0;
+}
+
+/***************************************************************
+ *  The control center says what a user may do changed (a role, or who
+ *  holds it): ask what THIS user may do now. No polling: it is told.
+ ***************************************************************/
+function ac_permissions_changed(gobj, event, kw, src)
+{
+    agent_link_command(gobj.priv.link, "my-permissions", {});
     return 0;
 }
 
@@ -1407,7 +1427,8 @@ function create_gclass(gclass_name)
             ["EV_NAV_ITEM_CLOSE",   ac_nav_item_close,  null],
             ["EV_ROUTE_CHANGED",    ac_route_changed,   null],
             ["EV_NORMALIZE_ROUTE",  ac_normalize_route, null],
-            ["EV_MT_COMMAND_ANSWER", ac_link_answer,    null]
+            ["EV_MT_COMMAND_ANSWER", ac_link_answer,    null],
+            ["EV_PERMISSIONS_CHANGED", ac_permissions_changed, null]
         ]]
     ];
 
@@ -1438,7 +1459,8 @@ function create_gclass(gclass_name)
         ["EV_NAV_ITEM_CLOSE",   0],
         ["EV_ROUTE_CHANGED",    0],
         ["EV_NORMALIZE_ROUTE",  0],
-        ["EV_MT_COMMAND_ANSWER", 0]
+        ["EV_MT_COMMAND_ANSWER", 0],
+        ["EV_PERMISSIONS_CHANGED", 0]
     ];
 
     __gclass__ = gclass_create(

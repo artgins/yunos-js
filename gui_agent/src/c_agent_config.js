@@ -131,7 +131,13 @@ function mt_destroy(gobj)
  ***************************************************************/
 function agent_config_set_permissions(gobj, perms)
 {
-    gobj_write_attr(gobj, "cc_permissions", perms && typeof perms === "object" ? perms : null);
+    let next = perms && typeof perms === "object" ? perms : null;
+    let before = JSON.stringify(gobj_read_attr(gobj, "cc_permissions") || null);
+    gobj_write_attr(gobj, "cc_permissions", next);
+    if(before !== JSON.stringify(next)) {
+        /*  The views that offer controls repaint what they offer  */
+        gobj_publish_event(gobj, "EV_CC_PERMISSIONS_CHANGED", {});
+    }
 }
 
 function agent_config_may(gobj, permission, scenario_id)
@@ -556,6 +562,7 @@ function create_gclass(gclass_name)
         ["EV_ACTIVE_NODE_CHANGED",    event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
         ["EV_SELECTED_NODES_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
         ["EV_MONITOR_SCENARIO_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
+        ["EV_CC_PERMISSIONS_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
         ["EV_NAV_MODE_CHANGED",       event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
     ];
 

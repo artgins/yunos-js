@@ -33,6 +33,8 @@
  *          node scripts/qa.mjs --check controlhelp     # each control of a scenario says what it does
  *          node scripts/qa.mjs --check roles           # the roles of a store: what each grants, its sheet
  *          node scripts/qa.mjs --check roleswrite      # a role created, edited and deleted (leaves none)
+ *          QA_PERM_OFF='<cmd>' QA_PERM_ON='<cmd>' \
+ *          node scripts/qa.mjs --check permlive        # controls follow a role taken and given, no reload
  *
  *      Routes are hash routes of the shell, given without the '#':
  *
@@ -587,6 +589,56 @@ async function check_roleswrite(page, args, step, out_dir)
     return created && edited && gone;
 }
 
+/*
+ *  --check permlive: the controls of a scenario follow the user's
+ *  permissions while the page is open (SDK 7.27.16, gui_agent 1.0.0).
+ *  Signed in as a user who may run HELD_SCENARIO, the page shows its
+ *  controls; QA_PERM_OFF (a shell command, e.g. an unlink-nodes of the
+ *  role) takes the permission and the controls must go, with no reload;
+ *  QA_PERM_ON gives it back and they must come back. QA_PERM_ON runs at
+ *  the end whatever happened, so the user is left as found.
+ */
+async function check_permlive(page, args, step, out_dir)
+{
+    const off = process.env.QA_PERM_OFF || "";
+    const on = process.env.QA_PERM_ON || "";
+    if(!off || !on) {
+        step("check permlive", false, "set QA_PERM_OFF and QA_PERM_ON");
+        return false;
+    }
+    const {execSync} = await import("node:child_process");
+    const controls = () => page.locator(".MONITOR_TEST_BUTTONS button").count();
+    const wait_for = async (want) => {
+        for(let i = 0; i < 40; i++) {
+            if((await controls() > 0) === want) {
+                return true;
+            }
+            await page.waitForTimeout(250);
+        }
+        return false;
+    };
+    await page.evaluate((id) => { window.location.hash = `#/scenarios/live/${id}`; }, HELD_SCENARIO);
+    let ok = await wait_for(true);
+    step("check permlive: the user may run it, the controls are there", ok, "");
+    let gone = false;
+    let back = false;
+    try {
+        if(ok) {
+            execSync(off, {stdio: "ignore"});
+            gone = await wait_for(false);
+            step("check permlive: the permission taken, the controls go (no reload)", gone, "");
+        }
+    } finally {
+        execSync(on, {stdio: "ignore"});
+    }
+    if(ok) {
+        back = await wait_for(true);
+        step("check permlive: the permission given back, the controls come back", back, "");
+    }
+    await page.screenshot({path: join(out_dir, "check_permlive.png"), fullPage: true});
+    return ok && gone && back;
+}
+
 const CHECKS = {
     schemaback: check_schemaback,
     gobjtree: check_gobjtree,
@@ -594,6 +646,7 @@ const CHECKS = {
     controlhelp: check_controlhelp,
     roles: check_roles,
     roleswrite: check_roleswrite,
+    permlive: check_permlive,
 };
 
 

@@ -6,6 +6,22 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.0.0, gui_treedb 1.0.0 (2026-10-24)
+
+**One digit per segment** from here on, as the `yunetas` CLI: each segment is
+0-9 and rolls over (x.y.9 -> x.(y+1).0). 0.29.116 and 0.17.172 had grown
+unreadable. gui_treedb 1.0.0 is the code of 0.17.172 renumbered.
+
+- **gui_agent: the controls follow the permissions without a reload.** The
+  control center publishes `EV_PERMISSIONS_CHANGED` when a role changes or
+  is given or taken (SDK 7.27.16); the link subscribes to it on the service
+  `controlcenter` and re-publishes it, C_APP asks `my-permissions` again,
+  and C_AGENT_CONFIG tells the views (`EV_CC_PERMISSIONS_CHANGED`): the
+  live view builds its controls again and the list of scenarios is read
+  again. A user who goes from watching to commanding the agents (or back)
+  gets the other shell, built again. Up to 0.29.116 a role given to a user
+  with the console open showed only after an F5.
+
 ## gui_agent 0.29.116 (2026-10-24)
 
 - **Users has a Roles view**: `<tab>/roles` (a route; the *Users* / *Roles*

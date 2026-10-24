@@ -455,13 +455,17 @@ describe("the live view of a scenario the control center keeps", () => {
             r.kw.__md_iev__.monitor_gen === mon.priv.generation && mon.priv.cc_watch !== false)).toEqual([]);
         expect(find("watch-scenario").length > 0).toBe(true);
 
-        /*  May run it too: the controls are there  */
+        /*  Given run-scenarios while it is open (the control center told
+         *  it, C_APP asked again): the controls appear, no reload  */
         agent_config_set_permissions(config, {
             "read-scenarios": ["stress"], "run-scenarios": ["stress"], "command-agent": false
         });
-        agent_config_set_monitor(config, {scenario: validate_scenario(Object.assign({}, SAVED)).scenario,
-            source: "saved"});
         expect(Object.keys(mon.priv.control_buttons)).toEqual(["start", "stop", "report", "restart"]);
+        /*  and taken away again  */
+        agent_config_set_permissions(config, {
+            "read-scenarios": ["stress"], "run-scenarios": false, "command-agent": false
+        });
+        expect(Object.keys(mon.priv.control_buttons)).toEqual([]);
         expect(errors()).toEqual([]);
     });
 

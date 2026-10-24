@@ -132,6 +132,8 @@ function mt_create(gobj)
     gobj_write_attr(gobj, "config_svc", config);
     if(config) {
         gobj_subscribe_event(config, "EV_MONITOR_SCENARIO_CHANGED", {}, gobj);
+        /*  The scenarios a user may read may be others now  */
+        gobj_subscribe_event(config, "EV_CC_PERMISSIONS_CHANGED", {}, gobj);
     }
 
     let $c = createElement2(
@@ -663,6 +665,7 @@ function create_gclass(gclass_name)
     const always = [
         ["EV_MT_COMMAND_ANSWER",        ac_mt_command_answer,   null],
         ["EV_MONITOR_SCENARIO_CHANGED", ac_scenario_changed,    null],
+        ["EV_CC_PERMISSIONS_CHANGED",   ac_scenario_changed,    null],
         ["EV_VISIBILITY",               ac_visibility,          null],
         ["EV_SEARCH",                   ac_search,              null],
         ["EV_LANGUAGE_CHANGED",         ac_language_changed,    null]
@@ -701,6 +704,7 @@ function create_gclass(gclass_name)
         ["EV_ON_CLOSE",                 0],
         ["EV_MT_COMMAND_ANSWER",        0],
         ["EV_MONITOR_SCENARIO_CHANGED", 0],
+        ["EV_CC_PERMISSIONS_CHANGED",   0],
         ["EV_LANGUAGE_CHANGED",         0],
         ["EV_REFRESH",                  0],
         ["EV_OPEN_SCENARIO",            0],

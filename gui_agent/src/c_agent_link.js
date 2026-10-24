@@ -15,7 +15,12 @@
  *      Consumers:
  *          - subscribe to "agent_link" for EV_ON_OPEN / EV_ON_CLOSE /
  *            EV_ON_OPEN_ERROR / EV_ON_ID_NAK / EV_MT_COMMAND_ANSWER /
- *            EV_MT_STATS_ANSWER;
+ *            EV_MT_STATS_ANSWER / EV_PERMISSIONS_CHANGED;
+ *          - EV_PERMISSIONS_CHANGED is the control center's own (SDK
+ *            7.27.16): what a user may do changed in its users store. The
+ *            transport subscribes to it on the service `controlcenter`
+ *            (the subscription travels to the control center, and is sent
+ *            again at every session) and this link re-publishes it;
  *          - send via agent_link_command() / agent_link_stats().
  *
  *      The identity-card session always targets the agent's default
@@ -223,6 +228,7 @@ function open_link(gobj)
         subscriber:          gobj
     }, gobj_yuno());
     gobj_write_attr(gobj, "iev", iev);
+    gobj_subscribe_event(iev, "EV_PERMISSIONS_CHANGED", {__service__: "controlcenter"}, gobj);
 
     gobj_start_tree(iev);
 }
@@ -308,6 +314,11 @@ function ac_yuno_stats(gobj, event, kw, src)
     return bubble(gobj, "EV_YUNO_STATS", kw);
 }
 
+function ac_permissions_changed(gobj, event, kw, src)
+{
+    return bubble(gobj, "EV_PERMISSIONS_CHANGED", kw);
+}
+
 /***************************************************************
  *  Active agent or login changed: re-open the link.
  ***************************************************************/
@@ -362,6 +373,7 @@ function create_gclass(gclass_name)
             ["EV_TTY_CLOSE",         ac_tty_close,         null],
             ["EV_TTY_DATA",          ac_tty_data,          null],
             ["EV_YUNO_STATS",        ac_yuno_stats,        null],
+            ["EV_PERMISSIONS_CHANGED", ac_permissions_changed, null],
             ["EV_REOPEN",            ac_reopen,            null]
         ]]
     ];
@@ -387,6 +399,7 @@ function create_gclass(gclass_name)
         ["EV_TTY_CLOSE",         answer],
         ["EV_TTY_DATA",          answer],
         ["EV_YUNO_STATS",        answer],
+        ["EV_PERMISSIONS_CHANGED", answer],
         ["EV_REOPEN",            0]
     ];
 

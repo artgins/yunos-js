@@ -54,11 +54,11 @@ switch language**. The full rule lives in ONE place, gobj-ui's README
   version(s) it ships, and the libraries it moves to:
   `## gui_agent 0.22.90, gui_treedb 0.17.63 + gobj-ui ^7.25.16 (2026-09-24)`.
   A release that touches only one yuno names only that one.
-- **gui_agent's version has one digit per segment** (rule of 2026-10-24,
+- **Both yunos' versions have one digit per segment** (rule of 2026-10-24,
   the same as the `yunetas` CLI's): each segment is 0-9 and rolls over like
-  an odometer -- x.y.9 -> x.(y+1).0, x.9.9 -> (x+1).0.0. 0.29.116 had grown
-  unreadable, so the release after it is **1.0.0** (anything lower sorts
-  below 0.29.116), then 1.0.1 ... 1.0.9, 1.1.0.
+  an odometer -- x.y.9 -> x.(y+1).0, x.9.9 -> (x+1).0.0. gui_agent 0.29.116
+  and gui_treedb 0.17.172 had grown unreadable, so both went to **1.0.0**
+  (anything lower sorts below them), then 1.0.1 ... 1.0.9, 1.1.0.
 - **Releases are tagged, one tag per yuno version, `<yuno>-<version>`**, no
   `v` prefix: `gui_agent-0.22.90`, `gui_treedb-0.17.63`, on the commit that
   bumps that `package.json` and writes its heading. A bare number cannot name
