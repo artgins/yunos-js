@@ -6,6 +6,21 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.112 (2026-10-24)
+
+- **The charts of a stopped scenario hold.** The live view of a scenario
+  that can start or stop knows what its actions left it doing: running
+  (start, resume, restart), paused or stopped -- from the control center's
+  runs (`scenario-runs`, the newest that is not a report; no run = never
+  started = stopped), asked on entering a session and when the tab shows
+  again, and from a control that ends here. While it is stopped or paused
+  the messages and cpu charts take no rows (the cards stay live) and say
+  why, so the last run stays on screen instead of scrolling away under
+  zeros and the cpu noise of idle yunos; the first row after a hold opens a
+  gap. A scenario with no start/stop, or whose state is not known (a failed
+  control, runs not readable), takes rows as before. A run from another
+  console is seen when the tab shows again (no polling).
+
 ## gui_agent 0.29.111 (2026-10-24)
 
 - **A version is split at '-' as well as '.'** when it is compared or sorted

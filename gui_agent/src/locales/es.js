@@ -881,6 +881,8 @@ const es = {
         "monitor disconnected": "Desconectado",
         "monitor messages per second": "Mensajes por segundo",
         "monitor cpu of one core": "CPU, % de un core",
+        "monitor charts held stopped": "Scenario parado: las gráficas guardan su última ejecución",
+        "monitor charts held paused": "Scenario en pausa: las gráficas no avanzan",
         "monitor cpu": "CPU",
         "monitor in": "Entrada",
         "monitor out": "Salida",

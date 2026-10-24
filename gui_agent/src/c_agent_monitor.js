@@ -134,6 +134,19 @@
  *      A control run from here that is not answered in time, or whose
  *      link drops, is said so instead of staying "running".
  *
+ *      CHARTS HELD. A scenario that can start or stop has a state, what
+ *      its actions left: running (start, resume, restart), paused or
+ *      stopped. The control center's runs say it (`scenario-runs`, the
+ *      newest that is not a report; none = never started = stopped),
+ *      asked on entering a session and when the tab shows again; a
+ *      control ended here says it at once (one that failed: not known).
+ *      While it is stopped or paused the charts take no rows -- the
+ *      cards stay live -- so the last run stays on screen instead of
+ *      scrolling away under zeros and cpu noise; the next row after a
+ *      hold opens a gap. A scenario with no start/stop, or whose state
+ *      is not known, always takes rows. A run from another console is
+ *      seen when the tab shows again, not before (no polling).
+ *
  *      GENERATIONS. Every request carries the generation of the scenario
  *      shown (`monitor_gen`, bumped when another one is adopted): a
  *      reading asked for the one before, or pushed by its watch, is
@@ -205,6 +218,9 @@ import {esc, fmt_value} from "./agent_helpers.js";
 import {
     SCENARIO_TEMPLATE,
     scenario_controls,
+    run_state_of_action,
+    run_state_of_runs,
+    charts_follow,
     action_steps,
     scenario_document,
     cc_lacks_command,
@@ -247,7 +263,7 @@ const CONTROL_ICONS = {
 
 /*  The kinds of the requests this view makes of the control center
  *  itself (not of an agent): answered in any state.  */
-const CC_KINDS = ["cc_save", "cc_delete", "cc_runs", "cc_run"];
+const CC_KINDS = ["cc_save", "cc_delete", "cc_runs", "cc_run", "cc_state"];
 
 const DANGEROUS_CONTROLS = ["stop", "restart"];
 
@@ -276,6 +292,13 @@ export const C_AGENT_MONITOR_CONFIRM_I18N_KEYS = [
 export const C_AGENT_MONITOR_STATE_I18N_KEYS = [
     "monitor yuno unknown", "monitor yuno playing", "monitor yuno paused",
     "monitor yuno stopped", "monitor yuno disabled", "monitor yuno missing"
+];
+
+/*  Why the charts take no rows, `monitor charts held ${run_state}`: one
+ *  per state of charts_follow() of monitor_helpers.js that holds them,
+ *  the same rule.  */
+export const C_AGENT_MONITOR_HELD_I18N_KEYS = [
+    "monitor charts held stopped", "monitor charts held paused"
 ];
 
 /*  Where the scenario watched comes from, `scenario source ${source}`: one
@@ -329,6 +352,9 @@ let PRIVATE_DATA = {
     discovery:      null,   /*  {pending: {key: true}, configs: {key: config}, failed: [key]}  */
     generation:     0,      /*  of the scenario shown: tags every request  */
     control_seq:    0,      /*  number of the last control sent  */
+    run_state:      null,   /*  running | paused | stopped | null (not known): what its actions left  */
+    run_state_asked: false, /*  the runs were asked to learn it, and no control said it since  */
+    charts_held:    false,  /*  a period went by without a row: the next one starts a gap  */
 };
 
 /*  How long a phase of a control run from here waits for its answers.  */
@@ -700,6 +726,11 @@ function build_dom(gobj)
 
     priv.$rate_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
     priv.$cpu_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
+    priv.$held = createElement2(
+        ["p", {class: "MONITOR_CHARTS_HELD"}, [
+            ["span", {class: "MONITOR_CHARTS_HELD_TEXT tag is-warning"}, ""]
+        ]]
+    );
     priv.$charts = createElement2(
         ["div", {class: "MONITOR_CHARTS"}, [
             ["div", {class: "MONITOR_CHART MONITOR_CHART_RATE box"}, [
@@ -722,6 +753,7 @@ function build_dom(gobj)
     $c.appendChild(priv.$empty);
     $c.appendChild(priv.$graph);
     $c.appendChild(priv.$cards);
+    $c.appendChild(priv.$held);
     $c.appendChild(priv.$charts);
 }
 
@@ -1073,6 +1105,17 @@ function render_status(gobj)
     show(priv.$graph, has && !cards);
     show(priv.$charts, has && !cards);
     show(priv.$cards, has && cards);
+    let held = has && !cards && !charts_follow(priv.scenario, priv.run_state);
+    let $ht = priv.$held.querySelector(".MONITOR_CHARTS_HELD_TEXT");
+    if(held) {
+        let held_key = `monitor charts held ${priv.run_state}`;
+        $ht.setAttribute("data-i18n", /* i18n: C_AGENT_MONITOR_HELD_I18N_KEYS */ held_key);
+        $ht.textContent = t(/* i18n: C_AGENT_MONITOR_HELD_I18N_KEYS */ held_key);
+    } else {
+        $ht.removeAttribute("data-i18n");
+        $ht.textContent = "";
+    }
+    show(priv.$held, held);
 }
 
 /***************************************************************
@@ -1277,11 +1320,25 @@ function poll_tick(gobj)
 {
     let priv = gobj.priv;
     let now = performance.now();
-    if(priv.last_tick > 0) {
+    let follow = charts_follow(priv.scenario, priv.run_state);
+    if(priv.last_tick > 0 && !follow) {
+        priv.charts_held = true;
+    } else if(priv.last_tick > 0) {
         /*  Fresh = arrived within the last period and a half: a pushed
          *  reading keeps its own phase against this timer.  */
         let fresh_from = now - 1.5 * (now - priv.last_tick);
         let row = {tm: Date.now() / 1000};
+        if(priv.charts_held && priv.rows.length) {
+            /*  The time the charts were held is a gap, not a line drawn
+             *  from the last run to this one.  */
+            let gap = {tm: row.tm - 0.001};
+            for(let y of priv.scenario.yunos) {
+                gap["cpu:" + y.key] = null;
+                gap["rate:" + y.key] = null;
+            }
+            priv.rows.push(gap);
+        }
+        priv.charts_held = false;
         for(let y of priv.scenario.yunos) {
             let m = priv.model[y.key];
             let fresh_cpu = m.cpu_t > fresh_from;
@@ -1387,6 +1444,28 @@ function cc_request(gobj, command, kw, kind, md)
         msg_iev_write_key(kw, k, md[k]);
     }
     return agent_link_command(link, command, kw);
+}
+
+/***************************************************************
+ *  What the scenario is doing, from the runs the control center
+ *  keeps: on entering a session and when the tab shows again (it may
+ *  have been run from another console meanwhile). Only for one the
+ *  control center runs and that can start or stop.
+ ***************************************************************/
+function ask_run_state(gobj)
+{
+    let priv = gobj.priv;
+    if(!run_by_control_center(gobj) || charts_follow(priv.scenario, "stopped")) {
+        return 0;
+    }
+    priv.run_state_asked = true;
+    if(cc_request(gobj, "scenario-runs", {scenario_id: priv.scenario.id}, "cc_state",
+            {monitor_scenario: priv.scenario.id}) < 0) {
+        priv.run_state_asked = false;
+        log_warning(`${gobj_short_name(gobj)}: the runs of '${priv.scenario.id}' not asked: ` +
+            `no link to the control center`);
+    }
+    return 0;
 }
 
 /***************************************************************
@@ -1776,6 +1855,9 @@ function adopt_scenario(gobj)
     }
     priv.view_mode = next ? next.view.mode : "graph";
     priv.control = null;
+    priv.run_state = null;
+    priv.run_state_asked = false;
+    priv.charts_held = false;
     priv.editing = false;
     reset_model(gobj);
     gobj_start_charts(gobj);
@@ -1794,6 +1876,7 @@ function adopt_scenario(gobj)
         for(let node of scenario_nodes(priv.scenario)) {
             priv.push[node] = null;
         }
+        ask_run_state(gobj);
         if(priv.visible) {
             send_watch(gobj);
             poll_tick(gobj);
@@ -1939,6 +2022,22 @@ function cc_answer(gobj, a, kw)
     if(a.kind === "cc_run") {
         return cc_run_answer(gobj, kw, failed);
     }
+    if(a.kind === "cc_state") {
+        /*  A control that ended since the question said it better.  */
+        if(!priv.run_state_asked || !priv.scenario || priv.scenario.id !== scenario_id) {
+            return 0;
+        }
+        priv.run_state_asked = false;
+        if(failed) {
+            log_warning(`${gobj_short_name(gobj)}: the runs of '${scenario_id}' not read: ` +
+                `${kw.comment || "no comment"}`);
+            priv.run_state = null;
+        } else {
+            priv.run_state = run_state_of_runs(kw.data);
+        }
+        render_status(gobj);
+        return 0;
+    }
     log_warning(`${gobj_short_name(gobj)}: control-center answer of no request (${a.kind})`);
     return 0;
 }
@@ -2044,6 +2143,10 @@ function control_over(gobj, ok, text_key)
     c.ok = !!ok && c.ok;
     if(text_key) {
         c.text_key = text_key;
+    }
+    if(c.control !== "report") {
+        gobj.priv.run_state = c.ok ? run_state_of_action(c.control) : null;
+        gobj.priv.run_state_asked = false;
     }
     render_status(gobj);
     return 0;
@@ -2186,6 +2289,7 @@ function ac_on_open(gobj, event, kw, src)
     for(let node of scenario_nodes(priv.scenario)) {
         priv.push[node] = null;
     }
+    ask_run_state(gobj);
     arm_poll(gobj);
     if(priv.visible) {
         send_watch(gobj);
@@ -2628,6 +2732,7 @@ function ac_visibility(gobj, event, kw, src)
         return 0;
     }
     if(priv.visible) {
+        ask_run_state(gobj);
         arm_poll(gobj);
         send_watch(gobj);
         poll_tick(gobj);

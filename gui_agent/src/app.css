@@ -436,6 +436,10 @@
     min-width: 0;
 }
 
+.MONITOR_CHARTS_HELD {
+    margin-bottom: 0.5rem;
+}
+
 .MONITOR_CHART_TITLE {
     font-weight: 600;
     font-size: 0.85rem;

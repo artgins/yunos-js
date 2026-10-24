@@ -872,6 +872,8 @@ const en = {
         "monitor disconnected": "Disconnected",
         "monitor messages per second": "Messages per second",
         "monitor cpu of one core": "CPU, % of one core",
+        "monitor charts held stopped": "Scenario stopped: the charts keep its last run",
+        "monitor charts held paused": "Scenario paused: the charts do not move on",
         "monitor cpu": "CPU",
         "monitor in": "In",
         "monitor out": "Out",

@@ -28,13 +28,15 @@ import {install_dom_double} from "../test/dom_double.js";
 
 install_dom_double();
 
-const {SCENARIO_ACTIONS, scenario_controls, yuno_run_state} = await import("./monitor_helpers.js");
+const {SCENARIO_ACTIONS, scenario_controls, yuno_run_state, run_state_of_action, charts_follow} =
+    await import("./monitor_helpers.js");
 const {MONITOR_SOURCES} = await import("./c_agent_config.js");
 const {
     C_AGENT_MONITOR_I18N_KEYS,
     C_AGENT_MONITOR_CONFIRM_I18N_KEYS,
     C_AGENT_MONITOR_STATE_I18N_KEYS,
-    C_AGENT_MONITOR_SOURCE_I18N_KEYS
+    C_AGENT_MONITOR_SOURCE_I18N_KEYS,
+    C_AGENT_MONITOR_HELD_I18N_KEYS
 } = await import("./c_agent_monitor.js");
 
 /*  The published reader (validate-locales.mjs is no export of the package:
@@ -179,5 +181,18 @@ describe("REV-CLOUD V23.5.3: the keys the monitor builds from data", () => {
     test("C_AGENT_MONITOR_SOURCE_I18N_KEYS holds `scenario source ${source}` for every source, and nothing else", () => {
         expect([...C_AGENT_MONITOR_SOURCE_I18N_KEYS].sort())
             .toEqual([...MONITOR_SOURCES].map((s) => `scenario source ${s}`).sort());
+    });
+
+    test("C_AGENT_MONITOR_HELD_I18N_KEYS holds `monitor charts held ${state}` for every state that holds the charts", () => {
+        let can = {actions: {start: [{yuno: "a", command: "x"}], stop: [{yuno: "a", command: "y"}]}};
+        let held = [];
+        for(let a of [...SCENARIO_ACTIONS, "restart"]) {
+            let st = run_state_of_action(a);
+            if(st && !charts_follow(can, st) && held.indexOf(st) < 0) {
+                held.push(st);
+            }
+        }
+        expect([...C_AGENT_MONITOR_HELD_I18N_KEYS].sort())
+            .toEqual(held.map((s) => `monitor charts held ${s}`).sort());
     });
 });

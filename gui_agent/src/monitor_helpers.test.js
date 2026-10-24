@@ -9,6 +9,9 @@ import {describe, it, expect} from "vitest";
 import {
     SCENARIO_TEMPLATE,
     scenario_controls,
+    run_state_of_action,
+    run_state_of_runs,
+    charts_follow,
     action_steps,
     scenario_document,
     selection_scenario,
@@ -480,5 +483,38 @@ describe("links from the configs", () => {
             ["sim_remote", "gate_ce"],
             ["gate_ce", "tracks_ce"]
         ]);
+    });
+});
+
+
+describe("run state and charts", () => {
+    const can = {actions: {start: [{yuno: "a", command: "x"}], stop: [{yuno: "a", command: "y"}]}};
+
+    it("an action leaves the scenario running, paused or stopped; report says nothing", () => {
+        expect(run_state_of_action("start")).toBe("running");
+        expect(run_state_of_action("resume")).toBe("running");
+        expect(run_state_of_action("restart")).toBe("running");
+        expect(run_state_of_action("pause")).toBe("paused");
+        expect(run_state_of_action("stop")).toBe("stopped");
+        expect(run_state_of_action("report")).toBe(null);
+    });
+
+    it("the newest run that is not a report decides; a failed one is not known", () => {
+        expect(run_state_of_runs([{action: "report", result: 0}, {action: "stop", result: 0},
+            {action: "start", result: 0}])).toBe("stopped");
+        expect(run_state_of_runs([{action: "start", result: 0}, {action: "stop", result: 0}]))
+            .toBe("running");
+        expect(run_state_of_runs([{action: "stop", result: -1}])).toBe(null);
+        expect(run_state_of_runs([])).toBe("stopped");
+        expect(run_state_of_runs(null)).toBe("stopped");
+    });
+
+    it("the charts follow a scenario that cannot start or stop, or whose state is not known", () => {
+        expect(charts_follow({actions: {}}, "stopped")).toBe(true);
+        expect(charts_follow({actions: {report: [{yuno: "a", command: "r"}]}}, "stopped")).toBe(true);
+        expect(charts_follow(can, null)).toBe(true);
+        expect(charts_follow(can, "running")).toBe(true);
+        expect(charts_follow(can, "stopped")).toBe(false);
+        expect(charts_follow(can, "paused")).toBe(false);
     });
 });

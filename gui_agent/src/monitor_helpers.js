@@ -491,6 +491,58 @@ function scenario_controls(scenario)
 }
 
 /***************************************************************
+ *  What a scenario is doing, as its actions left it: "running"
+ *  (start, resume, restart), "paused", "stopped", or null when it is
+ *  not known (report changes nothing, and a control that failed left
+ *  it half done).
+ ***************************************************************/
+function run_state_of_action(action)
+{
+    if(action === "start" || action === "resume" || action === "restart") {
+        return "running";
+    }
+    if(action === "pause") {
+        return "paused";
+    }
+    if(action === "stop") {
+        return "stopped";
+    }
+    return null;
+}
+
+/*  The same, from the runs the control center keeps, newest first:
+ *  the last one that was not a report decides. No such run is a
+ *  scenario never started: stopped.  */
+function run_state_of_runs(runs)
+{
+    let list = Array.isArray(runs) ? runs : [];
+    for(let r of list) {
+        if(!r || typeof r !== "object" || r.action === "report") {
+            continue;
+        }
+        if(typeof r.result === "number" && r.result < 0) {
+            return null;
+        }
+        return run_state_of_action(r.action);
+    }
+    return "stopped";
+}
+
+/*  Do the charts take a row each period? Always, for a scenario that
+ *  cannot start or stop (a group of yunos to watch) or whose state is
+ *  not known; only while it runs, for one that can. A stopped test
+ *  keeps the history of its last run on screen instead of scrolling
+ *  it away under rows of zeros.  */
+function charts_follow(scenario, run_state)
+{
+    let controls = scenario_controls(scenario);
+    if(controls.indexOf("start") < 0 && controls.indexOf("stop") < 0) {
+        return true;
+    }
+    return run_state !== "stopped" && run_state !== "paused";
+}
+
+/***************************************************************
  *  The steps of one action, resolved to the line each one sends and
  *  the node it goes to: [{key, node, line}]. Restart's resets are not
  *  here: they go to every yuno of the scenario.
@@ -940,6 +992,9 @@ export {
     SCENARIO_TEMPLATE,
     SCENARIO_ACTIONS,
     scenario_controls,
+    run_state_of_action,
+    run_state_of_runs,
+    charts_follow,
     action_steps,
     scenario_document,
     selection_scenario,
