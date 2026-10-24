@@ -9,8 +9,11 @@
  *           (and on logout / restore-failure).
  *        3. Builds the declarative shell (C_YUI_SHELL) LAZILY — only on
  *           the first EV_ON_OPEN, so views that issue backend commands in
- *           mt_start find the session already open. Tears it down on
- *           logout.
+ *           mt_start find the session already open, and only once the
+ *           control center has said what the user may do there
+ *           (`my-permissions`, kept in C_AGENT_CONFIG): a user who may not
+ *           command the agents gets a shell of Scenarios only
+ *           (viewer_shell_config). Tears it down on logout.
  *        4. Owns the app chrome the shell publishes: avatar initials,
  *           theme toggle, language toggle, logout.
  *
@@ -61,8 +64,11 @@ import {
     agent_config_is_node_selected,
     agent_config_get_active_tab,
     agent_config_set_active_tab,
+    agent_config_set_permissions,
+    agent_config_may,
     stats_sel_parse,
 } from "./c_agent_config.js";
+import {viewer_shell_config} from "./agent_helpers.js";
 
 import {
     setup_dev,
@@ -113,6 +119,7 @@ let PRIVATE_DATA = {
     tab_routes:     {},
     last_tab_base:  "",     /*  base of the previous route, to tell entering a
                                 tab from walking up inside it  */
+    viewer:         false,  /*  the user may not command the agents: a shell of Scenarios only  */
 };
 
 let __gclass__ = null;
@@ -283,8 +290,9 @@ function build_shell(gobj)
      *  subscriber, and C_APP must not receive events it does not declare
      *  ("event NOT defined in state"). Subscribe ONLY to the chrome we
      *  act on: theme/language toggles and Sign Out. */
+    let config = gobj_read_attr(gobj, "config");
     let shell = gobj_create_pure_child("shell", "C_YUI_SHELL", {
-        config:     gobj_read_attr(gobj, "config"),
+        config:     priv.viewer ? viewer_shell_config(config) : config,
         use_hash:   gobj_read_attr(gobj, "use_hash")
     }, gobj);
     priv.shell = shell;
@@ -553,8 +561,8 @@ function workspace_picker_item(ws)
 function rebuild_workspace_tabs(gobj, ws)
 {
     let priv = gobj.priv;
-    if(!priv.shell || !WORKSPACES[ws]) {
-        return;
+    if(!priv.shell || !WORKSPACES[ws] || priv.viewer) {
+        return;     /*  a viewer's shell has no per-node workspace  */
     }
     let spec = WORKSPACES[ws];
     let config = gobj_find_service("agent_config", false);
@@ -672,6 +680,9 @@ function workspace_first_route(gobj, ws)
 function request_live_agents(gobj)
 {
     let link = gobj.priv.link;
+    if(!agent_config_may(gobj_find_service("agent_config", false), "list-agents")) {
+        return;     /*  it would be refused: there is no node tab to paint  */
+    }
     if(link && agent_link_is_connected(link)) {
         agent_link_command(link, "list-agents", {});
     }
@@ -709,7 +720,11 @@ function ac_login_accepted(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Control-center session open → build the shell.
+ *  Control-center session open → ask what the user may do there
+ *  (`my-permissions`); the shell is built with the answer, because a
+ *  user who may not command the agents gets one of Scenarios only
+ *  (viewer_shell_config). A shell already up (a reconnect) goes on at
+ *  once; the answer refreshes the permissions the views ask.
  *
  *  The CC identity-ack carries the authenticated username — this is
  *  the authoritative source (the BFF /auth/refresh used on F5 does
@@ -719,10 +734,47 @@ function ac_login_accepted(gobj, event, kw, src)
  ***************************************************************/
 function ac_on_open(gobj, event, kw, src)
 {
-    gobj.priv.nak_recovering = false;   /*  session open again: recovery done  */
+    let priv = gobj.priv;
+    priv.nak_recovering = false;   /*  session open again: recovery done  */
     if(kw && kw.username) {
         gobj_write_str_attr(gobj, "username", kw.username);
     }
+    agent_link_command(priv.link, "my-permissions", {});
+    if(priv.shell) {
+        open_session(gobj);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  What the user may do in the control center. A control center older
+ *  than the command answers that it does not know it: everything is
+ *  offered, as before, and the control center refuses what it must.
+ ***************************************************************/
+function permissions_answered(gobj, kw)
+{
+    let priv = gobj.priv;
+    let config = gobj_find_service("agent_config", false);
+    let perms = null;
+    if(typeof kw.result === "number" && kw.result < 0) {
+        log_warning(`${gobj_short_name(gobj)}: the control center does not say the ` +
+            `permissions of the user (${kw.comment || "no comment"}): everything is offered`);
+    } else if(kw.data && typeof kw.data === "object" && !Array.isArray(kw.data)) {
+        perms = kw.data;
+    }
+    agent_config_set_permissions(config, perms);
+    if(!priv.shell) {
+        priv.viewer = !agent_config_may(config, "command-agent");
+        open_session(gobj);
+    }
+    return 0;
+}
+
+/***************************************************************
+ *  The shell, and what a session in it starts with.
+ ***************************************************************/
+function open_session(gobj)
+{
     let shell = build_shell(gobj);
     yui_shell_refresh_avatars(shell);
 
@@ -749,7 +801,6 @@ function ac_on_open(gobj, event, kw, src)
      *  "Refresh" button. */
     rebuild_all_workspaces(gobj);
     request_live_agents(gobj);
-    return 0;
 }
 
 /***************************************************************
@@ -1285,6 +1336,9 @@ function ac_link_answer(gobj, event, kw, src)
 {
     let stk = msg_iev_get_stack(gobj, kw, "command_stack", false);
     let command = kw_get_str(gobj, stk, "command", "", 0);
+    if(command === "my-permissions") {
+        return permissions_answered(gobj, kw);
+    }
     if(command !== "list-agents") {
         return 0;
     }

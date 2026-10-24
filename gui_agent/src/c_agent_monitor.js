@@ -53,6 +53,29 @@
  *      the text being edited and nothing else: the operator reads them
  *      and saves, or not.
  *
+ *      A scenario the control center keeps is watched BY NAME:
+ *      `watch-scenario scenario_id= node= [keys=] period=` (SDK 7.27.14),
+ *      and the control center builds the agent's watch from the scenario
+ *      it keeps -- so a user who may read that scenario (and nothing
+ *      else: a role scoped by `parameters` in C_AUTHZ) sees it live
+ *      without `command-agent`. A control center that does not know the
+ *      command answers so, and the view asks the agents itself, through
+ *      `command-agent`, from then on.
+ *
+ *      ROUTE. `/scenarios/live/<id>` is the saved scenario <id>: a link
+ *      that can be sent. A route naming one that is not shown asks the
+ *      control center for it (`scenarios scenario_id=`), and the bare
+ *      route is given the id of the one shown (replace), so the address
+ *      bar can always be copied. One of this browser or of the ticked
+ *      yunos has no id: its route is the bare one.
+ *
+ *      PERMISSIONS. What the control center said the user may do
+ *      (`my-permissions`, C_AGENT_CONFIG) decides what is offered: the
+ *      actions need `run-scenarios` on the scenario, edit/delete
+ *      `write-scenarios`, and "read once" and the gobj tree of a card,
+ *      commands to the agents, `command-agent`. A control that would
+ *      only be refused is not shown.
+ *
  *      PUSHED, OR POLLED -- per node. The view asks each agent for a
  *      `watch-yuno-stats` (its yunos, the period) and the agent SENDS the
  *      readings as EV_YUNO_STATS -- state, cpu and service stats of each
@@ -200,7 +223,7 @@ import {
 
 import i18next, {t} from "i18next";
 
-import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {fmt_date_time, date_time_format} from "@yuneta/gobj-ui/src/yui_date_text.js";
 import {
     yui_shell_confirm_yesno,
@@ -214,6 +237,7 @@ import {
     agent_config_set_monitor,
     MONITOR_REFRESH_CHOICES,
     MONITOR_WINDOW_CHOICES,
+    agent_config_may,
 } from "./c_agent_config.js";
 import {esc, fmt_value} from "./agent_helpers.js";
 import {
@@ -265,7 +289,11 @@ const CONTROL_ICONS = {
 
 /*  The kinds of the requests this view makes of the control center
  *  itself (not of an agent): answered in any state.  */
-const CC_KINDS = ["cc_save", "cc_delete", "cc_runs", "cc_run", "cc_state"];
+const CC_KINDS = ["cc_save", "cc_delete", "cc_runs", "cc_run", "cc_state", "cc_open"];
+
+/*  The route of this view. Its subpath is the id of the saved scenario
+ *  shown: `/scenarios/live/<id>` is a link that can be sent.  */
+const LIVE_ROUTE = "/scenarios/live";
 
 const DANGEROUS_CONTROLS = ["stop", "restart"];
 
@@ -357,6 +385,9 @@ let PRIVATE_DATA = {
     run_state:      null,   /*  running | paused | stopped | null (not known): what its actions left  */
     run_state_asked: false, /*  the runs were asked to learn it, and no control said it since  */
     charts_held:    false,  /*  a period went by without a row: the next one starts a gap  */
+    cc_watch:       null,   /*  false: the control center has no watch-scenario (older), ask through command-agent  */
+    route_id:       "",     /*  the scenario id in the url of the live tab (its subpath)  */
+    on_route:       false,  /*  the shell is on this view's route  */
 };
 
 /*  How long a phase of a control run from here waits for its answers.  */
@@ -438,6 +469,7 @@ function mt_start(gobj)
     let shell = yui_shell_of(gobj);
     if(shell) {
         gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+        gobj_subscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
     }
 
     /*  What the list, the tree and the editor write is what this view
@@ -487,6 +519,7 @@ function mt_stop(gobj)
     let shell = yui_shell_of(gobj);
     if(shell) {
         gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+        gobj_unsubscribe_event(shell, "EV_ROUTE_CHANGED", {}, gobj);
     }
     let config = gobj_read_attr(gobj, "config_svc");
     if(config) {
@@ -1062,8 +1095,11 @@ function render_status(gobj)
     priv.$source.textContent = t(/* i18n: C_AGENT_MONITOR_SOURCE_I18N_KEYS */ source_key);
     show(priv.$source, has);
     let saved = has && priv.source === "saved";
+    let writes = may(gobj, "write-scenarios");
     show(priv.$runs, saved);
-    show(priv.$delete, saved);
+    show(priv.$delete, saved && writes);
+    show(priv.$edit, writes);
+    show(priv.$new, writes || may(gobj, "command-agent"));
     priv.$mode.value = priv.view_mode;
     let $via = priv.$url.querySelector(".MONITOR_URL_VIA");
     let $where = priv.$url.querySelector(".MONITOR_URL_WHERE");
@@ -1121,6 +1157,26 @@ function render_status(gobj)
 }
 
 /***************************************************************
+ *  May the user do this here? What the control center said of the
+ *  session (`my-permissions`, kept by C_AGENT_CONFIG), for the saved
+ *  scenario shown. A control the user may not use is not offered: it
+ *  would only be refused.
+ ***************************************************************/
+function may(gobj, permission)
+{
+    let priv = gobj.priv;
+    let id = (priv.scenario && priv.source === "saved") ? priv.scenario.id : "";
+    return agent_config_may(gobj_read_attr(gobj, "config_svc"), permission, id);
+}
+
+/*  The controls run by the control center ask `run-scenarios`; run from
+ *  here they are commands to the agents.  */
+function may_run(gobj)
+{
+    return run_by_control_center(gobj) ? may(gobj, "run-scenarios") : may(gobj, "command-agent");
+}
+
+/***************************************************************
  *  One button per control the scenario's test declares.
  ***************************************************************/
 function build_test_controls(gobj)
@@ -1128,6 +1184,9 @@ function build_test_controls(gobj)
     let priv = gobj.priv;
     clear_node(priv.$test_buttons);
     priv.control_buttons = {};
+    if(!may_run(gobj)) {
+        return;
+    }
     for(let control of scenario_controls(priv.scenario)) {
         /*  The control's key, built from its name: every place that reads
          *  it names the list that publishes it  */
@@ -1291,7 +1350,8 @@ function answer_of(gobj, kw)
     let ack = false;
     if(kind && gobj.priv.scenario && gobj.priv.scenario.place === "control_center") {
         let stk = msg_iev_get_stack(gobj, kw, "command_stack", false);
-        ack = kw_get_str(gobj, stk, "command", "", 0) === "command-agent";
+        let command = kw_get_str(gobj, stk, "command", "", 0);
+        ack = command === "command-agent" || command === "watch-scenario";
     }
     return {
         kind: kind,
@@ -1498,13 +1558,54 @@ function watch_node(gobj, node)
         return;
     }
     priv.watch_at[node] = performance.now();
-    let yunos = priv.scenario.yunos.filter((y) => (y.node || "") === node && is_live(gobj, y));
+    let all = priv.scenario.yunos.filter((y) => (y.node || "") === node);
+    let yunos = all.filter((y) => is_live(gobj, y));
     if(yunos.length) {
-        send_request(gobj, lines.watch(yunos, refresh_ms(gobj)), "watch", "", node);
+        if(cc_builds_watch(gobj)) {
+            send_scenario_watch(gobj, node, {
+                keys:   yunos.length < all.length ? yunos.map((y) => y.key).join(",") : "",
+                period: refresh_ms(gobj)
+            });
+        } else {
+            send_request(gobj, lines.watch(yunos, refresh_ms(gobj)), "watch", "", node);
+        }
         priv.watched[node] = true;
     } else if(priv.watched[node]) {
-        send_request(gobj, lines.unwatch(), "unwatch", "", node);
+        send_unwatch_node(gobj, node);
         priv.watched[node] = false;
+    }
+}
+
+/*  A scenario the control center keeps is watched by NAME: the control
+ *  center builds the watch from it (`watch-scenario`), so a user who may
+ *  only read the scenario sees it live without `command-agent`. One older
+ *  than that command is asked with the agent's own line.  */
+function cc_builds_watch(gobj)
+{
+    return run_by_control_center(gobj) && gobj.priv.cc_watch !== false;
+}
+
+function send_scenario_watch(gobj, node, params)
+{
+    let priv = gobj.priv;
+    let kw = Object.assign({scenario_id: priv.scenario.id, node: node}, params);
+    let kind = params.stop ? "unwatch" : "watch";
+    msg_iev_write_key(kw, "monitor_kind", kind);
+    msg_iev_write_key(kw, "monitor_yuno", "");
+    msg_iev_write_key(kw, "monitor_node", node);
+    msg_iev_write_key(kw, "monitor_gen", priv.generation);
+    if(kind === "watch") {
+        kw.__relays__ = ["EV_YUNO_STATS"];
+    }
+    agent_link_command(gobj_read_attr(gobj, "cc_link_svc"), "watch-scenario", kw);
+}
+
+function send_unwatch_node(gobj, node)
+{
+    if(cc_builds_watch(gobj)) {
+        send_scenario_watch(gobj, node, {stop: true});
+    } else {
+        send_request(gobj, lines.unwatch(), "unwatch", "", node);
     }
 }
 
@@ -1522,7 +1623,7 @@ function send_unwatch(gobj)
     }
     for(let node of scenario_nodes(priv.scenario)) {
         if(priv.push[node] !== false && watched[node]) {
-            send_request(gobj, lines.unwatch(), "unwatch", "", node);
+            send_unwatch_node(gobj, node);
         }
     }
 }
@@ -1749,6 +1850,10 @@ function paint_card_tools(gobj, key)
     let monitoring = gobj_current_state(gobj) === "ST_MONITORING";
     c.$live.disabled = !monitoring;
     c.$once.disabled = !monitoring;
+    /*  Both are commands to the yuno's agent  */
+    let commands = may(gobj, "command-agent");
+    show(c.$once, commands);
+    show(c.$tree, commands);
 }
 
 /*  A button of a card: an icon, and its name in title and aria-label
@@ -2023,6 +2128,23 @@ function cc_answer(gobj, a, kw)
     }
     if(a.kind === "cc_run") {
         return cc_run_answer(gobj, kw, failed);
+    }
+    if(a.kind === "cc_open") {
+        /*  A link moved on since it was asked: that is the one to show.  */
+        if(priv.route_id !== scenario_id) {
+            return 0;
+        }
+        let doc = (!failed && Array.isArray(kw.data) && kw.data[0]) ? kw.data[0] : null;
+        let r = doc ? validate_scenario(doc) : null;
+        if(!r || !r.ok) {
+            log_warning(`${gobj_short_name(gobj)}: scenario '${scenario_id}' of the route not opened: ` +
+                `${failed ? (kw.comment || "no comment") : (r ? r.error.key : "no scenario")}`);
+            set_error(gobj, "scenario not opened",
+                `${scenario_id}: ${failed ? (kw.comment || "") : (r ? t(r.error.key) : "")}`);
+            return 0;
+        }
+        agent_config_set_monitor(config, {scenario: r.scenario, source: "saved"});
+        return 0;
     }
     if(a.kind === "cc_state") {
         /*  A control that ended since the question said it better.  */
@@ -2495,6 +2617,15 @@ function ac_mt_command_answer(gobj, event, kw, src)
     }
     if(kind === "watch") {
         let node = a.node;
+        if(failed && a.ack && cc_lacks_command(kw.comment) && priv.cc_watch !== false) {
+            /*  A control center older than watch-scenario: the agent's own
+             *  line, through command-agent, from now on.  */
+            log_warning(`${gobj_short_name(gobj)}: the control center does not build ` +
+                `the watch (${kw.comment || ""}), asking the agents through command-agent`);
+            priv.cc_watch = false;
+            watch_node(gobj, node);
+            return 0;
+        }
         if(failed && a.ack) {
             /*  The control center could not dispatch it (the node's agent
              *  is not connected there): asked again at the next renewal.  */
@@ -2973,7 +3104,63 @@ function ac_set_view_mode(gobj, event, kw, src)
 function ac_scenario_changed(gobj, event, kw, src)
 {
     adopt_scenario(gobj);
+    sync_route(gobj);
     return 0;
+}
+
+/***************************************************************
+ *  The shell moved. On this view's route, the subpath is the saved
+ *  scenario to show: one that is not the one shown is asked of the
+ *  control center (a link sent to somebody, a reload, Back); none is
+ *  the one shown, written into the url so it can be copied.
+ ***************************************************************/
+function ac_route_changed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(!kw || kw.base !== LIVE_ROUTE) {
+        priv.on_route = false;
+        return 0;
+    }
+    priv.on_route = true;
+    let seg = String(kw.subpath || "").split("/")[0];
+    let id = "";
+    try {
+        id = decodeURIComponent(seg);
+    } catch(e) {
+        log_warning(`${gobj_short_name(gobj)}: a scenario id in the route that is not ` +
+            `an encoded name: '${seg}'`);
+    }
+    priv.route_id = id;
+    if(!id) {
+        sync_route(gobj);
+        return 0;
+    }
+    if(priv.scenario && priv.source === "saved" && priv.scenario.id === id) {
+        return 0;
+    }
+    if(cc_request(gobj, "scenarios", {scenario_id: id}, "cc_open", {monitor_scenario: id}) < 0) {
+        set_error(gobj, "not connected to an agent", "");
+    }
+    return 0;
+}
+
+/*  The url says the scenario shown: its id when the control center
+ *  keeps it, none for one of this browser or of the ticked yunos.
+ *  Code-decided, so it replaces: Back goes where the user came from.  */
+function sync_route(gobj)
+{
+    let priv = gobj.priv;
+    let shell = yui_shell_of(gobj);
+    if(!priv.on_route || !shell) {
+        return;
+    }
+    let id = (priv.scenario && priv.source === "saved") ? priv.scenario.id : "";
+    if(id === priv.route_id) {
+        return;
+    }
+    priv.route_id = id;
+    yui_shell_navigate(shell, id ? `${LIVE_ROUTE}/${encodeURIComponent(id)}` : LIVE_ROUTE,
+        {replace: true});
 }
 
 /***************************************************************
@@ -3150,6 +3337,7 @@ function create_gclass(gclass_name)
          *  a reading's only matters while monitoring  */
         ["EV_MT_COMMAND_ANSWER",    ac_mt_command_answer,   null],
         ["EV_LANGUAGE_CHANGED",     ac_language_changed,    null],
+        ["EV_ROUTE_CHANGED",        ac_route_changed,       null],
         /*  a gobj tree stays open across a drop: its requests are
          *  answered in any state  */
         ["EV_OPEN_YUNO_TREE",       ac_open_yuno_tree,      null],
@@ -3209,6 +3397,7 @@ function create_gclass(gclass_name)
         ["EV_CANCEL_EDIT",          0],
         ["EV_SAVE_SCENARIO",        0],
         ["EV_LANGUAGE_CHANGED",     0],
+        ["EV_ROUTE_CHANGED",        0],
         ["EV_TEST_CONTROL",         0],
         ["EV_TEST_CONFIRMED",       0],
         ["EV_PROPOSE_LINKS",        0],

@@ -22,6 +22,7 @@ import {
 } from "@yuneta/gobj-js";
 
 import {selection_scenario} from "./monitor_helpers.js";
+import {cc_may} from "./agent_helpers.js";
 
 
 /***************************************************************
@@ -56,6 +57,7 @@ SDATA(data_type_t.DTP_DICT,     "monitor_scenario", sdata_flag_t.SDF_PERSIST, "{
 SDATA(data_type_t.DTP_STRING,   "monitor_source", sdata_flag_t.SDF_PERSIST, "local", "Scenarios: where the scenario watched comes from: local (this browser) | saved (the control center's) | selection (the yunos ticked in the tree)"),
 SDATA(data_type_t.DTP_INTEGER,  "monitor_refresh", sdata_flag_t.SDF_PERSIST, 2,    "Monitor: seconds between two readings of the yunos"),
 SDATA(data_type_t.DTP_INTEGER,  "monitor_window", sdata_flag_t.SDF_PERSIST, 15,    "Monitor: minutes of history kept in the charts"),
+SDATA(data_type_t.DTP_JSON,     "cc_permissions", 0,                      null,  "What the user may do in the control center (`my-permissions` of this session), null = not known"),
 SDATA(data_type_t.DTP_JSON,     "shortkeys",    sdata_flag_t.SDF_PERSIST, JSON.stringify(DEFAULT_SHORTKEYS), "Console command shortkeys {key: template}; $1 $2 … are positional args (ycli parity)"),
 SDATA_END()
 ];
@@ -120,6 +122,22 @@ function mt_destroy(gobj)
 
 
 
+
+/***************************************************************
+ *  What the user may do in the control center: set by C_APP when the
+ *  session opens (`my-permissions`), asked by the views that offer a
+ *  control (cc_may() of agent_helpers.js). Not persistent: it is the
+ *  session's.
+ ***************************************************************/
+function agent_config_set_permissions(gobj, perms)
+{
+    gobj_write_attr(gobj, "cc_permissions", perms && typeof perms === "object" ? perms : null);
+}
+
+function agent_config_may(gobj, permission, scenario_id)
+{
+    return cc_may(gobj ? gobj_read_attr(gobj, "cc_permissions") : null, permission, scenario_id);
+}
 
 /***************************************************************
  *  Active node (hostname/UUID), or "".
@@ -572,6 +590,8 @@ function register_c_agent_config()
 
 export {
     register_c_agent_config,
+    agent_config_set_permissions,
+    agent_config_may,
     agent_config_get_active_node,
     agent_config_set_active_node,
     agent_config_get_display_mode,

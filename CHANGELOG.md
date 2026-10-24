@@ -6,6 +6,38 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.114 (2026-10-24)
+
+A user who may see ONE scenario, and a link to it. Works with the control
+center of SDK 7.27.14 (the commands below); with an older one everything is
+offered and asked as before, with one warning each in the console.
+
+- **The scenario is in the route**: `#/scenarios/live/<id>`. The list opens
+  a scenario there, a link sent to somebody opens it (after the login, which
+  keeps the hash), and the bare route is given the id of the one shown
+  (replace), so the address bar can always be copied. A scenario of this
+  browser or of the ticked yunos has no id: bare route. One that cannot be
+  opened says *"The scenario could not be opened"* and why (not there, or
+  not this user's).
+- **The live view watches a saved scenario by name**:
+  `watch-scenario scenario_id= node= [keys=] period=`, and the control center
+  builds the agent's watch from the scenario it keeps -- a user with
+  `read-scenarios` on it sees it live without `command-agent` (which sends
+  anything to any node). A paused yuno leaves the watch by its key. A
+  control center without the command answers so, and the view asks the
+  agents through `command-agent` from then on.
+- **What the user may do decides what is offered** (`my-permissions` of the
+  control center, asked when the session opens, before the shell is built):
+  a user without `command-agent` gets a shell of Scenarios only -- the list
+  and the live view, no Commands, Terminal, Schemas, Users, nor the tree of
+  yunos, all of which talk to the agents; the actions of a scenario need
+  `run-scenarios` on it, edit and delete `write-scenarios`, and "read once"
+  and a card's gobj tree `command-agent`.
+- QA, on artgins.yunetacontrol.com against the control center of 7.27.13:
+  the route opens `renfe-20k-hidraulia` in a fresh browser, `--check
+  chartsheld` passes, and the console shows only the two expected
+  fallback warnings (`my-permissions`, `watch-scenario` not available).
+
 ## gui_agent 0.29.113 (2026-10-24)
 
 - **A run that failed with no step done changes nothing.** 0.29.112 read any

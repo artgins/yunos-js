@@ -13,7 +13,10 @@
  *      yuno, a shell and a backend, which is `scripts/qa.mjs`'s job.
  ***********************************************************************/
 import { describe, test, expect } from "vitest";
+import app_config from "./app_config.json";
 import {
+    cc_may,
+    viewer_shell_config,
     AGENT_YUNO_ID,
     is_agent_yuno,
     cmd2agent_service,
@@ -483,5 +486,36 @@ describe("agent_endpoint_of_cert", () => {
                                        url: "wss://0.0.0.0:1993"}))
             .toEqual({port: "1993", host: ""});
         expect(agent_endpoint_of_cert(null)).toEqual({port: "", host: ""});
+    });
+});
+
+describe("cc_may", () => {
+    test("not known: everything is offered", () => {
+        expect(cc_may(null, "command-agent")).toBe(true);
+        expect(cc_may(undefined, "run-scenarios", "x")).toBe(true);
+    });
+    test("true, false, or the scenarios it is granted for", () => {
+        const perms = {"command-agent": false, "list-agents": true, "read-scenarios": ["a", "b"]};
+        expect(cc_may(perms, "list-agents")).toBe(true);
+        expect(cc_may(perms, "command-agent")).toBe(false);
+        expect(cc_may(perms, "read-scenarios", "a")).toBe(true);
+        expect(cc_may(perms, "read-scenarios", "c")).toBe(false);
+        /*  granted for some only: not without one named  */
+        expect(cc_may(perms, "read-scenarios")).toBe(false);
+        expect(cc_may(perms, "write-scenarios", "a")).toBe(false);
+    });
+});
+
+describe("viewer_shell_config", () => {
+    const c = viewer_shell_config(app_config);
+    test("Scenarios only, without the tree of yunos", () => {
+        expect(c.menu.primary.items.map((it) => it.id)).toEqual(["scenarios"]);
+        expect(c.menu.primary.items[0].submenu.items.map((it) => it.id)).toEqual(["list", "live"]);
+        expect(c.shell.stages.main.default_route).toBe("/scenarios/list");
+        expect(Object.keys(c.shell.routes)).toEqual(["/preferences"]);
+    });
+    test("a copy: the app's config is untouched", () => {
+        expect(app_config.menu.primary.items.length).toBe(5);
+        expect(app_config.shell.stages.main.default_route).toBe("/commands/node");
     });
 });

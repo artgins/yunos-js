@@ -524,7 +524,71 @@ function agent_endpoint_of_cert(data)
 }
 
 
+/***************************************************************
+ *  May the user do `permission` in the control center, on this
+ *  scenario? `perms` is what `my-permissions` answers: a permission is
+ *  true, false, or the list of the scenarios it is granted for (a role
+ *  scoped by `parameters` in C_AUTHZ). null is not known -- a control
+ *  center older than that command: everything is offered, and the
+ *  control center refuses what it must. With no scenario_id, a
+ *  permission granted for some scenarios only is not granted.
+ ***************************************************************/
+function cc_may(perms, permission, scenario_id)
+{
+    if(!perms || typeof perms !== "object") {
+        return true;
+    }
+    let v = perms[permission];
+    if(v === true) {
+        return true;
+    }
+    if(Array.isArray(v) && scenario_id) {
+        return v.indexOf(scenario_id) >= 0;
+    }
+    return false;
+}
+
+/***************************************************************
+ *  The shell config of a user who may not command the agents (no
+ *  `command-agent`): Scenarios only -- its list and its live view.
+ *  Commands, Terminal, Schemas, Users and the tree of yunos all talk
+ *  to the agents through `command-agent`, so they would show nothing
+ *  but refusals. A copy: the config of the app is not touched.
+ ***************************************************************/
+const VIEWER_WORKSPACES = ["scenarios"];
+const VIEWER_HIDDEN_TABS = ["yunos"];
+
+function viewer_shell_config(config)
+{
+    let c = JSON.parse(JSON.stringify(config));
+    let primary = c.menu && c.menu.primary;
+    if(primary && Array.isArray(primary.items)) {
+        primary.items = primary.items.filter((it) => VIEWER_WORKSPACES.indexOf(it.id) >= 0);
+        for(let it of primary.items) {
+            if(it.submenu && Array.isArray(it.submenu.items)) {
+                it.submenu.items = it.submenu.items.filter(
+                    (sub) => VIEWER_HIDDEN_TABS.indexOf(sub.id) < 0);
+            }
+        }
+    }
+    let shell = c.shell || {};
+    if(shell.stages && shell.stages.main) {
+        shell.stages.main.default_route = "/scenarios/list";
+    }
+    if(shell.routes && typeof shell.routes === "object") {
+        for(let route of Object.keys(shell.routes)) {
+            let ws = route.split("/")[1] || "";
+            if(ws && ws !== "preferences" && VIEWER_WORKSPACES.indexOf(ws) < 0) {
+                delete shell.routes[route];
+            }
+        }
+    }
+    return c;
+}
+
 export {
+    cc_may,
+    viewer_shell_config,
     AGENT_YUNO_ID,
     SYSTEM_TREEDB,
     is_agent_yuno,

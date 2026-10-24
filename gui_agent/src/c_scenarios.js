@@ -579,7 +579,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
 
 /***************************************************************
  *  A row: that scenario becomes the one watched, and the tab moves
- *  to the live view.
+ *  to the live view of it, `/scenarios/live/<id>`.
  ***************************************************************/
 function ac_open_scenario(gobj, event, kw, src)
 {
@@ -603,9 +603,10 @@ function ac_open_scenario(gobj, event, kw, src)
         return -1;
     }
     agent_config_set_monitor(config, {scenario: r.scenario, source: "saved"});
+    /*  The scenario is IN the route: the link can be sent to somebody.  */
     let shell = yui_shell_of(gobj);
     if(shell) {
-        yui_shell_navigate(shell, LIVE_ROUTE);
+        yui_shell_navigate(shell, `${LIVE_ROUTE}/${encodeURIComponent(r.scenario.id)}`);
     }
     return 0;
 }

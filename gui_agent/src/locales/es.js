@@ -1012,6 +1012,7 @@ const es = {
         "scenario not saved": "El escenario no se ha guardado:",
         "scenario not deleted": "El escenario no se ha borrado:",
         "scenario runs not read": "No se han podido leer las ejecuciones:",
+        "scenario not opened": "No se ha podido abrir el scenario:",
         "scenario run ok": "Hecho",
         "scenario run failed": "Falló",
         "scenario run when": "Cuándo",

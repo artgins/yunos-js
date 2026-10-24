@@ -95,7 +95,7 @@ const {
     SDATA, SDATA_END, data_type_t, event_flag_t,
     gclass_create,
     gobj_start_up, gobj_create_yuno, gobj_create, gobj_create_service,
-    gobj_start, gobj_send_event, gobj_current_state, gobj_change_state,
+    gobj_start, gobj_send_event, gobj_publish_event, gobj_current_state, gobj_change_state,
     gobj_read_attr,
     gobj_name,
     clean_name,
@@ -103,7 +103,8 @@ const {
     set_log_callback,
 } = await import("@yuneta/gobj-js");
 const {register_c_agent_config, agent_config_get_monitor, agent_config_set_monitor,
-       agent_config_toggle_selected_node, stats_sel_id} = await import("./c_agent_config.js");
+       agent_config_toggle_selected_node, stats_sel_id,
+       agent_config_set_permissions} = await import("./c_agent_config.js");
 const {register_c_agent_monitor} = await import("./c_agent_monitor.js");
 const {register_c_agent_yuno_tree} = await import("./c_agent_yuno_tree.js");
 const {register_c_scenarios} = await import("./c_scenarios.js");
@@ -163,7 +164,8 @@ beforeAll(() => {
     tree_double.make = (host, opts) => gobj_create(`tree_double_${++n_trees}`, "C_TEST_TREE", {}, host);
 
     gclass_create("C_TEST_HOST", [], [["ST_IDLE", []]], {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
-    gclass_create("C_TEST_SHELL", [["EV_LANGUAGE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT]],
+    gclass_create("C_TEST_SHELL", [["EV_LANGUAGE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT],
+                                   ["EV_ROUTE_CHANGED", event_flag_t.EVF_OUTPUT_EVENT]],
         [["ST_IDLE", []]], {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
     gclass_create("C_TEST_IEV", [], [["ST_SESSION", []], ["ST_DISCONNECTED", []]],
         {mt_command_parser: iev_command_parser}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
@@ -224,6 +226,7 @@ beforeEach(() => {
     confirm.answer = true;
     confirm.asked.length = 0;
     agent_config_set_monitor(config, {scenario: {}, source: "local"});
+    agent_config_set_permissions(config, null);
     sent.length = 0;
 });
 
@@ -299,7 +302,7 @@ describe("the list of the control center's scenarios", () => {
         let m = agent_config_get_monitor(config);
         expect(m.source).toBe("saved");
         expect(m.scenario.id).toBe("stress");
-        expect(navigated).toEqual(["/scenarios/live"]);
+        expect(navigated).toEqual(["/scenarios/live/stress"]);
         expect(errors()).toEqual([]);
     });
 
@@ -355,11 +358,110 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(gobj_current_state(mon)).toBe("ST_MONITORING");
         expect(mon.priv.scenario.id).toBe("stress");
         expect(mon.priv.source).toBe("saved");
-        let watch = find("command-agent").filter((r) => /watch-yuno-stats/.test(r.kw.cmd2agent));
-        expect(watch.map((r) => r.kw.agent_id)).toEqual(["ctrl"]);
+        /*  The control center builds the watch from the scenario: the
+         *  console names the scenario and the node, never the agent's line  */
+        let watch = find("watch-scenario");
+        expect(watch.map((r) => [r.kw.scenario_id, r.kw.node, r.kw.keys])).toEqual([["stress", "ctrl", ""]]);
+        expect(find("command-agent").filter((r) => /watch-yuno-stats/.test(r.kw.cmd2agent))).toEqual([]);
         /*  The control center passes the marker on to the agent only when
          *  its client wrote it (SDK 7.25.21)  */
         expect(watch[0].kw.__relays__).toEqual(["EV_YUNO_STATS"]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a control center older than watch-scenario: the watch through command-agent", () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        let ws = find("watch-scenario").pop();     /*  this view's: the last one created  */
+        sent.length = 0;
+        answer(mon, ws, {result: -1,
+            comment: "controlcenter^x: command not available: 'watch-scenario'. Try 'help' command."});
+        let watch = find("command-agent").filter((r) => /watch-yuno-stats/.test(r.kw.cmd2agent));
+        expect(watch.map((r) => r.kw.agent_id)).toEqual(["ctrl"]);
+        expect(watch[0].kw.__relays__).toEqual(["EV_YUNO_STATS"]);
+        /*  and so it goes on: the stop too  */
+        sent.length = 0;
+        gobj_send_event(mon, "EV_DISCONNECT", {}, mon);
+        expect(find("watch-scenario")).toEqual([]);
+        expect(find("command-agent").map((r) => r.kw.cmd2agent)).toEqual(["watch-yuno-stats stop=1"]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a yuno paused is left out of the watch by its key", () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        sent.length = 0;
+        gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "gate"}, mon);
+        expect(find("watch-scenario").map((r) => r.kw.keys)).toEqual(["sim"]);
+        sent.length = 0;
+        gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "sim"}, mon);
+        expect(find("watch-scenario").map((r) => r.kw.stop)).toEqual([true]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("the route names the scenario: a link opens it, and the url says the one shown", () => {
+        const mon = new_monitor();
+        gobj_publish_event(test_shell.shell, "EV_ROUTE_CHANGED",
+            {route: "/scenarios/live/stress", base: "/scenarios/live", subpath: "stress"});
+        /*  Every live view of this run hears the shell: the last is this one  */
+        let asked = find("scenarios");
+        expect(asked.length > 0 && asked.every((r) => r.kw.scenario_id === "stress")).toBe(true);
+        answer(mon, asked.pop(), {data: [SAVED]});
+        expect(mon.priv.scenario.id).toBe("stress");
+        expect(mon.priv.source).toBe("saved");
+        expect(navigated).toEqual([]);      /*  the url already says it  */
+
+        /*  The bare route: the url is given the scenario shown  */
+        gobj_publish_event(test_shell.shell, "EV_ROUTE_CHANGED",
+            {route: "/scenarios/live", base: "/scenarios/live", subpath: ""});
+        expect(navigated.length > 0 && navigated.every((r) => r === "/scenarios/live/stress")).toBe(true);
+
+        /*  One that cannot be opened (not there, or not this user's) says so  */
+        sent.length = 0;
+        gobj_publish_event(test_shell.shell, "EV_ROUTE_CHANGED",
+            {route: "/scenarios/live/other", base: "/scenarios/live", subpath: "other"});
+        answer(mon, find("scenarios").pop(), {result: -1, comment: "controlcenter^x: no permission to 'read-scenarios'"});
+        expect(mon.priv.scenario.id).toBe("stress");
+        expect(mon.priv.error.key).toBe("scenario not opened");
+
+        /*  Another route is not this view's  */
+        sent.length = 0;
+        gobj_publish_event(test_shell.shell, "EV_ROUTE_CHANGED",
+            {route: "/scenarios/list", base: "/scenarios/list", subpath: ""});
+        expect(find("scenarios")).toEqual([]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a user who may only read the scenario: no controls, no edit, no command to the agents", () => {
+        agent_config_set_permissions(config, {
+            "read-scenarios": ["stress"], "run-scenarios": false, "write-scenarios": false,
+            "command-agent": false, "list-agents": false
+        });
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        gobj_send_event(mon, "EV_SET_VIEW_MODE", {mode: "cards"}, mon);
+        expect(Object.keys(mon.priv.control_buttons)).toEqual([]);
+        expect(mon.priv.$edit.classList.contains("is-hidden")).toBe(true);
+        expect(mon.priv.$new.classList.contains("is-hidden")).toBe(true);
+        expect(mon.priv.$delete.classList.contains("is-hidden")).toBe(true);
+        expect(mon.priv.$runs.classList.contains("is-hidden")).toBe(false);
+        let card = mon.priv.stats_cards.sim;
+        expect(card.$once.classList.contains("is-hidden")).toBe(true);
+        expect(card.$tree.classList.contains("is-hidden")).toBe(true);
+        expect(card.$live.classList.contains("is-hidden")).toBe(false);
+        /*  Nothing of this view through command-agent (the views of the
+         *  tests before are alive too, and one of them asks that way)  */
+        expect(find("command-agent").filter((r) =>
+            r.kw.__md_iev__.monitor_gen === mon.priv.generation && mon.priv.cc_watch !== false)).toEqual([]);
+        expect(find("watch-scenario").length > 0).toBe(true);
+
+        /*  May run it too: the controls are there  */
+        agent_config_set_permissions(config, {
+            "read-scenarios": ["stress"], "run-scenarios": ["stress"], "command-agent": false
+        });
+        agent_config_set_monitor(config, {scenario: validate_scenario(Object.assign({}, SAVED)).scenario,
+            source: "saved"});
+        expect(Object.keys(mon.priv.control_buttons)).toEqual(["start", "stop", "report", "restart"]);
         expect(errors()).toEqual([]);
     });
 
@@ -435,8 +537,8 @@ describe("the live view of a scenario the control center keeps", () => {
         sent.length = 0;
         const mon = new_monitor();
         watch_saved(Object.assign({}, SAVED, {id: "before"}));
-        let watch = find("command-agent").filter((r) => /watch-yuno-stats/.test(r.kw.cmd2agent)).pop();
-        answer(mon, watch, {result: -1, comment: "command not available", outer: "watch-yuno-stats"});
+        let watch = find("watch-scenario").pop();
+        answer(mon, watch, {result: -1, comment: "Yuno not found", outer: "watch-yuno-stats"});
         let cpu = find("command-agent").filter((r) => /service=__yuno__/.test(r.kw.cmd2agent))[0];
         watch_saved(Object.assign({}, SAVED, {id: "other"}));
         stats_answer(mon, cpu, {data: {cpu: 77}});

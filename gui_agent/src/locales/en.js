@@ -1003,6 +1003,7 @@ const en = {
         "scenario not saved": "The scenario was not saved:",
         "scenario not deleted": "The scenario was not deleted:",
         "scenario runs not read": "The runs could not be read:",
+        "scenario not opened": "The scenario could not be opened:",
         "scenario run ok": "Done",
         "scenario run failed": "Failed",
         "scenario run when": "When",
