@@ -12,7 +12,7 @@
  *          All Rights Reserved.
  ***********************************************************************/
 import {describe, test, expect, beforeAll, beforeEach, vi} from "vitest";
-import {install_dom_double} from "../test/dom_double.js";
+import {install_dom_double, fake_event} from "../test/dom_double.js";
 
 install_dom_double();
 
@@ -479,6 +479,56 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(h("gate")).toBe(148);
         expect(h("sim")).toBe(100);
         expect(mon.priv.relayout_posted).toBe(false);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a click on a card highlights it, the cards linked to it and their links", () => {
+        const CHAIN = JSON.parse(JSON.stringify(SAVED));
+        CHAIN.yunos.push({key: "tracks", id: "5120"});
+        CHAIN.links.push(["gate", "tracks"]);
+        const mon = new_monitor();
+        watch_saved(CHAIN);
+        gobj_send_event(mon, "EV_SET_VIEW_MODE", {mode: "graph"}, mon);
+        const card = (k) => mon.priv.cards[k].$card;
+        const edge = (from, to) => mon.priv.edge_labels.find((e) => e.from === from && e.to === to);
+        /*  What reaches the canvas from inside a card (the double does not bubble)  */
+        const hit = ($t, type, init) => mon.priv.$canvas.dispatchEvent(
+            fake_event(type, Object.assign({target: $t}, init || {})));
+        const lit = (k) => card(k).classList.contains("MONITOR_NODE--focus") ? "focus"
+            : card(k).classList.contains("MONITOR_NODE--linked") ? "linked" : "";
+        expect(card("sim").getAttribute("aria-label")).toBe(card("sim").getAttribute("title"));
+        expect(card("sim").getAttribute("data-i18n-aria-label")).toBe("monitor focus yuno");
+
+        /*  The gate: both its neighbours and both links  */
+        hit(card("gate").querySelector(".MONITOR_NODE_LABEL"), "click");
+        expect(mon.priv.focus).toBe("gate");
+        expect([lit("sim"), lit("gate"), lit("tracks")]).toEqual(["linked", "focus", "linked"]);
+        expect(card("gate").getAttribute("aria-pressed")).toBe("true");
+        expect(edge("sim", "gate").$path.classList.contains("MONITOR_EDGE--linked")).toBe(true);
+        expect(edge("gate", "tracks").$text.classList.contains("MONITOR_EDGE_LABEL--linked")).toBe(true);
+        expect(mon.priv.$canvas.classList.contains("MONITOR_GRAPH_CANVAS--focus")).toBe(true);
+
+        /*  The simulator: the gate only; a repaint keeps it  */
+        hit(card("sim"), "click");
+        expect([lit("sim"), lit("gate"), lit("tracks")]).toEqual(["focus", "linked", ""]);
+        expect(edge("gate", "tracks").$path.classList.contains("MONITOR_EDGE--linked")).toBe(false);
+        expect(edge("gate", "tracks").$path.getAttribute("marker-end")).not.toMatch(/-on\)/);
+        expect(edge("sim", "gate").$path.getAttribute("marker-end")).toMatch(/-on\)/);
+        gobj_send_event(mon, "EV_SET_VIEW_MODE", {mode: "graph"}, mon);
+        expect([lit("sim"), lit("gate"), lit("tracks")]).toEqual(["focus", "linked", ""]);
+
+        /*  Again on it: cleared; the empty canvas and Escape clear too  */
+        hit(card("sim"), "click");
+        expect(mon.priv.focus).toBe("");
+        expect([lit("sim"), lit("gate"), lit("tracks")]).toEqual(["", "", ""]);
+        hit(card("tracks"), "keydown", {key: "Enter"});
+        expect(mon.priv.focus).toBe("tracks");
+        hit(card("tracks"), "keydown", {key: "Escape"});
+        expect(mon.priv.focus).toBe("");
+        hit(card("gate"), "click");
+        hit(mon.priv.$canvas, "click");
+        expect(mon.priv.focus).toBe("");
+        expect(mon.priv.$canvas.classList.contains("MONITOR_GRAPH_CANVAS--focus")).toBe(false);
         expect(errors()).toEqual([]);
     });
 

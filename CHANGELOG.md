@@ -6,6 +6,17 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.0.6 (2026-10-24)
+
+- **A click on a card of the graph highlights it, the cards linked to it
+  and their links** (`EV_FOCUS_YUNO`): the card gets a thick outline, its
+  neighbours a thin one, its links are drawn over the others in the link
+  colour with their rate in bold, and the other links fade. A click on it
+  again, on the empty canvas, or Escape clears it; Enter on a card (they
+  take the keyboard focus) does what a click does. The focus survives a
+  repaint and a new layout, and is dropped with the scenario. QA:
+  `--check focus`.
+
 ## gui_agent 1.0.5 (2026-10-24)
 
 - **The queue of a gate is READ.** 1.0.4 watched the gates'

@@ -327,6 +327,43 @@
     overflow: hidden;
 }
 
+/*  Focus: a click on a card highlights it, the cards linked to it and
+ *  their links  */
+.MONITOR_NODE {
+    cursor: pointer;
+}
+
+.MONITOR_NODE:focus-visible {
+    outline: 2px solid var(--bulma-link);
+    outline-offset: 2px;
+}
+
+.MONITOR_NODE.MONITOR_NODE--focus {
+    box-shadow: 0 0 0 4px var(--bulma-link);
+}
+
+.MONITOR_NODE.MONITOR_NODE--linked {
+    box-shadow: 0 0 0 2px var(--bulma-link);
+}
+
+.MONITOR_GRAPH_CANVAS--focus .MONITOR_EDGE {
+    stroke: var(--bulma-border-weak);
+}
+
+.MONITOR_GRAPH_CANVAS--focus .MONITOR_EDGE.MONITOR_EDGE--linked {
+    stroke: var(--bulma-link);
+    stroke-width: 3;
+}
+
+.MONITOR_EDGE_TIP--linked {
+    fill: var(--bulma-link);
+}
+
+.MONITOR_EDGE_LABEL--linked {
+    fill: var(--bulma-link-on-scheme);
+    font-weight: 700;
+}
+
 .MONITOR_NODE--cpu-low {
     border-left-color: var(--bulma-success);
 }

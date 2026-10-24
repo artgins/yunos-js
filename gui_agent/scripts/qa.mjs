@@ -32,6 +32,7 @@
  *          node scripts/qa.mjs --check chartsheld      # a stopped scenario's charts hold (renfe-20k-hidraulia)
  *          node scripts/qa.mjs --check controlhelp     # each control of a scenario says what it does
  *          node scripts/qa.mjs --check queues          # the gates' queues: on their cards and charted
+ *          node scripts/qa.mjs --check focus           # a clicked card lights up with its links
  *          node scripts/qa.mjs --check roles           # the roles of a store: what each grants, its sheet
  *          node scripts/qa.mjs --check roleswrite      # a role created, edited and deleted (leaves none)
  *          QA_PERM_OFF='<cmd>' QA_PERM_ON='<cmd>' \
@@ -694,12 +695,60 @@ async function check_queues(page, args, step, out_dir)
     return ok;
 }
 
+/*
+ *  --check focus: a click on a gate's card highlights it, the cards
+ *  linked to it and their links, with the real stylesheet; a second
+ *  click clears it. Read only.
+ */
+async function check_focus(page, args, step, out_dir)
+{
+    await page.evaluate((id) => {
+        window.location.hash = `#/scenarios/live/${id}`;
+    }, HELD_SCENARIO);
+    const gate = QUEUE_GATES[0];
+    const $card = page.locator(".MONITOR_NODE", {has: page.locator(".MONITOR_NODE_ID", {hasText: gate})}).first();
+    let ok = true;
+    let detail = "";
+    try {
+        await $card.waitFor({timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        step("check focus", false, `no card of ${gate}`);
+        return false;
+    }
+    await $card.click();
+    const lit = await page.evaluate(() => ({
+        focus: document.querySelectorAll(".MONITOR_NODE--focus").length,
+        linked: document.querySelectorAll(".MONITOR_NODE--linked").length,
+        edges: document.querySelectorAll(".MONITOR_EDGE--linked").length,
+        shadow: getComputedStyle(document.querySelector(".MONITOR_NODE--focus") || document.body).boxShadow,
+        stroke: (() => {
+            const $e = document.querySelector(".MONITOR_EDGE--linked");
+            return $e ? getComputedStyle($e).stroke : "";
+        })()
+    }));
+    await page.screenshot({path: join(out_dir, "check_focus.png"), fullPage: true});
+    if(lit.focus !== 1 || lit.linked < 1 || lit.edges < 1 || !/\d+px/.test(lit.shadow)) {
+        ok = false;
+    }
+    detail = `focus=${lit.focus} linked=${lit.linked} edges=${lit.edges} shadow='${lit.shadow}' stroke='${lit.stroke}'`;
+    await $card.click();
+    const left = await page.evaluate(() => document.querySelectorAll(
+        ".MONITOR_NODE--focus, .MONITOR_NODE--linked, .MONITOR_EDGE--linked").length);
+    if(left !== 0) {
+        ok = false;
+        detail += `; ${left} still lit after the second click`;
+    }
+    step("check focus: a clicked card lights up with its links", ok, detail);
+    return ok;
+}
+
 const CHECKS = {
     schemaback: check_schemaback,
     gobjtree: check_gobjtree,
     chartsheld: check_chartsheld,
     controlhelp: check_controlhelp,
     queues: check_queues,
+    focus: check_focus,
     roles: check_roles,
     roleswrite: check_roleswrite,
     permlive: check_permlive,

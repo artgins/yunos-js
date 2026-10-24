@@ -9,6 +9,10 @@
  *          and out, its queue when it has one and what the agent says of
  *          it (playing, paused, stopped...); and under it two CHARTS,
  *          messages per second and cpu, over a window of history.
+ *          A click on a card FOCUSES it (EV_FOCUS_YUNO): the card, the
+ *          cards linked to it and the links between them are
+ *          highlighted; a click on it again, or on the empty canvas,
+ *          or Escape, clears it.
  *        - CARDS: every counter of every yuno, one card each -- what the
  *          Statistics workspace was before it became a kind of scenario.
  *
@@ -389,7 +393,11 @@ let PRIVATE_DATA = {
     cpu_chart:      null,
     queue_chart:    null,
     cards:          {},     /*  yuno key -> element refs of its card  */
-    edge_labels:    [],     /*  [{from, to, $text}]  */
+    edge_labels:    [],     /*  [{from, to, $text, $path}]  */
+    focus:          "",     /*  yuno key whose card is highlighted with its links  */
+    $canvas:        null,   /*  the graph's canvas, its edges and their arrow  */
+    $edges:         null,
+    marker_id:      "",
     control:        null,   /*  last control: {control, ok, text}  */
     control_buttons: {},    /*  control -> its button  */
     watching:       null,   /*  the link whose events reach this view  */
@@ -967,7 +975,21 @@ function build_graph(gobj)
     let g = layout_graph(ids, priv.scenario.links, {card_w: CARD_W, card_h: CARD_H, heights: heights});
 
     let $canvas = createElement2(["div", {class: "MONITOR_GRAPH_CANVAS",
-        style: `width:${g.width}px; height:${g.height}px;`}, []]);
+        style: `width:${g.width}px; height:${g.height}px;`}, [], {
+            click: (ev) => {
+                let $node = ev.target.closest(".MONITOR_NODE");
+                gobj_send_event(gobj, "EV_FOCUS_YUNO", {key: $node ? $node.dataset.key : ""}, gobj);
+            },
+            keydown: (ev) => {
+                let $node = ev.target.closest(".MONITOR_NODE");
+                if(ev.key === "Escape") {
+                    gobj_send_event(gobj, "EV_FOCUS_YUNO", {key: ""}, gobj);
+                } else if($node && (ev.key === "Enter" || ev.key === " ")) {
+                    ev.preventDefault();
+                    gobj_send_event(gobj, "EV_FOCUS_YUNO", {key: $node.dataset.key}, gobj);
+                }
+            }
+        }]);
 
     let svg = document.createElementNS(SVG_NS, "svg");
     svg.setAttribute("class", "MONITOR_EDGES");
@@ -988,7 +1010,12 @@ function build_graph(gobj)
     tip.setAttribute("class", "MONITOR_EDGE_TIP");
     marker.appendChild(tip);
     defs.appendChild(marker);
+    let marker_on = marker.cloneNode(true);
+    marker_on.setAttribute("id", `${marker_id}-on`);
+    marker_on.firstChild.setAttribute("class", "MONITOR_EDGE_TIP MONITOR_EDGE_TIP--linked");
+    defs.appendChild(marker_on);
     svg.appendChild(defs);
+    priv.marker_id = marker_id;
 
     for(let e of g.edges) {
         let path = document.createElementNS(SVG_NS, "path");
@@ -1002,7 +1029,7 @@ function build_graph(gobj)
         text.setAttribute("y", String(e.my - 6));
         text.setAttribute("text-anchor", "middle");
         svg.appendChild(text);
-        priv.edge_labels.push({from: e.from, to: e.to, $text: text});
+        priv.edge_labels.push({from: e.from, to: e.to, $text: text, $path: path});
     }
     $canvas.appendChild(svg);
 
@@ -1037,6 +1064,9 @@ function build_graph(gobj)
         );
         let $card = createElement2(
             ["div", {class: "MONITOR_NODE card" + (emits_only ? " MONITOR_NODE_EMITTER" : ""),
+                     "data-key": y.key, role: "button", tabindex: "0", "aria-pressed": "false",
+                     title: t("monitor focus yuno"), "data-i18n-title": "monitor focus yuno",
+                     "aria-label": t("monitor focus yuno"), "data-i18n-aria-label": "monitor focus yuno",
                      style: `left:${pos.x}px; top:${pos.y}px; width:${CARD_W}px; height:${pos.h}px;`}, [
                 ["div", {class: "MONITOR_NODE_HEAD"}, [
                     $dot,
@@ -1062,6 +1092,66 @@ function build_graph(gobj)
         priv.cards[y.key] = {$card, $dot, $cpu, $bar, $rx, $tx, $q, $qrow, $err, $where, $paused};
     }
     priv.$graph.appendChild($canvas);
+    priv.$canvas = $canvas;
+    priv.$edges = svg;
+    if(priv.focus && !priv.cards[priv.focus]) {
+        priv.focus = "";
+    }
+    apply_focus(gobj);
+}
+
+/***************************************************************
+ *  The yunos linked to `key`, either way.
+ ***************************************************************/
+function linked_to(scenario, key)
+{
+    let out = {};
+    for(let [from, to] of (scenario && key ? scenario.links : [])) {
+        if(from === key) {
+            out[to] = true;
+        } else if(to === key) {
+            out[from] = true;
+        }
+    }
+    return out;
+}
+
+/***************************************************************
+ *  The classes of a card for the focus (paint_card rewrites the rest).
+ ***************************************************************/
+function mark_focus(gobj, id, $card)
+{
+    let priv = gobj.priv;
+    let on = !!priv.focus && priv.focus === id;
+    $card.classList.toggle("MONITOR_NODE--focus", on);
+    $card.classList.toggle("MONITOR_NODE--linked", !!linked_to(priv.scenario, priv.focus)[id]);
+    $card.setAttribute("aria-pressed", on ? "true" : "false");
+}
+
+/***************************************************************
+ *  Highlight the focused card, the cards linked to it and their
+ *  links; a linked edge is drawn last, over the others.
+ ***************************************************************/
+function apply_focus(gobj)
+{
+    let priv = gobj.priv;
+    if(!priv.$canvas) {
+        return;
+    }
+    priv.$canvas.classList.toggle("MONITOR_GRAPH_CANVAS--focus", !!priv.focus);
+    for(let id of Object.keys(priv.cards)) {
+        mark_focus(gobj, id, priv.cards[id].$card);
+    }
+    for(let el of priv.edge_labels) {
+        let on = !!priv.focus && (el.from === priv.focus || el.to === priv.focus);
+        el.$path.classList.toggle("MONITOR_EDGE--linked", on);
+        el.$text.classList.toggle("MONITOR_EDGE_LABEL--linked", on);
+        el.$path.setAttribute("marker-end", `url(#${priv.marker_id}${on ? "-on" : ""})`);
+        if(on) {
+            priv.$edges.appendChild(el.$path);
+            priv.$edges.appendChild(el.$text);
+        }
+    }
 }
 
 /***************************************************************
@@ -1079,6 +1169,7 @@ function paint_card(gobj, id)
     }
     let level = cpu_level(m.cpu);
     c.$card.className = `MONITOR_NODE card MONITOR_NODE--cpu-${level} MONITOR_NODE--${m.run}`;
+    mark_focus(gobj, id, c.$card);
     let state_key = `monitor yuno ${m.run}`;
     let state_text = t(/* i18n: C_AGENT_MONITOR_STATE_I18N_KEYS */ state_key);
     c.$dot.className = `MONITOR_NODE_STATE MONITOR_NODE_STATE--${m.run}`;
@@ -2040,6 +2131,9 @@ function adopt_scenario(gobj)
     let old_where = priv.scenario ? `${priv.scenario.place}|${priv.scenario.agent_url || ""}` : "";
     if(st === "ST_MONITORING" && priv.scenario) {
         send_unwatch(gobj);
+    }
+    if(!next || !priv.scenario || next.id !== priv.scenario.id) {
+        priv.focus = "";
     }
     priv.scenario = next;
     priv.generation++;
@@ -3259,6 +3353,22 @@ function ac_permissions_changed(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  A click on a card focuses it (again: clears it); "" clears.
+ ***************************************************************/
+function ac_focus_yuno(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let key = kw.key || "";
+    if(key && !priv.cards[key]) {
+        log_warning(`${gobj_short_name(gobj)}: no card '${key}' to focus`);
+        key = "";
+    }
+    priv.focus = (key === priv.focus) ? "" : key;
+    apply_focus(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  A card learnt it has (or has not) a queue row: the graph is laid
  *  out again with the cards' new heights.
  ***************************************************************/
@@ -3516,6 +3626,7 @@ function create_gclass(gclass_name)
         ["EV_CC_PERMISSIONS_CHANGED", ac_permissions_changed, null],
         ["EV_SCENARIO_RUN_ENDED",   ac_run_ended,           null],
         ["EV_RELAYOUT",             ac_relayout,            null],
+        ["EV_FOCUS_YUNO",           ac_focus_yuno,          null],
         /*  a gobj tree stays open across a drop: its requests are
          *  answered in any state  */
         ["EV_OPEN_YUNO_TREE",       ac_open_yuno_tree,      null],
@@ -3579,6 +3690,7 @@ function create_gclass(gclass_name)
         ["EV_CC_PERMISSIONS_CHANGED", 0],
         ["EV_SCENARIO_RUN_ENDED",   0],
         ["EV_RELAYOUT",             0],
+        ["EV_FOCUS_YUNO",           0],
         ["EV_TEST_CONTROL",         0],
         ["EV_TEST_CONFIRMED",       0],
         ["EV_PROPOSE_LINKS",        0],

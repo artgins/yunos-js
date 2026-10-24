@@ -924,6 +924,7 @@ const en = {
         "monitor cpu": "CPU",
         "monitor in": "In",
         "monitor out": "Out",
+        "monitor focus yuno": "Highlight this yuno, the yunos linked to it and their links (again, or Esc: clear)",
         "monitor queue": "Queue",
         "monitor yuno unknown": "State not known yet",
         "monitor yuno playing": "Playing",

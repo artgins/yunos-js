@@ -933,6 +933,7 @@ const es = {
         "monitor cpu": "CPU",
         "monitor in": "Entrada",
         "monitor out": "Salida",
+        "monitor focus yuno": "Resalta este yuno, los yunos enlazados y sus enlaces (otra vez, o Esc: quitar)",
         "monitor queue": "Cola",
         "monitor yuno unknown": "Estado aún desconocido",
         "monitor yuno playing": "En marcha",
