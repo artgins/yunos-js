@@ -6,6 +6,14 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.111 (2026-10-24)
+
+- **A version is split at '-' as well as '.'** when it is compared or sorted
+  (`version_tuple()` of `agent_helpers.js`), as `version_cmp()` of the SDK
+  does. A yuno's version now carries the SDK it was built with after a '-'
+  (`1.9.1-7.27.11`, SDK 7.27.11+): split at '.' alone, `1-7` read as 1, so
+  a `1.9.1-8.0.0` sorted below `1.9.1-7.27.11`.
+
 ## gui_agent 0.29.110, gui_treedb 0.17.172 (2026-10-22)
 
 Dependencies caught up within their majors: i18next `^26.5.6`,

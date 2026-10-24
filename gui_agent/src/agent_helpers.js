@@ -36,11 +36,13 @@
 /***************************************************************
  *  A dotted version as numbers. Missing or non-numeric components
  *  count as 0, so "7.7" and "7.7.0" compare equal and a stray
- *  "7.x.1" does not throw.
+ *  "7.x.1" does not throw. Split at '-' too, as version_cmp() of
+ *  the SDK: a yuno's version carries the SDK after a '-'
+ *  ("1.9.1-7.27.11"), and "1-7" read as 1 lost the SDK's major.
  ***************************************************************/
 function version_tuple(v)
 {
-    return String(v || "").split(".").map((x) => parseInt(x, 10) || 0);
+    return String(v || "").split(/[.-]/).map((x) => parseInt(x, 10) || 0);
 }
 
 /***************************************************************

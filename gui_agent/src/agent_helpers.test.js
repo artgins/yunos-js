@@ -45,6 +45,12 @@ describe("versions", () => {
         expect(version_tuple(undefined)).toEqual([0]);
     });
 
+    test("a yuno's version carries the SDK after a '-'", () => {
+        expect(version_tuple("1.9.1-7.27.11")).toEqual([1, 9, 1, 7, 27, 11]);
+        expect(version_cmp("1.9.1-8.0.0", "1.9.1-7.27.11")).toBeGreaterThan(0);
+        expect(version_cmp("1.9.1-7.27.11", "1.9.1.0")).toBeGreaterThan(0);
+    });
+
     test("7.10.0 is NEWER than 7.9.0 — the whole reason this is not a string sort", () => {
         expect(version_cmp("7.10.0", "7.9.0")).toBeGreaterThan(0);
         expect(version_gte("7.10.0", "7.9.0")).toBe(true);
