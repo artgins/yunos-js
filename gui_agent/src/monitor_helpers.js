@@ -679,6 +679,30 @@ function queue_elsewhere(y)
     return !!(y && y.queue_service && y.queue_service !== (y.service || ""));
 }
 
+/***************************************************************
+ *  The messages a service's stats say are queued: its own
+ *  `msgs_in_queue`, or the sum of its children's when it has none
+ *  (a gate's __output_side__ answers per output gate:
+ *  {"output-qiogate-0": {"msgs_in_queue": 3, ...}}). null: none.
+ ***************************************************************/
+function queue_in_stats(data)
+{
+    if(!data || typeof data !== "object") {
+        return null;
+    }
+    if(typeof data.msgs_in_queue === "number") {
+        return data.msgs_in_queue;
+    }
+    let total = null;
+    for(const v of Object.values(data)) {
+        if(v && typeof v === "object" && !Array.isArray(v) &&
+                typeof v.msgs_in_queue === "number") {
+            total = (total || 0) + v.msgs_in_queue;
+        }
+    }
+    return total;
+}
+
 function unique(list)
 {
     return list.filter((v, i) => list.indexOf(v) === i);
@@ -1085,6 +1109,7 @@ export {
     layout_graph,
     only_emitters,
     queue_elsewhere,
+    queue_in_stats,
     pick_rate,
     prune_history,
     cpu_level,

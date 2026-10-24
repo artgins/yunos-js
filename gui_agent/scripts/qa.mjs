@@ -31,6 +31,7 @@
  *          node scripts/qa.mjs --check gobjtree        # a card's gobj tree opens and draws its canvas
  *          node scripts/qa.mjs --check chartsheld      # a stopped scenario's charts hold (renfe-20k-hidraulia)
  *          node scripts/qa.mjs --check controlhelp     # each control of a scenario says what it does
+ *          node scripts/qa.mjs --check queues          # the gates' queues: on their cards and charted
  *          node scripts/qa.mjs --check roles           # the roles of a store: what each grants, its sheet
  *          node scripts/qa.mjs --check roleswrite      # a role created, edited and deleted (leaves none)
  *          QA_PERM_OFF='<cmd>' QA_PERM_ON='<cmd>' \
@@ -639,11 +640,66 @@ async function check_permlive(page, args, step, out_dir)
     return ok && gone && back;
 }
 
+/*
+ *  --check queues: the gates of the held scenario name a queue_service
+ *  (__output_side__), so their cards show a queue with a number and the
+ *  "messages in queue" chart is there. Read only.
+ */
+const QUEUE_GATES = (process.env.QA_QUEUE_GATES || "2120,2130,2140").split(",");
+
+async function check_queues(page, args, step, out_dir)
+{
+    await page.evaluate((id) => {
+        window.location.hash = `#/scenarios/live/${id}`;
+    }, HELD_SCENARIO);
+    let ok = true;
+    let detail = "";
+    try {
+        await page.locator(".MONITOR_CHART_QUEUE").waitFor({state: "visible", timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        ok = false;
+        detail = "no queue chart";
+    }
+    /*  A reading or two, so every card had its chance  */
+    await page.waitForTimeout(6000);
+    const cards = await page.evaluate((ids) => {
+        const out = {};
+        for(const $id of document.querySelectorAll(".MONITOR_NODE .MONITOR_NODE_ID")) {
+            const id = $id.textContent.trim();
+            if(ids.indexOf(id) < 0) {
+                continue;
+            }
+            const $card = $id.closest(".MONITOR_NODE");
+            const $row = $card.querySelector(".MONITOR_NODE_QUEUE");
+            out[id] = {
+                shown: !!$row && !$row.classList.contains("is-hidden") && $row.offsetParent !== null,
+                value: $row ? $row.querySelector(".MONITOR_NODE_QUEUE_VALUE").textContent.trim() : "",
+                height: $card.style.height
+            };
+        }
+        return out;
+    }, QUEUE_GATES);
+    for(const id of QUEUE_GATES) {
+        const c = cards[id];
+        if(!c || !c.shown || !/\d/.test(c.value)) {
+            ok = false;
+            detail += ` gate ${id}: ${c ? `shown=${c.shown} value='${c.value}'` : "no card"};`;
+        }
+    }
+    if(ok) {
+        detail = QUEUE_GATES.map((id) => `${id}=${cards[id].value} (${cards[id].height})`).join(", ");
+    }
+    await page.screenshot({path: join(out_dir, "check_queues.png"), fullPage: true});
+    step("check queues: the gates' queues on their cards and charted", ok, detail.trim());
+    return ok;
+}
+
 const CHECKS = {
     schemaback: check_schemaback,
     gobjtree: check_gobjtree,
     chartsheld: check_chartsheld,
     controlhelp: check_controlhelp,
+    queues: check_queues,
     roles: check_roles,
     roleswrite: check_roleswrite,
     permlive: check_permlive,

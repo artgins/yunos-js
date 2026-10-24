@@ -452,7 +452,7 @@ describe("the live view of a scenario the control center keeps", () => {
         /*  The gate's own counters say no queue; its __output_side__ says 1200  */
         push({yuno_id: "2120", kind: "app", service: "", result: 0, data: {rxMsgsec: 7000}});
         push({yuno_id: "2120", kind: "app", service: "__output_side__", result: 0,
-              data: {msgs_in_queue: 1200}});
+              data: {"output-qiogate-0": {msgs_in_queue: 1200, pending_acks: 0}}});
         push({yuno_id: "2120", kind: "app", service: "", result: 0, data: {rxMsgsec: 7100}});
         expect(mon.priv.model.gate.queue).toBe(1200);
         expect(mon.priv.model.gate.rx).toBe(7100);

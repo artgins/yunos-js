@@ -262,6 +262,7 @@ import {
     layout_graph,
     only_emitters,
     queue_elsewhere,
+    queue_in_stats,
     pick_rate,
     prune_history,
     cpu_level,
@@ -2629,7 +2630,7 @@ function apply_reading(gobj, id, kind, result, comment, data_)
         m.cpu_t = now;
     } else if(kind === "queue") {
         /*  Its queue's service: only the queue is taken from it  */
-        m.queue = typeof data.msgs_in_queue === "number" ? data.msgs_in_queue : null;
+        m.queue = queue_in_stats(data);
         m.queue_t = now;
     } else {
         let rx = pick_rate(data, "rx", m.prev_rx, now);
@@ -2639,7 +2640,7 @@ function apply_reading(gobj, id, kind, result, comment, data_)
         m.tx = tx.rate;
         m.prev_tx = tx.prev;
         if(!queue_elsewhere(y)) {
-            m.queue = typeof data.msgs_in_queue === "number" ? data.msgs_in_queue : null;
+            m.queue = queue_in_stats(data);
             m.queue_t = now;
         }
         m.data = data;

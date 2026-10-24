@@ -26,6 +26,7 @@ import {
     layout_graph,
     only_emitters,
     queue_elsewhere,
+    queue_in_stats,
     pick_rate,
     prune_history,
     cpu_level,
@@ -590,5 +591,16 @@ describe("queue_service", () => {
         let raw = base();
         raw.yunos[1].queue_service = "a b";
         expect(validate_scenario(raw).error.key).toBe("scenario bad queue service");
+    });
+    it("reads the queue of a service, or the sum of its output gates'", () => {
+        expect(queue_in_stats({msgs_in_queue: 7, txMsgs: 1})).toBe(7);
+        /*  What a gate's __output_side__ answers  */
+        expect(queue_in_stats({
+            "output-qiogate-0": {msgs_in_queue: 3, pending_acks: 0},
+            "output-qiogate-1": {msgs_in_queue: 4, pending_acks: 1}
+        })).toBe(7);
+        expect(queue_in_stats({"output-qiogate-0": {msgs_in_queue: 0}})).toBe(0);
+        expect(queue_in_stats({txMsgs: 5, child: {rxMsgs: 1}})).toBe(null);
+        expect(queue_in_stats(null)).toBe(null);
     });
 });

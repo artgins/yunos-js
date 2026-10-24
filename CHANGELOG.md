@@ -6,6 +6,15 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.0.5 (2026-10-24)
+
+- **The queue of a gate is READ.** 1.0.4 watched the gates'
+  `__output_side__` and sized their cards for a queue, but showed no value:
+  that service answers per output gate (`{"output-qiogate-0":
+  {"msgs_in_queue": 0, ...}}`), and the view only read a `msgs_in_queue` at
+  the top. `queue_in_stats()` takes the top one, or the sum of the
+  children's. Seen on the live view of `renfe-20k-hidraulia`.
+
 ## gui_agent 1.0.4 (2026-10-24)
 
 - **A gate's queue is watched where it is: `queue_service`.** A yuno of a
