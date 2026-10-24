@@ -154,9 +154,12 @@ the same ones. The workspace (`/scenarios`) has three fixed tabs:
   **graph** of the yunos in the order the messages flow (left to right), each
   card with its cpu %, its messages per second in and out, its queue when its
   service reports one (`msgs_in_queue`) and what the agent says of it; the
-  edges carry the messages per second through them; under it two **charts**
-  (`C_YUI_UPLOT`), messages per second and cpu, over 5 to 60 minutes. Or as
-  **cards** (`view.mode`, and a selector in the toolbar).
+  edges carry the messages per second through them; under it the **charts**
+  (`C_YUI_UPLOT`), messages per second, messages in queue (when a yuno has a
+  queue) and cpu, over 5 to 60 minutes. A click on a card highlights it, the
+  cards linked to it and their links (1.0.6); again, the empty canvas or
+  Escape clears it. Or as **cards** (`view.mode`, and a selector in the
+  toolbar).
 
 The scenario watched is kept in `C_AGENT_CONFIG` (`monitor_scenario`) with
 where it came from (`monitor_source`: `saved` in the control center,
@@ -173,7 +176,8 @@ A scenario, as the control center keeps it and as the editor writes it:
     "node": "yunovatios-controlador",
     "yunos": [
         {"key": "sim",       "id": "stress", "service": "sim_controllers", "rate": "tx"},
-        {"key": "gate_co",   "id": "2120",   "label": "gate_central"},
+        {"key": "gate_co",   "id": "2120",   "label": "gate_central",
+         "queue_service": "__output_side__"},
         {"key": "tracks_co", "id": "5120",   "label": "db_tracks_ce"},
         {"key": "gate_ce",   "id": "2120",   "label": "gate_central", "node": "yunovatios-central"},
         {"key": "tracks_ce", "id": "5120",   "label": "db_tracks_ce", "node": "yunovatios-central"}
@@ -200,7 +204,12 @@ certificate a browser trusts. `key` names a yuno in `links` and `actions`
 (default: its id), and is needed when two nodes carry the same id. `rate` is
 the direction plotted as the yuno's throughput: `rx` (default) or `tx` (a
 generator). `service` names the service whose counters are read (default: the
-yuno's role), and is the service a step goes to when it names none. `links`
+yuno's role), and is the service a step goes to when it names none.
+`queue_service` (1.0.4, SDK 7.27.21) names the service whose stats hold the
+yuno's output queue when it is not `service`: a gate's queue towards its
+store is in `__output_side__`, answered per output gate and summed
+(`queue_in_stats()`). A queue that is not empty is painted in the warning
+colour. `links`
 gives the columns of the graph; each group of yunos that exchange messages is
 laid out as its own horizontal band. The validator (`monitor_helpers.js`)
 applies the rules of the control center's `save-scenario`, and names what is
