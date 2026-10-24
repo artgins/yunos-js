@@ -22,6 +22,7 @@ import {
     config_endpoints,
     derive_links,
     parse_scenario,
+    validate_scenario,
     layout_graph,
     pick_rate,
     prune_history,
@@ -526,5 +527,24 @@ describe("run state and charts", () => {
         expect(some_step_done([{result: -1}, {}])).toBe(false);
         expect(some_step_done([{result: -1}, {result: 0}])).toBe(true);
         expect(some_step_done(undefined)).toBe(false);
+    });
+});
+
+describe("max_run", () => {
+    const base = () => JSON.parse(JSON.stringify(SCENARIO_TEMPLATE));
+    it("is the seconds a start may run, 0 to a week; the document keeps it", () => {
+        let raw = Object.assign(base(), {max_run: 2100});
+        let r = validate_scenario(raw);
+        expect(r.ok).toBe(true);
+        expect(r.scenario.max_run).toBe(2100);
+        expect(scenario_document(r.scenario).max_run).toBe(2100);
+        let none = validate_scenario(base());
+        expect(none.scenario.max_run).toBe(0);
+        expect(scenario_document(none.scenario).max_run).toBe(undefined);
+    });
+    it("refuses what is not one", () => {
+        for(let bad of [-1, 1.5, "60", 7 * 24 * 3600 + 1]) {
+            expect(validate_scenario(Object.assign(base(), {max_run: bad})).error.key).toBe("scenario bad max_run");
+        }
     });
 });

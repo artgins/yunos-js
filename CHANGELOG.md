@@ -6,6 +6,19 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.0.1 (2026-10-24)
+
+- **A scenario's `max_run`** (SDK 7.27.17+): the seconds a start may run
+  before the control center stops it. The editor validates it (an integer,
+  0 to a week; *"max_run is the seconds a start may run..."*) and keeps it on
+  save -- 1.0.0 dropped it, and a save from the console would have set it
+  back to 0. While the scenario runs the status line says when it stops,
+  *"stops at 18:45"* (`stop_at` of `scenarios`, read with the runs).
+- **A run that ends anywhere is seen at once**: the control center publishes
+  `EV_SCENARIO_RUN_ENDED`, the link subscribes to it and the live view reads
+  the state and the stop again -- a scenario stopped by its max_run, or by
+  another console, shows stopped (and its charts hold) without a reload.
+
 ## gui_agent 1.0.0, gui_treedb 1.0.0 (2026-10-24)
 
 **One digit per segment** from here on, as the `yunetas` CLI: each segment is

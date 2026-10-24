@@ -169,7 +169,11 @@
  *      scrolling away under zeros and cpu noise; the next row after a
  *      hold opens a gap. A scenario with no start/stop, or whose state
  *      is not known, always takes rows. A run from another console is
- *      seen when the tab shows again, not before (no polling).
+ *      seen at once: every run that ends in the control center publishes
+ *      EV_SCENARIO_RUN_ENDED, and the state is read again (no polling).
+ *      A scenario with a `max_run` is stopped by the control center itself
+ *      that many seconds after its start; while it runs the status line
+ *      says when (`stop_at` of `scenarios`).
  *
  *      GENERATIONS. Every request carries the generation of the scenario
  *      shown (`monitor_gen`, bumped when another one is adopted): a
@@ -289,7 +293,7 @@ const CONTROL_ICONS = {
 
 /*  The kinds of the requests this view makes of the control center
  *  itself (not of an agent): answered in any state.  */
-const CC_KINDS = ["cc_save", "cc_delete", "cc_runs", "cc_run", "cc_state", "cc_open"];
+const CC_KINDS = ["cc_save", "cc_delete", "cc_runs", "cc_run", "cc_state", "cc_open", "cc_stop_at"];
 
 /*  The route of this view. Its subpath is the id of the saved scenario
  *  shown: `/scenarios/live/<id>` is a link that can be sent.  */
@@ -396,6 +400,7 @@ let PRIVATE_DATA = {
     cc_watch:       null,   /*  false: the control center has no watch-scenario (older), ask through command-agent  */
     route_id:       "",     /*  the scenario id in the url of the live tab (its subpath)  */
     on_route:       false,  /*  the shell is on this view's route  */
+    stop_at:        0,      /*  epoch second the control center stops the scenario (its max_run), 0 = none  */
 };
 
 /*  How long a phase of a control run from here waits for its answers.  */
@@ -492,6 +497,8 @@ function mt_start(gobj)
     let cc_link = gobj_read_attr(gobj, "cc_link_svc");
     if(cc_link) {
         gobj_subscribe_event(cc_link, "EV_MT_COMMAND_ANSWER", {}, gobj);
+        /*  A run ended, from here or anywhere: the state is read again  */
+        gobj_subscribe_event(cc_link, "EV_SCENARIO_RUN_ENDED", {}, gobj);
     }
 
     /*  A dashboard shows: with a scenario, connect at once.  */
@@ -538,6 +545,7 @@ function mt_stop(gobj)
     let cc_link = gobj_read_attr(gobj, "cc_link_svc");
     if(cc_link) {
         gobj_unsubscribe_event(cc_link, "EV_MT_COMMAND_ANSWER", {}, gobj);
+        gobj_unsubscribe_event(cc_link, "EV_SCENARIO_RUN_ENDED", {}, gobj);
     }
     /*  The charts are hosted children: retire them here, not in
      *  mt_destroy (the framework destroys children first).  */
@@ -698,8 +706,13 @@ function build_dom(gobj)
         ["span", {class: "MONITOR_ERROR_TEXT"}, ""],
         ["span", {class: "MONITOR_ERROR_DETAIL is-family-monospace"}, ""]
     ]]);
+    /*  When the control center stops it (its max_run), while it runs  */
+    priv.$stop_at = createElement2(["span", {class: "MONITOR_STOP_AT tag is-warning is-light"}, [
+        ["span", {class: "mr-1", i18n: "monitor stops at"}, t("monitor stops at")],
+        ["span", {class: "MONITOR_STOP_AT_TIME is-family-monospace"}, ""]
+    ]]);
     let $status = createElement2(
-        ["div", {class: "MONITOR_STATUS is-size-7"}, [priv.$url, priv.$updated, priv.$error]]
+        ["div", {class: "MONITOR_STATUS is-size-7"}, [priv.$url, priv.$updated, priv.$stop_at, priv.$error]]
     );
 
     /*  Test controls: filled from the scenario's test block.  */
@@ -1129,6 +1142,16 @@ function render_status(gobj)
     show(priv.$updated, priv.last_update > 0);
     priv.$updated_time.textContent = priv.last_update
         ? date_time_format(i18next.language, CLOCK_OPTIONS).format(new Date(priv.last_update)) : "";
+    let stops = has && priv.stop_at > 0 && (priv.run_state === "running" || priv.run_state === "paused");
+    show(priv.$stop_at, stops);
+    if(stops) {
+        let when = new Date(priv.stop_at * 1000);
+        /*  A stop of another day says the day too  */
+        priv.$stop_at.querySelector(".MONITOR_STOP_AT_TIME").textContent =
+            (when.toDateString() === new Date().toDateString())
+                ? date_time_format(i18next.language, CLOCK_OPTIONS).format(when)
+                : fmt_date_time(when, i18next.language);
+    }
 
     let $et = priv.$error.querySelector(".MONITOR_ERROR_TEXT");
     let $ed = priv.$error.querySelector(".MONITOR_ERROR_DETAIL");
@@ -1538,7 +1561,11 @@ function ask_run_state(gobj)
         priv.run_state_asked = false;
         log_warning(`${gobj_short_name(gobj)}: the runs of '${priv.scenario.id}' not asked: ` +
             `no link to the control center`);
+        return 0;
     }
+    /*  and when the control center stops it, if its max_run says so  */
+    cc_request(gobj, "scenarios", {scenario_id: priv.scenario.id}, "cc_stop_at",
+        {monitor_scenario: priv.scenario.id});
     return 0;
 }
 
@@ -1977,6 +2004,7 @@ function adopt_scenario(gobj)
     priv.run_state = null;
     priv.run_state_asked = false;
     priv.charts_held = false;
+    priv.stop_at = 0;
     priv.editing = false;
     reset_model(gobj);
     gobj_start_charts(gobj);
@@ -2156,6 +2184,15 @@ function cc_answer(gobj, a, kw)
             return 0;
         }
         agent_config_set_monitor(config, {scenario: r.scenario, source: "saved"});
+        return 0;
+    }
+    if(a.kind === "cc_stop_at") {
+        if(!priv.scenario || priv.scenario.id !== scenario_id) {
+            return 0;
+        }
+        let doc = (!failed && Array.isArray(kw.data) && kw.data[0]) ? kw.data[0] : null;
+        priv.stop_at = (doc && typeof doc.stop_at === "number") ? doc.stop_at : 0;
+        render_status(gobj);
         return 0;
     }
     if(a.kind === "cc_state") {
@@ -3131,6 +3168,17 @@ function ac_permissions_changed(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  A scenario run ended in the control center -- one of a console,
+ *  or its own stop of a max_run: what the scenario shown is doing,
+ *  and when it stops, are read again.
+ ***************************************************************/
+function ac_run_ended(gobj, event, kw, src)
+{
+    ask_run_state(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  The shell moved. On this view's route, the subpath is the saved
  *  scenario to show: one that is not the one shown is asked of the
  *  control center (a link sent to somebody, a reload, Back); none is
@@ -3361,6 +3409,7 @@ function create_gclass(gclass_name)
         ["EV_LANGUAGE_CHANGED",     ac_language_changed,    null],
         ["EV_ROUTE_CHANGED",        ac_route_changed,       null],
         ["EV_CC_PERMISSIONS_CHANGED", ac_permissions_changed, null],
+        ["EV_SCENARIO_RUN_ENDED",   ac_run_ended,           null],
         /*  a gobj tree stays open across a drop: its requests are
          *  answered in any state  */
         ["EV_OPEN_YUNO_TREE",       ac_open_yuno_tree,      null],
@@ -3422,6 +3471,7 @@ function create_gclass(gclass_name)
         ["EV_LANGUAGE_CHANGED",     0],
         ["EV_ROUTE_CHANGED",        0],
         ["EV_CC_PERMISSIONS_CHANGED", 0],
+        ["EV_SCENARIO_RUN_ENDED",   0],
         ["EV_TEST_CONTROL",         0],
         ["EV_TEST_CONFIRMED",       0],
         ["EV_PROPOSE_LINKS",        0],

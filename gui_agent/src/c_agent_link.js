@@ -15,7 +15,8 @@
  *      Consumers:
  *          - subscribe to "agent_link" for EV_ON_OPEN / EV_ON_CLOSE /
  *            EV_ON_OPEN_ERROR / EV_ON_ID_NAK / EV_MT_COMMAND_ANSWER /
- *            EV_MT_STATS_ANSWER / EV_PERMISSIONS_CHANGED;
+ *            EV_MT_STATS_ANSWER / EV_PERMISSIONS_CHANGED /
+ *            EV_SCENARIO_RUN_ENDED;
  *          - EV_PERMISSIONS_CHANGED is the control center's own (SDK
  *            7.27.16): what a user may do changed in its users store. The
  *            transport subscribes to it on the service `controlcenter`
@@ -229,6 +230,7 @@ function open_link(gobj)
     }, gobj_yuno());
     gobj_write_attr(gobj, "iev", iev);
     gobj_subscribe_event(iev, "EV_PERMISSIONS_CHANGED", {__service__: "controlcenter"}, gobj);
+    gobj_subscribe_event(iev, "EV_SCENARIO_RUN_ENDED", {__service__: "controlcenter"}, gobj);
 
     gobj_start_tree(iev);
 }
@@ -319,6 +321,11 @@ function ac_permissions_changed(gobj, event, kw, src)
     return bubble(gobj, "EV_PERMISSIONS_CHANGED", kw);
 }
 
+function ac_run_ended(gobj, event, kw, src)
+{
+    return bubble(gobj, "EV_SCENARIO_RUN_ENDED", kw);
+}
+
 /***************************************************************
  *  Active agent or login changed: re-open the link.
  ***************************************************************/
@@ -374,6 +381,7 @@ function create_gclass(gclass_name)
             ["EV_TTY_DATA",          ac_tty_data,          null],
             ["EV_YUNO_STATS",        ac_yuno_stats,        null],
             ["EV_PERMISSIONS_CHANGED", ac_permissions_changed, null],
+            ["EV_SCENARIO_RUN_ENDED", ac_run_ended,      null],
             ["EV_REOPEN",            ac_reopen,            null]
         ]]
     ];
@@ -400,6 +408,7 @@ function create_gclass(gclass_name)
         ["EV_TTY_DATA",          answer],
         ["EV_YUNO_STATS",        answer],
         ["EV_PERMISSIONS_CHANGED", answer],
+        ["EV_SCENARIO_RUN_ENDED", answer],
         ["EV_REOPEN",            0]
     ];
 

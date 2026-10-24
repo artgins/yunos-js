@@ -100,6 +100,10 @@ const SCENARIO_TEMPLATE = {
 
 const RATE_DIRECTIONS = ["rx", "tx"];
 
+/*  The longest max_run of a scenario (the control center's limit): a
+ *  week, in seconds.  */
+const MAX_RUN_LIMIT = 7 * 24 * 3600;
+
 /*  The actions a scenario can declare, in the order they are shown.  */
 const SCENARIO_ACTIONS = ["start", "pause", "resume", "stop", "report"];
 
@@ -315,6 +319,15 @@ function validate_scenario(raw)
         }
     }
 
+    /*  Seconds a start may run before the control center stops it  */
+    let max_run = 0;
+    if(raw.max_run !== undefined) {
+        if(!Number.isInteger(raw.max_run) || raw.max_run < 0 || raw.max_run > MAX_RUN_LIMIT) {
+            return fail("scenario bad max_run", String(raw.max_run));
+        }
+        max_run = raw.max_run;
+    }
+
     let scenario = {
         id: id,
         description: text_of(raw.description) || text_of(raw.name),
@@ -323,7 +336,8 @@ function validate_scenario(raw)
         yunos: yunos,
         links: links,
         actions: actions,
-        view: {mode: mode}
+        view: {mode: mode},
+        max_run: max_run
     };
     if(place === "direct") {
         scenario.agent_url = url;
@@ -467,6 +481,9 @@ function scenario_document(scenario)
         actions: JSON.parse(JSON.stringify(scenario.actions || {})),
         view: {mode: (scenario.view && scenario.view.mode) || "graph"}
     };
+    if(scenario.max_run > 0) {
+        doc.max_run = scenario.max_run;
+    }
     if(scenario.place === "direct") {
         doc.agent_url = scenario.agent_url;
     } else if(scenario.node) {

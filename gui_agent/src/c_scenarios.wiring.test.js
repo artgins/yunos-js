@@ -176,7 +176,8 @@ beforeAll(() => {
         ["EV_LINK_FAILED",       event_flag_t.EVF_OUTPUT_EVENT],
         ["EV_MT_COMMAND_ANSWER", event_flag_t.EVF_OUTPUT_EVENT],
         ["EV_MT_STATS_ANSWER",   event_flag_t.EVF_OUTPUT_EVENT],
-        ["EV_YUNO_STATS",        event_flag_t.EVF_OUTPUT_EVENT]
+        ["EV_YUNO_STATS",        event_flag_t.EVF_OUTPUT_EVENT],
+        ["EV_SCENARIO_RUN_ENDED", event_flag_t.EVF_OUTPUT_EVENT]
     ];
     gclass_create("C_TEST_LINK", link_events, [["ST_IDLE", []]], {}, 0,
         [SDATA(data_type_t.DTP_POINTER, "iev", 0, null, "session"), SDATA_END()], {}, 0, 0, 0, 0);
@@ -429,6 +430,32 @@ describe("the live view of a scenario the control center keeps", () => {
         gobj_publish_event(test_shell.shell, "EV_ROUTE_CHANGED",
             {route: "/scenarios/list", base: "/scenarios/list", subpath: ""});
         expect(find("scenarios")).toEqual([]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a run that ended anywhere is read again; while it runs, the line says when it stops", () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        sent.length = 0;
+        gobj_publish_event(link, "EV_SCENARIO_RUN_ENDED", {});
+        let runs = find("scenario-runs").filter((r) => r.kw.scenario_id === "stress");
+        let docs = find("scenarios").filter((r) => r.kw.scenario_id === "stress");
+        expect(runs.length > 0 && docs.length > 0).toBe(true);
+        answer(mon, runs.pop(), {data: [{action: "start", result: 0, steps: [{result: 0}]}]});
+        expect(mon.priv.run_state).toBe("running");
+        const at = Math.floor(Date.now() / 1000) + 2100;
+        answer(mon, docs.pop(), {data: [Object.assign({}, SAVED, {stop_at: at})]});
+        expect(mon.priv.stop_at).toBe(at);
+        expect(mon.priv.$stop_at.classList.contains("is-hidden")).toBe(false);
+        expect(mon.priv.$stop_at.textContent).toMatch(/\d{2}:\d{2}/);
+
+        /*  Stopped (by its max_run, or by anybody): the line goes  */
+        sent.length = 0;
+        gobj_publish_event(link, "EV_SCENARIO_RUN_ENDED", {});
+        answer(mon, find("scenario-runs").pop(), {data: [{action: "stop", result: 0, steps: [{result: 0}]}]});
+        answer(mon, find("scenarios").pop(), {data: [SAVED]});
+        expect(mon.priv.run_state).toBe("stopped");
+        expect(mon.priv.$stop_at.classList.contains("is-hidden")).toBe(true);
         expect(errors()).toEqual([]);
     });
 

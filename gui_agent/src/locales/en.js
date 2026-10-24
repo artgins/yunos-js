@@ -1064,6 +1064,8 @@ const en = {
         "monitor report": "Report",
         "monitor confirm report": "Ask for the report? These commands are sent:",
         "scenario bad id": "The id of a scenario is letters, digits and _ . @ -, not starting with a dot, 200 at most:",
+        "scenario bad max_run": "max_run is the seconds a start may run before the control center stops it, 0 (none) to 604800:",
+        "monitor stops at": "stops at",
         "scenario bad view": "view.mode is graph or cards:",
         "scenario bad action": "An action is start, pause, resume, stop or report, with a list of steps:",
         "scenario bad step": "A step names a yuno of the scenario (its key) and, optionally, a service:",
