@@ -274,10 +274,11 @@ import {
 const GCLASS_NAME = "C_AGENT_MONITOR";
 
 const CARD_W = 208;
+/*  A card with every row (cpu, in, out, queue); each row it does not
+ *  show takes CARD_ROW_H off: no input for a yuno that only emits, no
+ *  queue for a service that reports none (most gates and stores).  */
 const CARD_H = 148;
-/*  The card of a yuno that only emits (no input row): a column of
- *  simulators is a column of these.  */
-const CARD_H_EMITTER = 124;
+const CARD_ROW_H = 24;
 const CHART_H = 220;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -404,6 +405,8 @@ let PRIVATE_DATA = {
     cc_watch:       null,   /*  false: the control center has no watch-scenario (older), ask through command-agent  */
     route_id:       "",     /*  the scenario id in the url of the live tab (its subpath)  */
     on_route:       false,  /*  the shell is on this view's route  */
+    has_queue:      {},     /*  yuno key -> its service reports a queue: its card has the row  */
+    relayout_posted: false, /*  EV_RELAYOUT is on its way  */
     stop_at:        0,      /*  epoch second the control center stops the scenario (its max_run), 0 = none  */
 };
 
@@ -934,8 +937,9 @@ function build_graph(gobj)
     let ids = priv.scenario.yunos.map((y) => y.key);
     let emitters = only_emitters(ids, priv.scenario.links);
     let heights = {};
-    for(let id of emitters) {
-        heights[id] = CARD_H_EMITTER;
+    for(let id of ids) {
+        let missing = (emitters.indexOf(id) >= 0 ? 1 : 0) + (priv.has_queue[id] ? 0 : 1);
+        heights[id] = CARD_H - missing * CARD_ROW_H;
     }
     let g = layout_graph(ids, priv.scenario.links, {card_w: CARD_W, card_h: CARD_H, heights: heights});
 
@@ -1071,7 +1075,17 @@ function paint_card(gobj, id)
     c.$bar.style.width = `${typeof m.cpu === "number" ? Math.max(0, Math.min(100, m.cpu)) : 0}%`;
     c.$rx.textContent = fmt_rate(m.rx);
     c.$tx.textContent = fmt_rate(m.tx);
-    show(c.$qrow, typeof m.queue === "number");
+    let has_queue = typeof m.queue === "number";
+    show(c.$qrow, has_queue);
+    if(has_queue !== !!priv.has_queue[id]) {
+        /*  The card was sized for the other: laid out again, once, on the
+         *  next turn (not in the middle of a paint)  */
+        priv.has_queue[id] = has_queue;
+        if(!priv.relayout_posted) {
+            priv.relayout_posted = true;
+            gobj_post_event(gobj, "EV_RELAYOUT", {}, gobj);
+        }
+    }
     c.$q.textContent = typeof m.queue === "number" ? String(m.queue) : "";
     let err = m.errors.cpu || m.errors.app;
     if(err && err.key) {
@@ -2019,6 +2033,7 @@ function adopt_scenario(gobj)
     priv.run_state_asked = false;
     priv.charts_held = false;
     priv.stop_at = 0;
+    priv.has_queue = {};
     priv.editing = false;
     reset_model(gobj);
     gobj_start_charts(gobj);
@@ -3182,6 +3197,19 @@ function ac_permissions_changed(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  A card learnt it has (or has not) a queue row: the graph is laid
+ *  out again with the cards' new heights.
+ ***************************************************************/
+function ac_relayout(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    priv.relayout_posted = false;
+    build_graph(gobj);
+    paint_all_cards(gobj);
+    return 0;
+}
+
+/***************************************************************
  *  A scenario run ended in the control center -- one of a console,
  *  or its own stop of a max_run: what the scenario shown is doing,
  *  and when it stops, are read again.
@@ -3424,6 +3452,7 @@ function create_gclass(gclass_name)
         ["EV_ROUTE_CHANGED",        ac_route_changed,       null],
         ["EV_CC_PERMISSIONS_CHANGED", ac_permissions_changed, null],
         ["EV_SCENARIO_RUN_ENDED",   ac_run_ended,           null],
+        ["EV_RELAYOUT",             ac_relayout,            null],
         /*  a gobj tree stays open across a drop: its requests are
          *  answered in any state  */
         ["EV_OPEN_YUNO_TREE",       ac_open_yuno_tree,      null],
@@ -3486,6 +3515,7 @@ function create_gclass(gclass_name)
         ["EV_ROUTE_CHANGED",        0],
         ["EV_CC_PERMISSIONS_CHANGED", 0],
         ["EV_SCENARIO_RUN_ENDED",   0],
+        ["EV_RELAYOUT",             0],
         ["EV_TEST_CONTROL",         0],
         ["EV_TEST_CONFIRMED",       0],
         ["EV_PROPOSE_LINKS",        0],

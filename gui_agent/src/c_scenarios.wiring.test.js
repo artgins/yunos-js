@@ -433,6 +433,23 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(errors()).toEqual([]);
     });
 
+    test("a card is as high as its rows: an emitter has no input, a yuno with no queue no queue row", async () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);     /*  sim -> gate: sim only emits  */
+        const h = (key) => parseInt(/height:\s*(\d+)px/.exec(
+            mon.priv.cards[key].$card.style.cssText)[1], 10);
+        expect(h("sim")).toBe(100);     /*  no input, no queue known  */
+        expect(h("gate")).toBe(124);    /*  no queue known  */
+        /*  The gate reports a queue: laid out again, once, on the next turn  */
+        mon.priv.model.gate.queue = 3;
+        gobj_send_event(mon, "EV_SET_VIEW_MODE", {mode: "graph"}, mon);
+        await new Promise((r) => setTimeout(r, 0));
+        expect(h("gate")).toBe(148);
+        expect(h("sim")).toBe(100);
+        expect(mon.priv.relayout_posted).toBe(false);
+        expect(errors()).toEqual([]);
+    });
+
     test("a run that ended anywhere is read again; while it runs, the line says when it stops", () => {
         const mon = new_monitor();
         watch_saved(SAVED);

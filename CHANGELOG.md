@@ -6,6 +6,18 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.0.3 (2026-10-24)
+
+- **A card is as high as its rows.** Each row a card does not show takes 24
+  px off its 148: no input for a yuno that only emits, no queue for a
+  service that reports none -- most gates and stores, whose cards had an
+  empty band at the bottom. Whether a service reports a queue is known at
+  its first reading: the cards start without the row, and a card that
+  learns it has one makes the graph lay out again, once, on the next turn
+  (`EV_RELAYOUT`, posted, never in the middle of a paint). In
+  `renfe-20k-hidraulia` the gates and the store are 124 px high, the
+  simulators 124 (output and queue).
+
 ## gui_agent 1.0.2 (2026-10-24)
 
 - **The card of a yuno that only emits is smaller.** A yuno that sends along
