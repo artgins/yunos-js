@@ -24,6 +24,7 @@ import {
     parse_scenario,
     validate_scenario,
     layout_graph,
+    only_emitters,
     pick_rate,
     prune_history,
     cpu_level,
@@ -131,6 +132,17 @@ describe("layout_graph", () => {
         let g = layout_graph(["a", "b"], [["a", "b"], ["b", "a"]], O);
         expect(Object.keys(g.nodes).sort()).toEqual(["a", "b"]);
         expect(g.edges.length).toBe(2);
+    });
+
+    it("stacks shorter cards with their own heights; an edge meets each at its middle", () => {
+        let g = layout_graph(["s1", "s2", "gate"], [["s1", "gate"], ["s2", "gate"]],
+            Object.assign({}, O, {heights: {s1: 30, s2: 30}}));
+        expect([g.nodes.s1.h, g.nodes.s2.h, g.nodes.gate.h]).toEqual([30, 30, 50]);
+        expect(g.nodes.s1.y).toBe(0);
+        expect(g.nodes.s2.y).toBe(40);       /*  30 + the gap, not 50 + the gap  */
+        expect(g.nodes.gate.y).toBe(10);     /*  centred on a column 70 high  */
+        expect(g.edges[0].d.startsWith("M100,15")).toBe(true);
+        expect(g.height).toBe(80);       /*  the column, and one gap below it  */
     });
 
     it("lays out yunos with no links as one column", () => {
@@ -546,5 +558,15 @@ describe("max_run", () => {
         for(let bad of [-1, 1.5, "60", 7 * 24 * 3600 + 1]) {
             expect(validate_scenario(Object.assign(base(), {max_run: bad})).error.key).toBe("scenario bad max_run");
         }
+    });
+});
+
+describe("only_emitters", () => {
+    it("the yunos that send along a link and receive none", () => {
+        expect(only_emitters(["s1", "s2", "gate", "db"],
+            [["s1", "gate"], ["s2", "gate"], ["gate", "db"]])).toEqual(["s1", "s2"]);
+    });
+    it("none in a scenario with no links: the flow is not known", () => {
+        expect(only_emitters(["a", "b"], [])).toEqual([]);
     });
 });

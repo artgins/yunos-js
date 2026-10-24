@@ -260,6 +260,7 @@ import {
     parse_scenario,
     validate_scenario,
     layout_graph,
+    only_emitters,
     pick_rate,
     prune_history,
     cpu_level,
@@ -274,6 +275,9 @@ const GCLASS_NAME = "C_AGENT_MONITOR";
 
 const CARD_W = 208;
 const CARD_H = 148;
+/*  The card of a yuno that only emits (no input row): a column of
+ *  simulators is a column of these.  */
+const CARD_H_EMITTER = 124;
 const CHART_H = 220;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -928,7 +932,12 @@ function build_graph(gobj)
         return;
     }
     let ids = priv.scenario.yunos.map((y) => y.key);
-    let g = layout_graph(ids, priv.scenario.links, {card_w: CARD_W, card_h: CARD_H});
+    let emitters = only_emitters(ids, priv.scenario.links);
+    let heights = {};
+    for(let id of emitters) {
+        heights[id] = CARD_H_EMITTER;
+    }
+    let g = layout_graph(ids, priv.scenario.links, {card_w: CARD_W, card_h: CARD_H, heights: heights});
 
     let $canvas = createElement2(["div", {class: "MONITOR_GRAPH_CANVAS",
         style: `width:${g.width}px; height:${g.height}px;`}, []]);
@@ -991,9 +1000,17 @@ function build_graph(gobj)
                 $paused
             ]]
         );
+        /*  Nothing reaches a yuno that only emits: no input row  */
+        let emits_only = emitters.indexOf(y.key) >= 0;
+        let $rx_row = emits_only ? null : createElement2(
+            ["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_RX"}, [
+                ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor in"}, t("monitor in")],
+                $rx
+            ]]
+        );
         let $card = createElement2(
-            ["div", {class: "MONITOR_NODE card",
-                     style: `left:${pos.x}px; top:${pos.y}px; width:${CARD_W}px; height:${CARD_H}px;`}, [
+            ["div", {class: "MONITOR_NODE card" + (emits_only ? " MONITOR_NODE_EMITTER" : ""),
+                     style: `left:${pos.x}px; top:${pos.y}px; width:${CARD_W}px; height:${pos.h}px;`}, [
                 ["div", {class: "MONITOR_NODE_HEAD"}, [
                     $dot,
                     ["span", {class: "MONITOR_NODE_LABEL has-text-weight-bold"}, y.label],
@@ -1005,17 +1022,14 @@ function build_graph(gobj)
                     ["span", {class: "MONITOR_NODE_CPU_BAR"}, [$bar]],
                     $cpu
                 ]],
-                ["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_RX"}, [
-                    ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor in"}, t("monitor in")],
-                    $rx
-                ]],
+                $rx_row,
                 ["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_TX"}, [
                     ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor out"}, t("monitor out")],
                     $tx
                 ]],
                 $qrow,
                 $err
-            ]]
+            ].filter(Boolean)]
         );
         $canvas.appendChild($card);
         priv.cards[y.key] = {$card, $dot, $cpu, $bar, $rx, $tx, $q, $qrow, $err, $where, $paused};

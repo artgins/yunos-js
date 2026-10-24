@@ -763,6 +763,22 @@ function fail(key, detail)
 }
 
 /***************************************************************
+ *  The yunos that only EMIT: they send along a link and nothing
+ *  reaches them (a generator, a simulator). Their card shows no input.
+ *  In a scenario with no links nobody is one: the flow is not known.
+ ***************************************************************/
+function only_emitters(ids, links)
+{
+    let from = {};
+    let to = {};
+    for(let [a, b] of (links || [])) {
+        from[a] = true;
+        to[b] = true;
+    }
+    return ids.filter((id) => from[id] && !to[id]);
+}
+
+/***************************************************************
  *  Left-to-right layered layout, following the data flow: a yuno
  *  sits one column right of the furthest yuno that feeds it (longest
  *  path from the sources). Inside a column the yunos keep the order
@@ -775,12 +791,17 @@ function fail(key, detail)
  *  horizontal BANDS, in the order their first yuno was declared -- two
  *  chains of two nodes read as two rows, not as one knot.
  *
- *  Answers {nodes: {id: {x, y, layer}}, edges: [{from, to, d, mx, my}],
+ *  A card may be shorter than card_h (`heights`: {id: px}): a yuno
+ *  that only emits shows no input. A column stacks its cards with
+ *  their own heights, and an edge meets each card at its own middle.
+ *
+ *  Answers {nodes: {id: {x, y, h, layer}}, edges: [{from, to, d, mx, my}],
  *  width, height}, in pixels; `d` is an SVG path.
  ***************************************************************/
 function layout_graph(ids, links, opts)
 {
-    let o = Object.assign({card_w: 200, card_h: 120, gap_x: 72, gap_y: 24, pad: 12}, opts || {});
+    let o = Object.assign({card_w: 200, card_h: 120, gap_x: 72, gap_y: 24, pad: 12, heights: {}}, opts || {});
+    let h_of = (id) => (typeof o.heights[id] === "number" ? o.heights[id] : o.card_h);
 
     let incoming = {};
     let outgoing = {};
@@ -818,7 +839,8 @@ function layout_graph(ids, links, opts)
         groups.push(ids.filter((x) => g.indexOf(x) >= 0));
     }
 
-    let col_height = (n) => n * o.card_h + Math.max(0, n - 1) * o.gap_y;
+    let col_height = (col) => col.reduce((sum, id) => sum + h_of(id), 0) +
+        Math.max(0, col.length - 1) * o.gap_y;
     let nodes = {};
     let top = o.pad;
     let max_cols = 0;
@@ -865,15 +887,17 @@ function layout_graph(ids, links, opts)
         columns = columns.filter(Boolean);
         max_cols = Math.max(max_cols, columns.length);
 
-        let tallest = Math.max(0, ...columns.map((c) => col_height(c.length)));
+        let tallest = Math.max(0, ...columns.map((c) => col_height(c)));
         columns.forEach((col, ci) => {
-            let col_top = top + (tallest - col_height(col.length)) / 2;
-            col.forEach((id, ri) => {
+            let y = top + (tallest - col_height(col)) / 2;
+            col.forEach((id) => {
                 nodes[id] = {
                     x: o.pad + ci * (o.card_w + o.gap_x),
-                    y: col_top + ri * (o.card_h + o.gap_y),
+                    y: y,
+                    h: h_of(id),
                     layer: ci
                 };
+                y += h_of(id) + o.gap_y;
             });
         });
         top += tallest + o.gap_y * 2;
@@ -887,16 +911,16 @@ function layout_graph(ids, links, opts)
             return;
         }
         let x1 = na.x + o.card_w;
-        let y1 = na.y + o.card_h / 2;
+        let y1 = na.y + na.h / 2;
         let x2 = nb.x;
-        let y2 = nb.y + o.card_h / 2;
+        let y2 = nb.y + nb.h / 2;
         if(x2 <= x1) {
             /*  A backward edge (cycle): leave by the bottom, come back below.  */
-            let yb = Math.max(na.y, nb.y) + o.card_h + o.gap_y / 2;
+            let yb = Math.max(na.y + na.h, nb.y + nb.h) + o.gap_y / 2;
             x1 = na.x + o.card_w / 2;
-            y1 = na.y + o.card_h;
+            y1 = na.y + na.h;
             x2 = nb.x + o.card_w / 2;
-            y2 = nb.y + o.card_h;
+            y2 = nb.y + nb.h;
             edges.push({
                 from: a, to: b,
                 d: `M${x1},${y1} C${x1},${yb} ${x2},${yb} ${x2},${y2}`,
@@ -1037,6 +1061,7 @@ export {
     parse_scenario,
     validate_scenario,
     layout_graph,
+    only_emitters,
     pick_rate,
     prune_history,
     cpu_level,

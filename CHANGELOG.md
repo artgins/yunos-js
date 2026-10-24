@@ -6,6 +6,16 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.0.2 (2026-10-24)
+
+- **The card of a yuno that only emits is smaller.** A yuno that sends along
+  a link and receives none -- a simulator, a generator -- had an *In* row
+  that always read "-": its card has no input row now, and is 124 px high
+  instead of 148 (`only_emitters()`; `layout_graph()` takes a height per
+  card, `heights`, stacks a column with them and meets each card at its own
+  middle). The 8 simulators of `renfe-20k-hidraulia` take ~190 px less. In a
+  scenario with no links nobody is an emitter: the flow is not known.
+
 ## gui_agent 1.0.1 (2026-10-24)
 
 - **A scenario's `max_run`** (SDK 7.27.17+): the seconds a start may run
