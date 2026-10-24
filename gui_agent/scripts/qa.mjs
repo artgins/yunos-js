@@ -30,6 +30,7 @@
  *          node scripts/qa.mjs --check schemaback      # the schema editor's ← = browser Back
  *          node scripts/qa.mjs --check gobjtree        # a card's gobj tree opens and draws its canvas
  *          node scripts/qa.mjs --check chartsheld      # a stopped scenario's charts hold (renfe-20k-hidraulia)
+ *          node scripts/qa.mjs --check controlhelp     # each control of a scenario says what it does
  *
  *      Routes are hash routes of the shell, given without the '#':
  *
@@ -396,10 +397,40 @@ async function check_chartsheld(page, args, step, out_dir)
     return ok;
 }
 
+/*
+ *  --check controlhelp: every control of the scenario shown says what it
+ *  does: a title and an aria-label, equal, with a key, and longer than the
+ *  name on the button (0.29.114 repeated the name). Read only.
+ */
+async function check_controlhelp(page, args, step, out_dir)
+{
+    await page.evaluate((id) => { window.location.hash = `#/scenarios/live/${id}`; }, HELD_SCENARIO);
+    try {
+        await page.locator(".MONITOR_TEST_BUTTONS button").first().waitFor({timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        step("check controlhelp", false, "no control of the scenario on the page");
+        return false;
+    }
+    const bad = await page.evaluate(() => [...document.querySelectorAll(".MONITOR_TEST_BUTTONS button")]
+        .map(($b) => ({
+            name: $b.innerText.trim(),
+            title: $b.getAttribute("title") || "",
+            aria: $b.getAttribute("aria-label") || "",
+            key: $b.getAttribute("data-i18n-title") || ""
+        }))
+        .filter((b) => !b.title || b.title !== b.aria || !/ help$/.test(b.key) ||
+            b.title.length <= b.name.length + 5)
+        .map((b) => `${b.name}: '${b.title}'`));
+    const n = await page.locator(".MONITOR_TEST_BUTTONS button").count();
+    step(`check controlhelp: ${n} controls say what they do`, bad.length === 0, bad.join("; "));
+    return bad.length === 0;
+}
+
 const CHECKS = {
     schemaback: check_schemaback,
     gobjtree: check_gobjtree,
     chartsheld: check_chartsheld,
+    controlhelp: check_controlhelp,
 };
 
 
