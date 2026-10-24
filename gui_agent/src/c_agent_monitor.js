@@ -307,6 +307,14 @@ export const C_AGENT_MONITOR_I18N_KEYS = [
     "monitor start", "monitor pause", "monitor resume", "monitor stop", "monitor report", "monitor restart"
 ];
 
+/*  And what each control does, in its title and aria-label, `monitor
+ *  ${control} help`: the button shows the name, the tooltip says what it
+ *  does. The same controls, the same rule.  */
+export const C_AGENT_MONITOR_HELP_I18N_KEYS = [
+    "monitor start help", "monitor pause help", "monitor resume help",
+    "monitor stop help", "monitor report help", "monitor restart help"
+];
+
 /*  And the question each control asks before it runs, `monitor confirm
  *  ${control}`: the same controls, the same rule.  */
 export const C_AGENT_MONITOR_CONFIRM_I18N_KEYS = [
@@ -1192,13 +1200,15 @@ function build_test_controls(gobj)
          *  it names the list that publishes it  */
         let key = `monitor ${control}`;
         let label = t(/* i18n: C_AGENT_MONITOR_I18N_KEYS */ key);
+        let help_key = `monitor ${control} help`;
+        let help = t(/* i18n: C_AGENT_MONITOR_HELP_I18N_KEYS */ help_key);
         let danger = DANGEROUS_CONTROLS.indexOf(control) >= 0;
         let $btn = createElement2(
             ["button", {class: `MONITOR_TEST_${control.toUpperCase()} button` +
                                (danger ? " is-danger is-outlined" : ""),
                         type: "button",
-                        title: label, "data-i18n-title": /* i18n: C_AGENT_MONITOR_I18N_KEYS */ key,
-                        "aria-label": label, "data-i18n-aria-label": /* i18n: C_AGENT_MONITOR_I18N_KEYS */ key},
+                        title: help, "data-i18n-title": /* i18n: C_AGENT_MONITOR_HELP_I18N_KEYS */ help_key,
+                        "aria-label": help, "data-i18n-aria-label": /* i18n: C_AGENT_MONITOR_HELP_I18N_KEYS */ help_key},
                 [
                     ["span", {class: "icon"}, [["i", {class: CONTROL_ICONS[control]}]]],
                     ["span", {class: "is-hidden-mobile", i18n: /* i18n: C_AGENT_MONITOR_I18N_KEYS */ key}, label]

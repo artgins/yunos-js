@@ -36,7 +36,8 @@ const {
     C_AGENT_MONITOR_CONFIRM_I18N_KEYS,
     C_AGENT_MONITOR_STATE_I18N_KEYS,
     C_AGENT_MONITOR_SOURCE_I18N_KEYS,
-    C_AGENT_MONITOR_HELD_I18N_KEYS
+    C_AGENT_MONITOR_HELD_I18N_KEYS,
+    C_AGENT_MONITOR_HELP_I18N_KEYS
 } = await import("./c_agent_monitor.js");
 
 /*  The published reader (validate-locales.mjs is no export of the package:
@@ -181,6 +182,13 @@ describe("REV-CLOUD V23.5.3: the keys the monitor builds from data", () => {
     test("C_AGENT_MONITOR_SOURCE_I18N_KEYS holds `scenario source ${source}` for every source, and nothing else", () => {
         expect([...C_AGENT_MONITOR_SOURCE_I18N_KEYS].sort())
             .toEqual([...MONITOR_SOURCES].map((s) => `scenario source ${s}`).sort());
+    });
+
+    test("C_AGENT_MONITOR_HELP_I18N_KEYS holds `monitor ${control} help` for every control, and nothing else", () => {
+        let controls = scenario_controls({actions: Object.fromEntries(
+            SCENARIO_ACTIONS.map((a) => [a, [{yuno: "a", command: "x"}]]))});
+        expect([...C_AGENT_MONITOR_HELP_I18N_KEYS].sort())
+            .toEqual(controls.map((c) => `monitor ${c} help`).sort());
     });
 
     test("C_AGENT_MONITOR_HELD_I18N_KEYS holds `monitor charts held ${state}` for every state that holds the charts", () => {

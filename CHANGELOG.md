@@ -6,6 +6,15 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 0.29.115 (2026-10-24)
+
+- **The controls of a scenario say what they do.** Their tooltip (title and
+  aria-label) was their name again ("Start"); now it is a short sentence of
+  what the button runs: *"Start the scenario: runs its start steps"*,
+  *"Restart: stop, counters to zero, start again"* -- keys
+  `monitor <control> help`, published in `C_AGENT_MONITOR_HELP_I18N_KEYS`
+  and checked by `monitor_i18n_keys.test.js`. The name stays on the button.
+
 ## gui_agent 0.29.114 (2026-10-24)
 
 A user who may see ONE scenario, and a link to it. Works with the control
