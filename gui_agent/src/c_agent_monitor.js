@@ -19,6 +19,8 @@
  *          under the cursor, a click hides or shows it) are folded
  *          behind a toggle (EV_TOGGLE_SERIES), so the plot keeps its
  *          height.
+ *          Each link carries the rate of the yuno it leaves, written
+ *          where it leaves the card (beside it), not halfway along.
  *          A click on a card FOCUSES it (EV_FOCUS_YUNO): the card, the
  *          cards linked to it and the links between them are
  *          highlighted; a click on it again, or on the empty canvas,
@@ -340,6 +342,8 @@ const CARD_H = 196;
 const CARD_ROW_H = 24;
 /*  The line of a card that names its node is taller with a switch  */
 const SWITCH_ROW_EXTRA = 10;
+/*  How far an edge's rate sits from the card it leaves  */
+const EDGE_LABEL_GAP = 6;
 const CHART_H = 220;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -1205,11 +1209,13 @@ function build_graph(gobj)
         path.setAttribute("d", e.d);
         path.setAttribute("marker-end", `url(#${marker_id})`);
         svg.appendChild(path);
+        /*  The rate at the START of the edge, beside the card it leaves:
+         *  in the middle of a bundle of edges nobody could tell whose it was  */
         let text = document.createElementNS(SVG_NS, "text");
         text.setAttribute("class", "MONITOR_EDGE_LABEL");
-        text.setAttribute("x", String(e.mx));
-        text.setAttribute("y", String(e.my - 6));
-        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("x", String(e.sx + EDGE_LABEL_GAP));
+        text.setAttribute("y", String(e.back ? e.sy + 14 : e.sy - EDGE_LABEL_GAP));
+        text.setAttribute("text-anchor", "start");
         svg.appendChild(text);
         priv.edge_labels.push({from: e.from, to: e.to, $text: text, $path: path});
     }

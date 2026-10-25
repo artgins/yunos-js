@@ -8,6 +8,14 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.1.6 (2026-10-25)
+
+- **The rate of a link is written where it LEAVES its card**, beside the
+  yuno that emits it, not halfway along the edge: with many edges running
+  into a few gates the label in the middle belonged to nobody in
+  particular. `layout_graph()` answers the start of each edge (`sx`, `sy`,
+  `back` for one that leaves by the bottom).
+
 ## gui_treedb 1.0.3 (2026-10-25)
 
 - gobj-ui `^7.28.1` (a chart's Y axis as wide as its labels; gui_treedb

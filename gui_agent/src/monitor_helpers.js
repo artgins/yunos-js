@@ -991,8 +991,10 @@ function only_emitters(ids, links)
  *  that only emits shows no input. A column stacks its cards with
  *  their own heights, and an edge meets each card at its own middle.
  *
- *  Answers {nodes: {id: {x, y, h, layer}}, edges: [{from, to, d, mx, my}],
- *  width, height}, in pixels; `d` is an SVG path.
+ *  Answers {nodes: {id: {x, y, h, layer}}, edges: [{from, to, d, mx, my, sx, sy, back}],
+ *  width, height}, in pixels; `d` is an SVG path, (mx, my) its middle
+ *  and (sx, sy) where it leaves its card (the side of the card, or its
+ *  bottom for a backward edge: `back`).
  ***************************************************************/
 function layout_graph(ids, links, opts)
 {
@@ -1120,7 +1122,8 @@ function layout_graph(ids, links, opts)
             edges.push({
                 from: a, to: b,
                 d: `M${x1},${y1} C${x1},${yb} ${x2},${yb} ${x2},${y2}`,
-                mx: (x1 + x2) / 2, my: yb
+                mx: (x1 + x2) / 2, my: yb,
+                sx: x1, sy: y1, back: true
             });
             return;
         }
@@ -1128,7 +1131,8 @@ function layout_graph(ids, links, opts)
         edges.push({
             from: a, to: b,
             d: `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`,
-            mx: cx, my: (y1 + y2) / 2
+            mx: cx, my: (y1 + y2) / 2,
+            sx: x1, sy: y1, back: false
         });
     });
 

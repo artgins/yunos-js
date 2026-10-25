@@ -164,6 +164,22 @@ describe("layout_graph", () => {
 });
 
 
+describe("where an edge leaves its card", () => {
+    it("a forward edge starts at the right side of its card, a backward one at its bottom", () => {
+        let g = layout_graph(["a", "b"], [["a", "b"]], {card_w: 200, card_h: 100});
+        let fwd = g.edges[0];
+        expect(fwd.sx).toBe(g.nodes.a.x + 200);
+        expect(fwd.sy).toBe(g.nodes.a.y + 50);
+        expect(fwd.back).toBe(false);
+        /*  A cycle stacks its cards in one column: its edges go backward  */
+        let c = layout_graph(["a", "b"], [["a", "b"], ["b", "a"]], {card_w: 200, card_h: 100});
+        let back = c.edges.find((e) => e.from === "b");
+        expect(back.back).toBe(true);
+        expect(back.sx).toBe(c.nodes.b.x + 100);
+        expect(back.sy).toBe(c.nodes.b.y + c.nodes.b.h);
+    });
+});
+
 describe("pick_rate", () => {
     it("prefers the rate the yuno computes itself", () => {
         let r = pick_rate({rxMsgs: 10, rxMsgsec: 500}, "rx", null, 1000);
