@@ -210,7 +210,7 @@ describe("REV-CLOUD V23.5.3: the keys the monitor builds from data", () => {
         let all = scenario_controls({actions: Object.fromEntries(
             SCENARIO_ACTIONS.map((a) => [a, [{yuno: "a", command: "x"}]]))});
         /*  control_refusal() of the view, before the state's own  */
-        let reasons = ["offline", "busy", "reading"];
+        let reasons = ["offline", "busy", "in_flight", "reading"];
         for(let a of all) {
             let st = run_state_of_action(a);
             for(let c of all) {

@@ -360,9 +360,12 @@ the scenario's STATE (1.0.8), the one the control center's runs report:
 Start only a stopped scenario, Pause only a running one, Resume only a paused
 one, Stop one that runs or is paused, Restart and Report in any state; all
 off out of session and while the state is being read. A disabled button's
-title says why. A run in flight of another console is not reported until it
-ends, so a control sent meanwhile is still refused by the control center
-(*a run is in flight, one at a time*). Each step is
+title says why. A run in flight of another console, or the stop of a
+`max_run`, turns them all off (1.1.1, with SDK 7.28.4+: `run_in_flight` of
+`scenarios`, read when the view opens and after every run that ends). A run
+that starts while the view is open is seen only when it ends, so a control
+sent meanwhile is still refused by the control center (*a run is in flight,
+one at a time*). Each step is
 `command-yuno id=<yuno> [service=<service>] command=<command>`; nothing about
 any particular generator is written in the view. Every control is confirmed
 in a dialog that lists the commands it will send (stop and restart in red),

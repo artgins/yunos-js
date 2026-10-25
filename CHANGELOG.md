@@ -6,6 +6,19 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.1.1 (2026-10-25)
+
+- **Every control of a scenario is off while a run of it is in flight in
+  the control center.** `scenarios` answers that run as `run_in_flight`
+  (SDK 7.28.4+), read with `stop_at`: a start of another console, or the
+  stop of a `max_run`, now disables Start, Stop, Pause, Resume, Restart and
+  Report, and the title says why (*"a run of this scenario is in flight in
+  the control center"*, new key `monitor control refused in_flight`). The
+  end of that run (`EV_SCENARIO_RUN_ENDED`) reads it again. Until now such
+  a run was seen only when it ended, and a control sent meanwhile was
+  refused by the control center. A control center older than 7.28.4 does
+  not answer it, and nothing changes.
+
 ## gui_agent 1.1.0 (2026-10-25)
 
 - **The time axis of every chart is the window chosen**, ending at the last

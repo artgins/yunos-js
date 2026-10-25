@@ -1077,6 +1077,7 @@ const en = {
         "monitor series help": "Show or hide the series of this chart: which yuno each line is, and its value under the cursor; a click on one hides or shows its line",
         "monitor control refused offline": "Not available: the view is not connected",
         "monitor control refused busy": "Not available: an action is running, wait for its answer",
+        "monitor control refused in_flight": "Not available: a run of this scenario is in flight in the control center",
         "monitor control refused reading": "Not available yet: the state of the scenario is being read",
         "monitor control refused running": "Not available: the scenario is running",
         "monitor control refused paused": "Not available: the scenario is paused",

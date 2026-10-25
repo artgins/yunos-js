@@ -201,10 +201,13 @@
  *      (`monitor control refused ${reason}`); its aria-label still says
  *      what it does. The state is the one the control center reports:
  *      its runs, read again on every EV_SCENARIO_RUN_ENDED. A run in
- *      flight of ANOTHER console (or the stop of a max_run) is not
- *      reported until it ends: a control sent meanwhile is refused by
- *      the control center ("a run is in flight, one at a time"), as
- *      before.
+ *      flight of ANOTHER console (or the stop of a max_run) is answered
+ *      by `scenarios` as `run_in_flight` (SDK 7.28.4+), read with
+ *      `stop_at`: while it is there every control is off ("in_flight"),
+ *      and the end of that run reads it again. A run that starts while
+ *      the view is open is not told until it ends: a control sent
+ *      meanwhile is refused by the control center ("a run is in flight,
+ *      one at a time"), as before.
  *
  *      GENERATIONS. Every request carries the generation of the scenario
  *      shown (`monitor_gen`, bumped when another one is adopted): a
@@ -393,6 +396,7 @@ export const C_AGENT_MONITOR_HELD_I18N_KEYS = [
  *  monitor_helpers.js), the same rule.  */
 export const C_AGENT_MONITOR_REFUSED_I18N_KEYS = [
     "monitor control refused offline", "monitor control refused busy",
+    "monitor control refused in_flight",
     "monitor control refused reading", "monitor control refused running",
     "monitor control refused paused", "monitor control refused stopped"
 ];
@@ -464,6 +468,7 @@ let PRIVATE_DATA = {
     has_queue:      {},     /*  yuno key -> its service reports a queue: its card has the row  */
     relayout_posted: false, /*  EV_RELAYOUT is on its way  */
     stop_at:        0,      /*  epoch second the control center stops the scenario (its max_run), 0 = none  */
+    run_in_flight:  null,   /*  {id, action, username, started_at}: a run of it in the control center, not ours  */
     series_ui:      {},     /*  chart (rate | queue | cpu) -> its block, series toggle, count, chevron  */
     series_open:    {},     /*  chart -> its series (the uPlot legend) are shown  */
     node_mem_items: {},     /*  node -> its tag of available memory in the status line  */
@@ -1646,7 +1651,9 @@ function build_test_controls(gobj)
 /***************************************************************
  *  Why a control cannot be used now, or null when it can: out of
  *  session ("offline"), a control of this view running ("busy"),
- *  the state being read ("reading"), or the state that refuses it.
+ *  a run of the scenario in flight in the control center
+ *  ("in_flight"), the state being read ("reading"), or the state
+ *  that refuses it.
  ***************************************************************/
 function control_refusal(gobj, control)
 {
@@ -1656,6 +1663,9 @@ function control_refusal(gobj, control)
     }
     if(priv.control && priv.control.running) {
         return "busy";
+    }
+    if(priv.run_in_flight) {
+        return "in_flight";
     }
     if(priv.run_state === null && priv.run_state_asked) {
         return "reading";
@@ -2450,6 +2460,7 @@ function adopt_scenario(gobj)
     priv.run_state_asked = false;
     priv.charts_held = false;
     priv.stop_at = 0;
+    priv.run_in_flight = null;
     priv.has_queue = {};
     /*  A yuno that names its queue's service has one: its card is born
      *  with the row  */
@@ -2645,6 +2656,10 @@ function cc_answer(gobj, a, kw)
         }
         let doc = (!failed && Array.isArray(kw.data) && kw.data[0]) ? kw.data[0] : null;
         priv.stop_at = (doc && typeof doc.stop_at === "number") ? doc.stop_at : 0;
+        let rif = doc ? doc.run_in_flight : null;
+        priv.run_in_flight = (rif && typeof rif === "object" && !(priv.control && priv.control.running)) ?
+            {id: String(rif.id || ""), action: String(rif.action || ""),
+             username: String(rif.username || ""), started_at: Number(rif.started_at) || 0} : null;
         render_status(gobj);
         return 0;
     }
@@ -2767,6 +2782,7 @@ function control_over(gobj, ok, text_key)
     c.pending = 0;
     c.deadline = 0;
     c.ok = !!ok && c.ok;
+    gobj.priv.run_in_flight = null;     /*  one run at a time: the one in flight was this one  */
     if(text_key) {
         c.text_key = text_key;
     }

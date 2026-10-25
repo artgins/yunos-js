@@ -770,6 +770,30 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(errors()).toEqual([]);
     });
 
+    test("a run in flight in the control center turns every control off until it ends", () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        let btn = mon.priv.control_buttons;
+        let why = (c) => btn[c].getAttribute("data-i18n-title");
+        answer(mon, find("scenario-runs").pop(), {data: [{action: "stop", result: 0, steps: [{result: 0}]}]});
+        answer(mon, find("scenarios").pop(), {data: [Object.assign({}, SAVED, {run_in_flight:
+            {id: "stress.1", action: "start", username: "ana", started_at: 1}})]});
+        expect(mon.priv.run_in_flight.action).toBe("start");
+        expect(["start", "stop", "report", "restart"].map((c) => btn[c].disabled))
+            .toEqual([true, true, true, true]);
+        expect(why("start")).toBe("monitor control refused in_flight");
+
+        /*  It ends: read again, gone, the state decides  */
+        sent.length = 0;
+        gobj_publish_event(link, "EV_SCENARIO_RUN_ENDED", {});
+        answer(mon, find("scenario-runs").pop(), {data: [{action: "start", result: 0, steps: [{result: 0}]}]});
+        answer(mon, find("scenarios").pop(), {data: [SAVED]});
+        expect(mon.priv.run_in_flight).toBe(null);
+        expect(["start", "stop", "report", "restart"].map((c) => btn[c].disabled))
+            .toEqual([true, false, false, false]);
+        expect(errors()).toEqual([]);
+    });
+
     test("one control at a time, and an answer of another one is dropped", () => {
         const mon = new_monitor();
         watch_saved(SAVED);

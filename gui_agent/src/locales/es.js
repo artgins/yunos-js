@@ -1086,6 +1086,7 @@ const es = {
         "monitor series help": "Mostrar u ocultar las series de esta gráfica: qué yuno es cada línea y su valor bajo el cursor; un clic en una oculta o muestra su línea",
         "monitor control refused offline": "No disponible: la vista no está conectada",
         "monitor control refused busy": "No disponible: hay una acción en marcha, espera a su respuesta",
+        "monitor control refused in_flight": "No disponible: el centro de control está ejecutando una acción de este escenario",
         "monitor control refused reading": "Aún no disponible: se está leyendo el estado del escenario",
         "monitor control refused running": "No disponible: el escenario está en marcha",
         "monitor control refused paused": "No disponible: el escenario está en pausa",
