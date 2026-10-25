@@ -8,6 +8,12 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.1.5 (2026-10-25)
+
+- gobj-ui `^7.28.1`: **the Y axis of the live charts is as wide as its
+  labels**. uPlot's fixed 50px cut every value past five digits
+  (`150,000` read `,0,000` in *Mensajes en cola* at 35,000 msg/s).
+
 ## gui_agent 1.1.4 (2026-10-25)
 
 - **`view.node_labels` everywhere a node is named**, not only on the cards:
