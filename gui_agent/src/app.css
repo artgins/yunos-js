@@ -455,6 +455,36 @@
     background: var(--bulma-danger);
 }
 
+/*  A filesystem filling, a node running out of memory: warning
+ *  under 20 % free, danger under 10 %. No figure, no colour.  */
+.MONITOR_FREE--low .MONITOR_NODE_KEY,
+.MONITOR_FREE--low .MONITOR_NODE_DISK_VALUE,
+.MONITOR_FREE--low .MONITOR_NODE_DISK_FREE {
+    color: var(--bulma-warning-on-scheme);
+    font-weight: 700;
+}
+
+.MONITOR_FREE--critical .MONITOR_NODE_KEY,
+.MONITOR_FREE--critical .MONITOR_NODE_DISK_VALUE,
+.MONITOR_FREE--critical .MONITOR_NODE_DISK_FREE {
+    color: var(--bulma-danger-on-scheme);
+    font-weight: 700;
+}
+
+.MONITOR_NODE_DISK_FREE {
+    color: var(--bulma-text-weak);
+}
+
+.MONITOR_NODE_MEMS {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.MONITOR_NODE_MEM.tag {
+    gap: 0.35em;
+}
+
 /*  A queue holding messages: what a test watches  */
 .MONITOR_NODE_QUEUE--busy .MONITOR_NODE_KEY,
 .MONITOR_NODE_QUEUE--busy .MONITOR_NODE_QUEUE_VALUE {
@@ -490,13 +520,14 @@
 .MONITOR_SIDE {
     flex: 1 1 24rem;
     min-width: min(24rem, 100%);
-    container-type: inline-size;
-    container-name: monitor-side;
 }
 
+/*  Five charts at most (messages, queue, cpu, memory, disk): a grid of
+ *  columns of at least 22rem, so a column of charts beside the graph on
+ *  a wide screen holds two side by side and a narrow one stacks them.  */
 .MONITOR_CHARTS {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
     gap: 0.75rem;
 }
 
@@ -545,17 +576,6 @@
     text-align: left;
 }
 
-/*  Three in a row only when the column of the charts is that wide: on
- *  a wide screen under a wide graph, or beside a narrow one.  */
-@container monitor-side (min-width: 66rem) {
-    .MONITOR_CHARTS {
-        flex-direction: row;
-    }
-
-    .MONITOR_CHART {
-        flex: 1 1 0;
-    }
-}
 
 /*
  *  Monitor test controls: one wrapping row, shown only for a scenario

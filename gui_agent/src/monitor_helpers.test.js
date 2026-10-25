@@ -12,6 +12,9 @@ import {
     run_state_of_action,
     run_state_of_runs,
     control_refused_by,
+    resources_of,
+    free_level,
+    fmt_mem_kb,
     some_step_done,
     charts_follow,
     action_steps,
@@ -527,6 +530,24 @@ describe("run state and charts", () => {
             {action: "stop", result: 0}])).toBe("stopped");
         expect(run_state_of_runs([])).toBe("stopped");
         expect(run_state_of_runs(null)).toBe("stopped");
+    });
+
+    it("the memory and the disk of a yuno: null when it does not send them, never 0", () => {
+        expect(resources_of({cpu: 3, disk_free_percent: 73, disk_size_in_gigas: 1832})).toEqual({
+            mem_rss_kb: null, node_mem_pct: null, node_mem_total_mb: null,
+            disk_pct: null, disk_path: "", disk_gb: null
+        });
+        expect(resources_of({mem_rss_kb: 5324, mem_node_total_mb: 31885, mem_node_available_percent: 35,
+            disk_min_free_percent: 4, disk_min_free_path: "/mnt/simram/queues", disk_min_free_size_gigas: 26}))
+            .toEqual({mem_rss_kb: 5324, node_mem_pct: 35, node_mem_total_mb: 31885,
+                disk_pct: 4, disk_path: "/mnt/simram/queues", disk_gb: 26});
+        expect(resources_of(null).disk_pct).toBe(null);
+        expect(resources_of({disk_min_free_percent: "4"}).disk_pct).toBe(null);
+        expect([null, 0, 9, 10, 19, 20, 100].map(free_level))
+            .toEqual(["unknown", "critical", "critical", "low", "low", "ok", "ok"]);
+        expect(fmt_mem_kb(null)).toBe("–");
+        expect(fmt_mem_kb(5324)).toBe("5.2 MB");
+        expect(fmt_mem_kb(204800)).toBe("200 MB");
     });
 
     it("a control fits the scenario's state, or is refused by it", () => {

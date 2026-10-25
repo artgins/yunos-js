@@ -152,11 +152,18 @@ the same ones. The workspace (`/scenarios`) has three fixed tabs:
   kind of scenario (gui_agent 0.29.0).
 - **Live** (`C_AGENT_MONITOR`, `/scenarios/live`): the scenario watched, as a
   **graph** of the yunos in the order the messages flow (left to right), each
-  card with its cpu %, its messages per second in and out, its queue when its
-  service reports one (`msgs_in_queue`) and what the agent says of it; the
+  card with its cpu %, its resident memory (`mem_rss_kb`), the free space of
+  the FULLEST filesystem it writes to (`disk_min_free_percent`, its path and
+  size in the row's title; warning under 20 % free, danger under 10 %), its
+  messages per second in and out, its queue when its
+  service reports one (`msgs_in_queue`) and what the agent says of it -- the
+  memory still available on each NODE is in the status line, once per node
+  (`mem_node_available_percent`, same thresholds; 1.0.9, SDK 7.28.4+, an
+  older yuno shows "–"); the
   edges carry the messages per second through them; beside it the **charts**
   (`C_YUI_UPLOT`), messages per second, messages in queue (when a yuno has a
-  queue) and cpu, over 5 to 60 minutes, one over the other -- under the graph
+  queue), cpu, memory (MB, RSS) and disk (% free of the fullest filesystem),
+  over 5 to 60 minutes, in a grid of columns of at least 22rem -- under the graph
   when the graph's width plus 24rem does not fit (a phone, a tablet, a
   scenario of many columns; 1.0.7). The series of each chart (which yuno each
   line is, its value under the cursor, a click hides or shows it) are folded

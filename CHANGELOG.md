@@ -6,6 +6,35 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.0.9 (2026-10-25)
+
+- **Memory and disk in the live view.** The simulators of wattyzer filled a
+  26 GB ramdisk (`/mnt/simram`) with their queues and died in a loop for a
+  day, and nothing on screen said so. Every yuno of SDK 7.28.4 sends, with
+  its cpu (the `__yuno__` stats, the `cpu` kind of `watch-yuno-stats`), its
+  resident memory, the memory still available on its node, and the free
+  space of the FULLEST filesystem it writes to (`/yuneta` and the store of
+  each of its `C_TRANGER`s). Now:
+    - each card has a **Mem** row (RSS, MB) and a **Disk** row (% free of
+      that filesystem; its path and size in the row's title), the Disk row
+      in the warning colour under 20 % free and the danger colour under 10 %;
+    - the memory still available on each NODE is in the status line, ONE tag
+      per node (every yuno of a node reports the same figure: on every card
+      it would be noise), warning under 20 %, danger under 10 %, with the
+      node's total;
+    - two more charts, **Memory, MB (RSS)** and **Disk, % free (fullest
+      filesystem)** (0-100), per yuno, their series folded like the others.
+  A yuno older than 7.28.4 sends none of it: "–", no colour, no point in the
+  charts -- never a 0 that reads as an empty disk (`resources_of()`,
+  `free_level()`). The cards are 48 px higher (196 with every row).
+- **Five charts in a grid**, not a column: columns of at least 22rem, so the
+  chart column beside the graph holds two side by side at 1920 px (messages
+  | queue, cpu | memory, disk) and a phone stacks them. Replaces the
+  three-in-a-row container query of 1.0.7.
+- QA: `--check livelayout` at 1920 and 390 px against the deployed 7.28.3
+  yunos ("–" everywhere, no colour); the new fields and their colours are
+  checked by a wiring test that pushes them as `EV_YUNO_STATS`.
+
 ## gui_agent 1.0.8 (2026-10-25)
 
 - **The action buttons of the live view fit the scenario's state.** Every

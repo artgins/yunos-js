@@ -465,19 +465,76 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(errors()).toEqual([]);
     });
 
+    test("memory and disk: on the cards, coloured when low, the node's once, '–' from an older yuno", () => {
+        const TWO = JSON.parse(JSON.stringify(SAVED));
+        TWO.yunos.push({key: "tracks", id: "5120"});
+        TWO.links.push(["gate", "tracks"]);
+        const mon = new_monitor();
+        watch_saved(TWO);
+        gobj_send_event(mon, "EV_SET_VIEW_MODE", {mode: "graph"}, mon);
+        const push = (data) => gobj_send_event(mon, "EV_YUNO_STATS", {
+            data: data,
+            __md_iev__: {monitor_kind: "watch", monitor_gen: mon.priv.generation, monitor_node: "ctrl"}
+        }, link);
+        const card = (k) => mon.priv.cards[k];
+        /*  A yuno older than 7.28.4: its cpu, nothing else  */
+        push({yuno_id: "stress", kind: "cpu", service: "sim_controllers", result: 0,
+              data: {cpu: 3, disk_free_percent: 73, disk_size_in_gigas: 1832}});
+        expect(card("sim").$mem.textContent).toBe("–");
+        expect(card("sim").$disk.textContent).toBe("–");
+        expect(card("sim").$disk_free.classList.contains("is-hidden")).toBe(true);
+        expect(card("sim").$disk_row.className).toContain("MONITOR_FREE--unknown");
+        expect(card("sim").$disk_row.hasAttribute("title")).toBe(false);
+        expect(mon.priv.$node_mems.classList.contains("is-hidden")).toBe(true);
+
+        /*  7.28.4: a ramdisk at 4 % free is danger, 15 % is warning  */
+        push({yuno_id: "2120", kind: "cpu", service: "", result: 0, data: {cpu: 20,
+              mem_rss_kb: 5324, mem_node_total_mb: 31885, mem_node_available_percent: 15,
+              disk_min_free_percent: 4, disk_min_free_path: "/mnt/simram/queues", disk_min_free_size_gigas: 26}});
+        push({yuno_id: "5120", kind: "cpu", service: "", result: 0, data: {cpu: 20,
+              mem_rss_kb: 204800, mem_node_total_mb: 31885, mem_node_available_percent: 15,
+              disk_min_free_percent: 15, disk_min_free_path: "/yuneta/store", disk_min_free_size_gigas: 1832}});
+        expect(card("gate").$mem.textContent).toBe("5.2 MB");
+        expect(card("gate").$disk.textContent).toBe("4 %");
+        expect(card("gate").$disk_free.classList.contains("is-hidden")).toBe(false);
+        expect(card("gate").$disk_row.className).toContain("MONITOR_FREE--critical");
+        expect(card("gate").$disk_row.getAttribute("title")).toBe("/mnt/simram/queues · 26 GB");
+        expect(card("tracks").$mem.textContent).toBe("200 MB");
+        expect(card("tracks").$disk_row.className).toContain("MONITOR_FREE--low");
+        /*  The node's memory: once, for the two yunos of node ctrl, a warning  */
+        let tags = mon.priv.$node_mems.querySelectorAll(".MONITOR_NODE_MEM");
+        expect(tags.length).toBe(1);
+        expect(tags[0].className).toContain("is-warning");
+        expect(tags[0].querySelector(".MONITOR_NODE_MEM_PCT").textContent).toBe("15 %");
+        expect(tags[0].querySelector(".MONITOR_NODE_MEM_NAME").textContent).toBe("ctrl");
+        expect(tags[0].getAttribute("data-i18n-title")).toBe("monitor node memory help");
+        expect(mon.priv.$node_mems.classList.contains("is-hidden")).toBe(false);
+
+        /*  A row of the history carries them, MB and % free  */
+        expect(gobj_current_state(mon)).toBe("ST_MONITORING");
+        mon.priv.last_tick = 1;     /*  a period went by  */
+        mon.priv.model.gate.cpu_t = performance.now();
+        gobj_send_event(mon, "EV_TIMEOUT_PERIODIC", {}, mon);
+        let row = mon.priv.rows[mon.priv.rows.length - 1];
+        expect(row["mem:gate"]).toBe(5.2);
+        expect(row["disk:gate"]).toBe(4);
+        expect(mon.priv.series_ui.mem.$count.textContent).toBe("3");
+        expect(errors()).toEqual([]);
+    });
+
     test("a card is as high as its rows: an emitter has no input, a yuno with no queue no queue row", async () => {
         const mon = new_monitor();
         watch_saved(SAVED);     /*  sim -> gate: sim only emits  */
         const h = (key) => parseInt(/height:\s*(\d+)px/.exec(
             mon.priv.cards[key].$card.style.cssText)[1], 10);
-        expect(h("sim")).toBe(100);     /*  no input, no queue known  */
-        expect(h("gate")).toBe(124);    /*  no queue known  */
+        expect(h("sim")).toBe(148);     /*  no input, no queue known  */
+        expect(h("gate")).toBe(172);    /*  no queue known  */
         /*  The gate reports a queue: laid out again, once, on the next turn  */
         mon.priv.model.gate.queue = 3;
         gobj_send_event(mon, "EV_SET_VIEW_MODE", {mode: "graph"}, mon);
         await new Promise((r) => setTimeout(r, 0));
-        expect(h("gate")).toBe(148);
-        expect(h("sim")).toBe(100);
+        expect(h("gate")).toBe(196);
+        expect(h("sim")).toBe(148);
         expect(mon.priv.relayout_posted).toBe(false);
         expect(errors()).toEqual([]);
     });
@@ -1353,11 +1410,12 @@ describe("the charts of the graph mode", () => {
 
         gobj_send_event(mon, "EV_SET_VIEW_MODE", {mode: "graph"}, mon);
         expect(chart_loads.map((l) => [l.chart, l.rows])).toEqual([
-            ["rate_chart", mon.priv.rows.length], ["cpu_chart", mon.priv.rows.length]
+            ["rate_chart", mon.priv.rows.length], ["cpu_chart", mon.priv.rows.length],
+            ["mem_chart", mon.priv.rows.length], ["disk_chart", mon.priv.rows.length]
         ]);
         chart_loads.length = 0;
         gobj_send_event(mon, "EV_TIMEOUT_PERIODIC", {}, mon);
-        expect(chart_loads.map((l) => l.chart)).toEqual(["rate_chart", "cpu_chart"]);
+        expect(chart_loads.map((l) => l.chart)).toEqual(["rate_chart", "cpu_chart", "mem_chart", "disk_chart"]);
         expect(errors()).toEqual([]);
     });
 });

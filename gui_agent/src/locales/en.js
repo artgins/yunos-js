@@ -1081,6 +1081,14 @@ const en = {
         "monitor control refused running": "Not available: the scenario is running",
         "monitor control refused paused": "Not available: the scenario is paused",
         "monitor control refused stopped": "Not available: the scenario is stopped",
+        "monitor mem": "Mem",
+        "monitor mem help": "Resident memory of the process (RSS)",
+        "monitor disk": "Disk",
+        "monitor free": "free",
+        "monitor node memory": "memory available",
+        "monitor node memory help": "Memory of the node still available (MemAvailable), and its total",
+        "monitor memory rss": "Memory, MB (RSS)",
+        "monitor disk free fullest": "Disk, % free (fullest filesystem)",
 
         /* keep this last so adding new keys above never hits the comma trap */
         "discovery unanswered": "The node's agent did not answer: which treedbs this yuno has is not known. It is asked again when the connection comes back, or when the tab is opened again",

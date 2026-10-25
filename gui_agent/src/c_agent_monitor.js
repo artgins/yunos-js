@@ -7,9 +7,13 @@
  *        - GRAPH: the yunos in the order the messages flow (left to
  *          right), each card with its cpu %, its messages per second in
  *          and out, its queue when it has one and what the agent says of
- *          it (playing, paused, stopped...); and beside it the CHARTS,
- *          messages per second, messages in queue (when a yuno has a
- *          queue) and cpu, over a window of history -- under it where
+ *          it (playing, paused, stopped...), its resident memory and the
+ *          free space of the FULLEST filesystem it writes to (warning
+ *          under 20 %, danger under 10 %); the memory still available on
+ *          each node is in the status line, once per node. Beside it the
+ *          CHARTS, messages per second, messages in queue (when a yuno
+ *          has a queue), cpu, memory and disk free, over a window of
+ *          history, in a grid of columns of at least 22rem -- under it where
  *          they do not fit beside it (app.css, .MONITOR_LIVE). The
  *          series of each chart (which yuno each line is, its value
  *          under the cursor, a click hides or shows it) are folded
@@ -294,6 +298,9 @@ import {
     pick_rate,
     prune_history,
     cpu_level,
+    resources_of,
+    free_level,
+    fmt_mem_kb,
     yuno_run_state,
     fmt_rate,
 } from "./monitor_helpers.js";
@@ -304,10 +311,11 @@ import {
 const GCLASS_NAME = "C_AGENT_MONITOR";
 
 const CARD_W = 208;
-/*  A card with every row (cpu, in, out, queue); each row it does not
- *  show takes CARD_ROW_H off: no input for a yuno that only emits, no
- *  queue for a service that reports none (most gates and stores).  */
-const CARD_H = 148;
+/*  A card with every row (cpu, mem, disk, in, out, queue); each row it
+ *  does not show takes CARD_ROW_H off: no input for a yuno that only
+ *  emits, no queue for a service that reports none (most gates and
+ *  stores).  */
+const CARD_H = 196;
 const CARD_ROW_H = 24;
 const CHART_H = 220;
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -426,6 +434,8 @@ let PRIVATE_DATA = {
     rate_chart:     null,
     cpu_chart:      null,
     queue_chart:    null,
+    mem_chart:      null,
+    disk_chart:     null,
     cards:          {},     /*  yuno key -> element refs of its card  */
     edge_labels:    [],     /*  [{from, to, $text, $path}]  */
     focus:          "",     /*  yuno key whose card is highlighted with its links  */
@@ -455,6 +465,7 @@ let PRIVATE_DATA = {
     stop_at:        0,      /*  epoch second the control center stops the scenario (its max_run), 0 = none  */
     series_ui:      {},     /*  chart (rate | queue | cpu) -> its block, series toggle, count, chevron  */
     series_open:    {},     /*  chart -> its series (the uPlot legend) are shown  */
+    node_mem_items: {},     /*  node -> its tag of available memory in the status line  */
 };
 
 /*  How long a phase of a control run from here waits for its answers.  */
@@ -765,8 +776,13 @@ function build_dom(gobj)
         ["span", {class: "mr-1", i18n: "monitor stops at"}, t("monitor stops at")],
         ["span", {class: "MONITOR_STOP_AT_TIME is-family-monospace"}, ""]
     ]]);
+    /*  The memory still available on each node: one per node, not
+     *  once per card (every yuno of a node reports the same figure)  */
+    priv.$node_mems = createElement2(["span", {class: "MONITOR_NODE_MEMS"}, []]);
+    priv.node_mem_items = {};
     let $status = createElement2(
-        ["div", {class: "MONITOR_STATUS is-size-7"}, [priv.$url, priv.$updated, priv.$stop_at, priv.$error]]
+        ["div", {class: "MONITOR_STATUS is-size-7"},
+            [priv.$url, priv.$updated, priv.$stop_at, priv.$node_mems, priv.$error]]
     );
 
     /*  Test controls: filled from the scenario's test block.  */
@@ -839,6 +855,8 @@ function build_dom(gobj)
     priv.$rate_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
     priv.$queue_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
     priv.$cpu_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
+    priv.$mem_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
+    priv.$disk_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
     let $rate_chart = chart_block(gobj, "rate", "MONITOR_CHART_RATE",
         createElement2(["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor messages per second"},
             t("monitor messages per second")]),
@@ -853,13 +871,23 @@ function build_dom(gobj)
         createElement2(["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor cpu of one core"},
             t("monitor cpu of one core")]),
         priv.$cpu_box);
+    let $mem_chart = chart_block(gobj, "mem", "MONITOR_CHART_MEM",
+        createElement2(["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor memory rss"},
+            t("monitor memory rss")]),
+        priv.$mem_box);
+    /*  The fullest filesystem of each yuno: a queue on a ramdisk that
+     *  fills while /yuneta has room is what killed the simulators.  */
+    let $disk_chart = chart_block(gobj, "disk", "MONITOR_CHART_DISK",
+        createElement2(["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor disk free fullest"},
+            t("monitor disk free fullest")]),
+        priv.$disk_box);
     priv.$held = createElement2(
         ["p", {class: "MONITOR_CHARTS_HELD"}, [
             ["span", {class: "MONITOR_CHARTS_HELD_TEXT tag is-warning"}, ""]
         ]]
     );
     priv.$charts = createElement2(
-        ["div", {class: "MONITOR_CHARTS"}, [$rate_chart, priv.$queue_chart, $cpu_chart]]
+        ["div", {class: "MONITOR_CHARTS"}, [$rate_chart, priv.$queue_chart, $cpu_chart, $mem_chart, $disk_chart]]
     );
     /*  The graph and, beside it, the charts with the note that they are
      *  held: the charts wrap under the graph where they do not fit
@@ -939,6 +967,7 @@ function new_model()
         tx:         null,
         queue:      null,
         queue_t:    0,          /*  performance.now() of the queue's reading  */
+        res:        resources_of(null),  /*  memory and disk, read with the cpu  */
         data:       null,       /*  the service stats, whole (cards mode)  */
         app_t:      0,
         prev_rx:    null,
@@ -966,7 +995,7 @@ function reset_model(gobj)
 function destroy_charts(gobj)
 {
     let priv = gobj.priv;
-    for(let k of ["rate_chart", "cpu_chart", "queue_chart"]) {
+    for(let k of ["rate_chart", "cpu_chart", "queue_chart", "mem_chart", "disk_chart"]) {
         let ch = priv[k];
         if(ch) {
             priv[k] = null;
@@ -979,6 +1008,8 @@ function destroy_charts(gobj)
     clear_node(priv.$rate_box);
     clear_node(priv.$cpu_box);
     clear_node(priv.$queue_box);
+    clear_node(priv.$mem_box);
+    clear_node(priv.$disk_box);
 }
 
 function gobj_start_charts(gobj)
@@ -991,7 +1022,7 @@ function gobj_start_charts(gobj)
     /*  Both charts start at zero: a rate or a cpu drawn from its own
      *  minimum turns a flat line into a cliff.  */
     let from_zero = {y: {range: (u, min, max) => [0, max > 0 ? max * 1.1 : 1]}};
-    let make = (name, $box, prefix, yunos, ui) => {
+    let make = (name, $box, prefix, yunos, ui, scales) => {
         priv.series_ui[ui].$count.textContent = String(yunos.length);
         let $host = createElement2(["div", {class: "MONITOR_CHART_HOST"}, []]);
         $box.appendChild($host);
@@ -999,7 +1030,7 @@ function gobj_start_charts(gobj)
             $container: $host,
             width:      600,
             height:     CHART_H,
-            scales:     from_zero
+            scales:     scales || from_zero
         }, gobj);
         for(let y of yunos) {
             gobj_send_event(chart, "EV_ADD_SERIE", {id: prefix + y.key, label: y.label}, gobj);
@@ -1008,6 +1039,10 @@ function gobj_start_charts(gobj)
     };
     priv.rate_chart = make("rate_chart", priv.$rate_box, "rate:", priv.scenario.yunos, "rate");
     priv.cpu_chart = make("cpu_chart", priv.$cpu_box, "cpu:", priv.scenario.yunos, "cpu");
+    priv.mem_chart = make("mem_chart", priv.$mem_box, "mem:", priv.scenario.yunos, "mem");
+    /*  A percent: the whole of it, so a disk filling is seen falling  */
+    priv.disk_chart = make("disk_chart", priv.$disk_box, "disk:", priv.scenario.yunos, "disk",
+        {y: {range: [0, 100]}});
     /*  A series per yuno that has a queue: known by its readings  */
     let queued = priv.scenario.yunos.filter((y) => queue_elsewhere(y) || priv.has_queue[y.key]);
     show(priv.$queue_chart, queued.length > 0);
@@ -1033,6 +1068,12 @@ function load_charts(gobj)
     }
     if(priv.queue_chart) {
         gobj_send_event(priv.queue_chart, "EV_LOAD_DATA", priv.rows, gobj);
+    }
+    if(priv.mem_chart) {
+        gobj_send_event(priv.mem_chart, "EV_LOAD_DATA", priv.rows, gobj);
+    }
+    if(priv.disk_chart) {
+        gobj_send_event(priv.disk_chart, "EV_LOAD_DATA", priv.rows, gobj);
     }
 }
 
@@ -1124,6 +1165,15 @@ function build_graph(gobj)
         let $rx = createElement2(["span", {class: "MONITOR_NODE_RX_VALUE is-family-monospace"}, ""]);
         let $tx = createElement2(["span", {class: "MONITOR_NODE_TX_VALUE is-family-monospace"}, ""]);
         let $q = createElement2(["span", {class: "MONITOR_NODE_QUEUE_VALUE is-family-monospace"}, ""]);
+        let $mem = createElement2(["span", {class: "MONITOR_NODE_MEM_VALUE is-family-monospace"}, ""]);
+        let $disk = createElement2(["span", {class: "MONITOR_NODE_DISK_VALUE is-family-monospace"}, ""]);
+        let $disk_free = createElement2(["span", {class: "MONITOR_NODE_DISK_FREE", i18n: "monitor free"},
+            t("monitor free")]);
+        let $disk_row = createElement2(["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_DISK"}, [
+            ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor disk"}, t("monitor disk")],
+            $disk,
+            $disk_free
+        ]]);
         let $qrow = createElement2(["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_QUEUE"}, [
             ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor queue"}, t("monitor queue")],
             $q
@@ -1162,6 +1212,12 @@ function build_graph(gobj)
                     ["span", {class: "MONITOR_NODE_CPU_BAR"}, [$bar]],
                     $cpu
                 ]],
+                ["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_MEM",
+                         title: t("monitor mem help"), "data-i18n-title": "monitor mem help"}, [
+                    ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor mem"}, t("monitor mem")],
+                    $mem
+                ]],
+                $disk_row,
                 $rx_row,
                 ["div", {class: "MONITOR_NODE_ROW MONITOR_NODE_TX"}, [
                     ["span", {class: "MONITOR_NODE_KEY", i18n: "monitor out"}, t("monitor out")],
@@ -1172,7 +1228,8 @@ function build_graph(gobj)
             ].filter(Boolean)]
         );
         $canvas.appendChild($card);
-        priv.cards[y.key] = {$card, $dot, $cpu, $bar, $rx, $tx, $q, $qrow, $err, $where, $paused};
+        priv.cards[y.key] = {$card, $dot, $cpu, $bar, $rx, $tx, $q, $qrow, $err, $where, $paused,
+                             $mem, $disk, $disk_free, $disk_row};
     }
     priv.$graph.appendChild($canvas);
     priv.$canvas = $canvas;
@@ -1238,6 +1295,99 @@ function apply_focus(gobj)
 }
 
 /***************************************************************
+ *  The memory and the disk rows of a card. A yuno older than
+ *  7.28.4 sends neither: "–", and no colour (no figure is no alarm).
+ *  The disk's title is where it is: a path of the yuno on its
+ *  fullest filesystem, and the size of that filesystem.
+ ***************************************************************/
+function paint_resources(c, res)
+{
+    c.$mem.textContent = fmt_mem_kb(res.mem_rss_kb);
+    let has_disk = typeof res.disk_pct === "number";
+    c.$disk.textContent = has_disk ? `${res.disk_pct} %` : "–";
+    show(c.$disk_free, has_disk);
+    let level = free_level(res.disk_pct);
+    c.$disk_row.className = `MONITOR_NODE_ROW MONITOR_NODE_DISK MONITOR_FREE--${level}`;
+    let where = [res.disk_path, typeof res.disk_gb === "number" ? `${res.disk_gb} GB` : ""]
+        .filter(Boolean).join(" · ");
+    if(where) {
+        c.$disk_row.setAttribute("title", where);
+    } else {
+        c.$disk_row.removeAttribute("title");
+    }
+}
+
+/***************************************************************
+ *  The memory still available on each node of the scenario, in the
+ *  status line: one tag per node that reported it (every yuno of a
+ *  node reports the same figure: the freshest is taken), warning
+ *  under 20 %, danger under 10 %.
+ ***************************************************************/
+function paint_node_mems(gobj)
+{
+    let priv = gobj.priv;
+    let per_node = {};
+    let order = [];
+    for(let y of (priv.scenario ? priv.scenario.yunos : [])) {
+        let m = priv.model[y.key];
+        let node = y.node || "";
+        if(!m || typeof m.res.node_mem_pct !== "number") {
+            continue;
+        }
+        if(!per_node[node]) {
+            order.push(node);
+        }
+        if(!per_node[node] || m.cpu_t > per_node[node].t) {
+            per_node[node] = {t: m.cpu_t, pct: m.res.node_mem_pct, total: m.res.node_mem_total_mb};
+        }
+    }
+    for(let node of Object.keys(priv.node_mem_items)) {
+        if(!per_node[node]) {
+            let $gone = priv.node_mem_items[node].$item;
+            if($gone.parentNode) {
+                $gone.parentNode.removeChild($gone);
+            }
+            delete priv.node_mem_items[node];
+        }
+    }
+    for(let node of order) {
+        let it = priv.node_mem_items[node];
+        if(!it) {
+            let $value = createElement2(["span", {class: "MONITOR_NODE_MEM_PCT is-family-monospace"}, ""]);
+            let $total = createElement2(["span", {class: "MONITOR_NODE_MEM_TOTAL is-family-monospace"}, ""]);
+            let $item = createElement2(
+                ["span", {class: "MONITOR_NODE_MEM tag",
+                          title: t("monitor node memory help"), "data-i18n-title": "monitor node memory help"}, [
+                    ["span", {class: "MONITOR_NODE_MEM_NAME has-text-weight-semibold"}, node || scenario_host(priv.scenario)],
+                    ["span", {class: "MONITOR_NODE_MEM_KEY", i18n: "monitor node memory"}, t("monitor node memory")],
+                    $value,
+                    $total
+                ]]
+            );
+            priv.$node_mems.appendChild($item);
+            it = priv.node_mem_items[node] = {$item: $item, $value: $value, $total: $total};
+        }
+        let v = per_node[node];
+        it.$value.textContent = `${v.pct} %`;
+        it.$total.textContent = typeof v.total === "number" ? `${(v.total / 1024).toFixed(1)} GB` : "";
+        let level = free_level(v.pct);
+        it.$item.className = "MONITOR_NODE_MEM tag" +
+            (level === "critical" ? " is-danger" : (level === "low" ? " is-warning" : ""));
+    }
+    show(priv.$node_mems, order.length > 0);
+}
+
+/*  The host of a direct scenario, for a node with no name.  */
+function scenario_host(scenario)
+{
+    try {
+        return new URL(scenario.agent_url).hostname;
+    } catch(e) {
+        return "";
+    }
+}
+
+/***************************************************************
  *  Paint one card (and the labels of its outgoing edges) from its
  *  model. Text only: the card is never rebuilt, so nothing flickers.
  ***************************************************************/
@@ -1272,6 +1422,7 @@ function paint_card(gobj, id)
     c.$bar.style.width = `${typeof m.cpu === "number" ? Math.max(0, Math.min(100, m.cpu)) : 0}%`;
     c.$rx.textContent = fmt_rate(m.rx);
     c.$tx.textContent = fmt_rate(m.tx);
+    paint_resources(c, m.res);
     let has_queue = typeof m.queue === "number";
     show(c.$qrow, has_queue);
     /*  A queue that holds messages is what a test watches  */
@@ -1396,6 +1547,7 @@ function render_status(gobj)
     show(priv.$error, !!priv.error);
 
     render_control(gobj);
+    paint_node_mems(gobj);
     for(let key of Object.keys(priv.stats_cards)) {
         paint_card_tools(gobj, key);
     }
@@ -1694,6 +1846,8 @@ function poll_tick(gobj)
                 gap["cpu:" + y.key] = null;
                 gap["rate:" + y.key] = null;
                 gap["queue:" + y.key] = null;
+                gap["mem:" + y.key] = null;
+                gap["disk:" + y.key] = null;
             }
             priv.rows.push(gap);
         }
@@ -1706,6 +1860,9 @@ function poll_tick(gobj)
             row["cpu:" + y.key] = (fresh_cpu && typeof m.cpu === "number") ? m.cpu : null;
             row["rate:" + y.key] = (fresh_app && typeof rate === "number") ? Math.round(rate) : null;
             row["queue:" + y.key] = (m.queue_t > fresh_from && typeof m.queue === "number") ? m.queue : null;
+            row["mem:" + y.key] = (fresh_cpu && typeof m.res.mem_rss_kb === "number")
+                ? Math.round(m.res.mem_rss_kb / 102.4) / 10 : null;
+            row["disk:" + y.key] = (fresh_cpu && typeof m.res.disk_pct === "number") ? m.res.disk_pct : null;
         }
         priv.rows.push(row);
         let config = gobj_read_attr(gobj, "config_svc");
@@ -2836,6 +2993,7 @@ function apply_reading(gobj, id, kind, result, comment, data_)
     let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === id) : null;
     if(kind === "cpu") {
         m.cpu = typeof data.cpu === "number" ? data.cpu : null;
+        m.res = resources_of(data);
         m.cpu_t = now;
     } else if(kind === "queue") {
         /*  Its queue's service: only the queue is taken from it  */
@@ -2991,6 +3149,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
             m.errors[kind] = kw.comment ? {text: kw.comment} : {key: "monitor no answer"};
             if(kind === "cpu") {
                 m.cpu = null;
+                m.res = resources_of(null);
             } else if(kind === "queue") {
                 m.queue = null;
             } else {
@@ -3038,6 +3197,7 @@ function ac_yuno_stats(gobj, event, kw, src)
                 /*  No cpu and no stats come for a yuno that does not run:
                  *  its last figures are not its figures any more.  */
                 m.cpu = null;
+                m.res = resources_of(null);
                 m.rx = null;
                 m.tx = null;
                 m.queue = null;

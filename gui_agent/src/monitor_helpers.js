@@ -1070,6 +1070,56 @@ function prune_history(rows, now_s, window_s)
 }
 
 /***************************************************************
+ *  The memory and the disk a yuno reports with its cpu (the
+ *  `__yuno__` stats, SDK 7.28.4+): the resident memory of the
+ *  process, the memory still available on its node, and the FULLEST
+ *  filesystem it writes to (/yuneta and the store of each of its
+ *  C_TRANGERs). A field a yuno does not send (one older than 7.28.4)
+ *  is null, never 0: no figure is not an empty disk.
+ ***************************************************************/
+function resources_of(data)
+{
+    let d = (data && typeof data === "object") ? data : {};
+    let num = (v) => (typeof v === "number" && isFinite(v)) ? v : null;
+    return {
+        mem_rss_kb:         num(d.mem_rss_kb),
+        node_mem_pct:       num(d.mem_node_available_percent),
+        node_mem_total_mb:  num(d.mem_node_total_mb),
+        disk_pct:           num(d.disk_min_free_percent),
+        disk_path:          typeof d.disk_min_free_path === "string" ? d.disk_min_free_path : "",
+        disk_gb:            num(d.disk_min_free_size_gigas)
+    };
+}
+
+/***************************************************************
+ *  How much of something is still free (a percent): "critical"
+ *  under 10, "low" under 20, "ok", or "unknown" with no figure.
+ ***************************************************************/
+function free_level(pct)
+{
+    if(typeof pct !== "number") {
+        return "unknown";
+    }
+    if(pct < 10) {
+        return "critical";
+    }
+    if(pct < 20) {
+        return "low";
+    }
+    return "ok";
+}
+
+/*  A memory in KB, written in MB ("–" with no figure).  */
+function fmt_mem_kb(kb)
+{
+    if(typeof kb !== "number") {
+        return "–";
+    }
+    let mb = kb / 1024;
+    return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+}
+
+/***************************************************************
  *  The band a cpu % belongs to, for the colour of its card.
  ***************************************************************/
 function cpu_level(cpu)
@@ -1143,6 +1193,9 @@ export {
     pick_rate,
     prune_history,
     cpu_level,
+    resources_of,
+    free_level,
+    fmt_mem_kb,
     yuno_run_state,
     fmt_rate,
 };
