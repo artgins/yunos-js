@@ -10,6 +10,7 @@
  */
 import { defineConfig } from "vite";
 import { yunetaHtmlPlugin } from "@yuneta/gobj-ui/vite-plugin-yuneta-html.js";
+import { yunetaLicensesPlugin } from "@yuneta/gobj-ui/vite-plugin-yuneta-licenses.js";
 
 export default defineConfig({
     resolve: {
@@ -74,6 +75,7 @@ export default defineConfig({
         }
     },
     plugins: [
-        yunetaHtmlPlugin({ defaultTitle: "TreeDB GUI" })
+        yunetaHtmlPlugin({ defaultTitle: "TreeDB GUI" }),
+        yunetaLicensesPlugin()
     ]
 });

@@ -19,6 +19,7 @@
  ***********************************************************************/
 import { defineConfig } from "vite";
 import { yunetaHtmlPlugin } from "@yuneta/gobj-ui/vite-plugin-yuneta-html.js";
+import { yunetaLicensesPlugin } from "@yuneta/gobj-ui/vite-plugin-yuneta-licenses.js";
 
 export default defineConfig({
     resolve: {
@@ -61,7 +62,8 @@ export default defineConfig({
         }
     },
     plugins: [
-        yunetaHtmlPlugin({ defaultTitle: "Yuneta Agent Console" })
+        yunetaHtmlPlugin({ defaultTitle: "Yuneta Agent Console" }),
+        yunetaLicensesPlugin()
     ],
     test: {
         /*  The wiring tests import gclasses that import gobj-ui SOURCE,

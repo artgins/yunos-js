@@ -8,6 +8,15 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.1.2, gui_treedb 1.0.2 (2026-10-25)
+
+- **`licenses.txt` beside the bundle** of both yunos, written at build time by gobj-ui
+  7.28.0's `yunetaLicensesPlugin`: the license of every package with code in
+  the bundle, with the Font Awesome attribution (CC BY 4.0) that minifying
+  dropped. Served at `/licenses.txt`. gobj-js `^7.28.0` (`jwtDecode()` /
+  `jwt2json()` removed, unused here) and gobj-ui `^7.28.0`.
+  Deployed on artgins.ytreedb.com and artgins.yunetacontrol.com/.ovh,
+  `licenses.txt` read back (68 packages), the load clean in the console.
 - **`LICENSE` and `CONTRIBUTING.md`** (the repository had none): the MIT
   License (ArtGins 2024-2026), and `"license": "MIT"` in the `package.json`
   of both yunos. No yuno changes. `CONTRIBUTING.md` says how to contribute
