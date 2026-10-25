@@ -35,7 +35,7 @@
  *          node scripts/qa.mjs --check focus           # a clicked card lights up with its links
  *          node scripts/qa.mjs --check livelayout      # charts beside the graph (or under it), series folded
  *          node scripts/qa.mjs --check controlstate    # the action buttons fit the scenario's state (read only)
- *          node scripts/qa.mjs --check switches        # every generator's card has its switch, 3-letter nodes (read only)
+ *          node scripts/qa.mjs --check switches        # every generator's card has its switch, nodes in 3 letters everywhere (read only)
  *          node scripts/qa.mjs --check roles           # the roles of a store: what each grants, its sheet
  *          node scripts/qa.mjs --check roleswrite      # a role created, edited and deleted (leaves none)
  *          QA_PERM_OFF='<cmd>' QA_PERM_ON='<cmd>' \
@@ -809,6 +809,10 @@ async function check_switches(page, args, step, out_dir)
                 inside: sb.left >= cb.left && sb.right <= cb.right && sb.top >= cb.top && sb.bottom <= cb.bottom
             });
         }
+        out.via = (document.querySelector(".MONITOR_URL_WHERE") || {}).textContent || "";
+        out.mems = [...document.querySelectorAll(".MONITOR_NODE_MEM_NAME")].map((e) => e.textContent);
+        out.series = [...document.querySelectorAll(".MONITOR_CHART_RATE .u-legend .u-series .u-label")]
+            .map((e) => e.textContent).filter((t) => t && t !== "Time");
         return out;
     });
     await page.screenshot({path: join(out_dir, "check_switches.png"), fullPage: true});
@@ -826,11 +830,21 @@ async function check_switches(page, args, step, out_dir)
             bad.push(`node of ${w.id}: '${w.text}' (${w.title})`);
         }
     }
+    if(!r.via.split(", ").every((n) => /^(hid|wat|art)$/.test(n))) {
+        bad.push(`status line: '${r.via}'`);
+    }
+    if(!r.mems.length || !r.mems.every((n) => /^(hid|wat|art)$/.test(n))) {
+        bad.push(`memory tags: ${JSON.stringify(r.mems)}`);
+    }
+    if(new Set(r.series).size !== r.series.length || !r.series.every((n) => /\((hid|wat|art)\)$/.test(n))) {
+        bad.push(`series: ${JSON.stringify(r.series)}`);
+    }
     const first = r.switches[0] || {};
     step("check switches: a switch on every generator, nodes in 3 letters", bad.length === 0,
         bad.length ? bad.join("; ") :
         `${r.switches.length} switches; ${first.id}: checked=${first.checked} disabled=${first.disabled} ` +
-        `title='${first.title}' label='${first.label}'; nodes ${[...new Set(r.wheres.map((w) => w.text))].join(",")}`);
+        `title='${first.title}' label='${first.label}'; nodes ${[...new Set(r.wheres.map((w) => w.text))].join(",")}; ` +
+        `status '${r.via}'; memory ${r.mems.join(",")}; series ${r.series.length} (${r.series.slice(0, 2).join(", ")}...)`);
     return bad.length === 0;
 }
 

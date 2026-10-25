@@ -55,9 +55,10 @@
  *      center (`run-scenario action=on|off scenario_yuno=<key>`, SDK
  *      7.28.6) -- one generator turned on or off by hand while the others
  *      keep going. On only while the scenario runs; a switch run changes
- *      neither its state nor its max_run. `view.node_labels` names the
- *      nodes on the cards (`{"hidrauliaconnect": "hid"}`), the full name
- *      in the title.
+ *      neither its state nor its max_run. `view.node_labels` gives each
+ *      node the short name the view shows it by (`{"hidrauliaconnect":
+ *      "hid"}`: cards, status line, chart series, confirmations), the full
+ *      name in the title.
  *
  *      ACTIONS are `start`, `pause`, `resume`, `stop` and `report`, each a
  *      list of steps: a yuno (its key), an optional service (default: the
@@ -711,6 +712,18 @@ function switch_is_on(y, m)
     return typeof v === "number" && v > 0;
 }
 
+/*  The name of a yuno's series in a chart: its label, its id when the
+ *  label does not say it (several yunos may share one label), and its
+ *  node's short name.  */
+function series_label(scenario, y)
+{
+    let label = y.label || y.id;
+    if(y.id && label.split(/\s+/).indexOf(y.id) < 0) {
+        label += ` ${y.id}`;
+    }
+    return y.node ? `${label} (${node_label(scenario, y.node)})` : label;
+}
+
 /*  A node's name on a card: its `view.node_labels`, or the name.  */
 function node_label(scenario, node)
 {
@@ -1296,6 +1309,7 @@ export {
     switch_steps,
     switch_is_on,
     node_label,
+    series_label,
     SCENARIO_TEMPLATE,
     SCENARIO_ACTIONS,
     scenario_controls,

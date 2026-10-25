@@ -244,8 +244,9 @@ used now. `on` is offered only while the scenario RUNS, so the `max_run` stop
 is always there to stop it; `off` in any state. A switch run changes neither
 the state of the scenario nor its max_run, and is listed in its Runs; the
 scenario's `stop` is what turns every switch off, so it must name them too.
-`view.node_labels` gives a node a short name on the cards, with its full name
-in the title: `"view": {"mode": "graph", "node_labels": {"hidrauliaconnect":
+`view.node_labels` gives a node the short name the view shows it by (cards,
+status line, memory tags, chart series, confirmations; 1.1.4), with its full
+name in the title: `"view": {"mode": "graph", "node_labels": {"hidrauliaconnect":
 "hid", "wattyzer": "wat", "artgins": "art"}}` (16 characters at most).
 
 `links`

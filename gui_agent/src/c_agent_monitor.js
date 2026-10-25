@@ -180,8 +180,9 @@
  *      scenario_yuno=<key>`, or its steps sent from here for a scenario
  *      run from here), that changes neither the state of the scenario nor
  *      its max_run. On is offered only while the scenario runs; off always.
- *      The node a card names is its `view.node_labels` name, if any, with
- *      the full name in its title.
+ *      A node is shown by its `view.node_labels` name, if any -- on the
+ *      cards, in the status line, in the series of the charts and in the
+ *      commands a confirmation lists -- with the full name in its title.
  *
  *      CHARTS HELD. A scenario that can start or stop has a state, what
  *      its actions left: running (start, resume, restart), paused or
@@ -302,6 +303,7 @@ import {
     switch_steps,
     switch_is_on,
     node_label,
+    series_label,
     scenario_document,
     cc_lacks_command,
     lines,
@@ -1071,7 +1073,8 @@ function gobj_start_charts(gobj)
             scales:     Object.assign({x: x_window}, scales || from_zero)
         }, gobj);
         for(let y of yunos) {
-            gobj_send_event(chart, "EV_ADD_SERIE", {id: prefix + y.key, label: y.label}, gobj);
+            gobj_send_event(chart, "EV_ADD_SERIE", {id: prefix + y.key,
+                label: series_label(priv.scenario, y)}, gobj);
         }
         return chart;
     };
@@ -1423,7 +1426,9 @@ function paint_node_mems(gobj)
             let $item = createElement2(
                 ["span", {class: "MONITOR_NODE_MEM tag",
                           title: t("monitor node memory help"), "data-i18n-title": "monitor node memory help"}, [
-                    ["span", {class: "MONITOR_NODE_MEM_NAME has-text-weight-semibold"}, node || scenario_host(priv.scenario)],
+                    ["span", {class: "MONITOR_NODE_MEM_NAME has-text-weight-semibold",
+                              title: node || scenario_host(priv.scenario)},
+                        node ? node_label(priv.scenario, node) : scenario_host(priv.scenario)],
                     ["span", {class: "MONITOR_NODE_MEM_KEY", i18n: "monitor node memory"}, t("monitor node memory")],
                     $value,
                     $total
@@ -1613,11 +1618,14 @@ function render_status(gobj)
     if(has && priv.scenario.place === "control_center") {
         $via.setAttribute("data-i18n", "monitor via control center");
         $via.textContent = t("monitor via control center");
-        $where.textContent = scenario_nodes(priv.scenario).join(", ");
+        let nodes = scenario_nodes(priv.scenario);
+        $where.textContent = nodes.map((n) => node_label(priv.scenario, n)).join(", ");
+        $where.setAttribute("title", nodes.join(", "));
     } else {
         $via.removeAttribute("data-i18n");
         $via.textContent = "";
         $where.textContent = has ? priv.scenario.agent_url : "";
+        $where.removeAttribute("title");
     }
     priv.$propose.disabled = st !== "ST_MONITORING";
 
@@ -2393,8 +2401,8 @@ function build_cards(gobj)
             ["div", {class: "MONITOR_CARD box"}, [
                 ["div", {class: "MONITOR_CARD_HEAD"}, [
                     ["span", {class: "MONITOR_CARD_LABEL has-text-weight-bold"}, y.label],
-                    ["span", {class: "MONITOR_CARD_ID is-family-monospace has-text-grey"},
-                        y.node ? `${y.node} · ${y.id}` : y.id],
+                    ["span", {class: "MONITOR_CARD_ID is-family-monospace has-text-grey", title: y.node || ""},
+                        y.node ? `${node_label(priv.scenario, y.node)} · ${y.id}` : y.id],
                     ["span", {class: "MONITOR_CARD_TOOLS buttons"}, [$live, $once, $tree]]
                 ]],
                 ["div", {class: "MONITOR_CARD_ROW"}, [
@@ -3915,7 +3923,8 @@ function ac_test_control(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: no shell to confirm the control '${control}'`);
         return -1;
     }
-    let plan_lines = control_plan(gobj, control).map((p) => (p.node ? `[${p.node}] ` : "") + p.line);
+    let plan_lines = control_plan(gobj, control).map((p) =>
+        (p.node ? `[${node_label(priv.scenario, p.node)}] ` : "") + p.line);
     let who = run_by_control_center(gobj) ? "scenario run by the control center" : "scenario run from here";
     let $msg = createElement2(
         ["div", {class: "MONITOR_CONFIRM"}, [

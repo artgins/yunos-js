@@ -8,6 +8,17 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.1.4 (2026-10-25)
+
+- **`view.node_labels` everywhere a node is named**, not only on the cards:
+  the status line (*"through the control center: wat, hid, art"*), the
+  memory tag of each node, the cards mode and the commands a confirmation
+  lists; the full name in the title.
+- **The series of a chart name the yuno by label, id and node**
+  (`series_label()`: `sim_controllers pp1 (wat)`): yunos that share a label
+  -- the 14 fleets of renfe-20k-hidraulia are all `sim_controllers` -- were
+  14 lines of the same name.
+
 ## gui_agent 1.1.3 (2026-10-25)
 
 - **A switch on the card of a yuno that carries one** (`switch: {on: [steps],

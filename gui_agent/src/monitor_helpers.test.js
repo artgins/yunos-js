@@ -40,6 +40,7 @@ import {
     switch_steps,
     switch_is_on,
     node_label,
+    series_label,
 } from "./monitor_helpers.js";
 
 
@@ -710,6 +711,15 @@ describe("switch", () => {
         expect(control_refused_by("off", "stopped")).toBe(null);
         expect(run_state_of_runs([{action: "off", result: 0}, {action: "on", result: 0},
             {action: "start", result: 0}])).toBe("running");
+    });
+
+    it("a series is named by label, id when the label lacks it, and short node", () => {
+        let r = validate_scenario(base());
+        expect(series_label(r.scenario, r.scenario.yunos[0])).toBe("pp12 (art)");
+        expect(series_label(r.scenario, {label: "sim_controllers", id: "pp1", node: "wattyzer"}))
+            .toBe("sim_controllers pp1 (wattyzer)");
+        expect(series_label(r.scenario, {label: "gate_central 2120", id: "2120", node: "hidrauliaconnect"}))
+            .toBe("gate_central 2120 (hid)");
     });
 
     it("a switch is on while its yuno moves messages", () => {
