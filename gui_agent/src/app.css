@@ -469,6 +469,31 @@
     white-space: nowrap;
 }
 
+/*
+ *  The graph and its charts, side by side when they fit: the graph at
+ *  its natural width (its columns of cards, fixed in px), the charts in
+ *  the width that is left, never under 24rem -- below that a time axis
+ *  does not read. When the graph leaves less (a phone, a tablet, or a
+ *  scenario of many columns) the charts wrap under it, at full width.
+ *  So the breakpoint is the graph's own width plus 24rem, decided by
+ *  the flex line, not by a measure taken at run time, and the same in
+ *  every language (a card's width does not depend on its text).
+ */
+.MONITOR_LIVE {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.75rem;
+    flex: 0 0 auto;
+}
+
+.MONITOR_SIDE {
+    flex: 1 1 24rem;
+    min-width: min(24rem, 100%);
+    container-type: inline-size;
+    container-name: monitor-side;
+}
+
 .MONITOR_CHARTS {
     display: flex;
     flex-direction: column;
@@ -484,13 +509,45 @@
     margin-bottom: 0.5rem;
 }
 
-.MONITOR_CHART_TITLE {
-    font-weight: 600;
-    font-size: 0.85rem;
+.MONITOR_CHART_HEAD {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
     margin-bottom: 0.35rem;
 }
 
-@media screen and (min-width: 1216px) {
+.MONITOR_CHART_TITLE {
+    font-weight: 600;
+    font-size: 0.85rem;
+    min-width: 0;
+}
+
+.MONITOR_SERIES_TOGGLE {
+    flex: 0 0 auto;
+}
+
+.MONITOR_SERIES_COUNT {
+    margin-left: 0.4em;
+}
+
+/*  The series of a chart are uPlot's legend: folded until asked for,
+ *  and when open it scrolls inside its own box instead of pushing
+ *  the plot away.  */
+.MONITOR_CHART:not(.MONITOR_CHART--series-open) .u-legend {
+    display: none;
+}
+
+.MONITOR_CHART .u-legend {
+    max-height: 12rem;
+    overflow-y: auto;
+    margin: 0.5rem 0 0;
+    text-align: left;
+}
+
+/*  Three in a row only when the column of the charts is that wide: on
+ *  a wide screen under a wide graph, or beside a narrow one.  */
+@container monitor-side (min-width: 66rem) {
     .MONITOR_CHARTS {
         flex-direction: row;
     }

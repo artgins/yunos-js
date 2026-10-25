@@ -1082,6 +1082,8 @@ const es = {
         "scenario bad action": "Una acción es start, pause, resume, stop o report, con una lista de pasos:",
         "scenario bad step": "Un paso nombra un yuno del escenario (su key) y, si hace falta, un servicio:",
         "users pick a yuno": "Elige en la pestaña Nodos un yuno que guarde usuarios.",
+        "monitor series": "Series",
+        "monitor series help": "Mostrar u ocultar las series de esta gráfica: qué yuno es cada línea y su valor bajo el cursor; un clic en una oculta o muestra su línea",
 
         "discovery unanswered": "El agente del nodo no ha contestado: no se sabe qué treedbs tiene este yuno. Se vuelve a preguntar al volver la conexión, o al abrir de nuevo la pestaña",
         "raw json viewer unavailable": "El visor de json crudo no está disponible en esta aplicación",

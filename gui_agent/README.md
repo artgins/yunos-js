@@ -154,9 +154,13 @@ the same ones. The workspace (`/scenarios`) has three fixed tabs:
   **graph** of the yunos in the order the messages flow (left to right), each
   card with its cpu %, its messages per second in and out, its queue when its
   service reports one (`msgs_in_queue`) and what the agent says of it; the
-  edges carry the messages per second through them; under it the **charts**
+  edges carry the messages per second through them; beside it the **charts**
   (`C_YUI_UPLOT`), messages per second, messages in queue (when a yuno has a
-  queue) and cpu, over 5 to 60 minutes. A click on a card highlights it, the
+  queue) and cpu, over 5 to 60 minutes, one over the other -- under the graph
+  when the graph's width plus 24rem does not fit (a phone, a tablet, a
+  scenario of many columns; 1.0.7). The series of each chart (which yuno each
+  line is, its value under the cursor, a click hides or shows it) are folded
+  behind a **Series** toggle with their count. A click on a card highlights it, the
   cards linked to it and their links (1.0.6); again, the empty canvas or
   Escape clears it. Or as **cards** (`view.mode`, and a selector in the
   toolbar).

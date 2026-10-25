@@ -33,10 +33,21 @@
  *          node scripts/qa.mjs --check controlhelp     # each control of a scenario says what it does
  *          node scripts/qa.mjs --check queues          # the gates' queues: on their cards and charted
  *          node scripts/qa.mjs --check focus           # a clicked card lights up with its links
+ *          node scripts/qa.mjs --check livelayout      # charts beside the graph (or under it), series folded
  *          node scripts/qa.mjs --check roles           # the roles of a store: what each grants, its sheet
  *          node scripts/qa.mjs --check roleswrite      # a role created, edited and deleted (leaves none)
  *          QA_PERM_OFF='<cmd>' QA_PERM_ON='<cmd>' \
  *          node scripts/qa.mjs --check permlive        # controls follow a role taken and given, no reload
+ *
+ *      A BUILD NOT DEPLOYED YET is checked against the same live plane with
+ *      --dist: every GET of the plane's origin that names a file of that
+ *      directory is answered from it (index.html for "/"), the rest goes
+ *      to the plane -- the deploy is an rsync of dist/, so this is what
+ *      the deploy would serve. --viewport sets the window (default
+ *      1440x900):
+ *
+ *          node scripts/qa.mjs --dist dist --viewport 1920x1080 --check livelayout
+ *          node scripts/qa.mjs --dist dist --viewport 390x844 --check livelayout
  *
  *      Routes are hash routes of the shell, given without the '#':
  *
@@ -55,9 +66,9 @@
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
+import {existsSync, mkdirSync, readFileSync, statSync, writeFileSync} from "node:fs";
 import {homedir} from "node:os";
-import {join} from "node:path";
+import {join, normalize, resolve, sep} from "node:path";
 import {execFileSync} from "node:child_process";
 
 const DEFAULTS = {
@@ -90,7 +101,8 @@ const SEL = {
 
 
 function parse_args(argv) {
-    const out = {url: process.env.QA_URL || DEFAULTS.URL, routes: [], login: true, checks: []};
+    const out = {url: process.env.QA_URL || DEFAULTS.URL, routes: [], login: true, checks: [],
+                 dist: "", viewport: {width: 1440, height: 900}};
     for(let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if(a === "--url") {
@@ -99,6 +111,17 @@ function parse_args(argv) {
             out.routes.push(argv[++i]);
         } else if(a === "--check") {
             out.checks.push(argv[++i]);
+        } else if(a === "--dist") {
+            out.dist = resolve(argv[++i] || "");
+            if(!existsSync(join(out.dist, "index.html"))) {
+                throw new Error(`--dist ${out.dist}: no index.html there (npm run build first)`);
+            }
+        } else if(a === "--viewport") {
+            const m = /^(\d+)x(\d+)$/.exec(argv[++i] || "");
+            if(!m) {
+                throw new Error("--viewport is WIDTHxHEIGHT, e.g. 390x844");
+            }
+            out.viewport = {width: parseInt(m[1], 10), height: parseInt(m[2], 10)};
         } else if(a === "--no-login") {
             out.login = false;
         } else if(a === "--help" || a === "-h") {
@@ -742,6 +765,95 @@ async function check_focus(page, args, step, out_dir)
     return ok;
 }
 
+/*
+ *  --check livelayout: the charts of the live view are BESIDE the graph
+ *  when the graph's own width plus 24rem fits in the view, and UNDER it
+ *  when it does not; the series of every chart (uPlot's legend) are
+ *  folded, and the toggle of the rate chart opens them and folds them
+ *  again. Read only. Run it at two widths (--viewport).
+ */
+async function check_livelayout(page, args, step, out_dir)
+{
+    await page.evaluate((id) => {
+        window.location.hash = `#/scenarios/live/${id}`;
+    }, HELD_SCENARIO);
+    try {
+        await page.locator(".MONITOR_CHART_RATE canvas").first().waitFor({state: "visible", timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        step("check livelayout", false, "no rate chart on the page");
+        return false;
+    }
+    await page.waitForTimeout(3000);
+    const geo = await page.evaluate(() => {
+        const box = (sel) => {
+            const $e = document.querySelector(sel);
+            if(!$e) {
+                return null;
+            }
+            const b = $e.getBoundingClientRect();
+            return {x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height)};
+        };
+        const $view = document.querySelector(".MONITOR_VIEW");
+        const pad = parseFloat(getComputedStyle($view).paddingLeft) + parseFloat(getComputedStyle($view).paddingRight);
+        const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+        return {
+            room: $view.clientWidth - pad,
+            rem: rem,
+            graph: box(".MONITOR_GRAPH"),
+            canvas: box(".MONITOR_GRAPH_CANVAS"),
+            side: box(".MONITOR_SIDE"),
+            charts: [...document.querySelectorAll(".MONITOR_CHART:not(.is-hidden)")].map((e) => {
+                const b = e.getBoundingClientRect();
+                return {x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height)};
+            }),
+            legends: [...document.querySelectorAll(".MONITOR_CHART .u-legend")].map((e) => getComputedStyle(e).display),
+            counts: [...document.querySelectorAll(".MONITOR_SERIES_COUNT")].map((e) => e.textContent)
+        };
+    });
+    const vw = page.viewportSize().width;
+    const need = geo.canvas.w + 0.75 * geo.rem + 24 * geo.rem;
+    const beside = geo.side.x >= geo.graph.x + geo.graph.w;
+    const below = geo.side.y >= geo.graph.y + geo.graph.h;
+    const fits = need <= geo.room;
+    let ok = fits ? beside : below;
+    const folded = geo.legends.every((d) => d === "none");
+    ok = ok && folded && geo.legends.length > 0;
+    step(`check livelayout: ${vw}px, charts ${beside ? "beside" : (below ? "under" : "OVER")} the graph`, ok,
+        `room ${geo.room}px, graph ${geo.canvas.w}px + 24rem = ${Math.round(need)}px (${fits ? "fits" : "does not fit"}), ` +
+        `charts column ${geo.side.w}px, charts ${geo.charts.map((c) => `${c.w}x${c.h}`).join(" ")}, ` +
+        `series ${geo.counts.join("/")}, legends ${folded ? "folded" : geo.legends.join(",")}`);
+    await page.screenshot({path: join(out_dir, `check_livelayout_${vw}.png`), fullPage: true});
+    await page.evaluate(() => document.querySelector(".MONITOR_SIDE").scrollIntoView());
+    await page.waitForTimeout(300);
+    await page.screenshot({path: join(out_dir, `check_livelayout_${vw}_charts.png`), fullPage: true});
+
+    const $toggle = page.locator(".MONITOR_CHART_RATE .MONITOR_SERIES_TOGGLE");
+    const read = () => page.evaluate(() => {
+        const $c = document.querySelector(".MONITOR_CHART_RATE");
+        const $l = $c.querySelector(".u-legend");
+        return {
+            display: getComputedStyle($l).display,
+            height: Math.round($l.getBoundingClientRect().height),
+            expanded: $c.querySelector(".MONITOR_SERIES_TOGGLE").getAttribute("aria-expanded"),
+            canvas: Math.round($c.querySelector("canvas").getBoundingClientRect().height)
+        };
+    });
+    const before = await read();
+    await $toggle.click();
+    await page.waitForTimeout(300);
+    const open = await read();
+    await page.locator(".MONITOR_CHART_RATE").scrollIntoViewIfNeeded();
+    await page.screenshot({path: join(out_dir, `check_livelayout_${vw}_series.png`), fullPage: true});
+    await $toggle.click();
+    await page.waitForTimeout(300);
+    const closed = await read();
+    const ok2 = open.display !== "none" && open.expanded === "true" && open.height <= 12 * geo.rem + 1 &&
+        open.canvas === before.canvas && closed.display === "none" && closed.expanded === "false";
+    step("check livelayout: the series of a chart open and fold again", ok2,
+        `open: legend ${open.height}px, plot ${open.canvas}px (was ${before.canvas}px); folded again: ${closed.display}`);
+    return ok && ok2;
+}
+
 const CHECKS = {
     schemaback: check_schemaback,
     gobjtree: check_gobjtree,
@@ -749,6 +861,7 @@ const CHECKS = {
     controlhelp: check_controlhelp,
     queues: check_queues,
     focus: check_focus,
+    livelayout: check_livelayout,
     roles: check_roles,
     roleswrite: check_roleswrite,
     permlive: check_permlive,
@@ -796,7 +909,27 @@ async function main() {
     mkdirSync(out_dir, {recursive: true});
 
     const browser = await engine.launch();
-    const context = await browser.newContext({viewport: {width: 1440, height: 900}});
+    const context = await browser.newContext({viewport: args.viewport});
+    if(args.dist) {
+        /*  The plane's files from the local build: what a deploy (an
+         *  rsync of dist/) would serve. Anything else -- the BFF, the
+         *  websockets -- is the plane's.  */
+        const origin = new URL(args.url).origin;
+        await context.route((u) => u.origin === origin, async (route) => {
+            const req = route.request();
+            let rel = decodeURIComponent(new URL(req.url()).pathname);
+            if(rel === "/") {
+                rel = "/index.html";
+            }
+            const f = join(args.dist, normalize(rel));
+            if(req.method() === "GET" && f.startsWith(args.dist + sep) &&
+                    existsSync(f) && statSync(f).isFile()) {
+                await route.fulfill({path: f});
+            } else {
+                await route.fallback();
+            }
+        });
+    }
     const page = await context.newPage();
 
     /*
@@ -831,7 +964,8 @@ async function main() {
 
     let failed = false;
     try {
-        console.log(`\nQA: ${args.url}  (${want})\n`);
+        console.log(`\nQA: ${args.url}  (${want}, ${args.viewport.width}x${args.viewport.height}` +
+            `${args.dist ? `, files from ${args.dist}` : ""})\n`);
 
         const resp = await page.goto(args.url, {
             waitUntil: "domcontentloaded", timeout: DEFAULTS.TIMEOUT,

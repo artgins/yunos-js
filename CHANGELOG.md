@@ -6,6 +6,30 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.0.7 (2026-10-25)
+
+- **The charts of the live view go BESIDE the graph.** The graph of a
+  scenario takes its natural width (its columns of cards) and the charts
+  are stacked in the column left at its right, so on a wide screen they are
+  seen without scrolling past the whole graph, and the empty right half is
+  used. Where the graph's width plus 24rem does not fit -- a phone, a
+  tablet, a scenario of many columns -- they wrap under it as before. The
+  flex line decides it, not a measure taken at run time, so it is the same
+  in every language; three charts in a row only when their column is 66rem
+  wide (a container query). The held note ("Scenario stopped: ...") heads
+  that column.
+- **The series of each chart are folded.** uPlot's legend (which yuno each
+  line is, its value under the cursor, a click hides or shows a line) took
+  more height than the plot with a dozen yunos. It is behind a **Series**
+  toggle with the count (`EV_TOGGLE_SERIES`, `aria-expanded`), and when open
+  it scrolls inside 12rem. New keys `monitor series` and `monitor series
+  help` (en, es).
+- QA: `scripts/qa.mjs --dist dist` checks a build that is not deployed
+  against the live plane (the plane's files answered from the local
+  `dist/`), `--viewport WxH` sets the window, and `--check livelayout` says
+  where the charts are and opens and folds a chart's series. Run at 1920,
+  1440 and 390 px on `renfe-20k-hidraulia`.
+
 ## gui_agent 1.0.6 (2026-10-24)
 
 - **A click on a card of the graph highlights it, the cards linked to it

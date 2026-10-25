@@ -1073,6 +1073,8 @@ const en = {
         "scenario bad action": "An action is start, pause, resume, stop or report, with a list of steps:",
         "scenario bad step": "A step names a yuno of the scenario (its key) and, optionally, a service:",
         "users pick a yuno": "Pick a yuno that keeps users in the Nodes tab.",
+        "monitor series": "Series",
+        "monitor series help": "Show or hide the series of this chart: which yuno each line is, and its value under the cursor; a click on one hides or shows its line",
 
         /* keep this last so adding new keys above never hits the comma trap */
         "discovery unanswered": "The node's agent did not answer: which treedbs this yuno has is not known. It is asked again when the connection comes back, or when the tab is opened again",

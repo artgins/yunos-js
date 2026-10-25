@@ -7,8 +7,14 @@
  *        - GRAPH: the yunos in the order the messages flow (left to
  *          right), each card with its cpu %, its messages per second in
  *          and out, its queue when it has one and what the agent says of
- *          it (playing, paused, stopped...); and under it two CHARTS,
- *          messages per second and cpu, over a window of history.
+ *          it (playing, paused, stopped...); and beside it the CHARTS,
+ *          messages per second, messages in queue (when a yuno has a
+ *          queue) and cpu, over a window of history -- under it where
+ *          they do not fit beside it (app.css, .MONITOR_LIVE). The
+ *          series of each chart (which yuno each line is, its value
+ *          under the cursor, a click hides or shows it) are folded
+ *          behind a toggle (EV_TOGGLE_SERIES), so the plot keeps its
+ *          height.
  *          A click on a card FOCUSES it (EV_FOCUS_YUNO): the card, the
  *          cards linked to it and the links between them are
  *          highlighted; a click on it again, or on the empty canvas,
@@ -419,6 +425,8 @@ let PRIVATE_DATA = {
     has_queue:      {},     /*  yuno key -> its service reports a queue: its card has the row  */
     relayout_posted: false, /*  EV_RELAYOUT is on its way  */
     stop_at:        0,      /*  epoch second the control center stops the scenario (its max_run), 0 = none  */
+    series_ui:      {},     /*  chart (rate | queue | cpu) -> its block, series toggle, count, chevron  */
+    series_open:    {},     /*  chart -> its series (the uPlot legend) are shown  */
 };
 
 /*  How long a phase of a control run from here waits for its answers.  */
@@ -651,7 +659,7 @@ function relabel_select($sel)
 
 /***************************************************************
  *  The static skeleton: toolbar, status line, scenario editor,
- *  empty notice, graph and the two chart blocks.
+ *  empty notice, graph and, beside it, the chart blocks.
  ***************************************************************/
 function build_dom(gobj)
 {
@@ -803,33 +811,35 @@ function build_dom(gobj)
     priv.$rate_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
     priv.$queue_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
     priv.$cpu_box = createElement2(["div", {class: "MONITOR_CHART_BODY"}, []]);
+    let $rate_chart = chart_block(gobj, "rate", "MONITOR_CHART_RATE",
+        createElement2(["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor messages per second"},
+            t("monitor messages per second")]),
+        priv.$rate_box);
     /*  The queues: what a test watches -- one that grows is a load the
      *  receiver does not hold. Shown when a yuno of the scenario has one.  */
-    priv.$queue_chart = createElement2(
-        ["div", {class: "MONITOR_CHART MONITOR_CHART_QUEUE box"}, [
-            ["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor messages in queue"},
-                t("monitor messages in queue")],
-            priv.$queue_box
-        ]]
-    );
+    priv.$queue_chart = chart_block(gobj, "queue", "MONITOR_CHART_QUEUE",
+        createElement2(["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor messages in queue"},
+            t("monitor messages in queue")]),
+        priv.$queue_box);
+    let $cpu_chart = chart_block(gobj, "cpu", "MONITOR_CHART_CPU",
+        createElement2(["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor cpu of one core"},
+            t("monitor cpu of one core")]),
+        priv.$cpu_box);
     priv.$held = createElement2(
         ["p", {class: "MONITOR_CHARTS_HELD"}, [
             ["span", {class: "MONITOR_CHARTS_HELD_TEXT tag is-warning"}, ""]
         ]]
     );
     priv.$charts = createElement2(
-        ["div", {class: "MONITOR_CHARTS"}, [
-            ["div", {class: "MONITOR_CHART MONITOR_CHART_RATE box"}, [
-                ["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor messages per second"},
-                    t("monitor messages per second")],
-                priv.$rate_box
-            ]],
-            priv.$queue_chart,
-            ["div", {class: "MONITOR_CHART MONITOR_CHART_CPU box"}, [
-                ["p", {class: "MONITOR_CHART_TITLE", i18n: "monitor cpu of one core"},
-                    t("monitor cpu of one core")],
-                priv.$cpu_box
-            ]]
+        ["div", {class: "MONITOR_CHARTS"}, [$rate_chart, priv.$queue_chart, $cpu_chart]]
+    );
+    /*  The graph and, beside it, the charts with the note that they are
+     *  held: the charts wrap under the graph where they do not fit
+     *  (app.css, .MONITOR_LIVE).  */
+    priv.$live = createElement2(
+        ["div", {class: "MONITOR_LIVE"}, [
+            priv.$graph,
+            ["div", {class: "MONITOR_SIDE"}, [priv.$held, priv.$charts]]
         ]]
     );
 
@@ -838,10 +848,54 @@ function build_dom(gobj)
     $c.appendChild(priv.$test);
     $c.appendChild(priv.$editor);
     $c.appendChild(priv.$empty);
-    $c.appendChild(priv.$graph);
+    $c.appendChild(priv.$live);
     $c.appendChild(priv.$cards);
-    $c.appendChild(priv.$held);
-    $c.appendChild(priv.$charts);
+}
+
+/***************************************************************
+ *  A chart block: its title, the toggle of its series and the
+ *  body the chart is drawn in. The series are uPlot's legend --
+ *  which yuno each line is, its value under the cursor, and a
+ *  click on one hides or shows its line -- COLLAPSED by default
+ *  (EV_TOGGLE_SERIES): with a dozen yunos the legend was higher
+ *  than the plot.
+ ***************************************************************/
+function chart_block(gobj, name, cls, $title, $box)
+{
+    let priv = gobj.priv;
+    let $count = createElement2(["span", {class: "MONITOR_SERIES_COUNT tag is-rounded"}, ""]);
+    let $chevron = createElement2(["i", {class: "yi-chevron-down"}]);
+    let $toggle = createElement2(
+        ["button", {class: "MONITOR_SERIES_TOGGLE button", type: "button", "aria-expanded": "false",
+                    title: t("monitor series help"), "data-i18n-title": "monitor series help",
+                    "aria-label": t("monitor series help"), "data-i18n-aria-label": "monitor series help"},
+            [["span", {class: "MONITOR_SERIES_LABEL", i18n: "monitor series"}, t("monitor series")],
+             $count,
+             ["span", {class: "icon"}, [$chevron]]],
+            {click: () => gobj_send_event(gobj, "EV_TOGGLE_SERIES", {chart: name}, gobj)}]
+    );
+    let $block = createElement2(
+        ["div", {class: `MONITOR_CHART ${cls} box`}, [
+            ["div", {class: "MONITOR_CHART_HEAD"}, [$title, $toggle]],
+            $box
+        ]]
+    );
+    priv.series_ui[name] = {$block: $block, $toggle: $toggle, $count: $count, $chevron: $chevron};
+    priv.series_open[name] = false;
+    return $block;
+}
+
+/***************************************************************
+ *  The toggle says whether the series of its chart are shown.
+ ***************************************************************/
+function paint_series_toggle(gobj, name)
+{
+    let priv = gobj.priv;
+    let ui = priv.series_ui[name];
+    let open = !!priv.series_open[name];
+    ui.$block.classList.toggle("MONITOR_CHART--series-open", open);
+    ui.$toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    ui.$chevron.className = open ? "yi-chevron-up" : "yi-chevron-down";
 }
 
 /***************************************************************
@@ -909,7 +963,8 @@ function gobj_start_charts(gobj)
     /*  Both charts start at zero: a rate or a cpu drawn from its own
      *  minimum turns a flat line into a cliff.  */
     let from_zero = {y: {range: (u, min, max) => [0, max > 0 ? max * 1.1 : 1]}};
-    let make = (name, $box, prefix, yunos) => {
+    let make = (name, $box, prefix, yunos, ui) => {
+        priv.series_ui[ui].$count.textContent = String(yunos.length);
         let $host = createElement2(["div", {class: "MONITOR_CHART_HOST"}, []]);
         $box.appendChild($host);
         let chart = gobj_create_pure_child(name, "C_YUI_UPLOT", {
@@ -923,12 +978,12 @@ function gobj_start_charts(gobj)
         }
         return chart;
     };
-    priv.rate_chart = make("rate_chart", priv.$rate_box, "rate:", priv.scenario.yunos);
-    priv.cpu_chart = make("cpu_chart", priv.$cpu_box, "cpu:", priv.scenario.yunos);
+    priv.rate_chart = make("rate_chart", priv.$rate_box, "rate:", priv.scenario.yunos, "rate");
+    priv.cpu_chart = make("cpu_chart", priv.$cpu_box, "cpu:", priv.scenario.yunos, "cpu");
     /*  A series per yuno that has a queue: known by its readings  */
     let queued = priv.scenario.yunos.filter((y) => queue_elsewhere(y) || priv.has_queue[y.key]);
     show(priv.$queue_chart, queued.length > 0);
-    priv.queue_chart = queued.length ? make("queue_chart", priv.$queue_box, "queue:", queued) : null;
+    priv.queue_chart = queued.length ? make("queue_chart", priv.$queue_box, "queue:", queued, "queue") : null;
     load_charts(gobj);
 }
 
@@ -1319,6 +1374,7 @@ function render_status(gobj)
     show(priv.$editor, priv.editing);
     show(priv.$empty, !has && !priv.editing);
     let cards = priv.view_mode === "cards";
+    show(priv.$live, has && !cards);
     show(priv.$graph, has && !cards);
     show(priv.$charts, has && !cards);
     show(priv.$cards, has && cards);
@@ -3369,6 +3425,22 @@ function ac_focus_yuno(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  The series of a chart (its uPlot legend) shown, or hidden again.
+ ***************************************************************/
+function ac_toggle_series(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let name = kw.chart || "";
+    if(!priv.series_ui[name]) {
+        log_error(`${gobj_short_name(gobj)}: no chart '${name}' to show the series of`);
+        return -1;
+    }
+    priv.series_open[name] = !priv.series_open[name];
+    paint_series_toggle(gobj, name);
+    return 0;
+}
+
+/***************************************************************
  *  A card learnt it has (or has not) a queue row: the graph is laid
  *  out again with the cards' new heights.
  ***************************************************************/
@@ -3627,6 +3699,7 @@ function create_gclass(gclass_name)
         ["EV_SCENARIO_RUN_ENDED",   ac_run_ended,           null],
         ["EV_RELAYOUT",             ac_relayout,            null],
         ["EV_FOCUS_YUNO",           ac_focus_yuno,          null],
+        ["EV_TOGGLE_SERIES",        ac_toggle_series,       null],
         /*  a gobj tree stays open across a drop: its requests are
          *  answered in any state  */
         ["EV_OPEN_YUNO_TREE",       ac_open_yuno_tree,      null],
@@ -3691,6 +3764,7 @@ function create_gclass(gclass_name)
         ["EV_SCENARIO_RUN_ENDED",   0],
         ["EV_RELAYOUT",             0],
         ["EV_FOCUS_YUNO",           0],
+        ["EV_TOGGLE_SERIES",        0],
         ["EV_TEST_CONTROL",         0],
         ["EV_TEST_CONFIRMED",       0],
         ["EV_PROPOSE_LINKS",        0],
