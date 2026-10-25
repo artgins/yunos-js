@@ -6,6 +6,11 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_treedb 1.0.1 (2026-10-25)
+
+- `maplibre-gl` `^6.16.0` (no breaking change; gui_treedb takes only its
+  CSS). Deployed on artgins.ytreedb.com, the entry bundle read back.
+
 ## gui_agent 1.1.1 (2026-10-25)
 
 - **Every control of a scenario is off while a run of it is in flight in
