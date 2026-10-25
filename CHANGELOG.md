@@ -8,6 +8,11 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.0.3 (2026-10-25)
+
+- gobj-ui `^7.28.1` (a chart's Y axis as wide as its labels; gui_treedb
+  draws no chart). Deployed on artgins.ytreedb.com, console clean.
+
 ## gui_agent 1.1.5 (2026-10-25)
 
 - gobj-ui `^7.28.1`: **the Y axis of the live charts is as wide as its
