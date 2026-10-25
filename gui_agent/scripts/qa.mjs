@@ -35,6 +35,7 @@
  *          node scripts/qa.mjs --check focus           # a clicked card lights up with its links
  *          node scripts/qa.mjs --check livelayout      # charts beside the graph (or under it), series folded
  *          node scripts/qa.mjs --check controlstate    # the action buttons fit the scenario's state (read only)
+ *          node scripts/qa.mjs --check switches        # every generator's card has its switch, 3-letter nodes (read only)
  *          node scripts/qa.mjs --check roles           # the roles of a store: what each grants, its sheet
  *          node scripts/qa.mjs --check roleswrite      # a role created, edited and deleted (leaves none)
  *          QA_PERM_OFF='<cmd>' QA_PERM_ON='<cmd>' \
@@ -767,6 +768,73 @@ async function check_focus(page, args, step, out_dir)
 }
 
 /*
+ *  --check switches: every generator of renfe-20k-hidraulia has an on/off
+ *  switch on its card (role=switch, a name, a title, aria-checked), drawn
+ *  inside its card; the cards name their node by its 3 letters (hid, wat,
+ *  art) with the full name in the title. Read only: the scenario is not
+ *  run, so with it stopped every switch is off and disabled, its title
+ *  saying why.
+ */
+async function check_switches(page, args, step, out_dir)
+{
+    await page.evaluate((id) => {
+        window.location.hash = `#/scenarios/live/${id}`;
+    }, HELD_SCENARIO);
+    try {
+        await page.locator(".MONITOR_NODE_SWITCH").first().waitFor({timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        step("check switches", false, "no switch on the page");
+        return false;
+    }
+    await page.waitForTimeout(5000);
+    const r = await page.evaluate(() => {
+        const out = {switches: [], wheres: []};
+        for(const $c of document.querySelectorAll(".MONITOR_NODE")) {
+            const id = ($c.querySelector(".MONITOR_NODE_ID") || {}).textContent || "";
+            const $w = $c.querySelector(".MONITOR_NODE_WHERE_NAME");
+            out.wheres.push({id: id, text: $w ? $w.textContent : "", title: $w ? $w.getAttribute("title") : ""});
+            const $s = $c.querySelector(".MONITOR_NODE_SWITCH");
+            if(!$s) {
+                continue;
+            }
+            const sb = $s.getBoundingClientRect();
+            const cb = $c.getBoundingClientRect();
+            out.switches.push({
+                id: id,
+                role: $s.getAttribute("role"),
+                label: $s.getAttribute("aria-label"),
+                title: $s.getAttribute("title"),
+                checked: $s.getAttribute("aria-checked"),
+                disabled: $s.disabled,
+                inside: sb.left >= cb.left && sb.right <= cb.right && sb.top >= cb.top && sb.bottom <= cb.bottom
+            });
+        }
+        return out;
+    });
+    await page.screenshot({path: join(out_dir, "check_switches.png"), fullPage: true});
+    let bad = [];
+    if(r.switches.length !== 14) {
+        bad.push(`${r.switches.length} switches, 14 expected`);
+    }
+    for(const s of r.switches) {
+        if(s.role !== "switch" || !s.label || !s.title || (s.checked !== "true" && s.checked !== "false") || !s.inside) {
+            bad.push(`${s.id}: ${JSON.stringify(s)}`);
+        }
+    }
+    for(const w of r.wheres) {
+        if(!/^(hid|wat|art)$/.test(w.text) || !w.title) {
+            bad.push(`node of ${w.id}: '${w.text}' (${w.title})`);
+        }
+    }
+    const first = r.switches[0] || {};
+    step("check switches: a switch on every generator, nodes in 3 letters", bad.length === 0,
+        bad.length ? bad.join("; ") :
+        `${r.switches.length} switches; ${first.id}: checked=${first.checked} disabled=${first.disabled} ` +
+        `title='${first.title}' label='${first.label}'; nodes ${[...new Set(r.wheres.map((w) => w.text))].join(",")}`);
+    return bad.length === 0;
+}
+
+/*
  *  --check livelayout: the charts of the live view are BESIDE the graph
  *  when the graph's own width plus 24rem fits in the view, and UNDER it
  *  when it does not; the series of every chart (uPlot's legend) are
@@ -936,6 +1004,7 @@ const CHECKS = {
     controlhelp: check_controlhelp,
     queues: check_queues,
     focus: check_focus,
+    switches: check_switches,
     livelayout: check_livelayout,
     controlstate: check_controlstate,
     roles: check_roles,
