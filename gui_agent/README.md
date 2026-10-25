@@ -220,7 +220,35 @@ yuno's role), and is the service a step goes to when it names none.
 yuno's output queue when it is not `service`: a gate's queue towards its
 store is in `__output_side__`, answered per output gate and summed
 (`queue_in_stats()`). A queue that is not empty is painted in the warning
-colour. `links`
+colour.
+
+A yuno may carry a **switch** (1.1.3, SDK 7.28.6): its graph card gets an
+on/off switch, so one generator is turned on or off by hand while the others
+keep going -- to climb the load one fleet at a time. Its `on` and `off` are
+steps as those of an action; a step that names no `yuno` goes to the switch's
+own:
+
+```json
+{"key": "pp12", "id": "pp12", "service": "sim_controllers", "rate": "tx", "node": "artgins",
+ "switch": {
+     "on":  [{"command": "set-controllers controllers=125"}, {"command": "resume-generation"}],
+     "off": [{"command": "pause-generation"}, {"command": "set-controllers controllers=0"}]
+ }}
+```
+
+The switch shows ON while the yuno's throughput (`rate`) is not zero -- what
+the yuno does, not what was last clicked. A click runs the other one at once,
+with no confirmation, through the control center (`run-scenario action=on|off
+scenario_yuno=pp12`); its title says what a click does, or why it cannot be
+used now. `on` is offered only while the scenario RUNS, so the `max_run` stop
+is always there to stop it; `off` in any state. A switch run changes neither
+the state of the scenario nor its max_run, and is listed in its Runs; the
+scenario's `stop` is what turns every switch off, so it must name them too.
+`view.node_labels` gives a node a short name on the cards, with its full name
+in the title: `"view": {"mode": "graph", "node_labels": {"hidrauliaconnect":
+"hid", "wattyzer": "wat", "artgins": "art"}}` (16 characters at most).
+
+`links`
 gives the columns of the graph; each group of yunos that exchange messages is
 laid out as its own horizontal band. The validator (`monitor_helpers.js`)
 applies the rules of the control center's `save-scenario`, and names what is

@@ -8,6 +8,18 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.1.3 (2026-10-25)
+
+- **A switch on the card of a yuno that carries one** (`switch: {on: [steps],
+  off: [steps]}`, run by the control center as `run-scenario action=on|off
+  scenario_yuno=<key>`, SDK 7.28.6). It shows ON while the yuno moves
+  messages, and a click runs the other one at once, with no confirmation:
+  one generator turned on or off by hand while the others go on. `on` only
+  while the scenario runs; a switch run changes neither the state of the
+  scenario nor its `max_run`, and `run_state_of_runs()` skips it.
+- **`view.node_labels`**: the short name of a node on the cards (`"hid"` for
+  `hidrauliaconnect`), the full name in its title.
+
 ## gui_agent 1.1.2, gui_treedb 1.0.2 (2026-10-25)
 
 - **`licenses.txt` beside the bundle** of both yunos, written at build time by gobj-ui

@@ -49,6 +49,16 @@
  *      the chart: "rx" (default) or "tx" (a generator). `service` is the
  *      one whose counters are read (default: the yuno's role).
  *
+ *      A yuno may carry a SWITCH, `"switch": {"on": [steps], "off":
+ *      [steps]}`, steps as those of an action whose `yuno` defaults to the
+ *      switch's own: its card gets an on/off switch, run by the control
+ *      center (`run-scenario action=on|off scenario_yuno=<key>`, SDK
+ *      7.28.6) -- one generator turned on or off by hand while the others
+ *      keep going. On only while the scenario runs; a switch run changes
+ *      neither its state nor its max_run. `view.node_labels` names the
+ *      nodes on the cards (`{"hidrauliaconnect": "hid"}`), the full name
+ *      in the title.
+ *
  *      ACTIONS are `start`, `pause`, `resume`, `stop` and `report`, each a
  *      list of steps: a yuno (its key), an optional service (default: the
  *      yuno's `service`), and one command with its `key=value`
@@ -106,6 +116,12 @@ const MAX_RUN_LIMIT = 7 * 24 * 3600;
 
 /*  The actions a scenario can declare, in the order they are shown.  */
 const SCENARIO_ACTIONS = ["start", "pause", "resume", "stop", "report"];
+
+/*  The two of a yuno's switch.  */
+const SWITCH_ACTIONS = ["on", "off"];
+
+/*  A node's name on a card (`view.node_labels`): short.  */
+const NODE_LABEL_MAX = 16;
 
 const VIEW_MODES = ["graph", "cards"];
 
@@ -280,33 +296,39 @@ function validate_scenario(raw)
             if(!Array.isArray(steps) || steps.length === 0) {
                 return fail("scenario bad action", a);
             }
-            let out = [];
-            for(let st of steps) {
-                if(!st || typeof st !== "object" || !seen[st.yuno]) {
-                    return fail("scenario bad step", `${a}: ${JSON.stringify(st)}`);
-                }
-                if(st.service !== undefined && !(st.service === "" || is_name(st.service))) {
-                    return fail("scenario bad step", `${a}: ${JSON.stringify(st)}`);
-                }
-                let line = typeof st.command === "string" ? st.command.trim().replace(/\s+/g, " ") : "";
-                if(!TEST_COMMAND_RE.test(line)) {
-                    return fail("scenario bad test command", `${a}: ${JSON.stringify(st.command)}`);
-                }
-                let refused = refused_step_param(line);
-                if(refused) {
-                    return fail(refused.key, `${a}: ${refused.param}`);
-                }
-                let step = {yuno: st.yuno, command: line};
-                if(st.service) {
-                    step.service = st.service.trim();
-                }
-                out.push(step);
+            let r = validate_steps(steps, a, seen, "");
+            if(!r.ok) {
+                return r;
             }
-            actions[a] = out;
+            actions[a] = r.steps;
         }
     }
 
+    /*  The switch of a yuno: its on and off, both, never empty. Its
+     *  steps name the yuno itself when they name none.  */
+    for(let i = 0; i < raw.yunos.length; i++) {
+        let sw = raw.yunos[i] ? raw.yunos[i].switch : undefined;
+        if(sw === undefined) {
+            continue;
+        }
+        let key = yunos[i].key;
+        if(!sw || typeof sw !== "object" || Array.isArray(sw) || Object.keys(sw).length !== 2 ||
+                !Array.isArray(sw.on) || !sw.on.length || !Array.isArray(sw.off) || !sw.off.length) {
+            return fail("scenario bad switch", key);
+        }
+        let out = {};
+        for(let a of SWITCH_ACTIONS) {
+            let r = validate_steps(sw[a], `${key}.switch.${a}`, seen, key);
+            if(!r.ok) {
+                return r;
+            }
+            out[a] = r.steps;
+        }
+        yunos[i].switch = out;
+    }
+
     let mode = "graph";
+    let node_labels = {};
     if(raw.view !== undefined) {
         if(!raw.view || typeof raw.view !== "object" || Array.isArray(raw.view)) {
             return fail("scenario bad view", JSON.stringify(raw.view));
@@ -316,6 +338,19 @@ function validate_scenario(raw)
                 return fail("scenario bad view", String(raw.view.mode));
             }
             mode = raw.view.mode;
+        }
+        if(raw.view.node_labels !== undefined) {
+            let nl = raw.view.node_labels;
+            if(!nl || typeof nl !== "object" || Array.isArray(nl)) {
+                return fail("scenario bad node labels", JSON.stringify(nl));
+            }
+            for(let node of Object.keys(nl)) {
+                let label = nl[node];
+                if(typeof label !== "string" || !label.trim() || label.trim().length > NODE_LABEL_MAX) {
+                    return fail("scenario bad node labels", `${node}: ${JSON.stringify(label)}`);
+                }
+                node_labels[node] = label.trim();
+            }
         }
     }
 
@@ -339,6 +374,9 @@ function validate_scenario(raw)
         view: {mode: mode},
         max_run: max_run
     };
+    if(Object.keys(node_labels).length) {
+        scenario.view.node_labels = node_labels;
+    }
     if(place === "direct") {
         scenario.agent_url = url;
     } else if(default_node) {
@@ -354,6 +392,40 @@ function validate_scenario(raw)
         scenario.revision = revision;
     }
     return {ok: true, scenario: scenario};
+}
+
+/***************************************************************
+ *  The steps of an action or of a switch: {ok, steps} or a fail.
+ *  `where` names the list in the error; `own_key` is the yuno a step
+ *  of a switch goes to when it names none ("" for an action).
+ ***************************************************************/
+function validate_steps(steps, where, seen, own_key)
+{
+    let out = [];
+    for(let st of steps) {
+        let yuno = (st && typeof st === "object" && st.yuno === undefined && own_key) ? own_key
+                 : (st && typeof st === "object" ? st.yuno : undefined);
+        if(!st || typeof st !== "object" || !seen[yuno]) {
+            return fail("scenario bad step", `${where}: ${JSON.stringify(st)}`);
+        }
+        if(st.service !== undefined && !(st.service === "" || is_name(st.service))) {
+            return fail("scenario bad step", `${where}: ${JSON.stringify(st)}`);
+        }
+        let line = typeof st.command === "string" ? st.command.trim().replace(/\s+/g, " ") : "";
+        if(!TEST_COMMAND_RE.test(line)) {
+            return fail("scenario bad test command", `${where}: ${JSON.stringify(st.command)}`);
+        }
+        let refused = refused_step_param(line);
+        if(refused) {
+            return fail(refused.key, `${where}: ${refused.param}`);
+        }
+        let step = {yuno: yuno, command: line};
+        if(st.service) {
+            step.service = st.service.trim();
+        }
+        out.push(step);
+    }
+    return {ok: true, steps: out};
 }
 
 function validate_yuno(y, place, default_node, seen)
@@ -484,12 +556,18 @@ function scenario_document(scenario)
             if(y.node && y.node !== scenario.node) {
                 out.node = y.node;
             }
+            if(y.switch) {
+                out.switch = JSON.parse(JSON.stringify(y.switch));
+            }
             return out;
         }),
         links: scenario.links.map((l) => [l[0], l[1]]),
         actions: JSON.parse(JSON.stringify(scenario.actions || {})),
         view: {mode: (scenario.view && scenario.view.mode) || "graph"}
     };
+    if(scenario.view && scenario.view.node_labels) {
+        doc.view.node_labels = Object.assign({}, scenario.view.node_labels);
+    }
     if(scenario.max_run > 0) {
         doc.max_run = scenario.max_run;
     }
@@ -541,6 +619,7 @@ function run_state_of_action(action)
  *  not, else the state that refuses it ("running", "paused" or
  *  "stopped"): start only a stopped scenario, pause only a running
  *  one, resume only a paused one, stop one that runs or is paused.
+ *  A switch turns on only in a running one, and off in any.
  *  Restart (stop, the counters to zero, start) and report fit every
  *  state, and a state not known (null) refuses nothing: the control
  *  center refuses what does not fit, and says why.
@@ -562,6 +641,9 @@ function control_refused_by(control, run_state)
     if(control === "stop") {
         return run_state === "stopped" ? run_state : null;
     }
+    if(control === "on") {
+        return run_state === "running" ? null : run_state;
+    }
     return null;
 }
 
@@ -574,7 +656,8 @@ function some_step_done(steps)
 }
 
 /*  The same, from the runs the control center keeps, newest first:
- *  the last one that was not a report decides. One that failed with no
+ *  the last one that was not a report nor a switch (on/off of one
+ *  yuno) decides. One that failed with no
  *  step done changed nothing (the one before it decides); one that
  *  failed half way left it not known. No such run is a scenario never
  *  started: stopped.  */
@@ -582,7 +665,7 @@ function run_state_of_runs(runs)
 {
     let list = Array.isArray(runs) ? runs : [];
     for(let r of list) {
-        if(!r || typeof r !== "object" || r.action === "report") {
+        if(!r || typeof r !== "object" || r.action === "report" || SWITCH_ACTIONS.indexOf(r.action) >= 0) {
             continue;
         }
         if(typeof r.result === "number" && r.result < 0) {
@@ -608,6 +691,31 @@ function charts_follow(scenario, run_state)
         return true;
     }
     return run_state !== "stopped" && run_state !== "paused";
+}
+
+/***************************************************************
+ *  The steps of the switch of yuno `key` (`on` or `off`), resolved as
+ *  action_steps() resolves an action's: [{key, node, line}].
+ ***************************************************************/
+function switch_steps(scenario, key, action)
+{
+    let own = scenario && scenario.yunos.find((x) => x.key === key);
+    let steps = (own && own.switch && own.switch[action]) || [];
+    return action_steps({yunos: scenario ? scenario.yunos : [], actions: {[action]: steps}}, action);
+}
+
+/*  Is the switch of a yuno on? Its throughput (`rate`) is not zero.  */
+function switch_is_on(y, m)
+{
+    let v = m ? (y.rate === "tx" ? m.tx : m.rx) : null;
+    return typeof v === "number" && v > 0;
+}
+
+/*  A node's name on a card: its `view.node_labels`, or the name.  */
+function node_label(scenario, node)
+{
+    let nl = scenario && scenario.view && scenario.view.node_labels;
+    return (nl && nl[node]) || node || "";
 }
 
 /***************************************************************
@@ -1184,6 +1292,10 @@ function fmt_rate(v)
 }
 
 export {
+    SWITCH_ACTIONS,
+    switch_steps,
+    switch_is_on,
+    node_label,
     SCENARIO_TEMPLATE,
     SCENARIO_ACTIONS,
     scenario_controls,

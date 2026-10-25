@@ -28,7 +28,7 @@ import {install_dom_double} from "../test/dom_double.js";
 
 install_dom_double();
 
-const {SCENARIO_ACTIONS, scenario_controls, yuno_run_state, run_state_of_action, charts_follow,
+const {SCENARIO_ACTIONS, SWITCH_ACTIONS, scenario_controls, yuno_run_state, run_state_of_action, charts_follow,
     control_refused_by} =
     await import("./monitor_helpers.js");
 const {MONITOR_SOURCES} = await import("./c_agent_config.js");
@@ -39,7 +39,9 @@ const {
     C_AGENT_MONITOR_SOURCE_I18N_KEYS,
     C_AGENT_MONITOR_HELD_I18N_KEYS,
     C_AGENT_MONITOR_REFUSED_I18N_KEYS,
-    C_AGENT_MONITOR_HELP_I18N_KEYS
+    C_AGENT_MONITOR_HELP_I18N_KEYS,
+    C_AGENT_MONITOR_SWITCH_I18N_KEYS,
+    C_AGENT_MONITOR_SWITCH_HELP_I18N_KEYS
 } = await import("./c_agent_monitor.js");
 
 /*  The published reader (validate-locales.mjs is no export of the package:
@@ -155,6 +157,13 @@ describe("REV-CLOUD V23.5.3: the keys the monitor builds from data", () => {
     test("the controls are read from the code that offers them", () => {
         expect(every_control().length).toBeGreaterThan(SCENARIO_ACTIONS.length - 1);
         expect(every_control()).toContain("restart");
+    });
+
+    test("C_AGENT_MONITOR_SWITCH_I18N_KEYS / _SWITCH_HELP_ hold one key per switch action", () => {
+        expect([...C_AGENT_MONITOR_SWITCH_I18N_KEYS].sort())
+            .toEqual(SWITCH_ACTIONS.map((a) => `monitor ${a}`).sort());
+        expect([...C_AGENT_MONITOR_SWITCH_HELP_I18N_KEYS].sort())
+            .toEqual(SWITCH_ACTIONS.map((a) => `monitor switch ${a} help`).sort());
     });
 
     test("C_AGENT_MONITOR_I18N_KEYS holds `monitor ${control}` for every control, and nothing else", () => {

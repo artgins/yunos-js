@@ -37,6 +37,9 @@ import {
     cpu_level,
     yuno_run_state,
     fmt_rate,
+    switch_steps,
+    switch_is_on,
+    node_label,
 } from "./monitor_helpers.js";
 
 
@@ -647,5 +650,72 @@ describe("queue_service", () => {
         expect(queue_in_stats({"output-qiogate-0": {msgs_in_queue: 0}})).toBe(0);
         expect(queue_in_stats({txMsgs: 5, child: {rxMsgs: 1}})).toBe(null);
         expect(queue_in_stats(null)).toBe(null);
+    });
+});
+
+describe("switch", () => {
+    const base = () => ({
+        id: "sw",
+        node: "hidrauliaconnect",
+        yunos: [
+            {key: "pp12", id: "pp12", service: "sim_controllers", rate: "tx", node: "artgins",
+             switch: {
+                 on: [{command: "set-controllers controllers=125"}, {command: "resume-generation"}],
+                 off: [{command: "pause-generation"}, {command: "set-controllers controllers=0"}]
+             }},
+            {key: "g", id: "2120"}
+        ],
+        links: [["pp12", "g"]],
+        actions: {start: [{yuno: "g", command: "play-yuno"}], stop: [{yuno: "g", command: "pause-yuno"}]},
+        view: {mode: "graph", node_labels: {artgins: "art", hidrauliaconnect: "hid"}}
+    });
+
+    it("a switch's steps go to its own yuno when they name none", () => {
+        let r = validate_scenario(base());
+        expect(r.ok).toBe(true);
+        expect(r.scenario.yunos[0].switch.on[0]).toEqual({yuno: "pp12", command: "set-controllers controllers=125"});
+        expect(switch_steps(r.scenario, "pp12", "off").map((s) => s.line)).toEqual([
+            "command-yuno id=pp12 service=sim_controllers command=pause-generation",
+            "command-yuno id=pp12 service=sim_controllers command=set-controllers controllers=0"
+        ]);
+        expect(switch_steps(r.scenario, "g", "on")).toEqual([]);
+    });
+
+    it("a switch without its off, or with a step of no yuno, is refused", () => {
+        let raw = base();
+        delete raw.yunos[0].switch.off;
+        expect(validate_scenario(raw).error.key).toBe("scenario bad switch");
+        raw = base();
+        raw.yunos[0].switch.on[0].yuno = "nobody";
+        expect(validate_scenario(raw).error.key).toBe("scenario bad step");
+    });
+
+    it("node labels name the nodes, and survive the document", () => {
+        let r = validate_scenario(base());
+        expect(node_label(r.scenario, "artgins")).toBe("art");
+        expect(node_label(r.scenario, "wattyzer")).toBe("wattyzer");
+        let doc = scenario_document(r.scenario);
+        expect(doc.view.node_labels).toEqual({artgins: "art", hidrauliaconnect: "hid"});
+        expect(doc.yunos[0].switch.off.length).toBe(2);
+        expect(validate_scenario(doc).ok).toBe(true);
+        let raw = base();
+        raw.view.node_labels = {artgins: "a-name-far-too-long"};
+        expect(validate_scenario(raw).error.key).toBe("scenario bad node labels");
+    });
+
+    it("on only while running, off always; a switch run changes no state", () => {
+        expect(control_refused_by("on", "running")).toBe(null);
+        expect(control_refused_by("on", "paused")).toBe("paused");
+        expect(control_refused_by("on", "stopped")).toBe("stopped");
+        expect(control_refused_by("off", "stopped")).toBe(null);
+        expect(run_state_of_runs([{action: "off", result: 0}, {action: "on", result: 0},
+            {action: "start", result: 0}])).toBe("running");
+    });
+
+    it("a switch is on while its yuno moves messages", () => {
+        let y = {rate: "tx"};
+        expect(switch_is_on(y, {tx: 2500})).toBe(true);
+        expect(switch_is_on(y, {tx: 0})).toBe(false);
+        expect(switch_is_on(y, null)).toBe(false);
     });
 });

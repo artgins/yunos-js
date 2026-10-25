@@ -633,6 +633,70 @@
     margin-left: auto;
 }
 
+/*  The on/off switch of a graph node (a yuno with a `switch`): on the
+ *  line of its node's name. ON is the success colour; a switch that
+ *  cannot be used now keeps its ink (no opacity) and says why in its
+ *  title.  */
+.MONITOR_NODE_SWITCH {
+    flex: 0 0 auto;
+    position: relative;
+    width: 2.1rem;
+    height: 1.15rem;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid var(--bulma-border);
+    border-radius: 999px;
+    background: var(--bulma-scheme-main-ter);
+    cursor: pointer;
+    transition: none;
+}
+
+.MONITOR_NODE_SWITCH_THUMB {
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: calc(1.15rem - 4px);
+    height: calc(1.15rem - 4px);
+    border-radius: 50%;
+    background: var(--bulma-text-weak);
+}
+
+.MONITOR_NODE_SWITCH--on {
+    background: var(--bulma-success);
+    border-color: var(--bulma-success);
+}
+
+.MONITOR_NODE_SWITCH--on .MONITOR_NODE_SWITCH_THUMB {
+    left: auto;
+    right: 1px;
+    background: var(--bulma-success-invert);
+}
+
+.MONITOR_NODE_SWITCH:disabled {
+    cursor: not-allowed;
+    border-style: dashed;
+}
+
+.MONITOR_NODE_SWITCH--busy {
+    outline: 2px dashed var(--bulma-warning);
+    outline-offset: 1px;
+}
+
+.MONITOR_NODE_PAUSED.tag + .MONITOR_NODE_SWITCH {
+    margin-left: 0;
+}
+
+@media (pointer: coarse) {
+    .MONITOR_NODE_SWITCH {
+        width: 2.75rem;
+        height: 1.5rem;
+    }
+    .MONITOR_NODE_SWITCH_THUMB {
+        width: calc(1.5rem - 4px);
+        height: calc(1.5rem - 4px);
+    }
+}
+
 .MONITOR_URL_VIA:not(:empty) {
     margin-right: 0.35em;
 }

@@ -171,6 +171,18 @@
  *      A control run from here that is not answered in time, or whose
  *      link drops, is said so instead of staying "running".
  *
+ *      SWITCHES. A yuno that carries a `switch` (monitor_helpers.js) has
+ *      an on/off switch on its graph card (`role="switch"`), shown ON
+ *      while its throughput (`rate`) is not zero -- what the yuno does,
+ *      not what was last asked. A click turns it the other way at once,
+ *      with no confirmation (EV_SWITCH_YUNO): a control like the others
+ *      (one at a time, on the control center as `run-scenario action=on|off
+ *      scenario_yuno=<key>`, or its steps sent from here for a scenario
+ *      run from here), that changes neither the state of the scenario nor
+ *      its max_run. On is offered only while the scenario runs; off always.
+ *      The node a card names is its `view.node_labels` name, if any, with
+ *      the full name in its title.
+ *
  *      CHARTS HELD. A scenario that can start or stop has a state, what
  *      its actions left: running (start, resume, restart), paused or
  *      stopped. The control center's runs say it (`scenario-runs`, the
@@ -287,6 +299,9 @@ import {
     some_step_done,
     charts_follow,
     action_steps,
+    switch_steps,
+    switch_is_on,
+    node_label,
     scenario_document,
     cc_lacks_command,
     lines,
@@ -321,6 +336,8 @@ const CARD_W = 208;
  *  stores).  */
 const CARD_H = 196;
 const CARD_ROW_H = 24;
+/*  The line of a card that names its node is taller with a switch  */
+const SWITCH_ROW_EXTRA = 10;
 const CHART_H = 220;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -365,6 +382,13 @@ export const C_AGENT_MONITOR_HELP_I18N_KEYS = [
     "monitor start help", "monitor pause help", "monitor resume help",
     "monitor stop help", "monitor report help", "monitor restart help"
 ];
+
+/*  The name of a switch control in the status line, `monitor ${control}`:
+ *  one per SWITCH_ACTIONS of monitor_helpers.js, the same rule.  */
+export const C_AGENT_MONITOR_SWITCH_I18N_KEYS = ["monitor on", "monitor off"];
+
+/*  And what a click on a switch does, `monitor switch ${control} help`.  */
+export const C_AGENT_MONITOR_SWITCH_HELP_I18N_KEYS = ["monitor switch on help", "monitor switch off help"];
 
 /*  And the question each control asks before it runs, `monitor confirm
  *  ${control}`: the same controls, the same rule.  */
@@ -1116,16 +1140,26 @@ function build_graph(gobj)
     for(let id of ids) {
         let missing = (emitters.indexOf(id) >= 0 ? 1 : 0) + (priv.has_queue[id] ? 0 : 1);
         heights[id] = CARD_H - missing * CARD_ROW_H;
+        if(priv.scenario.yunos.find((y) => y.key === id && y.switch)) {
+            heights[id] += SWITCH_ROW_EXTRA;
+        }
     }
     let g = layout_graph(ids, priv.scenario.links, {card_w: CARD_W, card_h: CARD_H, heights: heights});
 
     let $canvas = createElement2(["div", {class: "MONITOR_GRAPH_CANVAS",
         style: `width:${g.width}px; height:${g.height}px;`}, [], {
             click: (ev) => {
+                /*  A switch is its own control, not a focus of its card  */
+                if(ev.target.closest(".MONITOR_NODE_SWITCH")) {
+                    return;
+                }
                 let $node = ev.target.closest(".MONITOR_NODE");
                 gobj_send_event(gobj, "EV_FOCUS_YUNO", {key: $node ? $node.dataset.key : ""}, gobj);
             },
             keydown: (ev) => {
+                if(ev.target.closest(".MONITOR_NODE_SWITCH")) {
+                    return;
+                }
                 let $node = ev.target.closest(".MONITOR_NODE");
                 if(ev.key === "Escape") {
                     gobj_send_event(gobj, "EV_FOCUS_YUNO", {key: ""}, gobj);
@@ -1202,11 +1236,21 @@ function build_graph(gobj)
         let $err = createElement2(["div", {class: "MONITOR_NODE_ERROR has-text-danger"}, ""]);
         let $paused = createElement2(["span", {class: "MONITOR_NODE_PAUSED tag is-warning is-light is-hidden",
             i18n: "monitor readings paused"}, t("monitor readings paused")]);
+        let $switch = y.switch ? createElement2(
+            ["button", {class: "MONITOR_NODE_SWITCH", type: "button", role: "switch",
+                        "aria-checked": "false", disabled: "disabled",
+                        title: t("monitor switch"), "data-i18n-title": "monitor switch",
+                        "aria-label": t("monitor switch"), "data-i18n-aria-label": "monitor switch"}, [
+                ["span", {class: "MONITOR_NODE_SWITCH_THUMB"}, ""]
+            ], {click: () => gobj_send_event(gobj, "EV_SWITCH_YUNO", {key: y.key}, gobj)}]
+        ) : null;
         let $where = createElement2(
-            ["div", {class: "MONITOR_NODE_WHERE" + (y.node ? "" : " is-hidden")}, [
-                ["span", {class: "MONITOR_NODE_WHERE_NAME is-family-monospace"}, y.node || ""],
-                $paused
-            ]]
+            ["div", {class: "MONITOR_NODE_WHERE" + (y.node || $switch ? "" : " is-hidden")}, [
+                ["span", {class: "MONITOR_NODE_WHERE_NAME is-family-monospace", title: y.node || ""},
+                    node_label(priv.scenario, y.node)],
+                $paused,
+                $switch
+            ].filter(Boolean)]
         );
         /*  Nothing reaches a yuno that only emits: no input row  */
         let emits_only = emitters.indexOf(y.key) >= 0;
@@ -1250,7 +1294,7 @@ function build_graph(gobj)
         );
         $canvas.appendChild($card);
         priv.cards[y.key] = {$card, $dot, $cpu, $bar, $rx, $tx, $q, $qrow, $err, $where, $paused,
-                             $mem, $disk, $disk_free, $disk_row};
+                             $mem, $disk, $disk_free, $disk_row, $switch};
     }
     priv.$graph.appendChild($canvas);
     priv.$canvas = $canvas;
@@ -1437,7 +1481,8 @@ function paint_card(gobj, id)
     let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === id) : null;
     let live = !y || is_live(gobj, y);
     show(c.$paused, !live);
-    show(c.$where, !!(y && y.node) || !live);
+    show(c.$where, !!(y && (y.node || y.switch)) || !live);
+    paint_switch(gobj, id);
 
     c.$cpu.textContent = typeof m.cpu === "number" ? `${m.cpu} %` : "–";
     c.$bar.style.width = `${typeof m.cpu === "number" ? Math.max(0, Math.min(100, m.cpu)) : 0}%`;
@@ -1477,6 +1522,44 @@ function paint_card(gobj, id)
                   : (dst && typeof dst.rx === "number") ? dst.rx : null;
             el.$text.textContent = v === null ? "" : `${fmt_rate(v)}/s`;
         }
+    }
+}
+
+/***************************************************************
+ *  The switch of a card: ON while the yuno moves messages; enabled
+ *  when the control a click would send (off when on, on when off)
+ *  fits now -- its title says what a click does, or why not.
+ ***************************************************************/
+function switch_control(gobj, y)
+{
+    return switch_is_on(y, gobj.priv.model[y.key]) ? "off" : "on";
+}
+
+function paint_switch(gobj, id)
+{
+    let priv = gobj.priv;
+    let c = priv.cards[id];
+    let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === id) : null;
+    if(!c || !c.$switch || !y) {
+        return;
+    }
+    let on = switch_is_on(y, priv.model[id]);
+    let control = on ? "off" : "on";
+    let busy = !!(priv.control && priv.control.running && priv.control.key === id);
+    let why = control_refusal(gobj, control);
+    c.$switch.setAttribute("aria-checked", on ? "true" : "false");
+    c.$switch.classList.toggle("MONITOR_NODE_SWITCH--on", on);
+    c.$switch.classList.toggle("MONITOR_NODE_SWITCH--busy", busy);
+    c.$switch.setAttribute("aria-busy", busy ? "true" : "false");
+    c.$switch.disabled = !!why;
+    if(why) {
+        let why_key = `monitor control refused ${why}`;
+        c.$switch.setAttribute("data-i18n-title", /* i18n: C_AGENT_MONITOR_REFUSED_I18N_KEYS */ why_key);
+        c.$switch.setAttribute("title", t(/* i18n: C_AGENT_MONITOR_REFUSED_I18N_KEYS */ why_key));
+    } else {
+        let help_key = `monitor switch ${control} help`;
+        c.$switch.setAttribute("data-i18n-title", /* i18n: C_AGENT_MONITOR_SWITCH_HELP_I18N_KEYS */ help_key);
+        c.$switch.setAttribute("title", t(/* i18n: C_AGENT_MONITOR_SWITCH_HELP_I18N_KEYS */ help_key));
     }
 }
 
@@ -1693,12 +1776,20 @@ function render_control(gobj)
             $btn.setAttribute("title", t(/* i18n: C_AGENT_MONITOR_HELP_I18N_KEYS */ help_key));
         }
     }
+    for(let id of Object.keys(priv.cards)) {
+        paint_switch(gobj, id);
+    }
     let $name = priv.$control.querySelector(".MONITOR_CONTROL_NAME");
     let $text = priv.$control.querySelector(".MONITOR_CONTROL_TEXT");
     if(c) {
         let key = `monitor ${c.control}`;
-        $name.setAttribute("data-i18n", /* i18n: C_AGENT_MONITOR_I18N_KEYS */ key);
-        $name.textContent = t(/* i18n: C_AGENT_MONITOR_I18N_KEYS */ key);
+        if(c.key) {
+            $name.setAttribute("data-i18n", /* i18n: C_AGENT_MONITOR_SWITCH_I18N_KEYS */ key);
+            $name.textContent = t(/* i18n: C_AGENT_MONITOR_SWITCH_I18N_KEYS */ key);
+        } else {
+            $name.setAttribute("data-i18n", /* i18n: C_AGENT_MONITOR_I18N_KEYS */ key);
+            $name.textContent = t(/* i18n: C_AGENT_MONITOR_I18N_KEYS */ key);
+        }
         if(c.not_sent) {
             $text.setAttribute("data-i18n", "monitor control not sent");
             $text.textContent = t("monitor control not sent");
@@ -2736,18 +2827,20 @@ function control_phase(gobj, phase)
         c.pending = 1;
         /*  The control center runs the steps one by one, each with its
          *  own deadline: give it the time of all of them.  */
-        c.deadline = performance.now() + CONTROL_PHASE_MS *
-            (action_steps(priv.scenario, phase).length + 1);
+        c.deadline = performance.now() + CONTROL_PHASE_MS * (control_steps(gobj, c, phase).length + 1);
         let md = Object.assign(control_md(c), {monitor_scenario: priv.scenario.id});
-        if(cc_request(gobj, "run-scenario", {scenario_id: priv.scenario.id, action: phase},
-                "cc_run", md) < 0) {
+        let kw_run = {scenario_id: priv.scenario.id, action: phase};
+        if(c.key) {
+            kw_run.scenario_yuno = c.key;
+        }
+        if(cc_request(gobj, "run-scenario", kw_run, "cc_run", md) < 0) {
             c.not_sent = true;
             return control_over(gobj, false, "");
         }
         render_status(gobj);
         return 0;
     }
-    let steps = action_steps(priv.scenario, phase);
+    let steps = control_steps(gobj, c, phase);
     c.pending = steps.length;
     for(let st of steps) {
         send_request(gobj, st.line, "control", st.key, st.node, control_md(c));
@@ -2757,6 +2850,13 @@ function control_phase(gobj, phase)
     }
     render_status(gobj);
     return 0;
+}
+
+/*  The steps of a phase: of the scenario's action, or of a switch.  */
+function control_steps(gobj, c, phase)
+{
+    let priv = gobj.priv;
+    return c.key ? switch_steps(priv.scenario, c.key, phase) : action_steps(priv.scenario, phase);
 }
 
 /*  The phase after the one just answered, or the end.  */
@@ -2786,8 +2886,9 @@ function control_over(gobj, ok, text_key)
     if(text_key) {
         c.text_key = text_key;
     }
-    /*  A control that failed with no step done changed nothing.  */
-    if(c.control !== "report" && (c.ok || some_step_done(c.outputs))) {
+    /*  A control that failed with no step done changed nothing; a
+     *  report and a switch change nothing either.  */
+    if(c.control !== "report" && !c.key && (c.ok || some_step_done(c.outputs))) {
         gobj.priv.run_state = c.ok ? run_state_of_action(c.control) : null;
         gobj.priv.run_state_asked = false;
     }
@@ -3886,6 +3987,45 @@ function ac_test_confirmed(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  A click on the switch of a card: the other way round from what
+ *  the yuno does now, at once (no confirmation: it is one yuno, and
+ *  what a click does is in its title).
+ ***************************************************************/
+function ac_switch_yuno(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    let key = (kw && kw.key) || "";
+    let y = priv.scenario ? priv.scenario.yunos.find((x) => x.key === key) : null;
+    if(!y || !y.switch) {
+        log_error(`${gobj_short_name(gobj)}: EV_SWITCH_YUNO of no switch of this scenario: '${key}'`);
+        return -1;
+    }
+    let control = switch_control(gobj, y);
+    /*  Its switch is disabled then: whoever sent it, sent it in the
+     *  wrong situation.  */
+    let why = control_refusal(gobj, control);
+    if(why) {
+        log_warning(`${gobj_short_name(gobj)}: EV_SWITCH_YUNO '${control}' of '${key}' refused: ${why}`);
+        return -1;
+    }
+    priv.control = {
+        control:  control,
+        key:      key,
+        seq:      ++priv.control_seq,
+        phase:    "",
+        pending:  0,
+        deadline: 0,
+        running:  true,
+        ok:       true,
+        text:     "",
+        text_key: "",
+        outputs:  [],
+        by_cc:    run_by_control_center(gobj)
+    };
+    return control_phase(gobj, control);
+}
+
+/***************************************************************
  *  The dialog was answered after the link went down: nothing was
  *  sent, and the operator is told so.
  ***************************************************************/
@@ -4002,6 +4142,7 @@ function create_gclass(gclass_name)
             ["EV_READ_ONCE",            ac_read_once,           null],
             ["EV_TEST_CONTROL",         ac_test_control,        null],
             ["EV_TEST_CONFIRMED",       ac_test_confirmed,      null],
+            ["EV_SWITCH_YUNO",          ac_switch_yuno,         null],
             ["EV_PROPOSE_LINKS",        ac_propose_links,       null],
             ...common
         ]]
@@ -4036,6 +4177,7 @@ function create_gclass(gclass_name)
         ["EV_TOGGLE_SERIES",        0],
         ["EV_TEST_CONTROL",         0],
         ["EV_TEST_CONFIRMED",       0],
+        ["EV_SWITCH_YUNO",          0],
         ["EV_PROPOSE_LINKS",        0],
         ["EV_YUNO_STATS",           0],
         ["EV_SAVE_CONFIRMED",       0],
