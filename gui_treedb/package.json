@@ -2,6 +2,7 @@
   "name": "gui-treedb",
   "private": true,
   "version": "1.0.1",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

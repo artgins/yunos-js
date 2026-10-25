@@ -6,6 +6,13 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## Unreleased
+
+- **`LICENSE` and `CONTRIBUTING.md`** (the repository had none): the MIT
+  License (ArtGins 2024-2026), and `"license": "MIT"` in the `package.json`
+  of both yunos. No yuno changes. `CONTRIBUTING.md` says how to contribute
+  and asks for the CLA of the Yuneta projects.
+
 ## gui_treedb 1.0.1 (2026-10-25)
 
 - `maplibre-gl` `^6.16.0` (no breaking change; gui_treedb takes only its
