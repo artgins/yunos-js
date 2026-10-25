@@ -522,6 +522,27 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(errors()).toEqual([]);
     });
 
+    test("every chart's time axis is the window chosen, ending at the last row, with a single point", () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        agent_config_set_monitor(config, {window: 15});
+        mon.priv.rows = [{tm: 1792932000, "cpu:sim": 3}];
+        for(let k of ["rate_chart", "cpu_chart", "mem_chart", "disk_chart"]) {
+            let x = gobj_read_attr(mon.priv[k], "scales").x;
+            expect(x.time).toBe(true);
+            expect(x.range()).toEqual([1792932000 - 900, 1792932000]);
+        }
+        /*  the y scales are kept: from zero, the disk 0..100  */
+        expect(gobj_read_attr(mon.priv.disk_chart, "scales").y.range).toEqual([0, 100]);
+        let y = gobj_read_attr(mon.priv.cpu_chart, "scales").y.range(null, 0, 50);
+        expect(y[0]).toBe(0);
+        expect(y[1]).toBeCloseTo(55);
+        /*  another window moves it  */
+        gobj_send_event(mon, "EV_SET_WINDOW", {value: 5}, mon);
+        expect(gobj_read_attr(mon.priv.rate_chart, "scales").x.range()).toEqual([1792932000 - 300, 1792932000]);
+        expect(errors()).toEqual([]);
+    });
+
     test("a card is as high as its rows: an emitter has no input, a yuno with no queue no queue row", async () => {
         const mon = new_monitor();
         watch_saved(SAVED);     /*  sim -> gate: sim only emits  */

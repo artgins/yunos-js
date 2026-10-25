@@ -6,6 +6,20 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.1.0 (2026-10-25)
+
+- **The time axis of every chart is the window chosen**, ending at the last
+  row of the history (now while the charts follow, the end of the last run
+  while they are held), with one point or many (`chart_x_window()`, the x
+  scale's `range`). In a fresh session the axis read "abr 2027 ... abr
+  2029" with a lone point at its left edge: given a single time, uPlot
+  makes the span `86400 / ms`, one day in milliseconds, which in a chart of
+  SECONDS is 86,400,000 s, about 2.7 years. It was so since the charts
+  existed (1.0.6 set only the y range); it showed only until a second row
+  came. Seen fixed at 1920 px: 14:13 ... 14:28 with the 15 min window, the
+  point at the right edge.
+- 1.1.0 and not 1.0.10: one digit per segment.
+
 ## gui_agent 1.0.9 (2026-10-25)
 
 - **Memory and disk in the live view.** The simulators of wattyzer filled a

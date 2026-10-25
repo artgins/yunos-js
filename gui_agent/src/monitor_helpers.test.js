@@ -12,6 +12,7 @@ import {
     run_state_of_action,
     run_state_of_runs,
     control_refused_by,
+    chart_x_window,
     resources_of,
     free_level,
     fmt_mem_kb,
@@ -530,6 +531,14 @@ describe("run state and charts", () => {
             {action: "stop", result: 0}])).toBe("stopped");
         expect(run_state_of_runs([])).toBe("stopped");
         expect(run_state_of_runs(null)).toBe("stopped");
+    });
+
+    it("the charts span the window chosen, ending at the last row, with one point or many", () => {
+        expect(chart_x_window([{tm: 1792932000}], 900, 1792932005)).toEqual([1792931100, 1792932000]);
+        expect(chart_x_window([{tm: 1792931000}, {tm: 1792932000}], 300, 1792932005))
+            .toEqual([1792931700, 1792932000]);
+        expect(chart_x_window([], 900, 1792932005)).toEqual([1792931105, 1792932005]);
+        expect(chart_x_window(null, 60, 100)).toEqual([40, 100]);
     });
 
     it("the memory and the disk of a yuno: null when it does not send them, never 0", () => {

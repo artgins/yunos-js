@@ -1070,6 +1070,22 @@ function prune_history(rows, now_s, window_s)
 }
 
 /***************************************************************
+ *  The time span of the charts, in epoch seconds: the window chosen
+ *  (`window_s`), ending at the last row of the history -- now, while
+ *  the charts follow; the end of the last run while they are held --
+ *  or at `now_s` with no row. Always the window, with one point or
+ *  many: left to uPlot, a lone point in a chart of SECONDS spans
+ *  86400/ms = 86,400,000 s (about 2.7 years: "one day" written in
+ *  milliseconds), with the point at the left edge.
+ ***************************************************************/
+function chart_x_window(rows, window_s, now_s)
+{
+    let last = (Array.isArray(rows) && rows.length) ? rows[rows.length - 1].tm : null;
+    let end = (typeof last === "number" && isFinite(last)) ? last : now_s;
+    return [end - window_s, end];
+}
+
+/***************************************************************
  *  The memory and the disk a yuno reports with its cpu (the
  *  `__yuno__` stats, SDK 7.28.4+): the resident memory of the
  *  process, the memory still available on its node, and the FULLEST
@@ -1193,6 +1209,7 @@ export {
     pick_rate,
     prune_history,
     cpu_level,
+    chart_x_window,
     resources_of,
     free_level,
     fmt_mem_kb,

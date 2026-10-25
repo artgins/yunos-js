@@ -298,6 +298,7 @@ import {
     pick_rate,
     prune_history,
     cpu_level,
+    chart_x_window,
     resources_of,
     free_level,
     fmt_mem_kb,
@@ -1022,6 +1023,14 @@ function gobj_start_charts(gobj)
     /*  Both charts start at zero: a rate or a cpu drawn from its own
      *  minimum turns a flat line into a cliff.  */
     let from_zero = {y: {range: (u, min, max) => [0, max > 0 ? max * 1.1 : 1]}};
+    /*  The time axis is always the window chosen, ending at the last
+     *  row (chart_x_window): read when uPlot draws, so a change of the
+     *  window or a new row moves it. Left to uPlot, a lone point -- a
+     *  fresh session -- spanned 2.7 years.  */
+    let x_window = {
+        time:   true,
+        range:  () => chart_x_window(priv.rows, window_seconds(gobj), Date.now() / 1000)
+    };
     let make = (name, $box, prefix, yunos, ui, scales) => {
         priv.series_ui[ui].$count.textContent = String(yunos.length);
         let $host = createElement2(["div", {class: "MONITOR_CHART_HOST"}, []]);
@@ -1030,7 +1039,7 @@ function gobj_start_charts(gobj)
             $container: $host,
             width:      600,
             height:     CHART_H,
-            scales:     scales || from_zero
+            scales:     Object.assign({x: x_window}, scales || from_zero)
         }, gobj);
         for(let y of yunos) {
             gobj_send_event(chart, "EV_ADD_SERIE", {id: prefix + y.key, label: y.label}, gobj);
@@ -1048,6 +1057,13 @@ function gobj_start_charts(gobj)
     show(priv.$queue_chart, queued.length > 0);
     priv.queue_chart = queued.length ? make("queue_chart", priv.$queue_box, "queue:", queued, "queue") : null;
     load_charts(gobj);
+}
+
+/*  The window of history chosen, in seconds  */
+function window_seconds(gobj)
+{
+    let config = gobj_read_attr(gobj, "config_svc");
+    return (config ? agent_config_get_monitor(config).window : 15) * 60;
 }
 
 /*  Only in the graph mode, where the charts are on screen. The rows are
