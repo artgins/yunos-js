@@ -6,6 +6,33 @@ Extracted from `yunetas/yunos/js` into its own repository and consumed back as a
 git **submodule** at `yunos/js` (the same model as `gobj-js` and `gobj-ui`), so
 the JS yunos — the most active-changing layer — evolve on their own line.
 
+## gui_agent 1.0.8 (2026-10-25)
+
+- **The action buttons of the live view fit the scenario's state.** Every
+  button was enabled whatever the scenario was doing, so Start could be
+  clicked on a running scenario and only the control center's answer said
+  no. Now, with the state the control center reports (its runs, read on
+  entering a session and again on every `EV_SCENARIO_RUN_ENDED`, and the
+  control just answered here): **Start** only when stopped, **Pause** only
+  when running, **Resume** only when paused, **Stop** when running or paused,
+  **Restart** and **Report** in any state (`control_refused_by()`). All of
+  them are off out of session, while a control of this view runs, and while
+  the runs are being read. A disabled button's title says why (`monitor
+  control refused offline|busy|reading|running|paused|stopped`, en and es);
+  its aria-label still says what it does. A control that no longer fits when
+  its dialog is confirmed is not sent, and an `EV_TEST_CONTROL` the state
+  refuses is logged. A state not known (a run that failed half way, a
+  scenario run from here before any control) refuses nothing.
+- Not known, so not shown: a run IN FLIGHT of another console (or the stop
+  of a max_run) -- the control center reports a run only when it ends, and
+  it runs one at a time across every scenario -- so a control sent meanwhile
+  is still refused by it ("a run is in flight, one at a time"). A user who
+  may not run a scenario still sees no buttons at all (`run-scenarios`, as
+  before).
+- QA: `--check controlstate` reads the buttons of `renfe-20k-hidraulia` and
+  checks them against its state, clicking none. Seen running: Start and
+  Resume off, "No disponible: el escenario está en marcha".
+
 ## gui_agent 1.0.7 (2026-10-25)
 
 - **The charts of the live view go BESIDE the graph.** The graph of a

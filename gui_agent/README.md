@@ -348,7 +348,14 @@ restart; anything else that fails ends it there. One control at a time: the
 buttons are off while one runs, every request carries the control's number,
 and an answer of another one is dropped. A control run from here that is not
 answered in 30 s per phase, or whose link drops, says so (*no answer in
-time*, *interrupted*) instead of staying "running". Each step is
+time*, *interrupted*) instead of staying "running". The buttons also fit
+the scenario's STATE (1.0.8), the one the control center's runs report:
+Start only a stopped scenario, Pause only a running one, Resume only a paused
+one, Stop one that runs or is paused, Restart and Report in any state; all
+off out of session and while the state is being read. A disabled button's
+title says why. A run in flight of another console is not reported until it
+ends, so a control sent meanwhile is still refused by the control center
+(*a run is in flight, one at a time*). Each step is
 `command-yuno id=<yuno> [service=<service>] command=<command>`; nothing about
 any particular generator is written in the view. Every control is confirmed
 in a dialog that lists the commands it will send (stop and restart in red),

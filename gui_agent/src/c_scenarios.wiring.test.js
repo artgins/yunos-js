@@ -598,6 +598,7 @@ describe("the live view of a scenario the control center keeps", () => {
     test("an action is RUN by the control center, and its answer is the run", () => {
         const mon = new_monitor();
         watch_saved(SAVED);
+        answer(mon, find("scenario-runs").pop(), {data: []});     /*  never run: stopped  */
         sent.length = 0;
         gobj_send_event(mon, "EV_TEST_CONFIRMED", {control: "report"}, mon);
         let runs = find("run-scenario");
@@ -625,6 +626,7 @@ describe("the live view of a scenario the control center keeps", () => {
     test("restart: the stop is run, the counters go to zero, and then the start", () => {
         const mon = new_monitor();
         watch_saved(SAVED);
+        answer(mon, find("scenario-runs").pop(), {data: []});
         sent.length = 0;
         gobj_send_event(mon, "EV_TEST_CONFIRMED", {control: "restart"}, mon);
         let stop = find("run-scenario");
@@ -644,13 +646,56 @@ describe("the live view of a scenario the control center keeps", () => {
         answer(mon, find("run-scenario")[1], {data: [{id: "stress.3", result: 0, steps: []}]});
         expect(mon.priv.control.running).toBe(false);
         expect(mon.priv.control.ok).toBe(true);
-        expect(mon.priv.control_buttons.start.disabled).toBe(false);
+        /*  It runs now: start no longer fits, stop does  */
+        expect(mon.priv.control_buttons.start.disabled).toBe(true);
+        expect(mon.priv.control_buttons.stop.disabled).toBe(false);
+        expect(mon.priv.control_buttons.restart.disabled).toBe(false);
+        expect(errors()).toEqual([]);
+    });
+
+    test("the controls fit the scenario's state, and a disabled one says why", () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        let btn = mon.priv.control_buttons;
+        let why = (c) => btn[c].getAttribute("data-i18n-title");
+        /*  The runs asked, not answered yet: none of them  */
+        expect(["start", "stop", "report", "restart"].map((c) => btn[c].disabled))
+            .toEqual([true, true, true, true]);
+        expect(why("start")).toBe("monitor control refused reading");
+
+        /*  Stopped: start, report and restart; not stop  */
+        answer(mon, find("scenario-runs").pop(), {data: [{action: "stop", result: 0, steps: [{result: 0}]}]});
+        expect(["start", "stop", "report", "restart"].map((c) => btn[c].disabled))
+            .toEqual([false, true, false, false]);
+        expect(why("stop")).toBe("monitor control refused stopped");
+        expect(why("start")).toBe("monitor start help");
+        expect(btn.stop.getAttribute("data-i18n-aria-label")).toBe("monitor stop help");
+
+        /*  Started from another console: its run ended, the state is read again  */
+        gobj_publish_event(link, "EV_SCENARIO_RUN_ENDED", {});
+        answer(mon, find("scenario-runs").pop(), {data: [{action: "start", result: 0, steps: [{result: 0}]}]});
+        expect(["start", "stop", "report", "restart"].map((c) => btn[c].disabled))
+            .toEqual([true, false, false, false]);
+        expect(why("start")).toBe("monitor control refused running");
+
+        /*  A start sent anyway is refused, loudly, and asks nothing  */
+        confirm.asked.length = 0;
+        gobj_send_event(mon, "EV_TEST_CONTROL", {control: "start"}, mon);
+        expect(confirm.asked).toEqual([]);
+        expect(logged.some((l) => /EV_TEST_CONTROL 'start' refused: running/.test(l.msg))).toBe(true);
+
+        /*  Out of session: all of them  */
+        gobj_send_event(mon, "EV_DISCONNECT", {}, mon);
+        expect(["start", "stop", "report", "restart"].map((c) => btn[c].disabled))
+            .toEqual([true, true, true, true]);
+        expect(why("report")).toBe("monitor control refused offline");
         expect(errors()).toEqual([]);
     });
 
     test("one control at a time, and an answer of another one is dropped", () => {
         const mon = new_monitor();
         watch_saved(SAVED);
+        answer(mon, find("scenario-runs").pop(), {data: []});
         sent.length = 0;
         gobj_send_event(mon, "EV_TEST_CONFIRMED", {control: "report"}, mon);
         let first = find("run-scenario")[0];

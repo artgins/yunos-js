@@ -28,7 +28,8 @@ import {install_dom_double} from "../test/dom_double.js";
 
 install_dom_double();
 
-const {SCENARIO_ACTIONS, scenario_controls, yuno_run_state, run_state_of_action, charts_follow} =
+const {SCENARIO_ACTIONS, scenario_controls, yuno_run_state, run_state_of_action, charts_follow,
+    control_refused_by} =
     await import("./monitor_helpers.js");
 const {MONITOR_SOURCES} = await import("./c_agent_config.js");
 const {
@@ -37,6 +38,7 @@ const {
     C_AGENT_MONITOR_STATE_I18N_KEYS,
     C_AGENT_MONITOR_SOURCE_I18N_KEYS,
     C_AGENT_MONITOR_HELD_I18N_KEYS,
+    C_AGENT_MONITOR_REFUSED_I18N_KEYS,
     C_AGENT_MONITOR_HELP_I18N_KEYS
 } = await import("./c_agent_monitor.js");
 
@@ -202,5 +204,23 @@ describe("REV-CLOUD V23.5.3: the keys the monitor builds from data", () => {
         }
         expect([...C_AGENT_MONITOR_HELD_I18N_KEYS].sort())
             .toEqual(held.map((s) => `monitor charts held ${s}`).sort());
+    });
+
+    test("C_AGENT_MONITOR_REFUSED_I18N_KEYS holds `monitor control refused ${reason}` for every reason a button is disabled", () => {
+        let all = scenario_controls({actions: Object.fromEntries(
+            SCENARIO_ACTIONS.map((a) => [a, [{yuno: "a", command: "x"}]]))});
+        /*  control_refusal() of the view, before the state's own  */
+        let reasons = ["offline", "busy", "reading"];
+        for(let a of all) {
+            let st = run_state_of_action(a);
+            for(let c of all) {
+                let why = control_refused_by(c, st);
+                if(why && reasons.indexOf(why) < 0) {
+                    reasons.push(why);
+                }
+            }
+        }
+        expect([...C_AGENT_MONITOR_REFUSED_I18N_KEYS].sort())
+            .toEqual(reasons.map((r) => `monitor control refused ${r}`).sort());
     });
 });

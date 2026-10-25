@@ -34,6 +34,7 @@
  *          node scripts/qa.mjs --check queues          # the gates' queues: on their cards and charted
  *          node scripts/qa.mjs --check focus           # a clicked card lights up with its links
  *          node scripts/qa.mjs --check livelayout      # charts beside the graph (or under it), series folded
+ *          node scripts/qa.mjs --check controlstate    # the action buttons fit the scenario's state (read only)
  *          node scripts/qa.mjs --check roles           # the roles of a store: what each grants, its sheet
  *          node scripts/qa.mjs --check roleswrite      # a role created, edited and deleted (leaves none)
  *          QA_PERM_OFF='<cmd>' QA_PERM_ON='<cmd>' \
@@ -854,6 +855,80 @@ async function check_livelayout(page, args, step, out_dir)
     return ok && ok2;
 }
 
+/*
+ *  --check controlstate: the action buttons of the held scenario fit
+ *  its state, as the control center reports it: once the runs are read
+ *  no button says "being read", start and stop are never both enabled
+ *  nor both disabled, a stopped scenario (its held note) has start on and
+ *  stop off, and every disabled button's title says why. READ ONLY: it
+ *  clicks no control (the scenario may be running a real test).
+ */
+async function check_controlstate(page, args, step, out_dir)
+{
+    await page.evaluate((id) => {
+        window.location.hash = `#/scenarios/live/${id}`;
+    }, HELD_SCENARIO);
+    try {
+        await page.locator(".MONITOR_TEST_BUTTONS button").first().waitFor({timeout: DEFAULTS.TIMEOUT});
+        await page.waitForFunction(() => {
+            const b = [...document.querySelectorAll(".MONITOR_TEST_BUTTONS button")];
+            return b.length && b.every((e) => e.getAttribute("data-i18n-title") !== "monitor control refused reading" &&
+                e.getAttribute("data-i18n-title") !== "monitor control refused offline");
+        }, null, {timeout: DEFAULTS.TIMEOUT});
+    } catch(e) {
+        step("check controlstate", false, "no control of the scenario, or its state never read");
+        await page.screenshot({path: join(out_dir, "check_controlstate.png"), fullPage: false});
+        return false;
+    }
+    const got = await page.evaluate(() => {
+        const out = {};
+        for(const $b of document.querySelectorAll(".MONITOR_TEST_BUTTONS button")) {
+            const m = /MONITOR_TEST_([A-Z]+)/.exec($b.className);
+            out[m ? m[1].toLowerCase() : "?"] = {
+                disabled: $b.disabled,
+                title: $b.getAttribute("title"),
+                key: $b.getAttribute("data-i18n-title"),
+                aria: $b.getAttribute("data-i18n-aria-label")
+            };
+        }
+        const $held = document.querySelector(".MONITOR_CHARTS_HELD:not(.is-hidden) .MONITOR_CHARTS_HELD_TEXT");
+        const $stop_at = document.querySelector(".MONITOR_STOP_AT:not(.is-hidden)");
+        return {
+            buttons: out,
+            held: $held ? $held.getAttribute("data-i18n") : "",
+            stop_at: $stop_at ? $stop_at.textContent.trim() : ""
+        };
+    });
+    const b = got.buttons;
+    let ok = true;
+    const bad = [];
+    if(b.start && b.stop && b.start.disabled === b.stop.disabled) {
+        bad.push("start and stop alike");
+    }
+    if(got.held === "monitor charts held stopped" && b.start && (b.start.disabled || !b.stop.disabled)) {
+        bad.push("stopped, but start off or stop on");
+    }
+    for(const [c, v] of Object.entries(b)) {
+        if(v.aria !== `monitor ${c} help`) {
+            bad.push(`${c}: aria-label ${v.aria}`);
+        }
+        if(v.disabled && !/^monitor control refused /.test(v.key || "")) {
+            bad.push(`${c}: disabled with no reason`);
+        }
+        if(!v.disabled && v.key !== `monitor ${c} help`) {
+            bad.push(`${c}: enabled, title ${v.key}`);
+        }
+    }
+    ok = bad.length === 0;
+    const state = got.held ? got.held.replace("monitor charts held ", "") : (got.stop_at ? "running, " + got.stop_at : "running");
+    step(`check controlstate: the buttons fit the state (${state})`, ok,
+        Object.entries(b).map(([c, v]) => `${c}=${v.disabled ? "off (" + v.title + ")" : "on"}`).join("; ") +
+        (bad.length ? ` -- ${bad.join(", ")}` : ""));
+    await page.locator(".MONITOR_TEST").screenshot({path: join(out_dir, "check_controlstate_row.png")});
+    await page.screenshot({path: join(out_dir, "check_controlstate.png"), fullPage: false});
+    return ok;
+}
+
 const CHECKS = {
     schemaback: check_schemaback,
     gobjtree: check_gobjtree,
@@ -862,6 +937,7 @@ const CHECKS = {
     queues: check_queues,
     focus: check_focus,
     livelayout: check_livelayout,
+    controlstate: check_controlstate,
     roles: check_roles,
     roleswrite: check_roleswrite,
     permlive: check_permlive,

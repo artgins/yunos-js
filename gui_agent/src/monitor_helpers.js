@@ -536,6 +536,35 @@ function run_state_of_action(action)
     return null;
 }
 
+/***************************************************************
+ *  Does the scenario's state refuse this control? null when it does
+ *  not, else the state that refuses it ("running", "paused" or
+ *  "stopped"): start only a stopped scenario, pause only a running
+ *  one, resume only a paused one, stop one that runs or is paused.
+ *  Restart (stop, the counters to zero, start) and report fit every
+ *  state, and a state not known (null) refuses nothing: the control
+ *  center refuses what does not fit, and says why.
+ ***************************************************************/
+function control_refused_by(control, run_state)
+{
+    if(!run_state) {
+        return null;
+    }
+    if(control === "start") {
+        return run_state === "stopped" ? null : run_state;
+    }
+    if(control === "pause") {
+        return run_state === "running" ? null : run_state;
+    }
+    if(control === "resume") {
+        return run_state === "paused" ? null : run_state;
+    }
+    if(control === "stop") {
+        return run_state === "stopped" ? run_state : null;
+    }
+    return null;
+}
+
 /*  Did any step of a run (or of a control) do its work? A step that
  *  was not sent has no result.  */
 function some_step_done(steps)
@@ -1094,6 +1123,7 @@ export {
     scenario_controls,
     run_state_of_action,
     run_state_of_runs,
+    control_refused_by,
     some_step_done,
     charts_follow,
     action_steps,

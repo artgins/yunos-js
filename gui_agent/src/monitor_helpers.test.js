@@ -11,6 +11,7 @@ import {
     scenario_controls,
     run_state_of_action,
     run_state_of_runs,
+    control_refused_by,
     some_step_done,
     charts_follow,
     action_steps,
@@ -526,6 +527,20 @@ describe("run state and charts", () => {
             {action: "stop", result: 0}])).toBe("stopped");
         expect(run_state_of_runs([])).toBe("stopped");
         expect(run_state_of_runs(null)).toBe("stopped");
+    });
+
+    it("a control fits the scenario's state, or is refused by it", () => {
+        let fits = (st) => ["start", "pause", "resume", "stop", "report", "restart"]
+            .filter((c) => control_refused_by(c, st) === null);
+        expect(fits("stopped")).toEqual(["start", "report", "restart"]);
+        expect(fits("running")).toEqual(["pause", "stop", "report", "restart"]);
+        expect(fits("paused")).toEqual(["resume", "stop", "report", "restart"]);
+        expect(fits(null)).toEqual(["start", "pause", "resume", "stop", "report", "restart"]);
+        expect(control_refused_by("start", "running")).toBe("running");
+        expect(control_refused_by("start", "paused")).toBe("paused");
+        expect(control_refused_by("pause", "paused")).toBe("paused");
+        expect(control_refused_by("resume", "stopped")).toBe("stopped");
+        expect(control_refused_by("stop", "stopped")).toBe("stopped");
     });
 
     it("the charts follow a scenario that cannot start or stop, or whose state is not known", () => {

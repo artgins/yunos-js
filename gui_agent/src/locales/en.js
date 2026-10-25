@@ -1075,6 +1075,12 @@ const en = {
         "users pick a yuno": "Pick a yuno that keeps users in the Nodes tab.",
         "monitor series": "Series",
         "monitor series help": "Show or hide the series of this chart: which yuno each line is, and its value under the cursor; a click on one hides or shows its line",
+        "monitor control refused offline": "Not available: the view is not connected",
+        "monitor control refused busy": "Not available: an action is running, wait for its answer",
+        "monitor control refused reading": "Not available yet: the state of the scenario is being read",
+        "monitor control refused running": "Not available: the scenario is running",
+        "monitor control refused paused": "Not available: the scenario is paused",
+        "monitor control refused stopped": "Not available: the scenario is stopped",
 
         /* keep this last so adding new keys above never hits the comma trap */
         "discovery unanswered": "The node's agent did not answer: which treedbs this yuno has is not known. It is asked again when the connection comes back, or when the tab is opened again",

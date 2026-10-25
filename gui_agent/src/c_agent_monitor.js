@@ -185,6 +185,23 @@
  *      that many seconds after its start; while it runs the status line
  *      says when (`stop_at` of `scenarios`).
  *
+ *      CONTROLS FIT THE STATE. A control button is enabled only when it
+ *      can do something (control_refused_by() of monitor_helpers.js):
+ *      start a stopped scenario, pause a running one, resume a paused
+ *      one, stop one that runs or is paused; restart and report in any
+ *      state. All of them are off out of session, while a control of
+ *      this view runs, and while the state of the scenario is being read
+ *      (the runs asked, not answered yet). A state not known (a failed
+ *      run, a scenario run from here before any control) refuses
+ *      nothing. A disabled button's title says why
+ *      (`monitor control refused ${reason}`); its aria-label still says
+ *      what it does. The state is the one the control center reports:
+ *      its runs, read again on every EV_SCENARIO_RUN_ENDED. A run in
+ *      flight of ANOTHER console (or the stop of a max_run) is not
+ *      reported until it ends: a control sent meanwhile is refused by
+ *      the control center ("a run is in flight, one at a time"), as
+ *      before.
+ *
  *      GENERATIONS. Every request carries the generation of the scenario
  *      shown (`monitor_gen`, bumped when another one is adopted): a
  *      reading asked for the one before, or pushed by its watch, is
@@ -259,6 +276,7 @@ import {
     scenario_controls,
     run_state_of_action,
     run_state_of_runs,
+    control_refused_by,
     some_step_done,
     charts_follow,
     action_steps,
@@ -358,6 +376,16 @@ export const C_AGENT_MONITOR_STATE_I18N_KEYS = [
  *  the same rule.  */
 export const C_AGENT_MONITOR_HELD_I18N_KEYS = [
     "monitor charts held stopped", "monitor charts held paused"
+];
+
+/*  Why a control button is disabled, `monitor control refused ${reason}`:
+ *  out of session, a control of this view running, the state being read,
+ *  or the state of the scenario that refuses it (control_refused_by() of
+ *  monitor_helpers.js), the same rule.  */
+export const C_AGENT_MONITOR_REFUSED_I18N_KEYS = [
+    "monitor control refused offline", "monitor control refused busy",
+    "monitor control refused reading", "monitor control refused running",
+    "monitor control refused paused", "monitor control refused stopped"
 ];
 
 /*  Where the scenario watched comes from, `scenario source ${source}`: one
@@ -1447,14 +1475,45 @@ function build_test_controls(gobj)
     }
 }
 
+/***************************************************************
+ *  Why a control cannot be used now, or null when it can: out of
+ *  session ("offline"), a control of this view running ("busy"),
+ *  the state being read ("reading"), or the state that refuses it.
+ ***************************************************************/
+function control_refusal(gobj, control)
+{
+    let priv = gobj.priv;
+    if(gobj_current_state(gobj) !== "ST_MONITORING") {
+        return "offline";
+    }
+    if(priv.control && priv.control.running) {
+        return "busy";
+    }
+    if(priv.run_state === null && priv.run_state_asked) {
+        return "reading";
+    }
+    return control_refused_by(control, priv.run_state);
+}
+
 function render_control(gobj)
 {
     let priv = gobj.priv;
-    let monitoring = gobj_current_state(gobj) === "ST_MONITORING";
     let c = priv.control;
-    let busy = !!(c && c.running);
+    /*  A disabled button's title says why; its aria-label says what it
+     *  does, enabled or not.  */
     for(let control of Object.keys(priv.control_buttons)) {
-        priv.control_buttons[control].disabled = !monitoring || busy;
+        let $btn = priv.control_buttons[control];
+        let why = control_refusal(gobj, control);
+        $btn.disabled = !!why;
+        if(why) {
+            let why_key = `monitor control refused ${why}`;
+            $btn.setAttribute("data-i18n-title", /* i18n: C_AGENT_MONITOR_REFUSED_I18N_KEYS */ why_key);
+            $btn.setAttribute("title", t(/* i18n: C_AGENT_MONITOR_REFUSED_I18N_KEYS */ why_key));
+        } else {
+            let help_key = `monitor ${control} help`;
+            $btn.setAttribute("data-i18n-title", /* i18n: C_AGENT_MONITOR_HELP_I18N_KEYS */ help_key);
+            $btn.setAttribute("title", t(/* i18n: C_AGENT_MONITOR_HELP_I18N_KEYS */ help_key));
+        }
     }
     let $name = priv.$control.querySelector(".MONITOR_CONTROL_NAME");
     let $text = priv.$control.querySelector(".MONITOR_CONTROL_TEXT");
@@ -3551,6 +3610,13 @@ function ac_test_control(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: EV_TEST_CONTROL of no control of this test: '${control}'`);
         return -1;
     }
+    /*  Its button is disabled then: whoever sent it, sent it in the
+     *  wrong situation.  */
+    let why = control_refusal(gobj, control);
+    if(why) {
+        log_warning(`${gobj_short_name(gobj)}: EV_TEST_CONTROL '${control}' refused: ${why}`);
+        return -1;
+    }
     let shell = yui_shell_of(gobj);
     if(!shell) {
         log_error(`${gobj_short_name(gobj)}: no shell to confirm the control '${control}'`);
@@ -3598,6 +3664,17 @@ function ac_test_confirmed(gobj, event, kw, src)
     if(priv.control && priv.control.running) {
         log_warning(`${gobj_short_name(gobj)}: control '${control}' confirmed while ` +
             `'${priv.control.control}' runs, not sent`);
+        return 0;
+    }
+    /*  The state may have moved while the dialog was open (a run of
+     *  another console ended): what no longer fits is not sent.  */
+    let why = control_refusal(gobj, control);
+    if(why) {
+        log_warning(`${gobj_short_name(gobj)}: control '${control}' confirmed, no longer fits ` +
+            `(${why}), not sent`);
+        priv.control = {control: control, ok: false, text: "",
+                        text_key: `monitor control refused ${why}`, outputs: []};
+        render_status(gobj);
         return 0;
     }
     priv.control = {
