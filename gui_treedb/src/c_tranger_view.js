@@ -2402,6 +2402,24 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
             ]];
     };
 
+    /*  The defaults of a new card (the last 100 rows) cut a search by
+     *  period down to whatever those rows hold: one click gives the full
+     *  key back.  */
+    let $blank = createElement2(
+        ["button", {class: "button TRANGER_OPT_BLANK", type: "button",
+                    title: t("blank the rows and flags fields"),
+                    "data-i18n-title": "blank the rows and flags fields",
+                    "aria-label": t("blank the rows and flags fields"),
+                    "data-i18n-aria-label": "blank the rows and flags fields"},
+            [
+                ["span", {class: "icon"}, [["i", {class: "yi-broom"}]]],
+                ["span", {i18n: "blank fields"}, t("blank fields")]
+            ]
+        ]);
+    $blank.addEventListener("click", () => {
+        gobj_send_event(gobj, "EV_BLANK_ROWS_FIELDS", {}, gobj);
+    });
+
     let open_key = editing ? "apply" : "open rows";
     let $open = createElement2(
         ["button", {class: "button is-link TRANGER_OPT_OPEN", type: "button",
@@ -2421,7 +2439,7 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
      *  when the thing it reports happened, and they can be hours apart after a
      *  backfill — so each gets its own card and its own navigator, and the
      *  third holds what is not time at all.  */
-    let card = (title, subtitle, logical, body) => createElement2(
+    let card = (title, subtitle, logical, body, $action) => createElement2(
         ["div", {class: `card mb-4 TRANGER_OPT_CARD ${logical}`},
             [
                 /*  Title and subtitle on ONE line (Bulma's .card-header-title is
@@ -2440,7 +2458,11 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
                                       "data-i18n": subtitle},
                                 t(subtitle)]
                         ]
-                    ]]
+                    ],
+                    $action
+                        ? ["div", {class: "is-flex is-align-items-center pr-3 " +
+                                          "TRANGER_OPT_CARD_ACTION"}, [$action]]
+                        : ["span", {}, ""]]
                 ],
                 ["div", {class: "card-content p-3"}, body]
             ]
@@ -2479,13 +2501,13 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
                             [$backward,
                              ["span", {class: "ml-2", "data-i18n": "newest first"},
                                 t("newest first")]]]
-                    ]),
+                    ], $blank),
 
                 ["div", {class: "has-text-centered TRANGER_OPT_ACTIONS"}, [$open]]
             ]
         ]);
 
-    return {$box: $box, inputs: inputs, time: time, $open: $open};
+    return {$box: $box, inputs: inputs, time: time, $open: $open, $blank: $blank};
 }
 
 /***************************************************************
@@ -4261,6 +4283,26 @@ function ac_time_range_typed(gobj, event, kw, src)
 }
 
 /************************************************************
+ *  Blank the fields of "rows and flags": no rowid range and no flag
+ *  masks, so the iterator reads the full key. A new card fills
+ *  `from rowid` with -100, and with a period chosen that leaves only the
+ *  part of it inside the last 100 rows.
+ ************************************************************/
+function ac_blank_rows_fields(gobj, event, kw, src)
+{
+    let form = gobj.priv.rows_options;
+    if(!form) {
+        log_error(`${gobj_short_name(gobj)}: EV_BLANK_ROWS_FIELDS with no Rows options open`);
+        return -1;
+    }
+    let inputs = form.inputs;
+    for(let name of ["from_rowid", "to_rowid", "mask_set", "mask_notset"]) {
+        inputs[name].value = "";
+    }
+    return 0;
+}
+
+/************************************************************
  *  The user picked the other clock: `t` (when the record was stored) or
  *  `tm` (when the thing it reports happened).
  *
@@ -5139,6 +5181,7 @@ function create_gclass(gclass_name)
             ["EV_OPEN_CARD_OPTIONS",    ac_open_card_options,     null],
             ["EV_SET_TIME_AXIS",        ac_set_time_axis,         null],
             ["EV_TIME_RANGE_TYPED",     ac_time_range_typed,      null],
+            ["EV_BLANK_ROWS_FIELDS",    ac_blank_rows_fields,     null],
             ["EV_PERIOD_CHANGED",       ac_period_changed,        null],
             ["EV_APPLY_MATCH_COND",     ac_apply_match_cond,      null],
             ["EV_OPEN_CARD",            ac_open_card,             null],
@@ -5177,6 +5220,7 @@ function create_gclass(gclass_name)
         ["EV_OPEN_CARD_OPTIONS",    0],
         ["EV_SET_TIME_AXIS",        0],
         ["EV_TIME_RANGE_TYPED",     0],
+        ["EV_BLANK_ROWS_FIELDS",    0],
         ["EV_PERIOD_CHANGED",       0],
         ["EV_APPLY_MATCH_COND",     0],
         ["EV_OPEN_CARD",            0],

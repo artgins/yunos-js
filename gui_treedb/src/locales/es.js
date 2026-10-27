@@ -597,6 +597,8 @@ const es = {
         "user-flag mask clear": "Máscara user-flag (a cero)",
         "open rows": "Abrir filas",
         "leave blank for the full key": "Déjalo en blanco para toda la clave",
+        "blank fields": "Vaciar campos",
+        "blank the rows and flags fields": "Vaciar los campos de filas y flags: toda la clave",
         "filters loaded rows": "filtra las filas cargadas",
         "column filters apply to the loaded rows only": "Los filtros de columna se aplican solo a las filas cargadas",
         "1-based; negative = from end": "empieza en 1; negativo = desde el final",

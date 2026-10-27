@@ -8,6 +8,15 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.0.4 (2026-10-27)
+
+- **The Rows dialog blanks its "rows and flags" fields with one click**
+  (`Blank fields`, in the header of that card, `EV_BLANK_ROWS_FIELDS`). A new
+  card fills `from rowid` with -100, and a search by period (a day, a week)
+  then reads only the part of it inside those last 100 rows. The button
+  empties from/to rowid and the two user-flag masks; the key regex and
+  "newest first" stay as they are.
+
 ## gui_agent 1.1.6 (2026-10-25)
 
 - **The rate of a link is written where it LEAVES its card**, beside the

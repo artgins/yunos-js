@@ -592,6 +592,8 @@ const en = {
         "user-flag mask clear": "User-flag mask (clear)",
         "open rows": "Open Rows",
         "leave blank for the full key": "Leave blank for the full key",
+        "blank fields": "Blank fields",
+        "blank the rows and flags fields": "Blank the rows and flags fields: the full key",
         "filters loaded rows": "filters loaded rows",
         "column filters apply to the loaded rows only": "Column filters apply to the loaded rows only",
         "1-based; negative = from end": "1-based; negative = from end",
