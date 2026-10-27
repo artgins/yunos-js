@@ -8,6 +8,15 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.0.5 (2026-10-27)
+
+- **A period chosen in the Rows dialog blanks the -100 of a new card**, while
+  `from rowid` still holds it (`drop_default_rowid()`, on
+  `EV_PERIOD_CHANGED` and `EV_TIME_RANGE_TYPED`). A value the user changed
+  is kept. It is decided once, at the first period: a -100 put back by hand
+  after that stays, and "All" decides nothing. An open card being edited
+  keeps its own value, which nobody can tell from one the user chose.
+
 ## gui_treedb 1.0.4 (2026-10-27)
 
 - **The Rows dialog blanks its "rows and flags" fields with one click**

@@ -241,6 +241,12 @@ const COL_MAX_INITIAL_WIDTH = 320;
  *  has — an incident between 18:03 and 18:07).  */
 const PERIOD_MODES = ["hour", "day", "week", "month", "year"];
 
+/*  The `from rowid` a NEW Rows card proposes: the last 100 records of each
+ *  key, not all of them (an iterator nobody bounded indexes every record of
+ *  every key it names). A period chosen in the dialog blanks it, while it is
+ *  still this value: see drop_default_rowid().  */
+const DEFAULT_FROM_ROWID = -100;
+
 /*  Table height inside a card (its own pager sits below): follows the
  *  viewport, capped — a short screen must not be eaten by one card.  */
 const CARD_TABLE_HEIGHT = "min(60vh, 560px)";
@@ -2321,6 +2327,27 @@ function paint_hint(time)
 }
 
 /***************************************************************
+ *  A period was chosen: the DEFAULT_FROM_ROWID a new card proposes would
+ *  cut it down to the part inside the last 100 rows. Blank it, unless the
+ *  user changed it. Decided ONCE, at the first period: a -100 the user puts
+ *  back after that is theirs. "All" (no bounds) decides nothing.
+ ***************************************************************/
+function drop_default_rowid(form)
+{
+    if(form.default_from_rowid === null) {
+        return;
+    }
+    let time = form.time;
+    if(!read_bound(time.$from, time.ms) && !read_bound(time.$to, time.ms)) {
+        return;
+    }
+    if(form.inputs.from_rowid.value === form.default_from_rowid) {
+        form.inputs.from_rowid.value = "";
+    }
+    form.default_from_rowid = null;
+}
+
+/***************************************************************
  *  Build the Rows-options form: the server-side match conditions
  *  forwarded to `open-iterator` (all optional; blank = the full key).
  *
@@ -2339,10 +2366,9 @@ function paint_hint(time)
 function build_rows_options_form(gobj, match_cond, editing, span, units, whole_topic)
 {
     let mc = match_cond || {};
-    /*  A NEW card asks for the last 100 records of each key, not all of
-     *  them: an iterator opened on a topic nobody bounded indexes every
-     *  record of every key it names. Editing shows what the card has.  */
-    let from_rowid = editing ? mc.from_rowid : -100;
+    /*  A NEW card proposes DEFAULT_FROM_ROWID. Editing shows what the card
+     *  has, which nobody can tell from a value the user chose.  */
+    let from_rowid = editing ? mc.from_rowid : DEFAULT_FROM_ROWID;
 
     /*  `label` names the control (title + aria-label) and `ph` is its
      *  placeholder: both are i18n KEYS, written with their data-i18n-*
@@ -2507,7 +2533,8 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
             ]
         ]);
 
-    return {$box: $box, inputs: inputs, time: time, $open: $open, $blank: $blank};
+    return {$box: $box, inputs: inputs, time: time, $open: $open, $blank: $blank,
+            default_from_rowid: editing ? null : String(DEFAULT_FROM_ROWID)};
 }
 
 /***************************************************************
@@ -4261,6 +4288,7 @@ function ac_period_changed(gobj, event, kw, src)
     }
 
     sync_time_inputs(form.time);
+    drop_default_rowid(form);
     paint_hint(form.time);
     return 0;
 }
@@ -4278,6 +4306,7 @@ function ac_time_range_typed(gobj, event, kw, src)
         log_error(`${gobj_short_name(gobj)}: EV_TIME_RANGE_TYPED with no Rows options open`);
         return -1;
     }
+    drop_default_rowid(form);
     paint_hint(form.time);
     return 0;
 }
