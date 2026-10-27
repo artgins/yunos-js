@@ -90,7 +90,10 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   (`open-iterator` + `get-page`), optionally pre-filtered at open time by
   server-side **match conditions** (time / rowid range, user_flag masks, and
   **newest first** — `open-iterator`'s `backward`, which indexes the key from
-  its end) chosen in an options form — or a **Live** card that streams new
+  its end) chosen in an options form. A new card proposes `from rowid` -100
+  (the last 100 records); choosing a period blanks it while it still holds
+  that default, and **Blank fields** empties the rowid range and the masks
+  (the full key) — or a **Live** card that streams new
   appends (`open-rt` + `EV_TRANGER_RECORD_ADDED`, newest on top, no history).
   The toolbar's **Live topic** button opens a Live card on the WHOLE topic
   (`open-rt` takes an empty key as "every key"); it names the key of each
