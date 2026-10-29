@@ -8,6 +8,40 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.1.7 (2026-10-29)
+
+- **A console paints only the answers to its own commands.** The link
+  re-publishes every answer it gets, and the console took any answer without
+  its markers as the answer to its command: C_APP's `my-permissions` (each
+  session open and each `EV_PERMISSIONS_CHANGED`) and the live view's
+  `watch-scenario` were painted in every open console. An answer now has to
+  echo the console's `console_seq` (or be its help fetch); the special case
+  for an unmarked `list-agents` is gone, covered by the rule (REV-CLOUD
+  V44.2.13; since 0.29.114 / 1.0.0, in yunetas 7.29.1).
+- **The switch of a scenario's yuno is disabled for a user who may not run
+  the scenario**, its title saying so (`monitor control refused denied`): it
+  was enabled, and a click sent a `run-scenario action=on|off` the control
+  center refused. `control_refusal()` asks the permission first, so a click
+  sent anyway is refused here too, with a warning. The switch stays, because
+  it also shows whether the yuno is on (V44.2.13; since 1.1.3, in 7.29.1).
+- **The roles sheet keeps a permission's own EMPTY scope** (`parameters:
+  {}`): each "more permissions" row has an *Own scope* checkbox. Not ticked,
+  no `parameters` and the role's scope applies; ticked, the text is the
+  scope, and empty is `{}`, unscoped -- how a role scoped on `scenario_id`
+  grants `command-agent`. The sheet showed both as "" and read `{}` as the
+  role's scope: the save was refused (*scope key not declared*) or wrote the
+  narrower scope (V44.2.13; since 0.29.116, in 7.29.1).
+- **Against a control center older than `watch-scenario`, every node is
+  watched through `command-agent` at once**: the refusal comes once per node,
+  and only the first was asked again; the others showed *no answer* until the
+  next renewal (V44.3; in 7.29.1).
+- **The brand of a viewer's shell goes to `/scenarios/list`**, not to
+  `/commands/nodes`, which that shell does not have; `viewer_shell_config()`
+  re-aims every toolbar route out of the viewer's workspaces (V44.3; since
+  0.29.114, in 7.29.1).
+- The placeholders of the roles sheet carry `data-i18n-placeholder`, so they
+  change language with the app (V44.3; in 7.29.1).
+
 ## gui_treedb 1.0.5 (2026-10-27)
 
 - **A period chosen in the Rows dialog blanks the -100 of a new card**, while

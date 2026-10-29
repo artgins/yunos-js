@@ -393,6 +393,27 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(errors()).toEqual([]);
     });
 
+    test("older than watch-scenario, with two nodes: each node is watched through command-agent", () => {
+        const TWO = JSON.parse(JSON.stringify(SAVED));
+        TWO.yunos[1].node = "n2";
+        const mon = new_monitor();
+        watch_saved(TWO);
+        let ws = find("watch-scenario").slice(-2);   /*  this view's, one per node  */
+        expect(ws.map((r) => r.kw.node).sort()).toEqual(["ctrl", "n2"]);
+        sent.length = 0;
+        for(let r of ws) {
+            answer(mon, r, {result: -1,
+                comment: "controlcenter^x: command not available: 'watch-scenario'. Try 'help' command."});
+        }
+        /*  The answers of the nodes after the first are the same refusal,
+         *  not a node that did not answer  */
+        let watch = find("command-agent").filter((r) => /watch-yuno-stats/.test(r.kw.cmd2agent));
+        expect(watch.map((r) => r.kw.agent_id).sort()).toEqual(["ctrl", "n2"]);
+        expect(mon.priv.error).toBe(null);
+        expect(warnings().filter((w) => /does not build the watch/.test(w)).length).toBe(1);
+        expect(errors()).toEqual([]);
+    });
+
     test("a yuno paused is left out of the watch by its key", () => {
         const mon = new_monitor();
         watch_saved(SAVED);
@@ -670,6 +691,39 @@ describe("the live view of a scenario the control center keeps", () => {
             "read-scenarios": ["stress"], "run-scenarios": false, "command-agent": false
         });
         expect(Object.keys(mon.priv.control_buttons)).toEqual([]);
+        expect(errors()).toEqual([]);
+    });
+
+    test("a user who may not run the scenario: the switch of a yuno shows its state, and refuses", () => {
+        agent_config_set_permissions(config, {
+            "read-scenarios": ["stress"], "run-scenarios": false, "command-agent": false
+        });
+        const SW = JSON.parse(JSON.stringify(SAVED));
+        SW.yunos[0].switch = {
+            on:  [{command: "set-controllers controllers=10"}],
+            off: [{command: "set-controllers controllers=0"}]
+        };
+        const mon = new_monitor();
+        watch_saved(SW);
+        answer(mon, find("scenario-runs").pop(), {data: [{action: "start", result: 0, steps: [{result: 0}]}]});
+        let $sw = mon.priv.cards.sim.$switch;
+        expect($sw).toBeTruthy();
+        expect($sw.disabled).toBe(true);
+        expect($sw.getAttribute("data-i18n-title")).toBe("monitor control refused denied");
+
+        /*  A click sent anyway is refused, loudly, and nothing is run  */
+        sent.length = 0;
+        gobj_send_event(mon, "EV_SWITCH_YUNO", {key: "sim"}, mon);
+        expect(find("run-scenario")).toEqual([]);
+        expect(logged.some((l) => /EV_SWITCH_YUNO 'on' of 'sim' refused: denied/.test(l.msg))).toBe(true);
+
+        /*  Given run-scenarios while it is open: the switch works  */
+        agent_config_set_permissions(config, {
+            "read-scenarios": ["stress"], "run-scenarios": ["stress"], "command-agent": false
+        });
+        $sw = mon.priv.cards.sim.$switch;
+        expect($sw.disabled).toBe(false);
+        expect($sw.getAttribute("data-i18n-title")).toBe("monitor switch on help");
         expect(errors()).toEqual([]);
     });
 

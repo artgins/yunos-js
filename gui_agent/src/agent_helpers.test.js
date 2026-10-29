@@ -514,7 +514,28 @@ describe("viewer_shell_config", () => {
         expect(c.shell.stages.main.default_route).toBe("/scenarios/list");
         expect(Object.keys(c.shell.routes)).toEqual(["/preferences"]);
     });
+    test("the brand goes to a route of the viewer's shell, not to Commands", () => {
+        let brand = c.toolbar.items.find((it) => it.id === "brand");
+        expect(brand.action).toEqual({type: "navigate", route: "/scenarios/list"});
+        /*  and every other navigate of the toolbar too  */
+        let routes = [];
+        let walk = (items) => {
+            for(let it of items || []) {
+                if(it.action && it.action.type === "navigate") {
+                    routes.push(it.action.route);
+                }
+                if(it.action && it.action.items) {
+                    walk(it.action.items);
+                }
+            }
+        };
+        walk(c.toolbar.items);
+        for(let r of routes) {
+            expect(["scenarios", "preferences"]).toContain(r.split("/")[1]);
+        }
+    });
     test("a copy: the app's config is untouched", () => {
+        expect(app_config.toolbar.items.find((it) => it.id === "brand").action.route).toBe("/commands/nodes");
         expect(app_config.menu.primary.items.length).toBe(5);
         expect(app_config.shell.stages.main.default_route).toBe("/commands/node");
     });

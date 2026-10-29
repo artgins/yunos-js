@@ -1185,19 +1185,26 @@ function role_field(cls, key, $control, help_key)
     return createElement2(["label", {class: `${cls} is-block mb-3`}, parts]);
 }
 
-/*  One row of "more permissions": permission, deny, its own scope.  */
+/*  One row of "more permissions": permission, deny, its own scope.
+ *  "Own scope" ticked: the text is the entry's `parameters` -- empty is
+ *  `{}`, unscoped, which is how a scoped role grants a permission that
+ *  does not declare the role's key. Not ticked: no `parameters`, the
+ *  role's scope applies (c_authz), and the text is off.  */
 function role_entry_row(entry, datalist_id, locked)
 {
+    let own = entry.parameters !== undefined && entry.parameters !== null;
     let $perm = role_input("USERS_ROLE_ENTRY_PERMISSION", "permission", entry.permission,
-        {list: datalist_id, placeholder: t("permission")});
+        {list: datalist_id, placeholder: t("permission"), "data-i18n-placeholder": "permission"});
     let $deny = role_check("USERS_ROLE_ENTRY_DENY", "deny", entry.deny);
+    let $own = role_check("USERS_ROLE_ENTRY_OWN", "own scope", own);
     let $scope = role_input("USERS_ROLE_ENTRY_SCOPE", "own scope",
-        entry.parameters !== undefined ? format_scope(entry.parameters) : "",
-        {placeholder: t("own scope placeholder")});
+        own ? format_scope(entry.parameters) : "",
+        {placeholder: t("own scope placeholder"), "data-i18n-placeholder": "own scope placeholder"});
     let $remove = createElement2(button_spec("USERS_ROLE_ENTRY_REMOVE", "yi-xmark", "remove permission", false));
-    for(let $x of [$perm, $deny, $scope, $remove]) {
+    for(let $x of [$perm, $deny, $own, $remove]) {
         $x.disabled = !!locked;
     }
+    $scope.disabled = !!locked || !own;
     let $row = createElement2(
         ["div", {class: "USERS_ROLE_ENTRY is-flex is-flex-wrap-wrap is-align-items-center mb-2",
                  style: "gap:0.5rem;"}, [
@@ -1205,12 +1212,18 @@ function role_entry_row(entry, datalist_id, locked)
             ["label", {class: "USERS_ROLE_ENTRY_DENY_LABEL checkbox"}, [
                 $deny, ["span", {class: "ml-1", i18n: "deny"}, t("deny")]
             ]],
+            ["label", {class: "USERS_ROLE_ENTRY_OWN_LABEL checkbox"}, [
+                $own, ["span", {class: "ml-1", i18n: "own scope"}, t("own scope")]
+            ]],
             ["div", {style: "flex:3 1 12rem; min-width:0;"}, [$scope]],
             $remove
         ]]
     );
     /*  Widget plumbing: a row of the form, not an action  */
     $remove.addEventListener("click", () => $row.remove());
+    $own.addEventListener("change", () => {
+        $scope.disabled = !$own.checked;
+    });
     return $row;
 }
 
@@ -1252,6 +1265,7 @@ function read_role_form(sheet)
         entries.push({
             permission: $row.querySelector(".USERS_ROLE_ENTRY_PERMISSION").value,
             deny:       $row.querySelector(".USERS_ROLE_ENTRY_DENY").checked,
+            own:        $row.querySelector(".USERS_ROLE_ENTRY_OWN").checked,
             scope_text: $row.querySelector(".USERS_ROLE_ENTRY_SCOPE").value
         });
     });
@@ -1812,7 +1826,8 @@ function ac_open_role(gobj, event, kw, src)
         $permission:  role_input("USERS_ROLE_PERMISSION", "permission", r.permission, {list: datalist_id}),
         $deny:        role_check("USERS_ROLE_DENY", "deny", r.deny),
         $scope:       role_input("USERS_ROLE_SCOPE", "role scope", format_scope(r.parameters),
-                                 {placeholder: t("role scope placeholder")}),
+                                 {placeholder: t("role scope placeholder"),
+                                  "data-i18n-placeholder": "role scope placeholder"}),
         $disabled:    role_check("USERS_ROLE_DISABLED", "disabled", r.disabled)
     };
     fields.$id.disabled = !is_new;

@@ -553,10 +553,35 @@ function cc_may(perms, permission, scenario_id)
  *  `command-agent`): Scenarios only -- its list and its live view.
  *  Commands, Terminal, Schemas, Users and the tree of yunos all talk
  *  to the agents through `command-agent`, so they would show nothing
- *  but refusals. A copy: the config of the app is not touched.
+ *  but refusals. A toolbar item that navigates out of them (the brand,
+ *  to Commands) goes to the viewer's home instead. A copy: the config of
+ *  the app is not touched.
  ***************************************************************/
 const VIEWER_WORKSPACES = ["scenarios"];
 const VIEWER_HIDDEN_TABS = ["yunos"];
+const VIEWER_HOME = "/scenarios/list";
+
+function viewer_route_kept(route)
+{
+    let ws = (typeof route === "string" ? route : "").split("/")[1] || "";
+    return !ws || ws === "preferences" || VIEWER_WORKSPACES.indexOf(ws) >= 0;
+}
+
+function viewer_toolbar_routes(items)
+{
+    for(let it of (Array.isArray(items) ? items : [])) {
+        let action = it && it.action;
+        if(!action) {
+            continue;
+        }
+        if(action.type === "navigate" && !viewer_route_kept(action.route)) {
+            action.route = VIEWER_HOME;
+        }
+        if(Array.isArray(action.items)) {
+            viewer_toolbar_routes(action.items);
+        }
+    }
+}
 
 function viewer_shell_config(config)
 {
@@ -573,15 +598,17 @@ function viewer_shell_config(config)
     }
     let shell = c.shell || {};
     if(shell.stages && shell.stages.main) {
-        shell.stages.main.default_route = "/scenarios/list";
+        shell.stages.main.default_route = VIEWER_HOME;
     }
     if(shell.routes && typeof shell.routes === "object") {
         for(let route of Object.keys(shell.routes)) {
-            let ws = route.split("/")[1] || "";
-            if(ws && ws !== "preferences" && VIEWER_WORKSPACES.indexOf(ws) < 0) {
+            if(!viewer_route_kept(route)) {
                 delete shell.routes[route];
             }
         }
+    }
+    if(c.toolbar) {
+        viewer_toolbar_routes(c.toolbar.items);
     }
     return c;
 }

@@ -531,6 +531,39 @@ describe("the roles of the store", () => {
         expect(errors()).toEqual([]);
     });
 
+    test("a permission with its own EMPTY scope keeps it: unscoped, not the role's", () => {
+        /*  `parameters: {}` in an entry is a scope of its own that restricts
+         *  nothing; an entry WITHOUT `parameters` takes the role's (c_authz).
+         *  It is how a scoped role grants a permission that does not declare
+         *  the role's key. Up to gui_agent 1.1.6 the sheet painted both as ""
+         *  and read the first as the second: the save was refused ("scope
+         *  key not declared"), or wrote the role's narrower scope.  */
+        ROLES.push({id: "op", description: "Runs s1", service: "controlcenter", realm_id: "*",
+            permission: "run-scenarios", parameters: {scenario_id: ["s1"]},
+            permissions: [
+                {permission: "command-agent", deny: false, parameters: {}},
+                {permission: "read-scenarios", deny: false}
+            ]});
+        try {
+            const v = ready_view();
+            gobj_send_event(v, "EV_OPEN_ROLE", {role_id: "op"}, v);
+            const $c = modals[0].$content;
+            const $rows = $c.querySelectorAll(".USERS_ROLE_ENTRY");
+            expect($rows.length).toBe(2);
+            expect($rows[0].querySelector(".USERS_ROLE_ENTRY_OWN").checked).toBe(true);
+            expect($rows[1].querySelector(".USERS_ROLE_ENTRY_OWN").checked).toBe(false);
+            $c.querySelector(".USERS_ROLE_SAVE").click();
+            expect(sent.map(inner)).toEqual(["update-node"]);
+            expect(sent[0].kw.record.permissions).toEqual([
+                {permission: "command-agent", deny: false, parameters: {}},
+                {permission: "read-scenarios", deny: false}
+            ]);
+            expect(errors()).toEqual([]);
+        } finally {
+            ROLES.pop();
+        }
+    });
+
     test("delete: asked in red; a role with users is not deleted", async () => {
         const v = ready_view();
         gobj_send_event(v, "EV_DELETE_ROLE", {role_id: "controlcenter"}, v);

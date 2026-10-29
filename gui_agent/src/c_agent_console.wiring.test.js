@@ -131,6 +131,7 @@ function answer(console_gobj, data)
         data: data,
         __md_iev__: {
             console_node: NODE,
+            console_seq: String(console_gobj.priv.req_seq),
             command_stack: [{command: "print-tranger", kw: {}}]
         }
     }, link);
@@ -173,5 +174,54 @@ describe("a console answer that carries __collapsed__ stubs", () => {
         gobj_send_event(viewer, "EV_EXPAND_COLLAPSED", {path: "b", size: 101}, viewer);
         expect(viewer.priv.pending.has("b")).toBe(false);
         expect(errors()).toEqual([]);
+    });
+});
+
+/*  An answer that crosses the shared link for somebody else: C_APP's
+ *  `my-permissions` (on each session open and each EV_PERMISSIONS_CHANGED),
+ *  the live view's `watch-scenario` / `run-scenario`. None carries the
+ *  console's markers; until gui_agent 1.1.7 every open console painted them
+ *  as the answer to its own command.  */
+describe("an answer the console did not ask for", () => {
+    function foreign(console_gobj, command, md)
+    {
+        gobj_send_event(console_gobj, "EV_MT_COMMAND_ANSWER", {
+            result: 0,
+            comment: "",
+            data: {"command-agent": {parameters: {}}},
+            __md_iev__: Object.assign({command_stack: [{command: command, kw: {}}]}, md || {})
+        }, link);
+    }
+
+    test("C_APP's my-permissions is not painted", () => {
+        const con = gobj_create("con3", "C_AGENT_CONSOLE", {node: NODE}, host);
+        gobj_start(con);
+        foreign(con, "my-permissions");
+        expect(con.priv.json_view).toBeFalsy();
+        expect(con.priv.$data.childNodes.length).toBe(0);
+    });
+
+    test("the live view's watch-scenario is not painted", () => {
+        const con = gobj_create("con4", "C_AGENT_CONSOLE", {node: NODE}, host);
+        gobj_start(con);
+        foreign(con, "watch-scenario", {monitor_kind: "watch", monitor_node: NODE});
+        expect(con.priv.json_view).toBeFalsy();
+        expect(con.priv.$data.childNodes.length).toBe(0);
+    });
+
+    test("the answer to its own command still is", () => {
+        const con = gobj_create("con5", "C_AGENT_CONSOLE", {node: NODE}, host);
+        gobj_start(con);
+        gobj_send_event(con, "EV_MT_COMMAND_ANSWER", {
+            result: 0,
+            comment: "",
+            data: {a: 1},
+            __md_iev__: {
+                console_node: NODE,
+                console_seq: String(con.priv.req_seq),
+                command_stack: [{command: "list-yunos", kw: {}}]
+            }
+        }, link);
+        expect(con.priv.json_view).toBeTruthy();
     });
 });

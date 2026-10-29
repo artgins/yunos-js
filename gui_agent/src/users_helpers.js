@@ -325,7 +325,9 @@ export const ROLE_PROBLEM_I18N_KEYS = [
  *  role of the sheet cannot be written.
  *
  *  form: {id, description, realm_id, service, permission, deny,
- *         scope_text, entries: [{permission, deny, scope_text}]}
+ *         scope_text, entries: [{permission, deny, own, scope_text}]}
+ *  An entry with `own` has a scope of its own, `scope_text` ("" is {},
+ *  unscoped); without it, the role's scope applies to it.
  *  declared: the `authzs` answer of the role's service
  *  ([{id, parameters: [{id}]}]), or null when not known -- then the
  *  permission names and the scope keys are not checked here, and the
@@ -352,7 +354,7 @@ function role_problem(form, declared)
     }
     let lines = [{permission: (form.permission || "").trim(), scope_text: form.scope_text}];
     for(let e of (form.entries || [])) {
-        lines.push({permission: (e.permission || "").trim(), scope_text: e.scope_text, own: true});
+        lines.push({permission: (e.permission || "").trim(), scope_text: e.scope_text, own: !!e.own});
     }
     if(!lines.some((l) => l.permission)) {
         return {key: "role grants nothing", detail: ""};
@@ -365,8 +367,7 @@ function role_problem(form, declared)
         if(!l.permission) {
             continue;
         }
-        let own = l.own && (l.scope_text || "").trim();
-        let sc = own ? parse_scope(l.scope_text) : role_scope;
+        let sc = l.own ? parse_scope(l.scope_text) : role_scope;
         if(!sc.ok) {
             return {key: sc.key, detail: `${l.permission}: ${sc.detail}`};
         }
@@ -402,8 +403,8 @@ function role_record(form)
             continue;
         }
         let entry = {permission: permission, deny: !!e.deny};
-        if((e.scope_text || "").trim()) {
-            entry.parameters = parse_scope(e.scope_text).scope;
+        if(e.own) {
+            entry.parameters = parse_scope(e.scope_text).scope;     /*  "" is {}, unscoped  */
         }
         entries.push(entry);
     }

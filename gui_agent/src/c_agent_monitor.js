@@ -182,6 +182,8 @@
  *      scenario_yuno=<key>`, or its steps sent from here for a scenario
  *      run from here), that changes neither the state of the scenario nor
  *      its max_run. On is offered only while the scenario runs; off always.
+ *      A user who may not run the scenario sees the switch, disabled: it
+ *      still says whether the yuno is on.
  *      A node is shown by its `view.node_labels` name, if any -- on the
  *      cards, in the status line, in the series of the charts and in the
  *      commands a confirmation lists -- with the full name in its title.
@@ -421,10 +423,11 @@ export const C_AGENT_MONITOR_HELD_I18N_KEYS = [
 ];
 
 /*  Why a control button is disabled, `monitor control refused ${reason}`:
- *  out of session, a control of this view running, the state being read,
- *  or the state of the scenario that refuses it (control_refused_by() of
- *  monitor_helpers.js), the same rule.  */
+ *  the user may not run it, out of session, a control of this view
+ *  running, the state being read, or the state of the scenario that
+ *  refuses it (control_refused_by() of monitor_helpers.js), the same rule.  */
 export const C_AGENT_MONITOR_REFUSED_I18N_KEYS = [
+    "monitor control refused denied",
     "monitor control refused offline", "monitor control refused busy",
     "monitor control refused in_flight",
     "monitor control refused reading", "monitor control refused running",
@@ -1746,15 +1749,20 @@ function build_test_controls(gobj)
 }
 
 /***************************************************************
- *  Why a control cannot be used now, or null when it can: out of
- *  session ("offline"), a control of this view running ("busy"),
- *  a run of the scenario in flight in the control center
- *  ("in_flight"), the state being read ("reading"), or the state
- *  that refuses it.
+ *  Why a control cannot be used now, or null when it can: the user
+ *  may not run it ("denied": the buttons are not even built, but the
+ *  switch of a card stays, because it also SHOWS the yuno on or off),
+ *  out of session ("offline"), a control of this view running
+ *  ("busy"), a run of the scenario in flight in the control center
+ *  ("in_flight"), the state being read ("reading"), or the state that
+ *  refuses it.
  ***************************************************************/
 function control_refusal(gobj, control)
 {
     let priv = gobj.priv;
+    if(!may_run(gobj)) {
+        return "denied";
+    }
     if(gobj_current_state(gobj) !== "ST_MONITORING") {
         return "offline";
     }
@@ -1927,13 +1935,15 @@ function answer_of(gobj, kw)
 {
     let kind = msg_iev_read_key(kw, "monitor_kind") || "";
     let ack = false;
+    let command = "";
     if(kind && gobj.priv.scenario && gobj.priv.scenario.place === "control_center") {
         let stk = msg_iev_get_stack(gobj, kw, "command_stack", false);
-        let command = kw_get_str(gobj, stk, "command", "", 0);
+        command = kw_get_str(gobj, stk, "command", "", 0);
         ack = command === "command-agent" || command === "watch-scenario";
     }
     return {
         kind: kind,
+        command: command,
         key: msg_iev_read_key(kw, "monitor_yuno") || "",
         node: msg_iev_read_key(kw, "monitor_node") || "",
         gen: msg_iev_read_key(kw, "monitor_gen"),
@@ -3259,12 +3269,17 @@ function ac_mt_command_answer(gobj, event, kw, src)
     }
     if(kind === "watch") {
         let node = a.node;
-        if(failed && a.ack && cc_lacks_command(kw.comment) && priv.cc_watch !== false) {
+        if(failed && a.command === "watch-scenario" && cc_lacks_command(kw.comment)) {
             /*  A control center older than watch-scenario: the agent's own
-             *  line, through command-agent, from now on.  */
-            log_warning(`${gobj_short_name(gobj)}: the control center does not build ` +
-                `the watch (${kw.comment || ""}), asking the agents through command-agent`);
-            priv.cc_watch = false;
+             *  line, through command-agent, from now on. Every node was
+             *  asked at once, so the refusal comes once per node: each one
+             *  is asked again its own way, not left as "no answer" until
+             *  the next renewal.  */
+            if(priv.cc_watch !== false) {
+                log_warning(`${gobj_short_name(gobj)}: the control center does not build ` +
+                    `the watch (${kw.comment || ""}), asking the agents through command-agent`);
+                priv.cc_watch = false;
+            }
             watch_node(gobj, node);
             return 0;
         }

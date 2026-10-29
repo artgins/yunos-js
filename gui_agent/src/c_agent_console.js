@@ -2111,25 +2111,17 @@ function ac_json_expand_path(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Command answer. The shared link re-publishes every answer; only
- *  render our own command-agent results (the node picker handles
- *  list-agents). Filter by the command in the command_stack.
+ *  Command answer. The shared link re-publishes EVERY answer it gets
+ *  (C_APP's list-agents and my-permissions, the live view's
+ *  watch-scenario and run-scenario, the other tabs' fetches): render
+ *  only the answers to OUR commands, which are the ones that echo this
+ *  panel's markers in __md_iev__ (console_seq, or the "cache" purpose
+ *  of the help fetch). An unmarked answer is somebody else's.
  ***************************************************************/
 function ac_mt_command_answer(gobj, event, kw, src)
 {
     let stk = msg_iev_get_stack(gobj, kw, "command_stack", false);
     let command = kw_get_str(gobj, stk, "command", "", 0);
-
-    /*  The Nodes panel's own list-agents fetch — not ours. A list-agents
-     *  the operator TYPED went through send_command, so its answer echoes
-     *  this panel's markers (console_seq/console_node) in __md_iev__; the
-     *  picker's fetch carries none. Swallow only the unmarked ones — the
-     *  node/seq filters below then vet the marked answer as usual.  */
-    if(command === "list-agents") {
-        if(!msg_iev_read_key(kw, "console_seq") || !msg_iev_read_key(kw, "console_node")) {
-            return 0;
-        }
-    }
 
     /*  Answers tagged with a non-console purpose (e.g. the Stats view's
      *  own list-yunos / stats-yuno fetches) are not ours — the console's
@@ -2148,13 +2140,13 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return 0;
     }
 
-    /*  Rapid-command race: a user command echoes its seq (send_command).
-     *  Both the dispatch ack and the real answer of a superseded command
-     *  carry an older seq — drop them so they can't overwrite the panel with
-     *  a stale result. Answers without a seq (e.g. the help-cache fetch,
-     *  handled next) are unaffected.  */
+    /*  A user command echoes its seq (send_command), the dispatch ack and
+     *  the real answer alike. No seq: not a command of this panel. An
+     *  older seq: a superseded command (rapid-command race), whose late
+     *  answer must not overwrite the panel. The help-cache fetch carries
+     *  no seq and is handled next.  */
     let ans_seq = msg_iev_read_key(kw, "console_seq");
-    if(ans_seq && ans_seq !== String(gobj.priv.req_seq)) {
+    if(purpose !== "cache" && ans_seq !== String(gobj.priv.req_seq)) {
         return 0;
     }
 

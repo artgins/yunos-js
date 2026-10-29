@@ -197,9 +197,23 @@ describe("role_problem / role_record", () => {
         /*  A scope on a key the permission does not declare: C_AUTHZ would
          *  grant nothing with it  */
         expect(p({permission: "command-agent"})).toEqual({key: "scope key not declared", detail: "command-agent: scenario_id"});
-        expect(p({entries: [{permission: "read-scenarios", scope_text: "node=x"}]}))
+        expect(p({entries: [{permission: "read-scenarios", own: true, scope_text: "node=x"}]}))
             .toEqual({key: "scope key not declared", detail: "read-scenarios: node"});
+        /*  Without a scope of its own, an entry takes the role's  */
+        expect(p({entries: [{permission: "command-agent", own: false, scope_text: ""}]}))
+            .toEqual({key: "scope key not declared", detail: "command-agent: scenario_id"});
         expect(p({scope_text: "scenario_id"}).key).toBe("scope bad syntax");
+    });
+    it("a scope of its own that is empty is kept: {}, unscoped, not the role's", () => {
+        let f = Object.assign({}, form, {entries: [
+            {permission: "command-agent", deny: false, own: true, scope_text: ""},
+            {permission: "read-scenarios", deny: false, own: false, scope_text: "ignored=x"}
+        ]});
+        expect(role_problem(f, declared)).toBe(null);
+        expect(role_record(f).permissions).toEqual([
+            {permission: "command-agent", deny: false, parameters: {}},
+            {permission: "read-scenarios", deny: false}
+        ]);
     });
     it("with no declaration known, names and keys are left to the service", () => {
         expect(role_problem(Object.assign({}, form, {permission: "anything"}), null)).toBe(null);

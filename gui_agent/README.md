@@ -98,7 +98,12 @@ the view panels intra-yuno. A panel that *is* a named service (e.g.
 
 The Console targets remote role `controlcenter` / service `controlcenter` and
 wraps each typed line in a `command-agent` (which returns a synchronous dispatch
-ack plus the agent's asynchronous real answer).
+ack plus the agent's asynchronous real answer). Each line carries the console's
+markers in `__md_iev__` (`console_node`, `console_seq`), echoed by both answers,
+and a console paints ONLY an answer that echoes its own: the link re-publishes
+every answer it gets -- C_APP's `my-permissions` at each session open and each
+`EV_PERMISSIONS_CHANGED`, the live view's `watch-scenario` -- and up to 1.1.6
+every open console painted those as the answer to its own command.
 
 A structured answer (a dict, or a list with no table schema) is shown in the
 lazy JSON viewer (`C_YUI_JSON`). An answer can carry `__collapsed__` stubs:
@@ -133,7 +138,8 @@ center publishes `EV_PERMISSIONS_CHANGED` when a role changes or is given or
 taken; the link subscribes to it on the service `controlcenter`, C_APP asks
 `my-permissions` again, the live view builds its controls again and the list
 is read again; a user who goes from watching to commanding the agents gets
-the other shell. `scripts/qa.mjs --check permlive` (with `QA_PERM_OFF` /
+the other shell, whose brand goes to `/scenarios/list` (1.1.7; it went to
+`/commands/nodes`, which that shell does not have). `scripts/qa.mjs --check permlive` (with `QA_PERM_OFF` /
 `QA_PERM_ON` commands that take and give the role) checks it on the page.
 
 A **scenario** is a set of yunos — the ones a test involves, or just the ones
@@ -244,6 +250,10 @@ used now. `on` is offered only while the scenario RUNS, so the `max_run` stop
 is always there to stop it; `off` in any state. A switch run changes neither
 the state of the scenario nor its max_run, and is listed in its Runs; the
 scenario's `stop` is what turns every switch off, so it must name them too.
+A user who may not run the scenario (`run-scenarios` on it, or `command-agent`
+for one run from here) still sees the switch -- it says whether the yuno is
+on -- but disabled, its title saying why (1.1.7; it was enabled, and a click
+sent a `run-scenario` the control center refused).
 `view.node_labels` gives a node the short name the view shows it by (cards,
 status line, memory tags, chart series, confirmations; 1.1.4), with its full
 name in the title: `"view": {"mode": "graph", "node_labels": {"hidrauliaconnect":
@@ -296,7 +306,10 @@ watch was tagged with). The requester says it takes the pushes with
 watch, direct (0.29.6) and through the control center (0.29.7), and an agent
 of SDK 7.25.21 or later refuses a watch without it. A control center of SDK
 7.25.21 or later passes it on to the agent only when the client wrote it, so
-with that control center an older gui_agent is refused the watch and polls. The watch is renewed every third of the `ttl` the
+with that control center an older gui_agent is refused the watch and polls. A
+control center older than `watch-scenario` refuses it once per node; each node
+is then watched with the agent's own line through `command-agent` (1.1.7: only
+the first was, and the others showed *no answer* until the next renewal). The watch is renewed every third of the `ttl` the
 agent answers (behind a control center the agent never sees the browser
 leave); a hidden tab stops it, a visible one asks again, and Disconnect,
 leaving the workspace or switching to another scenario stop it too
@@ -966,7 +979,12 @@ not, protected (a seed role). A click opens its **sheet**:
   does not declare (SDK 7.27.15), so the sheet refuses one before it is sent;
 - the **permission** and *Deny*, the role's **scope** as text,
   `scenario_id=a,b; key=v` (empty: no limit), and **more permissions**, each
-  with *Deny* and its own scope (empty: the role's);
+  with *Deny* and *Own scope*: not ticked, the entry has no `parameters` and
+  the role's scope applies to it; ticked, the text is its `parameters`, and
+  empty is `{}` -- unscoped, which is how a role scoped on `scenario_id`
+  grants a permission that does not declare that key (`command-agent`). Up to
+  1.1.6 the sheet showed both as an empty text and saved `{}` as the second:
+  the role's scope, or a refusal (*scope key not declared*);
 - *Role disabled*, *Save role* / *Create role*, *Delete role* -- confirmed in
   red, and off for a role that has users or child roles (take it from them
   first) and for a seed role.
