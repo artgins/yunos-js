@@ -80,6 +80,15 @@ const GCLASS_NAME = "C_ACCOUNT_VIEW";
 
 const ACCENT = "#2E7CD6";
 
+/*  The names of the preference segments: segment() hands each to t() as
+ *  a variable, so they are published for validate-locales.  */
+export const PREF_SEGMENT_I18N_KEYS = [
+    "light theme", "dark theme",
+    "english", "spanish",
+    "table", "json tree", "raw text",
+    "stacked strips", "back to parent", "breadcrumb"
+];
+
 
 /***************************************************************
  *              Attrs
@@ -247,8 +256,11 @@ function build_preference(gobj)
                 ? ["span", {i18n: opt.i18n}, opt.text]
                 : ["span", {}, opt.text]);
             return ["button", {type: "button", class: cls,
-                               title: t(opt.name), "data-i18n-title": opt.name,
-                               "aria-label": t(opt.name), "data-i18n-aria-label": opt.name}, kids,
+                               title: t(/* i18n: PREF_SEGMENT_I18N_KEYS */ opt.name),
+                               "data-i18n-title": /* i18n: PREF_SEGMENT_I18N_KEYS */ opt.name,
+                               "aria-label": t(/* i18n: PREF_SEGMENT_I18N_KEYS */ opt.name),
+                               "data-i18n-aria-label": /* i18n: PREF_SEGMENT_I18N_KEYS */ opt.name},
+                kids,
                 {click: function() { on_pick(opt.value); }}];
         });
         return ["div", {class: "PREF_SEGMENT buttons has-addons"}, btns];
@@ -285,9 +297,9 @@ function build_preference(gobj)
     let display_mode = config ? agent_config_get_display_mode(config) : "table";
     let display_seg = segment(
         [
-            {value: "table", i18n: "table",     text: "Table",     icon: "yi-table"},
-            {value: "form",  i18n: "json tree", text: "JSON tree", icon: "yi-folder-tree"},
-            {value: "raw",   i18n: "raw text",  text: "Raw text",  icon: "yi-align-left"}
+            {value: "table", i18n: "table",     name: "table",     text: "Table",     icon: "yi-table"},
+            {value: "form",  i18n: "json tree", name: "json tree", text: "JSON tree", icon: "yi-folder-tree"},
+            {value: "raw",   i18n: "raw text",  name: "raw text",  text: "Raw text",  icon: "yi-align-left"}
         ],
         display_mode,
         function(v) {
@@ -302,9 +314,9 @@ function build_preference(gobj)
     let nav_mode = config ? agent_config_get_nav_mode(config) : "stack";
     let nav_seg = segment(
         [
-            {value: "stack", i18n: "stacked strips", text: "Stacked strips", icon: "yi-layer-group"},
-            {value: "back",  i18n: "back to parent", text: "Back to parent", icon: "yi-arrow-left"},
-            {value: "path",  i18n: "breadcrumb",     text: "Breadcrumb",     icon: "yi-route"}
+            {value: "stack", i18n: "stacked strips", name: "stacked strips", text: "Stacked strips", icon: "yi-layer-group"},
+            {value: "back",  i18n: "back to parent", name: "back to parent", text: "Back to parent", icon: "yi-arrow-left"},
+            {value: "path",  i18n: "breadcrumb",     name: "breadcrumb",     text: "Breadcrumb",     icon: "yi-route"}
         ],
         nav_mode,
         function(v) {

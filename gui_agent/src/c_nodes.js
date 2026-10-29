@@ -473,8 +473,9 @@ function make_columns(gobj)
     function sel_formatter(cell)
     {
         let checked = is_selected_node(gobj, cell.getData()) ? " checked" : "";
+        let name = escapeHtml(t("open console tab"));
         return `<input type="checkbox" class="NODES_SEL node-sel"${checked} ` +
-            `aria-label="${escapeHtml(t("open console tab"))}">`;
+            `title="${name}" aria-label="${name}">`;
     }
 
     function sel_click(e, cell)
@@ -498,8 +499,9 @@ function make_columns(gobj)
         let nodes = gobj_read_attr(gobj, "nodes") || [];
         let sel = config ? agent_config_get_selected_nodes(config, ws).length : 0;
         let checked = (nodes.length > 0 && sel >= nodes.length) ? " checked" : "";
+        let name = escapeHtml(t("select all nodes"));
         return `<input type="checkbox" class="NODES_SEL_ALL node-sel-all"${checked} ` +
-            `aria-label="${escapeHtml(t("select all nodes"))}">`;
+            `title="${name}" aria-label="${name}">`;
     }
 
     function selall_click(e, column)

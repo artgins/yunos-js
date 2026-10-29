@@ -88,6 +88,8 @@ const {
     set_log_callback,
 } = await import("@yuneta/gobj-js");
 const {register_c_agent_users} = await import("./c_agent_users.js");
+const {en} = await import("./locales/en.js");
+const {es} = await import("./locales/es.js");
 
 const NODE = "node_1";
 const YUNO = "1996";
@@ -560,6 +562,28 @@ describe("the roles of the store", () => {
             expect($own.getAttribute("data-i18n-title")).toBe("give own scope");
             expect($scope.getAttribute("data-i18n-aria-label")).toBe("own scope of the permission");
             expect($scope.getAttribute("data-i18n-title")).toBe("own scope of the permission");
+            /*  WCAG label-in-name: a control wrapped in a <label> is named
+             *  with a text that holds the one a sighted user reads beside
+             *  it, in every language (REV-CLOUD V46.3: in Spanish "Ámbito
+             *  propio" was named "Dar a este permiso su propio ámbito...",
+             *  and "Rol deshabilitado" was named "Deshabilitado").  */
+            let pairs = 0;
+            for(const $label of $c.querySelectorAll("label")) {
+                const $control = $label.querySelector("input");
+                const $text = $label.querySelector("[data-i18n]");
+                if(!$control || !$text) {
+                    continue;
+                }
+                const name_key = $control.getAttribute("data-i18n-aria-label");
+                const label_key = $text.getAttribute("data-i18n");
+                for(const loc of [en, es]) {
+                    const name = loc.translation[name_key].toLowerCase();
+                    const label = loc.translation[label_key].toLowerCase();
+                    expect(`${name_key}: ${name}`).toContain(label);
+                }
+                pairs++;
+            }
+            expect(pairs).toBeGreaterThan(4);
             $c.querySelector(".USERS_ROLE_SAVE").click();
             expect(sent.map(inner)).toEqual(["update-node"]);
             expect(sent[0].kw.record.permissions).toEqual([

@@ -113,11 +113,11 @@ import {
     yui_shell_show_modal,
     yui_shell_confirm_yesno,
 } from "@yuneta/gobj-ui/src/shell_modals.js";
-import {yui_tabulator_lang, yui_tabulator_relocalize,
-        yui_tabulator_name_filters} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {epoch_to_ms, infer_period} from "@yuneta/gobj-ui/src/yui_time.js";
 
+import {keep_header_filters_named} from "./tabulator_filter_names.js";
 import {
     treedb_config_get_tranger_views,
     treedb_config_get_live_max,
@@ -1403,6 +1403,8 @@ function open_keys_picker(gobj)
          *  (their labels are is-hidden-mobile), hence the narrower column.  */
         columns: picker_columns(gobj, mobile)
     });
+    /*  Its `key` filter box, and again on every language change  */
+    keep_header_filters_named(picker);
     priv.picker_tbl = picker;
 
     /*
@@ -3143,6 +3145,9 @@ function mount_rows_table(gobj, card, $table)
         autoColumnsDefinitions: (defs) =>
             tune_columns(defs, card, card.key === ALL_KEYS)
     });
+    /*  Tabulator's header-filter boxes carry no name of any kind, and
+     *  autoColumns builds them again with every page.  */
+    keep_header_filters_named(table);
     table.on("rowClick", function(e, row) {
         gobj_send_event(gobj, "EV_SHOW_RECORD",
             {record: row.getData().__rec, key: record_key(card, row.getData())}, gobj);
@@ -3150,8 +3155,6 @@ function mount_rows_table(gobj, card, $table)
     /*  Re-measure once built + laid out (autoResize handles later window
      *  resizes), so the columns fit the card instead of a stale width.  */
     table.on("tableBuilt", function() {
-        /*  Tabulator's header-filter boxes carry no name of any kind.  */
-        yui_tabulator_name_filters(table, t);
         requestAnimationFrame(function() {
             try {
                 table.redraw(true);
@@ -3185,6 +3188,8 @@ function mount_live_table(gobj, card, $table)
         columns:        [],
         data:           []
     });
+    /*  Its columns, and their filter boxes, come with the first record  */
+    keep_header_filters_named(table);
     table.on("rowClick", function(e, row) {
         gobj_send_event(gobj, "EV_SHOW_RECORD",
             {record: row.getData().__rec, key: record_key(card, row.getData())}, gobj);

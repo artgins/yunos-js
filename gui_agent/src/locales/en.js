@@ -896,7 +896,7 @@ const en = {
         "only": "only",
         "own scope": "Own scope",
         "own scope placeholder": "its own scope (empty: everything; untick to take the role's)",
-        "give own scope": "Give this permission its own scope, not the role's",
+        "give own scope": "Own scope: give this permission its own scope, not the role's",
         "own scope of the permission": "Own scope of this permission (JSON; empty: unscoped)",
         "permission": "Permission",
         "permission not of the service": "The service has no such permission:",

@@ -253,15 +253,37 @@ origin), the two time units (seconds vs `sf_t_ms` milliseconds), a record free
 to carry its own field named like a metadata column — and there a test can
 reach them with no DOM, no Tabulator and no websocket.
 
-`src/controls_named.test.js` reads the SOURCE of every module of the app,
-never runs it: every control it builds (an `input`, `select`, `textarea` or
-`button`, or anything with the role of one) carries a `title` AND an
-`aria-label`, and a name given with `t()` carries its key
-(`data-i18n-title` / `data-i18n-aria-label`). A name that is data (a role id,
-a command, a connection) needs no key; a control whose name is painted with its
-state after it is built says so with a `named by <function>` comment in its
-attrs. What it cannot see -- a name written with `setAttribute`, what a widget
-draws for itself -- is checked on the deployed page, switching language.
+`src/controls_named.test.js` is a check of the SOURCE, not of the DOM: it
+parses every module of the app and never runs it. It reads createElement2 specs
+(attrs written in place, by `Object.assign()` of objects written in place, or
+in a variable of the same function), the tags of html strings (a template, a
+string literal, or a `+` chain of them read as one string), and every
+`document.createElement()` of a control held in a variable. A control (an
+`input`, `select`, `textarea` or `button`, or anything with the role of one)
+must carry a `title` AND an `aria-label`; on any element, a name may not be a
+string literal (it never changes language), a name given with `t()` carries its
+key (`data-i18n-title` / `data-i18n-aria-label`), and that key is the one handed
+to `t()`. A name that is data (a role id, a command, a connection) needs no key;
+a control whose name is painted with its state after it is built says so with a
+`named by <function>` comment in its attrs. What it CANNOT see is checked on the
+deployed page, switching language: what a widget draws for itself (Tabulator's
+header filters and row boxes, Tom Select) and what gobj-ui builds; a name
+written by a `setAttribute()` in another function; attrs reached through a
+parameter, a property or a spread; an element that acts as a control without
+the tag or role of one (an `<a>` or a `<div>` with a click handler); and whether
+the text says the right thing.
+
+`src/i18n_keys_seen.test.js` asks the `validate-locales` of the prebuild which
+keys of the locales it sees used, and holds the rest in a list that may only
+shrink: a NEW key that reaches `t()` through a variable, unmarked, fails it.
+Make the key visible the gobj-ui way -- publish it in a `<NAME>_I18N_KEYS`
+list and mark the place that reads it (`t(/* i18n: <NAME>_I18N_KEYS */ key)`)
+-- never add it to the list.
+
+`src/tabulator_filter_names.test.js` runs a real Tabulator under jsdom: a header
+filter box keeps its name after every build of its columns -- the Keys picker's
+on a language change, a Rows card's on page 2, a Live card's when its first
+record seeds it.
 
 ## A tab keeps what it had open
 

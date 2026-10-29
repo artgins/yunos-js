@@ -905,7 +905,7 @@ const es = {
         "only": "solo",
         "own scope": "Ámbito propio",
         "own scope placeholder": "su propio ámbito (vacío: todo; desmarca para tomar el del rol)",
-        "give own scope": "Dar a este permiso su propio ámbito, no el del rol",
+        "give own scope": "Ámbito propio: dar a este permiso su propio ámbito, no el del rol",
         "own scope of the permission": "Ámbito propio de este permiso (JSON; vacío: sin ámbito)",
         "permission": "Permiso",
         "permission not of the service": "El servicio no tiene ese permiso:",

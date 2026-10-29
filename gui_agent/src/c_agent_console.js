@@ -89,6 +89,10 @@ const GCLASS_NAME = "C_AGENT_CONSOLE";
 
 const HISTORY_MAX = 30;
 
+/*  The names of the history's sort buttons: mk_sort_btn() hands each to
+ *  t() as a variable, so they are published for validate-locales.  */
+export const HISTORY_SORT_I18N_KEYS = ["history most recent first", "history most used first"];
+
 /*  CONSOLE_RESPONSE_TEXT font size (mirrors the Terminal's TTY_HOST control):
  *  the persisted value is the shared DEFAULT, driven from Settings only; the
  *  A− / A+ buttons in the status row nudge each console's LIVE size temporarily
@@ -956,8 +960,10 @@ function fill_hist_popover(gobj)
     let mk_sort_btn = (mode, key, text, name) => {
         let $b = createElement2(
             ["button", {class: "HISTORY_SORT button", type: "button", i18n: key,
-                        title: t(name), "data-i18n-title": name,
-                        "aria-label": t(name), "data-i18n-aria-label": name}, text]);
+                        title: t(/* i18n: HISTORY_SORT_I18N_KEYS */ name),
+                        "data-i18n-title": /* i18n: HISTORY_SORT_I18N_KEYS */ name,
+                        "aria-label": t(/* i18n: HISTORY_SORT_I18N_KEYS */ name),
+                        "data-i18n-aria-label": /* i18n: HISTORY_SORT_I18N_KEYS */ name}, text]);
         if(priv.hist_sort === mode) {
             $b.classList.add("is-info", "is-selected");
         }

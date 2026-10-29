@@ -8,6 +8,47 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.1.9, gui_treedb 1.0.7 (2026-10-29)
+
+- **Three checkboxes of gui_agent have their `title`**: the row and
+  *select all* boxes of Nodes and the row box of Stats had only an
+  `aria-label`. Their `<input` is written in two string pieces, and the
+  check of 1.1.8 read each piece alone (REV-CLOUD V46.3; in yunetas 7.29.3).
+- **The Display mode and Navigation buttons of gui_agent's preferences have
+  a name again**: 1.1.8 named every segment button from an option's `name`,
+  and those two segments had none, so each button was named "" and carried
+  the key `undefined` (in yunetas 7.29.3).
+- **gui_treedb's header filters keep their name**: the Keys picker's filter
+  had none at all, and a card's lost theirs each time its columns were built
+  again -- page 2 of a Rows card (autoColumns), a Live card seeded by its
+  first record, the picker on a language change. Every table of the tranger
+  view now names its filters after each build of its columns
+  (`columnsLoaded`), through `keep_header_filters_named()`; checked by a new
+  jsdom test with the real Tabulator (V46.3; in 7.29.3).
+- **Nine keys of gui_agent were invisible to `validate-locales`**:
+  `english`/`spanish`, the history's two sort buttons, `give own scope`,
+  `own scope of the permission`, `role id`, `realm` and `role scope` reached
+  `t()` through a parameter of a helper, unmarked, so deleting them from a
+  locale still built. The helpers' modules publish them
+  (`PREF_SEGMENT_I18N_KEYS`, `HISTORY_SORT_I18N_KEYS`,
+  `USERS_ROLE_FIELD_I18N_KEYS`) and the reads are marked. A new
+  `src/i18n_keys_seen.test.js` in each app asks the prebuild's reader which
+  keys it sees, and fails on a new one it does not; the keys nobody has made
+  visible yet (180 in gui_agent, 79 in gui_treedb) are listed there, and the
+  list may only shrink (V46.3; in 7.29.3).
+- **A checkbox wrapped in its label is named with the label's text**
+  (WCAG label-in-name): in Spanish *Ámbito propio* was named "Dar a este
+  permiso su propio ámbito...", and a role's *Rol deshabilitado* box was
+  named *Deshabilitado* in both languages. The name now starts with, or is,
+  the text beside the box (V46.3; in 7.29.3).
+- **`src/controls_named.test.js` reads more, and says what it reads**: a
+  string `+` chain is read as one html string, attrs by `Object.assign()` or
+  in a variable of the same function, `document.createElement()` of a
+  control, a literal name (untranslated), and a `t(k1)` whose
+  `data-i18n-*` names another key. Its header and the READMEs say it is a
+  check of the source, not of the DOM, and list what it cannot see (what a
+  widget or gobj-ui draws, an `<a>` used as a button).
+
 ## gui_agent 1.1.8, gui_treedb 1.0.6 (2026-10-29)
 
 - **The *Own scope* box of a role's permission and the text beside it have

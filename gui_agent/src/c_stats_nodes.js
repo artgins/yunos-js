@@ -718,8 +718,9 @@ function make_columns(gobj)
         /*  Not selectable when it has nothing to open. Kept in the list
          *  (it IS a yuno of the node) but with the checkbox off.  */
         let disabled = (has_nothing_to_open(gobj, r) && !checked) ? " disabled" : "";
+        let name = escapeHtml(t("open stats tab"));
         return `<input type="checkbox" class="STATNODES_SEL node-sel"` +
-            `${checked}${disabled} aria-label="${escapeHtml(t("open stats tab"))}">`;
+            `${checked}${disabled} title="${name}" aria-label="${name}">`;
     }
 
     function sel_click(e, cell)

@@ -132,6 +132,14 @@ import {
  ***************************************************************/
 const GCLASS_NAME = "C_AGENT_USERS";
 
+/*  The names of the fields of a role's sheet: role_input() and
+ *  role_check() hand each to t() as a variable, so they are published for
+ *  validate-locales.  */
+export const USERS_ROLE_FIELD_I18N_KEYS = [
+    "role id", "description", "realm", "service", "permission", "deny",
+    "role scope", "role disabled", "give own scope", "own scope of the permission"
+];
+
 /*  Marker of this tab's requests in __md_iev__: the link re-publishes
  *  every answer to every panel.  */
 const PURPOSE = "users";
@@ -1157,8 +1165,10 @@ function role_input(cls, key, value, extra)
 {
     let $i = createElement2(["input", Object.assign({
         class: `${cls} input`, type: "text", autocomplete: "off",
-        title: t(key), "data-i18n-title": key,
-        "aria-label": t(key), "data-i18n-aria-label": key
+        title: t(/* i18n: USERS_ROLE_FIELD_I18N_KEYS */ key),
+        "data-i18n-title": /* i18n: USERS_ROLE_FIELD_I18N_KEYS */ key,
+        "aria-label": t(/* i18n: USERS_ROLE_FIELD_I18N_KEYS */ key),
+        "data-i18n-aria-label": /* i18n: USERS_ROLE_FIELD_I18N_KEYS */ key
     }, extra || {})]);
     $i.value = value || "";
     return $i;
@@ -1168,8 +1178,10 @@ function role_check(cls, key, checked)
 {
     let $cb = createElement2(["input", {
         class: cls, type: "checkbox",
-        title: t(key), "data-i18n-title": key,
-        "aria-label": t(key), "data-i18n-aria-label": key
+        title: t(/* i18n: USERS_ROLE_FIELD_I18N_KEYS */ key),
+        "data-i18n-title": /* i18n: USERS_ROLE_FIELD_I18N_KEYS */ key,
+        "aria-label": t(/* i18n: USERS_ROLE_FIELD_I18N_KEYS */ key),
+        "data-i18n-aria-label": /* i18n: USERS_ROLE_FIELD_I18N_KEYS */ key
     }]);
     $cb.checked = !!checked;
     return $cb;
@@ -1828,7 +1840,7 @@ function ac_open_role(gobj, event, kw, src)
         $scope:       role_input("USERS_ROLE_SCOPE", "role scope", format_scope(r.parameters),
                                  {placeholder: t("role scope placeholder"),
                                   "data-i18n-placeholder": "role scope placeholder"}),
-        $disabled:    role_check("USERS_ROLE_DISABLED", "disabled", r.disabled)
+        $disabled:    role_check("USERS_ROLE_DISABLED", "role disabled", r.disabled)
     };
     fields.$id.disabled = !is_new;
     for(let k of Object.keys(fields)) {
