@@ -8,6 +8,35 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.2.2, gui_treedb 1.1.0 (2026-10-29)
+
+- **`src/controls_named.test.js` reads an upper-case tag, a tag written in
+  pieces, and a const shadowed in a block** (REV-CLOUD V49.2). Three shapes
+  got past it, and its header did not say so:
+    - a createElement2 spec with an upper-case tag (`["BUTTON", attrs]`) was
+      dropped, although `createElement2()` makes a button of it and
+      `document.createElement("BUTTON")` was already read. The tag of a
+      spec is now read in lower case, as the DOM reads it;
+    - a tag written as a `+` of texts (`"but" + "ton"`), in place or in a
+      const, was not read. It is now read as one text, in the spec, in html
+      and in `document.createElement()`;
+    - a name was looked up by function, not by block, so a const shadowed in
+      a block was read as the first one of the function: the element was
+      checked as another tag, or not checked. A name is now the one of the
+      nearest block that declares it, and a `v.title = ...` counts only for
+      the `v` it writes.
+
+  Each shape has a case in the test's self-check, red on 1.2.1 / 1.0.9. The
+  scan reads the same 618 (gui_agent) and 274 (gui_treedb) elements as before,
+  and finds nothing new. What it still cannot read is in the header and in
+  both READMEs: a tag that is a parameter, a `let` or a `var`, a destructured
+  const, a property, an import, a branch or a call. The READMEs had lost "an
+  import" and "a call" from that list, and the 1.2.1 / 1.0.9 entry below lost
+  "an import". The upper-case tag and the tag in pieces are gaps since the
+  test came in, gui_agent 1.1.8 / gui_treedb 1.0.6 (in yunetas 7.29.3); the
+  shadowed const came with the const reading of 1.2.0 / 1.0.8 (not in a
+  yunetas release). None hides a control of either app.
+
 ## gui_agent 1.2.1, gui_treedb 1.0.9 (2026-10-29)
 
 - **`src/controls_named.test.js` reads a tag held in a const** (REV-CLOUD

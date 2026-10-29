@@ -1105,9 +1105,12 @@ it or of the module, or the single `return` of a helper of the same module --,
 the tags of html strings (a template, a string literal, or a `+` chain of them
 read as one string), and every `document.createElement()` held in a variable,
 with what its function writes into it (`.title`, `.ariaLabel`,
-`.dataset.i18nTitle`, `setAttribute()`, ...); in all three the tag is a text or
-a const of the file given one (`[TAG, attrs]`, `"<" + TAG + ">"`,
-`document.createElement(TAG)`). A control (an `input`, `select`,
+`.dataset.i18nTitle`, `setAttribute()`, ...); in all three the tag is a text,
+a `+` of texts, or a const of the file given one (`[TAG, attrs]`,
+`"<" + TAG + ">"`, `document.createElement(TAG)`), read in lower case as the
+DOM reads it (`["BUTTON", attrs]` is a button), and a name is the one of the
+nearest block that declares it (a const shadowed in a block is the block's).
+A control (an `input`, `select`,
 `textarea` or `button`, or anything with the role of one) must carry a `title`
 AND an `aria-label`; on any element, a name may not be WRITTEN as text -- a
 string literal, a template with no `${}`, a `+` of those, a branch of `?:` /
@@ -1121,7 +1124,8 @@ deployed page, switching language: what a widget draws for itself (Tabulator's
 header filters and row boxes, Tom Select) and what gobj-ui builds; attrs
 reached through a parameter, a property, an import or a helper with several
 `return`s; a name written by another function; the key of a `t()` in a branch;
-an element whose tag is a parameter, a `let`, a property or a branch
+an element whose tag is a parameter, a `let` or a `var`, a destructured
+const, a property, an import, a branch or a call
 (`document.createElement(t)`: the whole element is skipped);
 an element that acts as a control without the tag or role of one (an `<a>` or
 a `<div>` with a click handler); and whether the text says the right thing.

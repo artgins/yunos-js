@@ -30,9 +30,15 @@
  *          read as its attrs. A control created and never held is a fault.
  *
  *      In all three the tag is read when it is a string literal, a
- *      template with no `${}`, or a const of the file given one
- *      (`[TAG, attrs]`, `"<" + TAG + ">"`, `` `<${TAG}>` ``,
- *      `document.createElement(TAG)`).
+ *      template with no `${}`, a `+` of those (`"but" + "ton"`), or a
+ *      const of the file given one (`[TAG, attrs]`, `"<" + TAG + ">"`,
+ *      `` `<${TAG}>` ``, `document.createElement(TAG)`), and read in
+ *      lower case, as the DOM reads it (`["BUTTON", attrs]` is a
+ *      button). A name means what it means where it is used: the
+ *      nearest block that declares it (a `let`, a `const`), then the
+ *      function (a `var`), then the functions around it, then the
+ *      module -- so a const shadowed in a block is the one of that
+ *      block, and a `v.title = ...` is read for the `v` it writes.
  *
  *      A control is an input (not `type="hidden"`), select, textarea or
  *      button, or an element whose role is button, switch, checkbox, tab
@@ -65,15 +71,16 @@
  *      DOM); the key of a
  *      `t()` reached through a branch (`x ? t("a") : t("b")` is read as
  *      data); a name inside `${}` of an html string that is a branch
- *      (`title="${on ? "On" : "Off"}"`); a name of the same variable in a
- *      block that shadows it (scopes are functions, not blocks); an
- *      element that behaves as a control without the tag or the role of
- *      one (an `<a>` or a `<div>` with a click handler); an element whose
- *      TAG it cannot read -- a parameter, a `let`, a property, an import,
- *      a branch or a call (`[tag, {type: "button"}]`, `"<" + tag + ">"`,
- *      `document.createElement(t)` with `tag` / `t` one of those): the
- *      whole element is skipped, control or not; and whether the
- *      translated text says the right thing.
+ *      (`title="${on ? "On" : "Off"}"`); an element that behaves as a
+ *      control without the tag or the role of one (an `<a>` or a
+ *      `<div>` with a click handler); an element whose TAG it cannot
+ *      read -- a parameter, a `let` or a `var` (it may be given another
+ *      value), a destructured const (`const {TAG} = ...`,
+ *      `const [TAG] = ...`), a property, an import, a branch, a call, or
+ *      a `+` with any of those in it (`[tag, {type: "button"}]`,
+ *      `"<" + tag + ">"`, `document.createElement(t)` with `tag` / `t`
+ *      one of those): the whole element is skipped, control or not; and
+ *      whether the translated text says the right thing.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -197,11 +204,38 @@ function own_walk(scope, visit)
     go(scope.type === "Program" ? scope : scope.body);
 }
 
+const BLOCK_RE = /^(BlockStatement|StaticBlock|SwitchStatement|ForStatement|ForInStatement|ForOfStatement|CatchClause)$/;
+
 /***************************************************************
- *  What a name means where `node` is: the nearest function that
- *  declares it, then the module.
+ *  The node a declaration of `scope` binds its name in: the
+ *  function (or the module) for a `var`, the nearest block for a
+ *  `let`, a `const`, a class, a function declared in a block, an
+ *  import or a catch parameter
+ ***************************************************************/
+function declaring_block(n, scope)
+{
+    let decl = (n.type === "VariableDeclarator") ? PARENT.get(n) : n;
+    if(decl.type === "VariableDeclaration" && decl.kind === "var") {
+        return scope;
+    }
+    if(n.type === "CatchClause") {
+        return n;
+    }
+    for(let p = PARENT.get(decl); p && p !== scope; p = PARENT.get(p)) {
+        if(BLOCK_RE.test(p.type)) {
+            return p;
+        }
+    }
+    return scope;
+}
+
+/***************************************************************
+ *  What a name means where `node` is: the nearest block, then
+ *  function, that declares it, then the module.
  *
- *      {kind: "var", decl, scope, is_const}  a variable (its declarator)
+ *      {kind: "var", decl, scope, is_const}  a variable (its declarator;
+ *                                            `scope` is the block, or
+ *                                            the function of a `var`)
  *      {kind: "function", fn}                a function of the module
  *      {kind: "param"} / {kind: "other"}     what cannot be read here
  *      null                                  not declared in the file
@@ -209,22 +243,14 @@ function own_walk(scope, visit)
 function binding(name, node)
 {
     for(let s of scopes_of(node)) {
-        if(s.type !== "Program") {
-            if(s.params.some((p) => pattern_names(p).includes(name))) {
-                return {kind: "param"};
-            }
-            if(s.type === "FunctionExpression" && s.id && s.id.name === name) {
-                return {kind: "function", fn: s};
-            }
-        }
-        let found = null;
+        /*  Every declaration of the name that is the function's own,
+         *  by the block it binds in  */
+        let by_block = new Map();
         own_walk(s, (n) => {
-            if(found) {
-                return;
-            }
+            let found = null;
             if(n.type === "VariableDeclarator" && pattern_names(n.id).includes(name)) {
                 found = (n.id.type === "Identifier")
-                    ? {kind: "var", decl: n, scope: s, is_const: PARENT.get(n).kind === "const"}
+                    ? {kind: "var", decl: n, is_const: PARENT.get(n).kind === "const"}
                     : {kind: "other"};
             } else if(n.type === "FunctionDeclaration" && n !== s && n.id && n.id.name === name) {
                 found = {kind: "function", fn: n};
@@ -233,12 +259,48 @@ function binding(name, node)
             } else if(n.type === "CatchClause" && pattern_names(n.param).includes(name)) {
                 found = {kind: "other"};
             }
+            if(found) {
+                let block = declaring_block(n, s);
+                if(found.kind === "var") {
+                    found.scope = block;
+                }
+                if(!by_block.has(block)) {
+                    by_block.set(block, found);
+                }
+            }
         });
-        if(found) {
-            return found;
+        /*  The nearest block around `node` that declares it  */
+        for(let p = node; p; p = PARENT.get(p)) {
+            if(by_block.has(p)) {
+                return by_block.get(p);
+            }
+            if(p === s) {
+                break;
+            }
+        }
+        if(s.type !== "Program") {
+            if(s.params.some((p) => pattern_names(p).includes(name))) {
+                return {kind: "param"};
+            }
+            if(s.type === "FunctionExpression" && s.id && s.id.name === name) {
+                return {kind: "function", fn: s};
+            }
         }
     }
     return null;
+}
+
+/***************************************************************
+ *  Whether the name `id` is the variable `b` where `id` is (a
+ *  block between them may declare another of the same name)
+ ***************************************************************/
+function is_binding(id, b)
+{
+    if(!b || b.kind !== "var") {
+        return true;
+    }
+    let here = binding(id.name, id);
+    return !!here && here.decl === b.decl;
 }
 
 /***************************************************************
@@ -322,15 +384,16 @@ function as_prop(name, value)
 
 /***************************************************************
  *  What is written into a variable after it is declared
- *  (`v.name = ...`, `v["name"] = ...`), anywhere in the function
- *  -- or the module -- that declares it
+ *  (`v.name = ...`, `v["name"] = ...`), anywhere in the block --
+ *  the function, the module -- that declares it, `b` its binding
  ***************************************************************/
-function member_writes(scope, name)
+function member_writes(b, name)
 {
     let extra = [];
-    walk(scope, (n) => {
+    walk(b.scope, (n) => {
         if(n.type === "AssignmentExpression" && n.left.type === "MemberExpression" &&
-                n.left.object.type === "Identifier" && n.left.object.name === name) {
+                n.left.object.type === "Identifier" && n.left.object.name === name &&
+                is_binding(n.left.object, b)) {
             let key = member_name(n.left);
             if(key) {
                 extra.push(as_prop(key, n.right));
@@ -397,7 +460,7 @@ function attrs_of(node, depth = 0)
         if(!props) {
             return null;
         }
-        return [...props, ...member_writes(b.scope, node.name)];
+        return [...props, ...member_writes(b, node.name)];
     }
     if(node.type === "CallExpression" && node.callee.type === "Identifier") {
         let fn = function_of(binding(node.callee.name, node));
@@ -467,9 +530,9 @@ function literal_texts(v, depth = 0)
 
 /***************************************************************
  *  The text a tag is written as: a string literal, a template with
- *  no `${}`, or a const of the file given one. null when it cannot
- *  be read here (a parameter, a `let`, a property, an import, a
- *  branch, a call).
+ *  no `${}`, a `+` of those, or a const of the file given one. null
+ *  when it cannot be read here (a parameter, a `let` or a `var`, a
+ *  destructured const, a property, an import, a branch, a call).
  ***************************************************************/
 function tag_text(node, depth = 0)
 {
@@ -481,6 +544,17 @@ function tag_text(node, depth = 0)
     }
     if(node.type === "TemplateLiteral" && node.expressions.length === 0) {
         return node.quasis[0].value.cooked;
+    }
+    if(is_plus(node)) {
+        let s = "";
+        for(let leaf of plus_leaves(node)) {
+            let piece = tag_text(leaf, depth + 1);
+            if(piece === null) {
+                return null;
+            }
+            s += piece;
+        }
+        return s;
     }
     if(node.type === "Identifier") {
         let b = binding(node.name, node);
@@ -698,12 +772,13 @@ const DATASET_PROPS = {i18nTitle: "data-i18n-title", i18nAriaLabel: "data-i18n-a
  *  What is written into an element held in `v`, as attrs:
  *  `v.title = ...`, `v.ariaLabel = ...`, `v.type = ...`,
  *  `v.dataset.i18nTitle = ...`, `v.setAttribute("<name>", ...)`,
- *  anywhere in the function that declares `v`
+ *  anywhere in the block that declares `v` (`b` its binding, if
+ *  any), or in the function that creates the element
  ***************************************************************/
-function element_writes(scope, v)
+function element_writes(scope, v, b)
 {
     let props = [];
-    let is_v = (x) => x.type === "Identifier" && x.name === v;
+    let is_v = (x) => x.type === "Identifier" && x.name === v && is_binding(x, b);
     walk(scope, (n) => {
         if(n.type === "AssignmentExpression" && n.left.type === "MemberExpression") {
             let m = n.left;
@@ -753,7 +828,7 @@ function created_element_faults(src, n)
     }
     let b = binding(v, n);
     let scope = (b && b.kind === "var") ? b.scope : scopes_of(n)[0];
-    let props = element_writes(scope, v);
+    let props = element_writes(scope, v, b);
     let value_of = (name) => {
         let p = props.find((x) => prop_name(x) === name);
         return (p && p.value.type === "Literal") ? p.value.value : null;
@@ -782,7 +857,11 @@ function scan_source(file, src)
         if(n.type === "ArrayExpression" && n.elements.length >= 2) {
             let [tag_node, attrs] = n.elements;
             let tag = tag_text(tag_node);
-            if(tag === null || !/^[a-z][a-z0-9]*$/.test(tag)) {
+            if(tag === null) {
+                return;
+            }
+            tag = tag.toLowerCase();    /*  as document.createElement() reads it  */
+            if(!/^[a-z][a-z0-9]*$/.test(tag)) {
                 return;
             }
             let props = attrs_of(attrs);
@@ -995,5 +1074,61 @@ describe("the scan finds what it says it finds", () => {
             'return ["<" + tag + ">", [tag, {type: "button"}], $e]; }')).toEqual([]);
         expect(faults('let tag = "button";\nlet a = [tag, {type: "button"}];')).toEqual([]);
         expect(faults('const TAG = make();\nlet a = [TAG, {type: "button"}];')).toEqual([]);
+    });
+
+    /*
+     *  REV-CLOUD V49.2: an upper-case tag, a tag of pieces, a const shadowed
+     *  in a block
+     */
+    test("an upper-case tag in a spec, as the DOM reads it", () => {
+        expect(faults('let a = ["BUTTON", {class: "x"}];'))
+            .toEqual(["x.js:1 <button> no title", "x.js:1 <button> no aria-label"]);
+        expect(faults('const TAG = "Input";\nlet a = [TAG, {type: "text"}];'))
+            .toEqual(["x.js:2 <input> no title", "x.js:2 <input> no aria-label"]);
+    });
+
+    test("a tag written as a + of texts, in place or in a const", () => {
+        expect(faults('let a = ["but" + "ton", {class: "x"}];'))
+            .toEqual(["x.js:1 <button> no title", "x.js:1 <button> no aria-label"]);
+        expect(faults('const TAG = "but" + `ton`;\nlet a = [TAG, {class: "x"}];'))
+            .toEqual(["x.js:2 <button> no title", "x.js:2 <button> no aria-label"]);
+        expect(faults('const TAG = "sel" + "ect";\nlet h = "<" + TAG + \' class="x">\';'))
+            .toEqual(["x.js:2 <select> no title", "x.js:2 <select> no aria-label"]);
+        expect(faults('const TAG = "in" + "put";\n' +
+            'function f() { let $i = document.createElement(TAG); return $i; }'))
+            .toEqual(["x.js:2 createElement(TAG) no title", "x.js:2 createElement(TAG) no aria-label"]);
+    });
+
+    test("a const shadowed in a block is the one of the block", () => {
+        expect(faults('function f(x) {\n' +
+            '    const TAG = "div";\n' +
+            '    if(x) {\n' +
+            '        const TAG = "button";\n' +
+            '        return [TAG, {class: "x"}];\n' +
+            '    }\n' +
+            '    return [TAG, {title: name}];\n' +
+            '}'))
+            .toEqual(["x.js:5 <button> no title", "x.js:5 <button> no aria-label"]);
+        expect(faults('function f(x) {\n' +
+            '    if(x) {\n' +
+            '        const TAG = "button";\n' +
+            '    }\n' +
+            '    const TAG = "span";\n' +
+            '    return [TAG, {class: "x"}];\n' +
+            '}')).toEqual([]);
+        expect(faults('const SAVE = "Save";\n' +
+            'function f() { { const SAVE = t("save"); return ["button", {title: SAVE, ' +
+            '"data-i18n-title": "save", "aria-label": name}]; } }')).toEqual([]);
+        expect(faults('function f() {\n' +
+            '    let attrs = {type: "button"};\n' +
+            '    { let attrs = {}; attrs.title = "Lit"; }\n' +
+            '    return ["button", attrs];\n' +
+            '}')).toEqual(["x.js:4 <button> no title", "x.js:4 <button> no aria-label"]);
+    });
+
+    test("a var or a destructured const holding the tag is not read (listed in the header)", () => {
+        expect(faults('var tag = "button";\nlet a = [tag, {type: "button"}];')).toEqual([]);
+        expect(faults('const {TAG} = {TAG: "button"};\nlet a = [TAG, {type: "button"}];')).toEqual([]);
+        expect(faults('const [TAG] = ["button"];\nlet a = [TAG, {type: "button"}];')).toEqual([]);
     });
 });
