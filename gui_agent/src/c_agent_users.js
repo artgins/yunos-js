@@ -1196,8 +1196,8 @@ function role_entry_row(entry, datalist_id, locked)
     let $perm = role_input("USERS_ROLE_ENTRY_PERMISSION", "permission", entry.permission,
         {list: datalist_id, placeholder: t("permission"), "data-i18n-placeholder": "permission"});
     let $deny = role_check("USERS_ROLE_ENTRY_DENY", "deny", entry.deny);
-    let $own = role_check("USERS_ROLE_ENTRY_OWN", "own scope", own);
-    let $scope = role_input("USERS_ROLE_ENTRY_SCOPE", "own scope",
+    let $own = role_check("USERS_ROLE_ENTRY_OWN", "give own scope", own);
+    let $scope = role_input("USERS_ROLE_ENTRY_SCOPE", "own scope of the permission",
         own ? format_scope(entry.parameters) : "",
         {placeholder: t("own scope placeholder"), "data-i18n-placeholder": "own scope placeholder"});
     let $remove = createElement2(button_spec("USERS_ROLE_ENTRY_REMOVE", "yi-xmark", "remove permission", false));

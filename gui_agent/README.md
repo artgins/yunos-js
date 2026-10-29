@@ -1097,6 +1097,16 @@ npm run qa         # drive the DEPLOYED plane in a real browser
 command history. Everything that needs a yuno, a shell and a backend is
 `scripts/qa.mjs`'s job instead.
 
+`src/controls_named.test.js` reads the SOURCE of every module of the app,
+never runs it: every control it builds (an `input`, `select`, `textarea` or
+`button`, or anything with the role of one) carries a `title` AND an
+`aria-label`, and a name given with `t()` carries its key
+(`data-i18n-title` / `data-i18n-aria-label`). A name that is data (a role id,
+a command, a connection) needs no key; a control whose name is painted with its
+state after it is built says so with a `named by <function>` comment in its
+attrs. What it cannot see -- a name written with `setAttribute`, what a widget
+draws for itself -- is checked on the deployed page, switching language.
+
 ## Roadmap
 
 The phased build-out is **done**: scaffold (shell + nav), the Commands console,

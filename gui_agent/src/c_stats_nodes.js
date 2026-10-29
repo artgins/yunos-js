@@ -415,6 +415,8 @@ function build_dom(gobj)
         type:         "text",
         placeholder:  t("search nodes"),
         "data-i18n-placeholder": "search nodes",
+        title:        t("search nodes"),
+        "data-i18n-title": "search nodes",
         "aria-label": t("search nodes"),
         "data-i18n-aria-label": "search nodes"
     }, null, {
@@ -501,7 +503,9 @@ function build_dom(gobj)
                  style: "gap:0.5rem; margin-left:auto;"}, [
             $copy,
             $copy_conns,
-            ["button", {class: "STATNODES_REFRESH button", type: "button", i18n: "refresh"},
+            ["button", {class: "STATNODES_REFRESH button", type: "button", i18n: "refresh",
+                        title: t("refresh"), "data-i18n-title": "refresh",
+                        "aria-label": t("refresh"), "data-i18n-aria-label": "refresh"},
                 "Refresh", {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
         ]]
     );

@@ -134,16 +134,26 @@ function render_html(dep, plane)
                     <label class="yfield">
                         <span class="yfield-label" data-i18n="username" data-default="Username">Username</span>
                         <div class="yfield-control">
-                            <input type="text" name="username" autocomplete="username" required>
+                            <input type="text" name="username" autocomplete="username" required
+                                   title="${t("username", {defaultValue: "Username"})}"
+                                   data-i18n-title="username"
+                                   aria-label="${t("username", {defaultValue: "Username"})}"
+                                   data-i18n-aria-label="username">
                         </div>
                     </label>
 
                     <label class="yfield">
                         <span class="yfield-label" data-i18n="password" data-default="Password">Password</span>
                         <div class="yfield-password">
-                            <input type="password" name="password" autocomplete="current-password" required>
+                            <input type="password" name="password" autocomplete="current-password" required
+                                   title="${t("password", {defaultValue: "Password"})}"
+                                   data-i18n-title="password"
+                                   aria-label="${t("password", {defaultValue: "Password"})}"
+                                   data-i18n-aria-label="password">
                             <button type="button" class="ypassword-toggle" data-action="toggle-password"
                                     aria-pressed="false"
+                                    title="${t("show password", {defaultValue: "Show password"})}"
+                                    data-i18n-title="show password"
                                     aria-label="${t("show password", {defaultValue: "Show password"})}"
                                     data-i18n-aria-label="show password">
                                 <span data-password-icon>${svg_eye()}</span>
@@ -151,7 +161,11 @@ function render_html(dep, plane)
                         </div>
                     </label>
 
-                    <button type="submit" class="ylogin-cta">
+                    <button type="submit" class="ylogin-cta"
+                            title="${t("sign in", {defaultValue: "Sign in"})}"
+                            data-i18n-title="sign in"
+                            aria-label="${t("sign in", {defaultValue: "Sign in"})}"
+                            data-i18n-aria-label="sign in">
                         <span data-i18n="sign in" data-default="Sign in">Sign in</span>
                     </button>
                 </form>
@@ -245,9 +259,11 @@ function wire_form(root, on_submit)
          *  `data-i18n-aria-label`, and a stale key there would put the
          *  label back to "show" on a field that is showing.  */
         let pwd_key = revealed ? "show password" : "hide password";
+        let pwd_label = t(pwd_key, {defaultValue: revealed ? "Show password" : "Hide password"});
+        toggle.setAttribute("data-i18n-title", pwd_key);
+        toggle.setAttribute("title", pwd_label);
         toggle.setAttribute("data-i18n-aria-label", pwd_key);
-        toggle.setAttribute("aria-label",
-            t(pwd_key, {defaultValue: revealed ? "Show password" : "Hide password"}));
+        toggle.setAttribute("aria-label", pwd_label);
     });
 
     return {set_error, clear_error, set_busy, repaint_error};

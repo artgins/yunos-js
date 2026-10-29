@@ -220,7 +220,11 @@ function build_ui(gobj)
         class:        "PICKER_SEARCH input",
         type:         "text",
         placeholder:  t("search a node or a treedb"),
-        "data-i18n-placeholder": "search a node or a treedb"
+        "data-i18n-placeholder": "search a node or a treedb",
+        title:        t("search a node or a treedb"),
+        "data-i18n-title": "search a node or a treedb",
+        "aria-label": t("search a node or a treedb"),
+        "data-i18n-aria-label": "search a node or a treedb"
     }]);
     $search.addEventListener("input", () => {
         gobj_send_event(gobj, "EV_SEARCH", {text: $search.value || ""}, gobj);
@@ -259,6 +263,9 @@ function build_ui(gobj)
 
     let $manage = createElement2(
         ["button", {class: "button PICKER_MANAGE",
+                    title: t("manage connections"), "data-i18n-title": "manage connections",
+                    "aria-label": t("manage connections"),
+                    "data-i18n-aria-label": "manage connections",
                     i18n: "manage connections"}, "Manage connections"]);
     $manage.addEventListener("click", () => {
         gobj_send_event(gobj, "EV_MANAGE_CONNECTIONS", {}, gobj);
@@ -471,6 +478,7 @@ function make_columns(gobj)
             $cb.className = "PICKER_SERVICE_CHECK";
             $cb.checked = !!r.selected;
             $cb.setAttribute("aria-label", t("open in this workspace"));
+            $cb.title = t("open in this workspace");
             return $cb;
         }
 

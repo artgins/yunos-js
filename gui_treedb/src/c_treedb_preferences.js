@@ -140,6 +140,8 @@ function build_live_max_field(gobj)
         ["input", {class: "input is-small PREFERENCES_LIVE_MAX", type: "number",
                    min: String(LIVE_MAX_MIN), max: String(LIVE_MAX_MAX),
                    step: "50", value: String(cur),
+                   title: t("rows per live card"),
+                   "data-i18n-title": "rows per live card",
                    "aria-label": t("rows per live card"),
                    "data-i18n-aria-label": "rows per live card",
                    style: "max-width:9rem;"}]);

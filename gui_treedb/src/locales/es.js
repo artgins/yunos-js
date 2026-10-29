@@ -19,7 +19,7 @@
  *              snake_case form so they match the wire format
  *              one-to-one.  Both forms are still ASCII lower-case.
  *
- *          Copyright (c) 2025, ArtGins.
+ *          Copyright (c) 2025-2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
 const es = {
@@ -656,6 +656,8 @@ const es = {
         "connected": "Conectado",
         "disconnected": "Desconectado",
         "remove": "Eliminar",
+        "connect the ticked ones": "Conectar las conexiones marcadas y desconectar las demás",
+        "remove the ticked connections": "Eliminar las conexiones marcadas",
         "remove several connections": "Borrar varias conexiones",
         "select all": "Seleccionar todas",
         "to connect": "a conectar",

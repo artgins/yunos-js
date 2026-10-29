@@ -701,7 +701,9 @@ function build_ui(gobj)
     let $live_btn = createElement2(
         ["button", {class: "button ml-2 TRANGER_LIVE_TOPIC_BTN",
                     title: t("live on the whole topic"),
-                    "aria-label": t("live on the whole topic")},
+                    "data-i18n-title": "live on the whole topic",
+                    "aria-label": t("live on the whole topic"),
+                    "data-i18n-aria-label": "live on the whole topic"},
             [
                 ["span", {class: "TRANGER_LIVE_DOT mr-2"}, ""],
                 ["span", {i18n: "live topic"}, t("live topic")]
@@ -722,7 +724,9 @@ function build_ui(gobj)
     let $rows_btn = createElement2(
         ["button", {class: "button ml-2 TRANGER_ROWS_TOPIC_BTN",
                     title: t("rows of every key of the topic"),
-                    "aria-label": t("rows of every key of the topic")},
+                    "data-i18n-title": "rows of every key of the topic",
+                    "aria-label": t("rows of every key of the topic"),
+                    "data-i18n-aria-label": "rows of every key of the topic"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-table"}]]],
                 ["span", {i18n: "rows topic"}, t("rows topic")]
@@ -1086,7 +1090,8 @@ function render_tabs(gobj)
         $tabs.removeChild($tabs.firstChild);
     }
     for(let topic of (priv.topics || [])) {
-        let $a = createElement2(["a", {class: "TRANGER_TOPIC_TAB"}, topic]);
+        let $a = createElement2(["a", {class: "TRANGER_TOPIC_TAB", title: topic, "aria-label": topic},
+            topic]);
         $a.addEventListener("click", (ev) => {
             ev.preventDefault();
             gobj_send_event(gobj, "EV_SELECT_TOPIC", {topic: topic}, gobj);
@@ -1666,9 +1671,12 @@ function paint_live_topic_btn(gobj)
     let open = !!find_card(gobj, ALL_KEYS, "live");
     $btn.classList.toggle("is-live", open);
 
-    let label = open ? t("stop following the topic") : t("live on the whole topic");
+    let key = open ? "stop following the topic" : "live on the whole topic";
+    let label = t(key);
     $btn.title = label;
     $btn.setAttribute("aria-label", label);
+    $btn.setAttribute("data-i18n-title", key);
+    $btn.setAttribute("data-i18n-aria-label", key);
 
     /*  The whole-topic Rows card, in the picker's language for a key's Rows:
      *  the button is coloured while the card is open.  */
@@ -1677,11 +1685,14 @@ function paint_live_topic_btn(gobj)
         let rows_open = !!find_card(gobj, ALL_KEYS, "rows");
         $rows.classList.toggle("is-link", rows_open);
         $rows.classList.toggle("is-selected", rows_open);
-        let rows_label = rows_open
-            ? t("close the rows of the topic")
-            : t("rows of every key of the topic");
+        let rows_key = rows_open
+            ? "close the rows of the topic"
+            : "rows of every key of the topic";
+        let rows_label = t(rows_key);
         $rows.title = rows_label;
         $rows.setAttribute("aria-label", rows_label);
+        $rows.setAttribute("data-i18n-title", rows_key);
+        $rows.setAttribute("data-i18n-aria-label", rows_key);
     }
 }
 
@@ -1872,7 +1883,8 @@ function build_key_actions(gobj, cell)
     let $rows = createElement2(
         ["button", {class: "button is-small TRANGER_KEY_ROWS" +
                            (rows_open ? " is-link is-selected" : ""),
-                    type: "button", title: t("rows"), "aria-label": t("rows")},
+                    type: "button", title: t("rows"), "data-i18n-title": "rows",
+                    "aria-label": t("rows"), "data-i18n-aria-label": "rows"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-table"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "rows"}, t("rows")]
@@ -1891,7 +1903,8 @@ function build_key_actions(gobj, cell)
     let $live = createElement2(
         ["button", {class: "button is-small ml-1 TRANGER_KEY_LIVE" +
                            (live_open ? " is-success is-selected" : ""),
-                    type: "button", title: t("live"), "aria-label": t("live")},
+                    type: "button", title: t("live"), "data-i18n-title": "live",
+                    "aria-label": t("live"), "data-i18n-aria-label": "live"},
             [
                 ["span", {class: "TRANGER_LIVE_DOT mr-1"}, ""],
                 ["span", {class: "is-hidden-mobile", i18n: "live"}, t("live")]
@@ -1911,7 +1924,8 @@ function build_key_actions(gobj, cell)
      *  and the delete happens in the action that receives the answer.  */
     let $del = createElement2(
         ["button", {class: "button is-small ml-1 TRANGER_KEY_DELETE",
-                    type: "button", title: t("delete"), "aria-label": t("delete")},
+                    type: "button", title: t("delete"), "data-i18n-title": "delete",
+                    "aria-label": t("delete"), "data-i18n-aria-label": "delete"},
             [
                 ["span", {class: "icon"}, [["i", {class: "yi-trash"}]]],
                 ["span", {class: "is-hidden-mobile", i18n: "delete"}, t("delete")]
@@ -2075,9 +2089,11 @@ function build_time_block(gobj, match_cond, span, units)
      *  below): the name has to be on the input.  */
     let $from = createElement2(
         ["input", {class: "input TRANGER_OPT_FROM", type: "datetime-local", step: "1",
+                   title: t("from"), "data-i18n-title": "from",
                    "aria-label": t("from"), "data-i18n-aria-label": "from"}]);
     let $to = createElement2(
         ["input", {class: "input TRANGER_OPT_TO", type: "datetime-local", step: "1",
+                   title: t("to"), "data-i18n-title": "to",
                    "aria-label": t("to"), "data-i18n-aria-label": "to"}]);
 
     /*  Typing in them is an answer too: the hint must follow what the inputs
@@ -2156,7 +2172,9 @@ function build_time_block(gobj, match_cond, span, units)
                          *  line under the pair. Two full sentences side by side
                          *  wrapped into an unreadable block on a phone.  */
                         title: t(id === "t" ? "t persistence" : "tm message origin"),
-                        "data-i18n-title": id === "t" ? "t persistence" : "tm message origin"},
+                        "data-i18n-title": id === "t" ? "t persistence" : "tm message origin",
+                        "aria-label": t(id === "t" ? "t persistence" : "tm message origin"),
+                        "data-i18n-aria-label": id === "t" ? "t persistence" : "tm message origin"},
                 [["span", {"data-i18n": id === "t" ? "axis t" : "axis tm"},
                     t(id === "t" ? "axis t" : "axis tm")]]
             ]);
@@ -2409,7 +2427,8 @@ function build_rows_options_form(gobj, match_cond, editing, span, units, whole_t
      *  to reach them without paging by hand through 400k rows to the end.  */
     let $backward = createElement2(["input", {type: "checkbox",
         class: "TRANGER_OPT_BACKWARD",
-        title: t("newest first"), "data-i18n-title": "newest first"}]);
+        title: t("newest first"), "data-i18n-title": "newest first",
+        "aria-label": t("newest first"), "data-i18n-aria-label": "newest first"}]);
     $backward.checked = !!mc.backward;
     inputs.backward = $backward;
 
@@ -2918,7 +2937,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
     if(mode === "live") {
         $pause = createElement2(
             ["button", {class: "button TRANGER_CARD_PAUSE",
-                        title: t("pause"), "aria-label": t("pause")},
+                        title: t("pause"), "data-i18n-title": "pause",
+                        "aria-label": t("pause"), "data-i18n-aria-label": "pause"},
                 [
                     ["span", {class: "icon"}, [["i", {class: "yi-pause"}]]],
                     ["span", {class: "is-hidden-mobile", i18n: "pause"}, t("pause")]
@@ -2950,7 +2970,8 @@ function add_card(gobj, key, mode, match_cond, restoring)
     } else {
         $action = createElement2(
             ["button", {class: "button TRANGER_CARD_CLEAR",
-                        title: t("clear"), "aria-label": t("clear")},
+                        title: t("clear"), "data-i18n-title": "clear",
+                        "aria-label": t("clear"), "data-i18n-aria-label": "clear"},
                 [
                     ["span", {class: "icon"}, [["i", {class: "yi-broom"}]]],
                     ["span", {class: "is-hidden-mobile", i18n: "clear"}, t("clear")]
@@ -2966,7 +2987,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
     if(mode === "live") {
         head_children.push(
             ["span", {class: "TRANGER_LIVE_DOT ml-1 mr-2 is-flex-shrink-0",
-                      title: t("live")}, ""]);
+                      title: t("live"), "data-i18n-title": "live"}, ""]);
     }
     /*  The title is not one composed string any more: "<key> · <mode>" built
      *  with t() at create time carried no i18n key, so refresh_language() had
@@ -4581,9 +4602,12 @@ function paint_pause_button(card)
     if(!card.$pause) {
         return;
     }
-    let label = card.paused ? t("resume") : t("pause");
+    let key = card.paused ? "resume" : "pause";
+    let label = t(key);
     card.$pause.title = label;
     card.$pause.setAttribute("aria-label", label);
+    card.$pause.setAttribute("data-i18n-title", key);
+    card.$pause.setAttribute("data-i18n-aria-label", key);
     card.$pause.classList.toggle("is-warning", card.paused);
     card.$pause.classList.toggle("is-selected", card.paused);
 
@@ -4667,7 +4691,7 @@ function ac_open_columns(gobj, event, kw, src)
         if(!field || field === "__rec") {
             continue;
         }
-        let $cb = createElement2(["input", {type: "checkbox"}]);
+        let $cb = createElement2(["input", {type: "checkbox", title: field, "aria-label": field}]);
         $cb.checked = col.isVisible();
         $cb.addEventListener("change", () => {
             gobj_send_event(gobj, "EV_TOGGLE_COLUMN",

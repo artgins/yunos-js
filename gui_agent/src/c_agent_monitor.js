@@ -2467,7 +2467,7 @@ function paint_card_tools(gobj, key)
 function card_button(cls, event, key, gobj)
 {
     return createElement2(
-        ["button", {class: `${cls} button`, type: "button"},
+        ["button", {class: `${cls} button`, type: "button" /* named by set_card_button */},
             [["span", {class: "icon"}, [["i", {}]]]],
             {click: () => gobj_send_event(gobj, event, {key: key}, gobj)}]
     );

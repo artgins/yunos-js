@@ -552,6 +552,14 @@ describe("the roles of the store", () => {
             expect($rows.length).toBe(2);
             expect($rows[0].querySelector(".USERS_ROLE_ENTRY_OWN").checked).toBe(true);
             expect($rows[1].querySelector(".USERS_ROLE_ENTRY_OWN").checked).toBe(false);
+            /*  The box and the text beside it do two things, so they have
+             *  two names (REV-CLOUD V45.2: both were "own scope").  */
+            const $own = $rows[0].querySelector(".USERS_ROLE_ENTRY_OWN");
+            const $scope = $rows[0].querySelector(".USERS_ROLE_ENTRY_SCOPE");
+            expect($own.getAttribute("data-i18n-aria-label")).toBe("give own scope");
+            expect($own.getAttribute("data-i18n-title")).toBe("give own scope");
+            expect($scope.getAttribute("data-i18n-aria-label")).toBe("own scope of the permission");
+            expect($scope.getAttribute("data-i18n-title")).toBe("own scope of the permission");
             $c.querySelector(".USERS_ROLE_SAVE").click();
             expect(sent.map(inner)).toEqual(["update-node"]);
             expect(sent[0].kw.record.permissions).toEqual([

@@ -8,6 +8,35 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.1.8, gui_treedb 1.0.6 (2026-10-29)
+
+- **The *Own scope* box of a role's permission and the text beside it have
+  two names** (gui_agent): both were *Own scope*. The box is `give own scope`
+  ("Give this permission its own scope, not the role's"), the text `own scope
+  of the permission` ("Own scope of this permission (JSON; empty:
+  unscoped)") (REV-CLOUD V45.2; since 1.1.7, in yunetas 7.29.2).
+- **Every control of both apps carries a `title` AND an `aria-label`, and a
+  name given with `t()` carries its key** (V45.2: nine had an `aria-label`
+  and no `title`; the sweep found more). gui_agent: the searches of Nodes
+  and Stats, the console's command line, the shortkey inputs, now with
+  their `title`; the Refresh buttons, the theme and language buttons of the
+  preferences (each language named in the reader's own language), the two
+  font-size readouts, *Add* of the shortkeys, the history's sort buttons,
+  and the login form (user, password, *Sign in*, and the password toggle's
+  `title`), which had none. gui_treedb: the From/To of the Rows options
+  with their `title`, the `t`/`tm` axis and *Newest first* with their
+  `aria-label`; the picker's search (no name at all), *Manage connections*
+  and its service boxes; the connect and remove boxes of the connections
+  (each connection, *Select all*, *Apply*, *Remove*, *Cancel*), the paste
+  box and its *Import*, the hidden file input, the live-rows preference,
+  the column chooser, the topic tabs and the same login form. The key-row
+  Rows/Live/Delete, *Pause*/*Clear*, *Live topic*/*Rows topic* and the live
+  dot had a `t()` name with no key, so a language change did not reach
+  them; the buttons painted with their state now write the key with the
+  text. A new `src/controls_named.test.js` in each app reads every control
+  of the source and fails on one without its two names or its keys (all
+  in yunetas 7.29.2).
+
 ## gui_agent 1.1.7 (2026-10-29)
 
 - **A console paints only the answers to its own commands.** The link

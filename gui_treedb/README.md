@@ -253,6 +253,16 @@ origin), the two time units (seconds vs `sf_t_ms` milliseconds), a record free
 to carry its own field named like a metadata column — and there a test can
 reach them with no DOM, no Tabulator and no websocket.
 
+`src/controls_named.test.js` reads the SOURCE of every module of the app,
+never runs it: every control it builds (an `input`, `select`, `textarea` or
+`button`, or anything with the role of one) carries a `title` AND an
+`aria-label`, and a name given with `t()` carries its key
+(`data-i18n-title` / `data-i18n-aria-label`). A name that is data (a role id,
+a command, a connection) needs no key; a control whose name is painted with its
+state after it is built says so with a `named by <function>` comment in its
+attrs. What it cannot see -- a name written with `setAttribute`, what a widget
+draws for itself -- is checked on the deployed page, switching language.
+
 ## A tab keeps what it had open
 
 A tab's nav item is a **fixed route**: `yui_shell_set_submenu()` registers it in

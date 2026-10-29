@@ -19,7 +19,7 @@
  *              snake_case form so they match the wire format
  *              one-to-one.  Both forms are still ASCII lower-case.
  *
- *          Copyright (c) 2025, ArtGins.
+ *          Copyright (c) 2025-2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
 const en = {
@@ -651,6 +651,8 @@ const en = {
         "connected": "Connected",
         "disconnected": "Disconnected",
         "remove": "Remove",
+        "connect the ticked ones": "Connect the ticked connections and disconnect the rest",
+        "remove the ticked connections": "Remove the ticked connections",
         "remove several connections": "Remove several connections",
         "select all": "Select all",
         "to connect": "to connect",

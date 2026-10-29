@@ -246,7 +246,9 @@ function build_preference(gobj)
             kids.push(opt.i18n
                 ? ["span", {i18n: opt.i18n}, opt.text]
                 : ["span", {}, opt.text]);
-            return ["button", {type: "button", class: cls}, kids,
+            return ["button", {type: "button", class: cls,
+                               title: t(opt.name), "data-i18n-title": opt.name,
+                               "aria-label": t(opt.name), "data-i18n-aria-label": opt.name}, kids,
                 {click: function() { on_pick(opt.value); }}];
         });
         return ["div", {class: "PREF_SEGMENT buttons has-addons"}, btns];
@@ -254,8 +256,8 @@ function build_preference(gobj)
 
     let theme_seg = segment(
         [
-            {value: "light", i18n: "light theme", text: "Light theme", icon: "yi-sun"},
-            {value: "dark",  i18n: "dark theme",  text: "Dark theme",  icon: "yi-moon"}
+            {value: "light", i18n: "light theme", name: "light theme", text: "Light theme", icon: "yi-sun"},
+            {value: "dark",  i18n: "dark theme",  name: "dark theme",  text: "Dark theme",  icon: "yi-moon"}
         ],
         theme,
         function(v) {
@@ -265,8 +267,10 @@ function build_preference(gobj)
 
     let lang_seg = segment(
         [
-            {value: "en", text: "English"},
-            {value: "es", text: "Español"}
+            /*  Each language is SHOWN in its own words, and named in the
+             *  reader's.  */
+            {value: "en", name: "english", text: "English"},
+            {value: "es", name: "spanish", text: "Español"}
         ],
         lang,
         function(v) {
@@ -333,6 +337,9 @@ function build_preference(gobj)
                     gobj_send_event(gobj, "EV_SET_TTY_FONT_SIZE", {delta: -1}, gobj);
                 }),
             ["button", {type: "button", class: "PREF_FONT_SIZE button is-static",
+                        title: t("terminal font size"), "data-i18n-title": "terminal font size",
+                        "aria-label": t("terminal font size"),
+                        "data-i18n-aria-label": "terminal font size",
                         style: "min-width:4.5rem;"},
                 `${font_size} px`],
             font_button("yi-magnifying-glass-plus", "font larger", font_size >= FONT_SIZE_MAX,
@@ -354,6 +361,9 @@ function build_preference(gobj)
                     gobj_send_event(gobj, "EV_SET_CONSOLE_FONT_SIZE", {delta: -1}, gobj);
                 }),
             ["button", {type: "button", class: "PREF_CONSOLE_FONT_SIZE button is-static",
+                        title: t("console font size"), "data-i18n-title": "console font size",
+                        "aria-label": t("console font size"),
+                        "data-i18n-aria-label": "console font size",
                         style: "min-width:4.5rem;"},
                 `${console_font_size} px`],
             font_button("yi-magnifying-glass-plus", "font larger",
@@ -446,12 +456,14 @@ function build_shortkeys(gobj)
     let $key = ce(["input", {class: "SK_ADD_KEY input is-family-monospace", type: "text",
                              placeholder: t("shortkey"),
                              "data-i18n-placeholder": "shortkey",
+                             title: t("shortkey"), "data-i18n-title": "shortkey",
                              "aria-label": t("shortkey"),
                              "data-i18n-aria-label": "shortkey",
                              style: "max-width:7rem;"}]);
     let $cmd = ce(["input", {class: "SK_ADD_CMD input is-family-monospace", type: "text",
                              placeholder: t("command template"),
                              "data-i18n-placeholder": "command template",
+                             title: t("command template"), "data-i18n-title": "command template",
                              "aria-label": t("command template"),
                              "data-i18n-aria-label": "command template"}]);
 
@@ -484,7 +496,10 @@ function build_shortkeys(gobj)
                 $key_control,
                 $cmd_control,
                 ["div", {class: "SK_ADD_CONTROL control"},
-                    [["button", {class: "SK_ADD button is-primary", type: "button"},
+                    [["button", {class: "SK_ADD button is-primary", type: "button",
+                                 title: t("add to shortkeys"), "data-i18n-title": "add to shortkeys",
+                                 "aria-label": t("add to shortkeys"),
+                                 "data-i18n-aria-label": "add to shortkeys"},
                         [
                             ["span", {class: "icon"}, [["span", {class: "yi-plus"}, ""]]],
                             ["span", {i18n: "add"}, "Add"]

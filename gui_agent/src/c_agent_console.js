@@ -384,6 +384,7 @@ function build_ui(gobj)
          *  translated -- the same as a code sample.  */
         placeholder:  "help",
         autocomplete: "off",
+        title: t("command"), "data-i18n-title": "command",
         "aria-label": t("command"), "data-i18n-aria-label": "command"
     }, null, {
         /*  Each key that MEANS something is an event; the handler only
@@ -876,7 +877,8 @@ function fill_help_popover(gobj)
             ? " " + cmd.params.map((p) => `[${p}]`).join(" ") : "";
         let $item = createElement2(
             ["a", {class: "HELP_ITEM dropdown-item is-family-monospace",
-                   style: "white-space:normal;", title: (cmd && cmd.desc) ? cmd.desc : ""},
+                   style: "white-space:normal;", title: (cmd && cmd.desc) ? cmd.desc : name,
+                   "aria-label": name},
                 [
                     ["span", {class: "HELP_ITEM_NAME has-text-weight-semibold"}, name],
                     ["span", {class: "HELP_ITEM_SIG has-text-grey"}, sig]
@@ -951,9 +953,11 @@ function fill_hist_popover(gobj)
     }
 
     /*  Sort header: recency vs frequency.  */
-    let mk_sort_btn = (mode, key, text) => {
+    let mk_sort_btn = (mode, key, text, name) => {
         let $b = createElement2(
-            ["button", {class: "HISTORY_SORT button", type: "button", i18n: key}, text]);
+            ["button", {class: "HISTORY_SORT button", type: "button", i18n: key,
+                        title: t(name), "data-i18n-title": name,
+                        "aria-label": t(name), "data-i18n-aria-label": name}, text]);
         if(priv.hist_sort === mode) {
             $b.classList.add("is-info", "is-selected");
         }
@@ -965,8 +969,8 @@ function fill_hist_popover(gobj)
     };
     $c.appendChild(createElement2(
         ["div", {class: "HISTORY_SORT_ROW dropdown-item", style: "display:flex; gap:0.5rem;"},
-            [mk_sort_btn("time", "recent", t("recent")),
-             mk_sort_btn("freq", "frequent", t("frequent"))]]));
+            [mk_sort_btn("time", "recent", t("recent"), "history most recent first"),
+             mk_sort_btn("freq", "frequent", t("frequent"), "history most used first")]]));
     $c.appendChild(createElement2(
         ["hr", {class: "HISTORY_DIVIDER dropdown-divider"}]));
 
@@ -1011,7 +1015,7 @@ function fill_hist_popover(gobj)
         let $item = createElement2(
             ["a", {class: "HISTORY_ITEM dropdown-item is-family-monospace",
                    style: "white-space:normal; display:flex; align-items:center; gap:0.5rem;",
-                   title: e.cmd},
+                   title: e.cmd, "aria-label": e.cmd},
                 [
                     ["span", {class: "HISTORY_ITEM_CMD",
                               style: "flex:1; min-width:0; overflow-wrap:anywhere;"}, e.cmd],

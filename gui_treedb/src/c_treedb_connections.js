@@ -302,7 +302,11 @@ function build_ui(gobj)
      *  its `change` does nothing but turn the picked file into an event.  */
     let $file = createElement2(
         ["input", {type: "file", accept: "application/json,.json",
-                   class: "is-hidden CONNECTIONS_IMPORT_FILE"}]);
+                   class: "is-hidden CONNECTIONS_IMPORT_FILE",
+                   title: t("add the connections of a json file"),
+                   "data-i18n-title": "add the connections of a json file",
+                   "aria-label": t("add the connections of a json file"),
+                   "data-i18n-aria-label": "add the connections of a json file"}]);
     $file.addEventListener("change", () => {
         let file = $file.files && $file.files[0];
         $file.value = "";       /*  so picking the same file twice fires again  */
@@ -406,6 +410,8 @@ function build_ui(gobj)
         /*  A placeholder is not a NAME: it goes away as soon as anything
          *  is typed, and a reader is not required to announce it. The
          *  other searches of this family carry both.  */
+        title:        t("search a node or a treedb"),
+        "data-i18n-title": "search a node or a treedb",
         "aria-label": t("search a node or a treedb"),
         "data-i18n-aria-label": "search a node or a treedb"
     }]);
@@ -1432,24 +1438,31 @@ function ac_connect_many(gobj, event, kw, src)
     let $rows = [];
     for(let conn of conns) {
         was[conn.id] = !!conn.enabled;
+        let conn_name = String(conn.label || conn.url || conn.id);
         let $cb = createElement2(["input", {type: "checkbox",
-            class: "CONNECTIONS_CONNECT_PICK", "data-conn": conn.id}]);
+            class: "CONNECTIONS_CONNECT_PICK", "data-conn": conn.id,
+            title: conn_name, "aria-label": conn_name}]);
         $cb.checked = !!conn.enabled;
         $rows.push(createElement2(
             ["label", {class: "CONNECTIONS_CONNECT_ROW checkbox is-block mb-1"}, [
                 $cb,
                 ["span", {class: "ml-2 has-text-weight-semibold"},
-                    String(conn.label || conn.url || conn.id)],
+                    conn_name],
                 ["span", {class: "ml-2 is-size-7 has-text-grey"}, String(conn.url || "")]
             ]]
         ));
     }
 
-    let $all = createElement2(["input", {type: "checkbox", class: "CONNECTIONS_CONNECT_ALL"}]);
+    let $all = createElement2(["input", {type: "checkbox", class: "CONNECTIONS_CONNECT_ALL",
+        title: t("select all"), "data-i18n-title": "select all",
+        "aria-label": t("select all"), "data-i18n-aria-label": "select all"}]);
     let $count_line = createElement2(
         ["p", {class: "CONNECTIONS_CONNECT_COUNT is-size-7 has-text-grey mt-2"}, ""]);
     let $go = createElement2(
         ["button", {class: "button is-primary CONNECTIONS_CONNECT_GO", type: "button",
+                    title: t("connect the ticked ones"), "data-i18n-title": "connect the ticked ones",
+                    "aria-label": t("connect the ticked ones"),
+                    "data-i18n-aria-label": "connect the ticked ones",
                     disabled: "disabled", i18n: "apply"}, "Apply"]);
 
     let $box = createElement2(
@@ -1466,6 +1479,8 @@ function ac_connect_many(gobj, event, kw, src)
                 t("each connection opens its own socket")],
             ["div", {class: "is-flex", style: "gap:.5rem; justify-content:flex-end;"}, [
                 ["button", {class: "button CONNECTIONS_CONNECT_CANCEL", type: "button",
+                            title: t("cancel"), "data-i18n-title": "cancel",
+                            "aria-label": t("cancel"), "data-i18n-aria-label": "cancel",
                             i18n: "cancel"}, "Cancel"],
                 $go
             ]]
@@ -1583,23 +1598,31 @@ function ac_delete_many(gobj, event, kw, src)
 
     let $rows = [];
     for(let conn of conns) {
+        let conn_name = String(conn.label || conn.url || conn.id);
         let $cb = createElement2(["input", {type: "checkbox",
-            class: "CONNECTIONS_DELETE_PICK", "data-conn": conn.id}]);
+            class: "CONNECTIONS_DELETE_PICK", "data-conn": conn.id,
+            title: conn_name, "aria-label": conn_name}]);
         $rows.push(createElement2(
             ["label", {class: "CONNECTIONS_DELETE_ROW checkbox is-block mb-1"}, [
                 $cb,
                 ["span", {class: "ml-2 has-text-weight-semibold"},
-                    String(conn.label || conn.url || conn.id)],
+                    conn_name],
                 ["span", {class: "ml-2 is-size-7 has-text-grey"}, String(conn.url || "")]
             ]]
         ));
     }
 
-    let $all = createElement2(["input", {type: "checkbox", class: "CONNECTIONS_DELETE_ALL"}]);
+    let $all = createElement2(["input", {type: "checkbox", class: "CONNECTIONS_DELETE_ALL",
+        title: t("select all"), "data-i18n-title": "select all",
+        "aria-label": t("select all"), "data-i18n-aria-label": "select all"}]);
     let $count_line = createElement2(
         ["p", {class: "CONNECTIONS_DELETE_COUNT is-size-7 has-text-grey mt-2"}, ""]);
     let $go = createElement2(
         ["button", {class: "button is-danger CONNECTIONS_DELETE_GO", type: "button",
+                    title: t("remove the ticked connections"),
+                    "data-i18n-title": "remove the ticked connections",
+                    "aria-label": t("remove the ticked connections"),
+                    "data-i18n-aria-label": "remove the ticked connections",
                     disabled: "disabled", i18n: "remove"}, "Remove"]);
 
     let $box = createElement2(
@@ -1615,6 +1638,8 @@ function ac_delete_many(gobj, event, kw, src)
                 t("removing drops its tabs")],
             ["div", {class: "is-flex", style: "gap:.5rem; justify-content:flex-end;"}, [
                 ["button", {class: "button CONNECTIONS_DELETE_CANCEL", type: "button",
+                            title: t("cancel"), "data-i18n-title": "cancel",
+                            "aria-label": t("cancel"), "data-i18n-aria-label": "cancel",
                             i18n: "cancel"}, "Cancel"],
                 $go
             ]]
@@ -1831,11 +1856,17 @@ function open_paste_dialog(gobj, text)
         ["textarea", {class: "textarea CONNECTIONS_PASTE_AREA", rows: "10",
                       spellcheck: "false",
                       placeholder: t("paste the connections here"),
-                      "data-i18n-placeholder": "paste the connections here"}]);
+                      "data-i18n-placeholder": "paste the connections here",
+                      title: t("paste the connections here"),
+                      "data-i18n-title": "paste the connections here",
+                      "aria-label": t("paste the connections here"),
+                      "data-i18n-aria-label": "paste the connections here"}]);
     $area.value = text || "";
 
     let $ok = createElement2(
         ["button", {class: "button is-primary mt-3 CONNECTIONS_PASTE_OK",
+                    title: t("import"), "data-i18n-title": "import",
+                    "aria-label": t("import"), "data-i18n-aria-label": "import",
                     i18n: "import"}, t("import")]);
 
     let $box = createElement2(
