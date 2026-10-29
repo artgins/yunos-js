@@ -737,6 +737,8 @@ function make_columns(gobj)
         $cb.checked = !!d.browse;
         $cb.setAttribute("aria-label", t("browse"));
         $cb.title = t("browse");
+        $cb.dataset.i18nTitle = "browse";
+        $cb.dataset.i18nAriaLabel = "browse";
         return $cb;
     }
 
@@ -760,6 +762,8 @@ function make_columns(gobj)
         $cb.className = "CONNECTIONS_ALL_CHECK";
         $cb.setAttribute("aria-label", t("browse everything on screen"));
         $cb.title = t("browse everything on screen");
+        $cb.dataset.i18nTitle = "browse everything on screen";
+        $cb.dataset.i18nAriaLabel = "browse everything on screen";
         paint_browse_box($cb, browse_header_state(gobj));
         return $cb;
     }

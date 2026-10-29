@@ -8,6 +8,39 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.2.0, gui_treedb 1.0.8 (2026-10-29)
+
+- **`src/controls_named.test.js` sees the names it claimed to see**
+  (REV-CLOUD V47.2): a name written as a template with no `${}`
+  (`` title: `Refresh` ``), a `+` of texts, a branch of `?:` / `||`, or a
+  const given one, passed as data; a `document.createElement()` was only
+  asked to HAVE a `title` and an `aria-label`, never what they were
+  (`$b.title = "Save"` passed); and attrs in a const of the module, of an
+  outer function, in a spread or returned by a helper of the module were not
+  read at all. Each shape is now read and held to the rule, with a case in the
+  test's self-check (red on 1.1.9 / 1.0.7), and the header lists exactly what
+  it reads and what it cannot see. The test has been there since gui_agent
+  1.1.8 / gui_treedb 1.0.6, in yunetas 7.29.3.
+- **The checkboxes made with `createElement()` carry their i18n keys**: the
+  node and *open all shown* boxes of gui_agent's Stats, and the browse,
+  *browse everything on screen* and picker boxes of gui_treedb, were named
+  with `t()` and no `data-i18n-title` / `data-i18n-aria-label`. Every one
+  of their tables builds them again on `EV_LANGUAGE_CHANGED`, so none was
+  seen in the old language; with the key, `refresh_language()` reaches them
+  as it reaches every other control (in yunetas 7.29.3 and older).
+- **A key read through a value nobody follows is listed, and a new one
+  fails** (V47.2): `src/i18n_keys_seen.test.js` starts from the keys the
+  locales HAVE, so a key handed to `t()` by a variable and in NO locale was
+  seen by no check and rendered as the raw key. A new
+  `src/i18n_key_reads.test.js` in each app asks the prebuild's reader for
+  every place a key is read (`t()`, an `i18n` / `data-i18n*` value) whose
+  value it cannot follow and that is not marked (73 in gui_agent, 21 in
+  gui_treedb), and holds them in a list that may only shrink: a new such read
+  fails until it is marked with the published list of its keys (which the
+  locales are then asked for) or as data. What stays invisible: a new value
+  reaching a read of that list, or a value at run time outside the list its
+  marker names.
+
 ## gui_agent 1.1.9, gui_treedb 1.0.7 (2026-10-29)
 
 - **Three checkboxes of gui_agent have their `title`**: the row and

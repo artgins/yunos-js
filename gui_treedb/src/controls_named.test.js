@@ -9,36 +9,62 @@
  *      the language it was built in.
  *
  *      This is a check of the SOURCE, not of the DOM: the modules of the
- *      app are parsed (acorn), never run. What it reads:
+ *      app are parsed (acorn), never run. The elements it reads:
  *
- *        - every createElement2 spec `["tag", attrs, ...]` whose attrs are
- *          an object written in place, an `Object.assign()` of objects
- *          written in place, or a variable of the same function given one
- *          of those (`let attrs = {...}; ["button", attrs]`);
+ *        - every createElement2 spec `["tag", attrs, ...]` whose attrs it
+ *          can read (attrs_of()): an object written in place, its spreads
+ *          read the same way; an `Object.assign()` of what it reads (an
+ *          `extra || {}` is what a caller adds, and is skipped); a
+ *          variable given one of those where it is declared -- in the
+ *          function, in a function around it, or in the module -- plus
+ *          its `v.name = ...` writes; a call of a function of the same
+ *          module (declared, or a variable given a function) with ONE
+ *          `return`, read the same way;
  *        - every tag of an html string: a template literal, a string
  *          literal, or a `+` chain of them (`'<input ' + '...>'` is read as
  *          one string);
- *        - every `document.createElement("input"|"select"|"textarea"|
- *          "button")` held in a variable: the function that creates it must
- *          give that variable a `title` and an `aria-label`.
+ *        - every `document.createElement("<tag>")` held in a variable: what
+ *          the function that declares the variable writes into it
+ *          (`v.title`, `v.ariaLabel`, `v.type`, `v.dataset.i18nTitle`,
+ *          `v.dataset.i18nAriaLabel`, `v.setAttribute("<name>", ...)`) is
+ *          read as its attrs. A control created and never held is a fault.
+ *
+ *      A control is an input (not `type="hidden"`), select, textarea or
+ *      button, or an element whose role is button, switch, checkbox, tab
+ *      or menuitem -- the type and the role read when they are literals.
  *
  *      What it refuses on a control: a missing `title` or `aria-label`. On
- *      any element: a name that is a string LITERAL (untranslated: it never
- *      changes language), a `t()` name without its `data-i18n-*` key, and a
- *      `t(k1)` whose `data-i18n-*` names another key (`k2`) -- compared as
- *      written, literal or variable. A name that is data (a role id, a
- *      command, a connection) is a variable and needs no key. A control
- *      whose name is painted with its state after it is built says so with
- *      a `named by <function>` comment inside its attrs.
+ *      any element: a name WRITTEN as text (literal_texts(): a string
+ *      literal, a template with no `${}`, a `+` of those, any branch of
+ *      `?:` / `||` / `??` that is one, a const of the file given one --
+ *      untranslated, it never changes language); a name that is a `t()`
+ *      call without its `data-i18n-*` key; and a `t(k1)` whose
+ *      `data-i18n-*` names another key (`k2`) -- compared as written,
+ *      literal or variable. In html, a name is text when it holds no
+ *      `${}`, and a `${t(k)}` is held to its key the same way. A name
+ *      that is data (a role id, a command, a connection; a template WITH
+ *      `${}`) needs no key. A control whose name is painted with its
+ *      state after it is built says so with a `named by <function>`
+ *      comment inside its attrs.
  *
  *      What it CANNOT see, and is checked on the deployed page, switching
  *      language: what a widget draws for itself (Tabulator's header
  *      filters and row-selection boxes, Tom Select's box) and what gobj-ui
- *      builds; a name written later than its element, by a setAttribute()
- *      in another function; attrs reached through a parameter, a property
- *      or a spread; an element that behaves as a control without the tag or
- *      the role of one (an `<a>` or a `<div>` with a click handler); and
- *      whether the translated text says the right thing.
+ *      builds; attrs reached through a parameter, a property
+ *      (`opts.attrs`), an import, a helper with more than one `return`, a
+ *      variable given its attrs by a later `v = {...}`, or a spread or an
+ *      `Object.assign()` argument it cannot read (then the whole spec is
+ *      skipped); a name written into an element by another function (a
+ *      helper it is handed to), or into an element that no
+ *      createElement() of the file made (a parameter, a query of the
+ *      DOM); the key of a
+ *      `t()` reached through a branch (`x ? t("a") : t("b")` is read as
+ *      data); a name inside `${}` of an html string that is a branch
+ *      (`title="${on ? "On" : "Off"}"`); a name of the same variable in a
+ *      block that shadows it (scopes are functions, not blocks); an
+ *      element that behaves as a control without the tag or the role of
+ *      one (an `<a>` or a `<div>` with a click handler); and whether the
+ *      translated text says the right thing.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -84,14 +110,161 @@ function walk(node, visit, up = [])
 
 const FUNCTION_RE = /^(FunctionDeclaration|FunctionExpression|ArrowFunctionExpression)$/;
 
-function enclosing_function(up)
+/*  The parent of each node of the file being scanned (scan_source())  */
+let PARENT = new WeakMap();
+
+/***************************************************************
+ *  The functions around a node, the nearest first, and then the
+ *  module
+ ***************************************************************/
+function scopes_of(node)
 {
-    for(let i = up.length - 1; i >= 0; i--) {
-        if(FUNCTION_RE.test(up[i].type)) {
-            return up[i];
+    let out = [];
+    for(let p = PARENT.get(node); p; p = PARENT.get(p)) {
+        if(FUNCTION_RE.test(p.type) || p.type === "Program") {
+            out.push(p);
         }
     }
-    return up[0];   /*  the module  */
+    return out;
+}
+
+/***************************************************************
+ *  The names a declaration or a parameter binds
+ ***************************************************************/
+function pattern_names(p, out = [])
+{
+    if(!p) {
+        return out;
+    }
+    switch(p.type) {
+        case "Identifier":
+            out.push(p.name);
+            break;
+        case "AssignmentPattern":
+            pattern_names(p.left, out);
+            break;
+        case "RestElement":
+            pattern_names(p.argument, out);
+            break;
+        case "ArrayPattern":
+            for(let e of p.elements) {
+                pattern_names(e, out);
+            }
+            break;
+        case "ObjectPattern":
+            for(let q of p.properties) {
+                pattern_names(q.type === "RestElement" ? q : q.value, out);
+            }
+            break;
+    }
+    return out;
+}
+
+/***************************************************************
+ *  Visit the nodes of a function (or of the module) that are its
+ *  own: a function inside is visited, never entered
+ ***************************************************************/
+function own_walk(scope, visit)
+{
+    let go = (node) => {
+        if(!node || typeof node.type !== "string") {
+            return;
+        }
+        visit(node);
+        if(node !== scope && FUNCTION_RE.test(node.type)) {
+            return;
+        }
+        for(let k of Object.keys(node)) {
+            let v = node[k];
+            if(Array.isArray(v)) {
+                for(let c of v) {
+                    go(c);
+                }
+            } else if(v && typeof v.type === "string") {
+                go(v);
+            }
+        }
+    };
+    go(scope.type === "Program" ? scope : scope.body);
+}
+
+/***************************************************************
+ *  What a name means where `node` is: the nearest function that
+ *  declares it, then the module.
+ *
+ *      {kind: "var", decl, scope, is_const}  a variable (its declarator)
+ *      {kind: "function", fn}                a function of the module
+ *      {kind: "param"} / {kind: "other"}     what cannot be read here
+ *      null                                  not declared in the file
+ ***************************************************************/
+function binding(name, node)
+{
+    for(let s of scopes_of(node)) {
+        if(s.type !== "Program") {
+            if(s.params.some((p) => pattern_names(p).includes(name))) {
+                return {kind: "param"};
+            }
+            if(s.type === "FunctionExpression" && s.id && s.id.name === name) {
+                return {kind: "function", fn: s};
+            }
+        }
+        let found = null;
+        own_walk(s, (n) => {
+            if(found) {
+                return;
+            }
+            if(n.type === "VariableDeclarator" && pattern_names(n.id).includes(name)) {
+                found = (n.id.type === "Identifier")
+                    ? {kind: "var", decl: n, scope: s, is_const: PARENT.get(n).kind === "const"}
+                    : {kind: "other"};
+            } else if(n.type === "FunctionDeclaration" && n !== s && n.id && n.id.name === name) {
+                found = {kind: "function", fn: n};
+            } else if(/^Import(Default|Namespace)?Specifier$/.test(n.type) && n.local.name === name) {
+                found = {kind: "other"};
+            } else if(n.type === "CatchClause" && pattern_names(n.param).includes(name)) {
+                found = {kind: "other"};
+            }
+        });
+        if(found) {
+            return found;
+        }
+    }
+    return null;
+}
+
+/***************************************************************
+ *  The function a name is bound to, or null
+ ***************************************************************/
+function function_of(b)
+{
+    if(!b) {
+        return null;
+    }
+    if(b.kind === "function") {
+        return b.fn;
+    }
+    if(b.kind === "var" && b.decl.init && FUNCTION_RE.test(b.decl.init.type)) {
+        return b.decl.init;
+    }
+    return null;
+}
+
+/***************************************************************
+ *  What a function returns: each `return` of its own, or the body
+ *  of an arrow written as an expression
+ ***************************************************************/
+function returns_of(fn)
+{
+    if(fn.type === "ArrowFunctionExpression" && fn.body.type !== "BlockStatement") {
+        return [fn.body];
+    }
+    let out = [];
+    own_walk(fn, (n) => {
+        if(n.type === "ReturnStatement" && n.argument) {
+            out.push(n.argument);
+        }
+    });
+    return out;
 }
 
 function prop_name(p)
@@ -104,6 +277,17 @@ function prop_name(p)
     }
     if(p.key.type === "Literal") {
         return String(p.key.value);
+    }
+    return null;
+}
+
+function member_name(m)
+{
+    if(!m.computed && m.property.type === "Identifier") {
+        return m.property.name;
+    }
+    if(m.computed && m.property.type === "Literal") {
+        return String(m.property.value);
     }
     return null;
 }
@@ -122,65 +306,154 @@ function is_object_assign(node)
         node.callee.property.type === "Identifier" && node.callee.property.name === "assign";
 }
 
-/***************************************************************
- *  The properties of attrs written in place: an object, or an
- *  Object.assign() of objects. null when they cannot be read here.
- ***************************************************************/
-function written_props(node)
+function as_prop(name, value)
 {
-    if(node && node.type === "ObjectExpression") {
-        return node.properties;
+    return {type: "Property", key: {type: "Literal", value: name}, value};
+}
+
+/***************************************************************
+ *  What is written into a variable after it is declared
+ *  (`v.name = ...`, `v["name"] = ...`), anywhere in the function
+ *  -- or the module -- that declares it
+ ***************************************************************/
+function member_writes(scope, name)
+{
+    let extra = [];
+    walk(scope, (n) => {
+        if(n.type === "AssignmentExpression" && n.left.type === "MemberExpression" &&
+                n.left.object.type === "Identifier" && n.left.object.name === name) {
+            let key = member_name(n.left);
+            if(key) {
+                extra.push(as_prop(key, n.right));
+            }
+        }
+    });
+    return extra;
+}
+
+/***************************************************************
+ *  The properties of the attrs of a spec, or null when they
+ *  cannot be read here. Read:
+ *
+ *      - an object written in place, its spreads read the same way;
+ *      - an Object.assign() of what is read the same way (an
+ *        `extra || {}` is what a caller adds, and is skipped);
+ *      - a variable -- of the function, of a function around it,
+ *        or a const of the module -- given one of those where it
+ *        is declared, plus the `v.name = ...` writes of it;
+ *      - a call of a function of the module (declared, or a const
+ *        given a function) with ONE return, read the same way.
+ ***************************************************************/
+function attrs_of(node, depth = 0)
+{
+    if(!node || depth > 8) {
+        return null;
+    }
+    if(node.type === "ObjectExpression") {
+        let props = [];
+        for(let p of node.properties) {
+            if(p.type === "SpreadElement") {
+                let more = attrs_of(p.argument, depth + 1);
+                if(!more) {
+                    return null;
+                }
+                props.push(...more);
+            } else {
+                props.push(p);
+            }
+        }
+        return props;
     }
     if(is_object_assign(node)) {
         let props = [];
         for(let a of node.arguments) {
-            if(a.type === "ObjectExpression") {
-                props.push(...a.properties);
-            } else if(a.type === "LogicalExpression" && a.right.type === "ObjectExpression" &&
+            if(a.type === "LogicalExpression" && a.right.type === "ObjectExpression" &&
                     a.right.properties.length === 0) {
                 continue;   /*  `extra || {}`: what a caller adds  */
-            } else {
+            }
+            let more = attrs_of(a, depth + 1);
+            if(!more) {
                 return null;
             }
+            props.push(...more);
         }
         return props;
+    }
+    if(node.type === "Identifier") {
+        let b = binding(node.name, node);
+        if(!b || b.kind !== "var" || !b.decl.init) {
+            return null;
+        }
+        let props = attrs_of(b.decl.init, depth + 1);
+        if(!props) {
+            return null;
+        }
+        return [...props, ...member_writes(b.scope, node.name)];
+    }
+    if(node.type === "CallExpression" && node.callee.type === "Identifier") {
+        let fn = function_of(binding(node.callee.name, node));
+        if(!fn) {
+            return null;
+        }
+        let returns = returns_of(fn);
+        if(returns.length !== 1) {
+            return null;
+        }
+        return attrs_of(returns[0], depth + 1);
     }
     return null;
 }
 
 /***************************************************************
- *  The properties of the attrs of a spec: written in place, or in
- *  a variable of the same function given them where it is
- *  declared (plus `v.name = ...` writes of it in that function).
+ *  The texts a name is WRITTEN as, untranslated: a string
+ *  literal, a template with no `${}`, a `+` of those, every branch
+ *  of `?:` / `||` / `??` (the right one of `&&`), and a const
+ *  given one of those. [] when no branch is such a text.
  ***************************************************************/
-function attrs_props(attrs, up)
+function literal_texts(v, depth = 0)
 {
-    let props = written_props(attrs);
-    if(props) {
-        return props;
+    if(!v || depth > 8) {
+        return [];
     }
-    if(!attrs || attrs.type !== "Identifier") {
-        return null;
-    }
-    let fn = enclosing_function(up);
-    let found = null;
-    let extra = [];
-    walk(fn, (n) => {
-        if(n.type === "VariableDeclarator" && n.id.type === "Identifier" &&
-                n.id.name === attrs.name && n.init) {
-            found = written_props(n.init);
-        }
-        if(n.type === "AssignmentExpression" && n.left.type === "MemberExpression" &&
-                n.left.object.type === "Identifier" && n.left.object.name === attrs.name) {
-            let key = n.left.computed
-                ? (n.left.property.type === "Literal" ? String(n.left.property.value) : null)
-                : n.left.property.name;
-            if(key) {
-                extra.push({type: "Property", key: {type: "Literal", value: key}, value: n.right});
+    let text = (s) => (typeof s === "string" && s.trim()) ? [s] : [];
+    switch(v.type) {
+        case "Literal":
+            return text(v.value);
+        case "TemplateLiteral":
+            return (v.expressions.length === 0) ? text(v.quasis[0].value.cooked) : [];
+        case "BinaryExpression": {
+            if(v.operator !== "+") {
+                return [];
             }
+            let s = "";
+            for(let leaf of plus_leaves(v)) {
+                let piece = (leaf.type === "Literal" && typeof leaf.value === "string") ? leaf.value
+                    : (leaf.type === "TemplateLiteral" && leaf.expressions.length === 0)
+                        ? leaf.quasis[0].value.cooked : null;
+                if(piece === null) {
+                    return [];
+                }
+                s += piece;
+            }
+            return text(s);
         }
-    });
-    return found ? [...found, ...extra] : null;
+        case "ConditionalExpression":
+            return [...literal_texts(v.consequent, depth + 1), ...literal_texts(v.alternate, depth + 1)];
+        case "LogicalExpression":
+            if(v.operator === "&&") {
+                return literal_texts(v.right, depth + 1);
+            }
+            return [...literal_texts(v.left, depth + 1), ...literal_texts(v.right, depth + 1)];
+        case "Identifier": {
+            let b = binding(v.name, v);
+            if(b && b.kind === "var" && b.is_const && b.decl.init) {
+                return literal_texts(b.decl.init, depth + 1);
+            }
+            return [];
+        }
+        default:
+            return [];
+    }
 }
 
 /***************************************************************
@@ -190,38 +463,41 @@ function attrs_props(attrs, up)
  ***************************************************************/
 function name_faults(src, props, control)
 {
+    /*  Every value each attr is given: a spec gives one, an element
+     *  written by hand may be given one per branch  */
     let by = {};
     for(let p of props) {
         let name = prop_name(p);
         if(name) {
-            by[name] = p.value;
+            (by[name] = by[name] || []).push(p.value);
         }
     }
+    let text = (n) => src.slice(n.start, n.end);
     let faults = [];
     for(let name of NAMES) {
-        let v = by[name];
-        if(!v) {
-            if(control) {
-                faults.push(`no ${name}`);
+        let values = by[name] || [];
+        if(values.length === 0 && control) {
+            faults.push(`no ${name}`);
+        }
+        for(let v of values) {
+            let texts = literal_texts(v);
+            if(texts.length > 0) {
+                faults.push(`${name} is the literal "${texts[0]}": t() it, with its key`);
+                continue;
             }
-            continue;
-        }
-        if(v.type === "Literal" && typeof v.value === "string" && v.value.trim()) {
-            faults.push(`${name} is the literal "${v.value}": t() it, with its key`);
-            continue;
-        }
-        if(!is_t_call(v)) {
-            continue;   /*  data  */
-        }
-        let key = by[`data-i18n-${name}`];
-        if(!key) {
-            faults.push(`${name} by t() without data-i18n-${name}`);
-            continue;
-        }
-        let arg = v.arguments[0];
-        if(arg && src.slice(arg.start, arg.end) !== src.slice(key.start, key.end)) {
-            faults.push(`${name} is t(${src.slice(arg.start, arg.end)}) and data-i18n-${name} is ` +
-                src.slice(key.start, key.end));
+            if(!is_t_call(v)) {
+                continue;   /*  data  */
+            }
+            let keys = by[`data-i18n-${name}`] || [];
+            if(keys.length === 0) {
+                faults.push(`${name} by t() without data-i18n-${name}`);
+                continue;
+            }
+            let arg = v.arguments[0];
+            if(arg && !keys.some((k) => text(k) === text(arg))) {
+                faults.push(`${name} is t(${text(arg)}) and data-i18n-${name} is ` +
+                    keys.map(text).join(" / "));
+            }
         }
     }
     return faults;
@@ -364,19 +640,56 @@ function html_of(src, node)
     return {text, line_at};
 }
 
+/*  What a property of an element written by hand is, as an attr  */
+const ELEMENT_PROPS = {title: "title", ariaLabel: "aria-label", type: "type", role: "role"};
+const DATASET_PROPS = {i18nTitle: "data-i18n-title", i18nAriaLabel: "data-i18n-aria-label"};
+
 /***************************************************************
- *  A `document.createElement(<control>)` held in a variable: the
- *  function that creates it names it.
+ *  What is written into an element held in `v`, as attrs:
+ *  `v.title = ...`, `v.ariaLabel = ...`, `v.type = ...`,
+ *  `v.dataset.i18nTitle = ...`, `v.setAttribute("<name>", ...)`,
+ *  anywhere in the function that declares `v`
  ***************************************************************/
-function created_control_faults(src, n, up)
+function element_writes(scope, v)
+{
+    let props = [];
+    let is_v = (x) => x.type === "Identifier" && x.name === v;
+    walk(scope, (n) => {
+        if(n.type === "AssignmentExpression" && n.left.type === "MemberExpression") {
+            let m = n.left;
+            let k = member_name(m);
+            if(is_v(m.object) && Object.hasOwn(ELEMENT_PROPS, k)) {
+                props.push(as_prop(ELEMENT_PROPS[k], n.right));
+            } else if(m.object.type === "MemberExpression" && is_v(m.object.object) &&
+                    member_name(m.object) === "dataset" && Object.hasOwn(DATASET_PROPS, k)) {
+                props.push(as_prop(DATASET_PROPS[k], n.right));
+            }
+        }
+        if(n.type === "CallExpression" && n.callee.type === "MemberExpression" &&
+                is_v(n.callee.object) && member_name(n.callee) === "setAttribute" &&
+                n.arguments.length >= 2 && n.arguments[0].type === "Literal") {
+            props.push(as_prop(String(n.arguments[0].value), n.arguments[1]));
+        }
+    });
+    return props;
+}
+
+/***************************************************************
+ *  A `document.createElement("<tag>")`: what the function that
+ *  holds it writes into it is read as its attrs, and held to the
+ *  rule of a spec. A control created and never held is never
+ *  named.
+ ***************************************************************/
+function created_element_faults(src, n)
 {
     let callee = n.callee;
-    if(callee.type !== "MemberExpression" || callee.property.name !== "createElement" ||
+    if(callee.type !== "MemberExpression" || member_name(callee) !== "createElement" ||
             !n.arguments[0] || n.arguments[0].type !== "Literal" ||
-            !CONTROLS.includes(String(n.arguments[0].value).toLowerCase())) {
+            typeof n.arguments[0].value !== "string") {
         return [];
     }
-    let parent = up[up.length - 1];
+    let tag = n.arguments[0].value.toLowerCase();
+    let parent = PARENT.get(n);
     let v = null;
     if(parent.type === "VariableDeclarator" && parent.id.type === "Identifier") {
         v = parent.id.name;
@@ -384,21 +697,20 @@ function created_control_faults(src, n, up)
         v = parent.left.name;
     }
     if(!v) {
-        return ["created and never held, so never named"];
+        return CONTROLS.includes(tag) ? ["created and never held, so never named"] : [];
     }
-    let body = src.slice(enclosing_function(up).start, enclosing_function(up).end);
-    let esc = v.replace(/\$/g, "\\$");
-    if(new RegExp(`${esc}\\.type\\s*=\\s*["']hidden["']`).test(body)) {
+    let b = binding(v, n);
+    let scope = (b && b.kind === "var") ? b.scope : scopes_of(n)[0];
+    let props = element_writes(scope, v);
+    let value_of = (name) => {
+        let p = props.find((x) => prop_name(x) === name);
+        return (p && p.value.type === "Literal") ? p.value.value : null;
+    };
+    if(tag === "input" && value_of("type") === "hidden") {
         return [];
     }
-    let faults = [];
-    if(!new RegExp(`${esc}\\.(title\\s*=|setAttribute\\(\\s*["']title["'])`).test(body)) {
-        faults.push("no title");
-    }
-    if(!new RegExp(`${esc}\\.(ariaLabel\\s*=|setAttribute\\(\\s*["']aria-label["'])`).test(body)) {
-        faults.push("no aria-label");
-    }
-    return faults;
+    let control = CONTROLS.includes(tag) || CONTROL_ROLES.includes(value_of("role"));
+    return name_faults(src, props, control);
 }
 
 function scan_source(file, src)
@@ -406,6 +718,10 @@ function scan_source(file, src)
     let comments = [];
     let ast = acorn.parse(src, {
         ecmaVersion: "latest", sourceType: "module", locations: true, onComment: comments
+    });
+    PARENT = new WeakMap();
+    walk(ast, (n, up) => {
+        PARENT.set(n, up[up.length - 1] || null);
     });
     let found = [];
     walk(ast, (n, up) => {
@@ -417,18 +733,19 @@ function scan_source(file, src)
                     !/^[a-z][a-z0-9]*$/.test(tag.value)) {
                 return;
             }
-            let props = attrs_props(attrs, up);
+            let props = attrs_of(attrs);
             if(!props) {
                 return;
             }
-            let type = props.find((p) => prop_name(p) === "type");
-            if(tag.value === "input" && type && type.value.value === "hidden") {
+            let value_of = (name) => {
+                let p = props.find((x) => prop_name(x) === name);
+                return (p && p.value.type === "Literal") ? p.value.value : null;
+            };
+            if(tag.value === "input" && value_of("type") === "hidden") {
                 return;
             }
-            let role = props.find((p) => prop_name(p) === "role");
-            let control = CONTROLS.includes(tag.value) ||
-                !!(role && CONTROL_ROLES.includes(role.value.value));
-            let named_later = attrs.type !== "Identifier" && comments.some((c) =>
+            let control = CONTROLS.includes(tag.value) || CONTROL_ROLES.includes(value_of("role"));
+            let named_later = attrs.type === "ObjectExpression" && comments.some((c) =>
                 c.start >= attrs.start && c.end <= attrs.end && /named by \w+/.test(c.value));
             if(control && named_later) {
                 return;
@@ -440,7 +757,7 @@ function scan_source(file, src)
         }
 
         if(n.type === "CallExpression") {
-            for(let fault of created_control_faults(src, n, up)) {
+            for(let fault of created_element_faults(src, n)) {
                 found.push(`${file}:${n.loc.start.line} createElement(${n.arguments[0].raw}) ${fault}`);
             }
             return;
@@ -542,8 +859,64 @@ describe("the scan finds what it says it finds", () => {
             .toEqual(['x.js:1 createElement("button") no title',
                       'x.js:1 createElement("button") no aria-label']);
         expect(faults('function f() { let $b = document.createElement("input");\n' +
-            '$b.title = t("k"); $b.setAttribute("aria-label", t("k")); return $b; }')).toEqual([]);
+            '$b.title = t("k"); $b.setAttribute("aria-label", t("k"));\n' +
+            '$b.dataset.i18nTitle = "k"; $b.setAttribute("data-i18n-aria-label", "k"); return $b; }'))
+            .toEqual([]);
         expect(faults('function f() { let $h = document.createElement("input"); ' +
             '$h.type = "hidden"; return $h; }')).toEqual([]);
+    });
+
+    /*
+     *  REV-CLOUD V47.2: the shapes the scan of 1.1.9 / 1.0.7 got past
+     */
+    test("a name written as a template with no ${}, a branch or a const", () => {
+        expect(faults('let a = ["button", {title: `Refresh`, "aria-label": t("k"), ' +
+            '"data-i18n-aria-label": "k"}];'))
+            .toEqual(['x.js:1 <button> title is the literal "Refresh": t() it, with its key']);
+        expect(faults('let a = ["button", {title: on ? "On" : t("off"), "data-i18n-title": "off", ' +
+            '"aria-label": "Re" + `fresh`}];'))
+            .toEqual(['x.js:1 <button> title is the literal "On": t() it, with its key',
+                      'x.js:1 <button> aria-label is the literal "Refresh": t() it, with its key']);
+        expect(faults('const SAVE = "Save";\nfunction f() { return ["button", {title: SAVE, ' +
+            '"aria-label": name}]; }'))
+            .toEqual(['x.js:2 <button> title is the literal "Save": t() it, with its key']);
+        expect(faults('let a = ["button", {title: `${host}:${port}`, "aria-label": host}];'))
+            .toEqual([]);
+    });
+
+    test("document.createElement() of a control named with literals, or without its key", () => {
+        expect(faults('function f() { let $b = document.createElement("button");\n' +
+            '$b.title = "Save"; $b.setAttribute("aria-label", `Save`); return $b; }'))
+            .toEqual(['x.js:1 createElement("button") title is the literal "Save": t() it, with its key',
+                      'x.js:1 createElement("button") aria-label is the literal "Save": t() it, with its key']);
+        expect(faults('function f() { let $b = document.createElement("input");\n' +
+            '$b.title = t("k"); $b.ariaLabel = t("k"); $b.dataset.i18nTitle = "j"; return $b; }'))
+            .toEqual(['x.js:1 createElement("input") title is t("k") and data-i18n-title is "j"',
+                      'x.js:1 createElement("input") aria-label by t() without data-i18n-aria-label']);
+        expect(faults('function f() { let $d = document.createElement("div");\n' +
+            '$d.setAttribute("role", "button"); return $d; }'))
+            .toEqual(['x.js:1 createElement("div") no title', 'x.js:1 createElement("div") no aria-label']);
+        expect(faults('function f() { document.body.append(document.createElement("select")); }'))
+            .toEqual(['x.js:1 createElement("select") created and never held, so never named']);
+    });
+
+    test("attrs in a const of the module, of an outer function, or returned by a helper", () => {
+        expect(faults('const ATTRS = {type: "button", title: t("k"), "data-i18n-title": "k"};\n' +
+            'function f() { return ["button", ATTRS]; }'))
+            .toEqual(["x.js:2 <button> no aria-label"]);
+        expect(faults('function f() { let attrs = {type: "button"};\n' +
+            'return () => ["button", attrs]; }'))
+            .toEqual(["x.js:2 <button> no title", "x.js:2 <button> no aria-label"]);
+        expect(faults('function named(key) {\n' +
+            '    return {title: t(key), "data-i18n-title": key, "aria-label": t(key), ' +
+            '"data-i18n-aria-label": key};\n}\n' +
+            'let a = ["button", named("save")];\n' +
+            'let b = ["input", {...named("find"), type: "text"}];\n' +
+            'let c = ["button", Object.assign({class: "x"}, named("k"))];')).toEqual([]);
+        expect(faults('const half = (key) => ({title: t(key), "data-i18n-title": key});\n' +
+            'let a = ["button", {...half("save"), class: "x"}];\n' +
+            'let b = ["button", Object.assign(half("k"), {"aria-label": "Lit"})];'))
+            .toEqual(["x.js:2 <button> no aria-label",
+                      'x.js:3 <button> aria-label is the literal "Lit": t() it, with its key']);
     });
 });

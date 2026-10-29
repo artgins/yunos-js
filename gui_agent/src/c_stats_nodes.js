@@ -709,6 +709,8 @@ function make_columns(gobj)
             $cb.indeterminate = open > 0 && open < all.length;
             $cb.setAttribute("aria-label", t("open all of this node"));
             $cb.title = t("open all of this node");
+            $cb.dataset.i18nTitle = "open all of this node";
+            $cb.dataset.i18nAriaLabel = "open all of this node";
             return $cb;
         }
         if(r._type !== "yuno") {
@@ -765,6 +767,8 @@ function make_columns(gobj)
         $cb.indeterminate = counts.open > 0 && counts.open < counts.total;
         $cb.setAttribute("aria-label", t("open all shown"));
         $cb.title = t("open all shown");
+        $cb.dataset.i18nTitle = "open all shown";
+        $cb.dataset.i18nAriaLabel = "open all shown";
         return $cb;
     }
 

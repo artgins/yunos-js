@@ -479,6 +479,8 @@ function make_columns(gobj)
             $cb.checked = !!r.selected;
             $cb.setAttribute("aria-label", t("open in this workspace"));
             $cb.title = t("open in this workspace");
+            $cb.dataset.i18nTitle = "open in this workspace";
+            $cb.dataset.i18nAriaLabel = "open in this workspace";
             return $cb;
         }
 
@@ -490,6 +492,8 @@ function make_columns(gobj)
         $cb.indeterminate = r.open > 0 && r.open < r.total;
         $cb.setAttribute("aria-label", t("open all of this connection"));
         $cb.title = t("open all of this connection");
+        $cb.dataset.i18nTitle = "open all of this connection";
+        $cb.dataset.i18nAriaLabel = "open all of this connection";
         return $cb;
     }
 

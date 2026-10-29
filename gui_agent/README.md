@@ -1099,31 +1099,44 @@ command history. Everything that needs a yuno, a shell and a backend is
 
 `src/controls_named.test.js` is a check of the SOURCE, not of the DOM: it
 parses every module of the app and never runs it. It reads createElement2 specs
-(attrs written in place, by `Object.assign()` of objects written in place, or
-in a variable of the same function), the tags of html strings (a template, a
-string literal, or a `+` chain of them read as one string), and every
-`document.createElement()` of a control held in a variable. A control (an
-`input`, `select`, `textarea` or `button`, or anything with the role of one)
-must carry a `title` AND an `aria-label`; on any element, a name may not be a
-string literal (it never changes language), a name given with `t()` carries its
-key (`data-i18n-title` / `data-i18n-aria-label`), and that key is the one handed
-to `t()`. A name that is data (a role id, a command, a connection) needs no key;
-a control whose name is painted with its state after it is built says so with a
-`named by <function>` comment in its attrs. What it CANNOT see is checked on the
+whose attrs it can follow -- written in place (spreads too), an
+`Object.assign()` of those, a variable of the function, of a function around
+it or of the module, or the single `return` of a helper of the same module --,
+the tags of html strings (a template, a string literal, or a `+` chain of them
+read as one string), and every `document.createElement()` held in a variable,
+with what its function writes into it (`.title`, `.ariaLabel`,
+`.dataset.i18nTitle`, `setAttribute()`, ...). A control (an `input`, `select`,
+`textarea` or `button`, or anything with the role of one) must carry a `title`
+AND an `aria-label`; on any element, a name may not be WRITTEN as text -- a
+string literal, a template with no `${}`, a `+` of those, a branch of `?:` /
+`||` that is one, a const given one: it never changes language --, a name given
+with `t()` carries its key (`data-i18n-title` / `data-i18n-aria-label`), and
+that key is the one handed to `t()`. A name that is data (a role id, a command,
+a connection) needs no key; a control whose name is painted with its state
+after it is built says so with a `named by <function>` comment in its attrs.
+The test's header lists exactly what it CANNOT see; that is checked on the
 deployed page, switching language: what a widget draws for itself (Tabulator's
-header filters and row boxes, Tom Select) and what gobj-ui builds; a name
-written by a `setAttribute()` in another function; attrs reached through a
-parameter, a property or a spread; an element that acts as a control without
-the tag or role of one (an `<a>` or a `<div>` with a click handler); and whether
-the text says the right thing.
+header filters and row boxes, Tom Select) and what gobj-ui builds; attrs
+reached through a parameter, a property, an import or a helper with several
+`return`s; a name written by another function; the key of a `t()` in a branch;
+an element that acts as a control without the tag or role of one (an `<a>` or
+a `<div>` with a click handler); and whether the text says the right thing.
 
 `src/i18n_keys_seen.test.js` asks the `validate-locales` of the prebuild which
 keys of the locales it sees used, and holds the rest in a list that may only
-shrink: a NEW key that reaches `t()` through a variable, unmarked, fails it.
-Make the key visible the gobj-ui way -- publish it in a `<NAME>_I18N_KEYS`
-list and mark the place that reads it (`t(/* i18n: <NAME>_I18N_KEYS */ key)`)
--- never add it to the list. `src/wrapper_keys.test.js` ties the three lists of
-this app (`PREF_SEGMENT_I18N_KEYS`, `HISTORY_SORT_I18N_KEYS`,
+shrink: a key of the locales that the reader stops seeing fails it. It starts
+from the keys the locales HAVE, so a key that is in NO locale is not its case:
+that is `src/i18n_key_reads.test.js`, which lists every place a key is read
+(`t()`, an `i18n` / `data-i18n*` value) through a value the reader cannot
+follow (a parameter, a property of data) and nobody marked. That list may only
+shrink too: a NEW such read fails until it is marked. Make the key visible the
+gobj-ui way -- publish it in a `<NAME>_I18N_KEYS` list and mark the place that
+reads it (`t(/* i18n: <NAME>_I18N_KEYS */ key)`), so the locales are asked for
+every key of the list; `/* i18n: data */` says it is no key -- never add it to
+either list. What stays invisible: a new value reaching a read of that list,
+or a value at run time that is not in the list its marker names.
+`src/wrapper_keys.test.js` ties the three lists of this app
+(`PREF_SEGMENT_I18N_KEYS`, `HISTORY_SORT_I18N_KEYS`,
 `USERS_ROLE_FIELD_I18N_KEYS`) to the calls of the helpers that hand them to
 `t()`.
 
