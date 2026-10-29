@@ -8,6 +8,20 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.2.1, gui_treedb 1.0.9 (2026-10-29)
+
+- **`src/controls_named.test.js` reads a tag held in a const** (REV-CLOUD
+  V48.2): it read an element only when its tag was written as a string, so
+  `[TAG, {type: "button"}]`, `"<" + TAG + ">"` in html and
+  `document.createElement(TAG)` passed with no name, and its header did not
+  say so. A tag that is a const of the file given a text is now read like the
+  attrs are, with a case in the test's self-check (red on 1.2.0 / 1.0.8); a
+  tag it still cannot read -- a parameter, a `let`, a property, a branch, a
+  call -- skips the whole element, and the header and the README now list it.
+  No control of either app was built that way, so the scan finds nothing new.
+  The gap is in gui_agent 1.2.0 / gui_treedb 1.0.8 (unreleased in yunetas);
+  the test has no tag read but a literal since yunetas 7.29.3.
+
 ## gui_agent 1.2.0, gui_treedb 1.0.8 (2026-10-29)
 
 - **`src/controls_named.test.js` sees the names it claimed to see**

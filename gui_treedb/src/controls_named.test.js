@@ -29,6 +29,11 @@
  *          `v.dataset.i18nAriaLabel`, `v.setAttribute("<name>", ...)`) is
  *          read as its attrs. A control created and never held is a fault.
  *
+ *      In all three the tag is read when it is a string literal, a
+ *      template with no `${}`, or a const of the file given one
+ *      (`[TAG, attrs]`, `"<" + TAG + ">"`, `` `<${TAG}>` ``,
+ *      `document.createElement(TAG)`).
+ *
  *      A control is an input (not `type="hidden"`), select, textarea or
  *      button, or an element whose role is button, switch, checkbox, tab
  *      or menuitem -- the type and the role read when they are literals.
@@ -63,7 +68,11 @@
  *      (`title="${on ? "On" : "Off"}"`); a name of the same variable in a
  *      block that shadows it (scopes are functions, not blocks); an
  *      element that behaves as a control without the tag or the role of
- *      one (an `<a>` or a `<div>` with a click handler); and whether the
+ *      one (an `<a>` or a `<div>` with a click handler); an element whose
+ *      TAG it cannot read -- a parameter, a `let`, a property, an import,
+ *      a branch or a call (`[tag, {type: "button"}]`, `"<" + tag + ">"`,
+ *      `document.createElement(t)` with `tag` / `t` one of those): the
+ *      whole element is skipped, control or not; and whether the
  *      translated text says the right thing.
  *
  *          Copyright (c) 2026, ArtGins.
@@ -457,6 +466,32 @@ function literal_texts(v, depth = 0)
 }
 
 /***************************************************************
+ *  The text a tag is written as: a string literal, a template with
+ *  no `${}`, or a const of the file given one. null when it cannot
+ *  be read here (a parameter, a `let`, a property, an import, a
+ *  branch, a call).
+ ***************************************************************/
+function tag_text(node, depth = 0)
+{
+    if(!node || depth > 8) {
+        return null;
+    }
+    if(node.type === "Literal" && typeof node.value === "string") {
+        return node.value;
+    }
+    if(node.type === "TemplateLiteral" && node.expressions.length === 0) {
+        return node.quasis[0].value.cooked;
+    }
+    if(node.type === "Identifier") {
+        let b = binding(node.name, node);
+        if(b && b.kind === "var" && b.is_const && b.decl.init) {
+            return tag_text(b.decl.init, depth + 1);
+        }
+    }
+    return null;
+}
+
+/***************************************************************
  *  What is wrong with the names of one element, [] if nothing.
  *  `control`: it must have both names; otherwise only a name it
  *  has is checked.
@@ -613,16 +648,31 @@ function html_of(src, node)
     let text = "";
     let pieces = [];
     let any = false;
+    /*  A piece of code right after `<` (or `</`) is the tag: written
+     *  as its text when tag_text() reads it, so the tag is read  */
+    let tag_at = (expr) => {
+        if(!/<\/?$/.test(text)) {
+            return null;
+        }
+        let tag = tag_text(expr);
+        return (tag !== null && /^[a-zA-Z][a-zA-Z0-9]*$/.test(tag)) ? tag : null;
+    };
     for(let leaf of leaves) {
         pieces.push({at: text.length, line: leaf.loc.start.line});
         if(leaf.type === "Literal" && typeof leaf.value === "string") {
             text += leaf.value;
             any = true;
         } else if(leaf.type === "TemplateLiteral") {
-            text += src.slice(leaf.start + 1, leaf.end - 1);
+            for(let i = 0; i < leaf.quasis.length; i++) {
+                let q = leaf.quasis[i];
+                text += src.slice(q.start, q.end);
+                if(i < leaf.expressions.length) {
+                    text += tag_at(leaf.expressions[i]) ?? src.slice(q.end, leaf.quasis[i + 1].start);
+                }
+            }
             any = true;
         } else {
-            text += "${" + src.slice(leaf.start, leaf.end) + "}";
+            text += tag_at(leaf) ?? "${" + src.slice(leaf.start, leaf.end) + "}";
         }
     }
     if(!any) {
@@ -683,12 +733,14 @@ function element_writes(scope, v)
 function created_element_faults(src, n)
 {
     let callee = n.callee;
-    if(callee.type !== "MemberExpression" || member_name(callee) !== "createElement" ||
-            !n.arguments[0] || n.arguments[0].type !== "Literal" ||
-            typeof n.arguments[0].value !== "string") {
+    if(callee.type !== "MemberExpression" || member_name(callee) !== "createElement") {
         return [];
     }
-    let tag = n.arguments[0].value.toLowerCase();
+    let tag = tag_text(n.arguments[0]);
+    if(tag === null) {
+        return [];
+    }
+    tag = tag.toLowerCase();
     let parent = PARENT.get(n);
     let v = null;
     if(parent.type === "VariableDeclarator" && parent.id.type === "Identifier") {
@@ -728,9 +780,9 @@ function scan_source(file, src)
         let parent = up[up.length - 1];
 
         if(n.type === "ArrayExpression" && n.elements.length >= 2) {
-            let [tag, attrs] = n.elements;
-            if(!tag || tag.type !== "Literal" || typeof tag.value !== "string" ||
-                    !/^[a-z][a-z0-9]*$/.test(tag.value)) {
+            let [tag_node, attrs] = n.elements;
+            let tag = tag_text(tag_node);
+            if(tag === null || !/^[a-z][a-z0-9]*$/.test(tag)) {
                 return;
             }
             let props = attrs_of(attrs);
@@ -741,24 +793,25 @@ function scan_source(file, src)
                 let p = props.find((x) => prop_name(x) === name);
                 return (p && p.value.type === "Literal") ? p.value.value : null;
             };
-            if(tag.value === "input" && value_of("type") === "hidden") {
+            if(tag === "input" && value_of("type") === "hidden") {
                 return;
             }
-            let control = CONTROLS.includes(tag.value) || CONTROL_ROLES.includes(value_of("role"));
+            let control = CONTROLS.includes(tag) || CONTROL_ROLES.includes(value_of("role"));
             let named_later = attrs.type === "ObjectExpression" && comments.some((c) =>
                 c.start >= attrs.start && c.end <= attrs.end && /named by \w+/.test(c.value));
             if(control && named_later) {
                 return;
             }
             for(let fault of name_faults(src, props, control)) {
-                found.push(`${file}:${n.loc.start.line} <${tag.value}> ${fault}`);
+                found.push(`${file}:${n.loc.start.line} <${tag}> ${fault}`);
             }
             return;
         }
 
         if(n.type === "CallExpression") {
             for(let fault of created_element_faults(src, n)) {
-                found.push(`${file}:${n.loc.start.line} createElement(${n.arguments[0].raw}) ${fault}`);
+                let a = n.arguments[0];
+            found.push(`${file}:${n.loc.start.line} createElement(${src.slice(a.start, a.end)}) ${fault}`);
             }
             return;
         }
@@ -918,5 +971,29 @@ describe("the scan finds what it says it finds", () => {
             'let b = ["button", Object.assign(half("k"), {"aria-label": "Lit"})];'))
             .toEqual(["x.js:2 <button> no aria-label",
                       'x.js:3 <button> aria-label is the literal "Lit": t() it, with its key']);
+    });
+
+    /*
+     *  REV-CLOUD V48.2: a tag held in a const passed unnamed
+     */
+    test("a tag held in a const: in a spec, in html, in createElement()", () => {
+        expect(faults('const TAG = "button";\nlet a = [TAG, {class: "x", type: "button"}];'))
+            .toEqual(["x.js:2 <button> no title", "x.js:2 <button> no aria-label"]);
+        expect(faults('const TAG = "input";\nlet h = "<" + TAG + \' type="text">\';'))
+            .toEqual(["x.js:2 <input> no title", "x.js:2 <input> no aria-label"]);
+        expect(faults('const TAG = `select`;\nlet h = `<${TAG} class="x">`;'))
+            .toEqual(["x.js:2 <select> no title", "x.js:2 <select> no aria-label"]);
+        expect(faults('const TAG = "button";\n' +
+            'function f() { let $b = document.createElement(TAG); return $b; }'))
+            .toEqual(["x.js:2 createElement(TAG) no title", "x.js:2 createElement(TAG) no aria-label"]);
+        expect(faults('const TAG = "button";\nlet a = [TAG, {title: t("k"), "data-i18n-title": "k", ' +
+            '"aria-label": t("k"), "data-i18n-aria-label": "k"}];')).toEqual([]);
+    });
+
+    test("a tag it cannot read is not read (listed in the header)", () => {
+        expect(faults('function f(tag) { let $e = document.createElement(tag);\n' +
+            'return ["<" + tag + ">", [tag, {type: "button"}], $e]; }')).toEqual([]);
+        expect(faults('let tag = "button";\nlet a = [tag, {type: "button"}];')).toEqual([]);
+        expect(faults('const TAG = make();\nlet a = [TAG, {type: "button"}];')).toEqual([]);
     });
 });
