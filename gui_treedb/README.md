@@ -281,8 +281,9 @@ header filters and row boxes, Tom Select) and what gobj-ui builds; attrs
 reached through a parameter, a property, an import or a helper with several
 `return`s; a name written by another function; the key of a `t()` in a branch;
 an element whose tag is a parameter, a `let` or a `var`, a destructured
-const, a property, an import, a branch or a call
-(`document.createElement(t)`: the whole element is skipped);
+const, a property, an import, a branch, a call, or a `+` with any of those
+in it (`"<" + tag + ">"`, `document.createElement(t)`: the whole element is
+skipped);
 an element that acts as a control without the tag or role of one (an `<a>` or
 a `<div>` with a click handler); and whether the text says the right thing.
 
