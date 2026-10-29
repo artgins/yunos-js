@@ -34,12 +34,12 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   particular. `layout_graph()` answers the start of each edge (`sx`, `sy`,
   `back` for one that leaves by the bottom).
 
-## gui_treedb 1.0.3 (2026-10-25)
+## gui_treedb 1.0.3 + gobj-ui ^7.28.1 (2026-10-25)
 
 - gobj-ui `^7.28.1` (a chart's Y axis as wide as its labels; gui_treedb
   draws no chart). Deployed on artgins.ytreedb.com, console clean.
 
-## gui_agent 1.1.5 (2026-10-25)
+## gui_agent 1.1.5 + gobj-ui ^7.28.1 (2026-10-25)
 
 - gobj-ui `^7.28.1`: **the Y axis of the live charts is as wide as its
   labels**. uPlot's fixed 50px cut every value past five digits
@@ -68,7 +68,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 - **`view.node_labels`**: the short name of a node on the cards (`"hid"` for
   `hidrauliaconnect`), the full name in its title.
 
-## gui_agent 1.1.2, gui_treedb 1.0.2 (2026-10-25)
+## gui_agent 1.1.2, gui_treedb 1.0.2 + gobj-js ^7.28.0, gobj-ui ^7.28.0 (2026-10-25)
 
 - **`licenses.txt` beside the bundle** of both yunos, written at build time by gobj-ui
   7.28.0's `yunetaLicensesPlugin`: the license of every package with code in
