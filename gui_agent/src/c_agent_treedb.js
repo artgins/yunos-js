@@ -988,8 +988,8 @@ function build_tree(gobj)
         {
             node_id:    "treedbs",
             /*  The root IS the yuno, so it says which one: the breadcrumb
-             *  reads "gate_hub^4020 / treedb_authzs" and the back bar
-             *  "<- gate_hub^4020". A name, not an i18n key — i18next
+             *  reads "gate_b^7401 / treedb_authzs" and the back bar
+             *  "<- gate_b^7401". A name, not an i18n key — i18next
              *  answers an unknown key with the key itself, which is the
              *  name, and that is what a data label wants.  */
             label:      gobj_read_str_attr(gobj, "yuno_label") ||

@@ -240,7 +240,7 @@ function mt_destroy(gobj)
  *  `%7E`), and a `~` joins them: an encoded part never holds one.
  *
  *  gobj-js registers and finds a service by its name LOWERCASED, so
- *  the keys `Gate` and `gate`, or the nodes `Central` and `central`,
+ *  the keys `Gate` and `gate`, or the nodes `Node-B` and `node-b`,
  *  were one window. An uppercase letter is
  *  written `!` + the letter in lowercase (`Gate` -> `!gate`), and a
  *  `!` of the part itself is percent-encoded (`%21`): `!` starts no

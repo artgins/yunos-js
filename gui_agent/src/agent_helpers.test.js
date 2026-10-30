@@ -231,8 +231,8 @@ describe("apply_shortkey", () => {
     });
 
     test("positional args land in $1 $2 $3", () => {
-        expect(apply_shortkey(KEYS, "two 4046 __yuno__ services"))
-            .toBe("command-yuno id=4046 service=__yuno__ command=services");
+        expect(apply_shortkey(KEYS, "two 7701 __yuno__ services"))
+            .toBe("command-yuno id=7701 service=__yuno__ command=services");
     });
 
     test("a quoted argument reaches $1 whole", () => {
@@ -255,7 +255,7 @@ describe("apply_shortkey", () => {
     test("a $N with no argument for it is left in place, not blanked", () => {
         /*  Better a visible "$2" the operator can see and fix than a
          *  silently truncated command.  */
-        expect(apply_shortkey(KEYS, "two 4046")).toBe("command-yuno id=4046 service=$2 command=$3");
+        expect(apply_shortkey(KEYS, "two 7701")).toBe("command-yuno id=7701 service=$2 command=$3");
     });
 
     test("extra arguments beyond the template's $N are dropped", () => {
@@ -344,8 +344,8 @@ describe("normalize_history", () => {
 
 describe("cmd2agent_service", () => {
     test("addresses a managed yuno through command-yuno", () => {
-        expect(cmd2agent_service("4630", "treedb_authzs", "topics")).toBe(
-            'command-yuno id="4630" service="treedb_authzs" command="topics"'
+        expect(cmd2agent_service("7302", "treedb_authzs", "topics")).toBe(
+            'command-yuno id="7302" service="treedb_authzs" command="topics"'
         );
     });
 
@@ -357,7 +357,7 @@ describe("cmd2agent_service", () => {
 
     test("tells the agent sentinel from a real yuno id", () => {
         expect(is_agent_yuno(AGENT_YUNO_ID)).toBe(true);
-        expect(is_agent_yuno("4630")).toBe(false);
+        expect(is_agent_yuno("7302")).toBe(false);
         expect(is_agent_yuno("")).toBe(false);
         expect(is_agent_yuno(undefined)).toBe(false);
     });
@@ -472,8 +472,8 @@ describe("agent_endpoint_of_cert", () => {
     });
 
     test("an RFC 2253 subject names it too", () => {
-        expect(agent_endpoint_of_cert({subject: "C=ES, CN=agent.central.example.es", url: "wss://0.0.0.0:1993"}))
-            .toEqual({port: "1993", host: "agent.central.example.es"});
+        expect(agent_endpoint_of_cert({subject: "C=ES, CN=agent.node-b.example.es", url: "wss://0.0.0.0:1993"}))
+            .toEqual({port: "1993", host: "agent.node-b.example.es"});
     });
 
     test("a certificate that names no domain gives no host", () => {

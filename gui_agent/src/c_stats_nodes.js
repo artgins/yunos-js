@@ -1441,7 +1441,7 @@ function conn_of_scanned(row, endpoint, services)
 
 /***************************************************************
  *  How much a node's name says about a url's host: the words they
- *  share (`app-central` and `central.app.example` share
+ *  share (`app-north` and `north.app.example` share
  *  two, `dev-laptop-01` none).
  *
  *  It settles which row a url belongs to when two rows give the

@@ -50,7 +50,7 @@ describe("parse_scenario", () => {
         expect(r.ok).toBe(true);
         expect(r.scenario.id).toBe("stress-test");
         expect(r.scenario.place).toBe("control_center");
-        expect(r.scenario.yunos.map((y) => y.id)).toEqual(["stress", "4120", "4520"]);
+        expect(r.scenario.yunos.map((y) => y.id)).toEqual(["stress", "7601", "7501"]);
         expect(r.scenario.yunos[0].rate).toBe("tx");
         expect(r.scenario.yunos[1].rate).toBe("rx");
         expect(r.scenario.yunos[1].service).toBe("");
@@ -97,7 +97,7 @@ describe("parse_scenario", () => {
             .toBe("scenario bad rate");
         expect(parse_scenario('{"agent_url":"wss://h","yunos":[{"id":"a","service":"x y"}]}').error.key)
             .toBe("scenario bad service");
-        expect(parse_scenario('{"agent_url":"wss://h","yunos":[{"id":"a","service":"gate_hub"}]}').ok)
+        expect(parse_scenario('{"agent_url":"wss://h","yunos":[{"id":"a","service":"gate_b"}]}').ok)
             .toBe(true);
         expect(parse_scenario('{"agent_url":"wss://h","yunos":[{"id":"a"}],"links":[["a","b"]]}').error.key)
             .toBe("scenario bad link");
@@ -129,13 +129,13 @@ describe("layout_graph", () => {
     });
 
     it("stacks independent chains as bands, not interleaved", () => {
-        let g = layout_graph(["sim", "gate_edge", "tracks_edge", "gate_hub", "tracks_hub"],
-            [["sim", "gate_edge"], ["gate_edge", "tracks_edge"], ["gate_hub", "tracks_hub"]], O);
-        expect([g.nodes.sim.layer, g.nodes.gate_edge.layer, g.nodes.tracks_edge.layer]).toEqual([0, 1, 2]);
-        expect([g.nodes.gate_hub.layer, g.nodes.tracks_hub.layer]).toEqual([0, 1]);
-        expect(g.nodes.sim.y).toBe(g.nodes.tracks_edge.y);
-        expect(g.nodes.gate_hub.y).toBeGreaterThan(g.nodes.sim.y + O.card_h);
-        expect(g.nodes.gate_hub.y).toBe(g.nodes.tracks_hub.y);
+        let g = layout_graph(["sim", "gate_a", "events_a", "gate_b", "events_b"],
+            [["sim", "gate_a"], ["gate_a", "events_a"], ["gate_b", "events_b"]], O);
+        expect([g.nodes.sim.layer, g.nodes.gate_a.layer, g.nodes.events_a.layer]).toEqual([0, 1, 2]);
+        expect([g.nodes.gate_b.layer, g.nodes.events_b.layer]).toEqual([0, 1]);
+        expect(g.nodes.sim.y).toBe(g.nodes.events_a.y);
+        expect(g.nodes.gate_b.y).toBeGreaterThan(g.nodes.sim.y + O.card_h);
+        expect(g.nodes.gate_b.y).toBe(g.nodes.events_b.y);
         expect(g.width).toBe(340);
     });
 
@@ -324,16 +324,16 @@ describe("actions", () => {
 describe("the old form", () => {
     it("a name becomes the id, and the test block the steps of the actions", () => {
         let r = parse_scenario(JSON.stringify({
-            name: "Stress test (central)",
+            name: "Stress test (node B)",
             node: "c",
-            yunos: [{id: "stress", rate: "tx"}, {id: "4120"}],
+            yunos: [{id: "stress", rate: "tx"}, {id: "7601"}],
             test: {yuno: "stress", service: "sim_load",
                    start: ["set-clients clients=10", "resume-load"],
                    stop: ["set-clients clients=0"]}
         }));
         expect(r.ok).toBe(true);
-        expect(r.scenario.id).toBe("stress-test-central");
-        expect(r.scenario.description).toBe("Stress test (central)");
+        expect(r.scenario.id).toBe("stress-test-node-b");
+        expect(r.scenario.description).toBe("Stress test (node B)");
         expect(r.scenario.actions.start).toEqual([
             {yuno: "stress", service: "sim_load", command: "set-clients clients=10"},
             {yuno: "stress", service: "sim_load", command: "resume-load"}
@@ -399,15 +399,15 @@ describe("a control center that keeps no scenario", () => {
 describe("the yunos ticked in the tree", () => {
     it("make a scenario of cards, each yuno on its node", () => {
         let sc = selection_scenario([
-            {node: "node3", yuno_id: "4620", label: "db_history^4620"},
-            {node: "local", yuno_id: "4620"},
-            {node: "local", yuno_id: "4620"}
+            {node: "node3", yuno_id: "7301", label: "db_history^7301"},
+            {node: "local", yuno_id: "7301"},
+            {node: "local", yuno_id: "7301"}
         ]);
         expect(sc.id).toBe("selection");
         expect(sc.view.mode).toBe("cards");
         expect(sc.yunos.map((y) => [y.key, y.id, y.node, y.label])).toEqual([
-            ["node3.4620", "4620", "node3", "db_history^4620"],
-            ["local.4620", "4620", "local", "4620"]
+            ["node3.7301", "7301", "node3", "db_history^7301"],
+            ["local.7301", "7301", "local", "7301"]
         ]);
     });
 
@@ -429,11 +429,11 @@ describe("where the yunos are", () => {
 
     it("a control-center scenario gives every yuno a node and a key", () => {
         let r = parse_scenario(JSON.stringify({
-            node: "central",
+            node: "node-b",
             yunos: [
-                {key: "sim", id: "stress", node: "field", rate: "tx"},
-                {key: "gate", id: "4120"},
-                {key: "gate_edge", id: "4120", node: "field"}
+                {key: "sim", id: "stress", node: "node-a", rate: "tx"},
+                {key: "gate", id: "7601"},
+                {key: "gate_a", id: "7601", node: "node-a"}
             ],
             links: [["sim", "gate"]],
             test: {yuno: "sim", service: "sim_load", stop: ["set-clients clients=0"]}
@@ -441,9 +441,9 @@ describe("where the yunos are", () => {
         expect(r.ok).toBe(true);
         expect(r.scenario.place).toBe("control_center");
         expect(r.scenario.yunos.map((y) => `${y.key}@${y.node}`)).toEqual(
-            ["sim@field", "gate@central", "gate_edge@field"]);
-        expect(scenario_nodes(r.scenario)).toEqual(["field", "central"]);
-        expect(action_steps(r.scenario, "stop")).toEqual([{key: "sim", node: "field",
+            ["sim@node-a", "gate@node-b", "gate_a@node-a"]);
+        expect(scenario_nodes(r.scenario)).toEqual(["node-a", "node-b"]);
+        expect(action_steps(r.scenario, "stop")).toEqual([{key: "sim", node: "node-a",
             line: "command-yuno id=stress service=sim_load command=set-clients clients=0"}]);
     });
 
@@ -463,15 +463,15 @@ describe("where the yunos are", () => {
     });
 
     it("writes every parameter in the line", () => {
-        let y = {id: "4120", service: ""};
-        expect(lines.cpu(y)).toBe("stats-yuno id=4120 service=__yuno__");
-        expect(lines.app(y)).toBe("stats-yuno id=4120");
+        let y = {id: "7601", service: ""};
+        expect(lines.cpu(y)).toBe("stats-yuno id=7601 service=__yuno__");
+        expect(lines.app(y)).toBe("stats-yuno id=7601");
         expect(lines.app({id: "5", service: "db"})).toBe("stats-yuno id=5 service=db");
         expect(lines.reset({id: "5", service: "db"})).toBe("stats-yuno id=5 service=db stats=__reset__");
-        expect(lines.config(y)).toBe("command-yuno id=4120 service=__yuno__ command=view-config");
-        expect(lines.watch([{id: "stress"}, {id: "4120", service: ""}, {id: "5", service: "db"},
+        expect(lines.config(y)).toBe("command-yuno id=7601 service=__yuno__ command=view-config");
+        expect(lines.watch([{id: "stress"}, {id: "7601", service: ""}, {id: "5", service: "db"},
                             {id: "stress"}], 2000))
-            .toBe("watch-yuno-stats ids=stress,4120,5:db period=2000");
+            .toBe("watch-yuno-stats ids=stress,7601,5:db period=2000");
         expect(lines.unwatch()).toBe("watch-yuno-stats stop=1");
     });
 });
@@ -484,45 +484,45 @@ describe("links from the configs", () => {
         global: {
             "__top_side__.__json_config_variables__": {"__url__": "ws://127.0.0.1:11102"},
             "__input_side__.__json_config_variables__": {
-                "__input_mqtt_url__": "tcp://0.0.0.0:4120",
-                "__input_mqtts_url__": "tcps://0.0.0.0:4122"
+                "__input_mqtt_url__": "tcp://0.0.0.0:7601",
+                "__input_mqtts_url__": "tcps://0.0.0.0:7603"
             },
-            "__output_side__.__json_config_variables__": {"__output_url__": "tcp://127.0.0.1:4520"}
+            "__output_side__.__json_config_variables__": {"__output_url__": "tcp://127.0.0.1:7501"}
         },
         services: [{children: [{kw: {url: "(^^__output_url__^^)"}}]}, {kw: {url: "ws://127.0.0.1:1991"}}]
     };
-    const tracks = {
-        global: {"__input_side__.__json_config_variables__": {"__input_url__": "tcp://127.0.0.1:4520"}},
+    const db_events = {
+        global: {"__input_side__.__json_config_variables__": {"__input_url__": "tcp://127.0.0.1:7501"}},
         services: [{kw: {url: "ws://127.0.0.1:11100"}}]
     };
-    const sim_local = {global: {"sim_load.target_url": "tcps://127.0.0.1:4122"},
-                       services: [{target_url: "tcps://127.0.0.1:4122"}]};
-    const sim_remote = {global: {"sim_load.target_url": "tcps://central.example.com:4122"}};
+    const sim_local = {global: {"sim_load.target_url": "tcps://127.0.0.1:7603"},
+                       services: [{target_url: "tcps://127.0.0.1:7603"}]};
+    const sim_remote = {global: {"sim_load.target_url": "tcps://node-b.example.com:7603"}};
 
     it("reads what a yuno listens on and what it connects to", () => {
         let e = config_endpoints(gate);
-        expect(e.listen.map((x) => x.port).sort()).toEqual([4120, 4122]);
-        expect(e.connect).toEqual([{host: "127.0.0.1", port: 4520}]);
+        expect(e.listen.map((x) => x.port).sort()).toEqual([7601, 7603]);
+        expect(e.connect).toEqual([{host: "127.0.0.1", port: 7501}]);
     });
 
     it("proposes the chain of one node", () => {
         expect(derive_links([
             {key: "stress", config: sim_local},
-            {key: "4120", config: gate},
-            {key: "4520", config: tracks}
-        ])).toEqual([["stress", "4120"], ["4120", "4520"]]);
+            {key: "7601", config: gate},
+            {key: "7501", config: db_events}
+        ])).toEqual([["stress", "7601"], ["7601", "7501"]]);
     });
 
     it("looks for a local address on the same node only, and for a host on any node", () => {
         let entries = [
-            {key: "sim_local", node: "ctl", config: sim_local},
-            {key: "sim_remote", node: "ctl", config: sim_remote},
-            {key: "gate_hub", node: "central", config: gate},
-            {key: "tracks_hub", node: "central", config: tracks}
+            {key: "sim_local", node: "node-a", config: sim_local},
+            {key: "sim_remote", node: "node-a", config: sim_remote},
+            {key: "gate_b", node: "node-b", config: gate},
+            {key: "events_b", node: "node-b", config: db_events}
         ];
         expect(derive_links(entries)).toEqual([
-            ["sim_remote", "gate_hub"],
-            ["gate_hub", "tracks_hub"]
+            ["sim_remote", "gate_b"],
+            ["gate_b", "events_b"]
         ]);
     });
 });
@@ -648,8 +648,8 @@ describe("queue_service", () => {
         let gate = r.scenario.yunos[1];
         expect(queue_elsewhere(gate)).toBe(true);
         expect(scenario_document(r.scenario).yunos[1].queue_service).toBe("__output_side__");
-        expect(lines.watch([gate], 2000)).toBe("watch-yuno-stats ids=4120,4120:__output_side__ period=2000");
-        expect(lines.queue(gate)).toBe("stats-yuno id=4120 service=__output_side__");
+        expect(lines.watch([gate], 2000)).toBe("watch-yuno-stats ids=7601,7601:__output_side__ period=2000");
+        expect(lines.queue(gate)).toBe("stats-yuno id=7601 service=__output_side__");
         expect(queue_elsewhere(r.scenario.yunos[0])).toBe(false);
     });
     it("refuses one that is no service name", () => {
@@ -680,7 +680,7 @@ describe("switch", () => {
                  on: [{command: "set-clients clients=100"}, {command: "resume-load"}],
                  off: [{command: "pause-load"}, {command: "set-clients clients=0"}]
              }},
-            {key: "g", id: "4120"}
+            {key: "g", id: "7601"}
         ],
         links: [["gen2", "g"]],
         actions: {start: [{yuno: "g", command: "play-yuno"}], stop: [{yuno: "g", command: "pause-yuno"}]},
@@ -734,8 +734,8 @@ describe("switch", () => {
         expect(series_label(r.scenario, r.scenario.yunos[0])).toBe("gen2 (n1)");
         expect(series_label(r.scenario, {label: "sim_load", id: "gen1", node: "node3"}))
             .toBe("sim_load gen1 (node3)");
-        expect(series_label(r.scenario, {label: "gate_hub 4120", id: "4120", node: "node2"}))
-            .toBe("gate_hub 4120 (n2)");
+        expect(series_label(r.scenario, {label: "gate_b 7601", id: "7601", node: "node2"}))
+            .toBe("gate_b 7601 (n2)");
     });
 
     it("a switch is on while its yuno moves messages", () => {

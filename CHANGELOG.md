@@ -80,8 +80,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   English; the notes of `gui_treedb`'s `main.js`, `conf/deploy.js` and
   `locales.js` and the `gui_agent` console point at public documents; the
   CSP comment of `gui_treedb/index.html` no longer names a file that does
-  not exist; the yuno ids of this CHANGELOG are `db_history_edge^4630` and
-  `gate_energy^4046`; and the scenario examples of the gui_agent README use
+  not exist; the yuno ids of this CHANGELOG are `db_history^7302` and
+  `gate_probe^7701`; and the scenario examples of the gui_agent README use
   the generator `gen1` and a switch of 100 clients. No code change.
 
 ## gui_agent 1.2.4 (2026-10-30)
@@ -103,8 +103,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   them; a list with no item that is not empty (`,`) is not set.
 - **The examples and tests of gui_agent name no scenario, yuno or port of an
   application**: the stress topology of the README and the monitor's tests
-  use `sim_load`, `gate_edge` / `gate_hub`, `node-a` and the ports 4120 /
-  4520; the placeholder of a role's scope reads `scenario_id=load-test`.
+  use `sim_load`, `gate_a` / `gate_b`, `node-a` and the ports 7601 /
+  7501; the placeholder of a role's scope reads `scenario_id=load-test`.
 - **This CHANGELOG cites no review in words** either: its entries say what
   each version changed.
 
@@ -701,7 +701,7 @@ serves the new bundle, and its console shows only the 401 of
 ## gui_agent 0.29.108, gui_treedb 0.17.170 + gobj-ui ^7.27.33 (2026-10-22)
 
 - Deployed by the round (274 and 74 tests). QA on the deployed plane:
-  `--check gobjtree` opens the tree of `db_history^4620` (a key with a
+  `--check gobjtree` opens the tree of `db_history^7301` (a key with a
   `^`) and its canvas is drawn; 0 console messages of concern.
 
 - **gobj-ui 7.27.33: the tree window finds its canvas again.** Since 0.29.106
@@ -781,7 +781,7 @@ serves the new bundle, and its console shows only the 401 of
   and sent the tree's lines to the node of whatever yuno the NEW scenario
   held under that key. The key defaults to the yuno id, so two
   control-center scenarios with the same id on two nodes collided: the
-  status line said `ctrl · 4120`, and a `set-gclass-trace` reached the
+  status line said `gate · 7601`, and a `set-gclass-trace` reached the
   other node's yuno, where the trace is saved and survives a restart. Now a
   tree is closed when its key names another yuno (node, id, service) or
   the scenario moves to another agent or control center, and each request
@@ -861,7 +861,7 @@ and .ovh, artgins.ytreedb.com), console clean.
   header of `C_AGENT_YUNO_TREE` says the same. Three new i18n keys in both
   locales of both yunos.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live on
-  db_history_edge^4630: the C_TRANGER card (a service) and a C_TIMER card each
+  db_history^7302: the C_TRANGER card (a service) and a C_TIMER card each
   carry their note; the C_TRANGER card reads `●` now that the backend (7.27.3)
   answers `play_methods`. Console clean but for G6's two usual warnings.
 
@@ -878,15 +878,15 @@ and .ovh, artgins.ytreedb.com), console clean.
   rows, the methods in the head, the lit state naming its instance.
 - New i18n keys of gobj-ui 7.27.27 in both locales of both yunos.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live:
-  the three scopes on db_history_edge^4630 (app B's controller node, read
-  only), and set and put back in each scope on gate_energy^4046 (app A:
-  `start_stop` for a C_TIMER and for its gclass, `authzs` for the yuno).
+  the three scopes on db_history^7302 (read only), and set and put back in
+  each scope on gate_probe^7701 (`start_stop` for a C_TIMER and for its
+  gclass, `authzs` for the yuno).
   Console clean but for G6's two usual warnings.
 
 ## gui_agent 0.29.100, gui_treedb 0.17.162 + gobj-ui ^7.27.26 (2026-10-19)
 
 - **The gobj tree has a minimap** (gobj-ui 7.27.26), from 20 cards on: the
-  tree of a yuno opens at actual size, and a db_history_edge has 46 gobjs.
+  tree of a yuno opens at actual size, and a db_history has 46 gobjs.
   gui_treedb's graph keeps its own minimap, now drawn by the same module.
 - **gui_agent asks `view-gobj-tree` for `play_methods`**, which the C SDK
   answers from the release after 7.27.1: whether the gobj's gclass has an
@@ -895,7 +895,7 @@ and .ovh, artgins.ytreedb.com), console clean.
   A yuno built before that SDK ignores the name, and its gobjs keep reading
   paused until it is rebuilt.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live
-  on artgins.yunetacontrol.com: the tree of db_history_edge^4630 opens with its
+  on artgins.yunetacontrol.com: the tree of db_history^7302 opens with its
   minimap; console clean but for G6's two usual warnings, on both planes and
   on artgins.ytreedb.com.
 
@@ -1776,7 +1776,7 @@ Goes with SDK 7.25.21 (agent + control center), and works with older ones.
   instead (`command-agent service=agent_secure_port command=view-cert`): the
   CN of the certificate it has LOADED and the port of its url --
   `wss://agent.artgins.com:1993`, `wss://agent.example.com:1993`,
-  `wss://agent.central.app.example:1993`... A CN that is not a hostname
+  `wss://agent.north.app.example:1993`... A CN that is not a hostname
   (the package's self-signed `yuneta_agent.yuneta.io`) or an agent that does
   not answer falls back to `view-config` and the node's name, as before.
 
@@ -1923,8 +1923,8 @@ older ones.
   an agent older than the command, or a control center that does not relay
   the event -- is polled, the others keep being pushed. The watch is renewed
   every third of the `ttl` the agent answers. Verified with app B's two
-  nodes through the new control center: the controller pushed at ≈500 msg/s,
-  the central (older agent) was polled.
+  nodes through the new control center: node A pushed at ≈500 msg/s, node
+  B (older agent) was polled.
 
 ## gui_agent 0.26.0 (2026-09-29)
 
@@ -1935,7 +1935,7 @@ older ones.
   asks again, a change of interval or of scenario replaces it. An agent that
   does not know the command answers with an error and the view falls back to
   polling, with one warning. Through the control center it still polls.
-  Verified against app B's controller running the new agent (≈500 msg/s,
+  Verified against app B's node A running the new agent (≈500 msg/s,
   start and stop of the stress test) and against an older agent (fallback).
 - `C_MONITOR_LINK` declares `EV_YUNO_STATS` public; a reading pushed or
   polled goes through one path (`apply_reading`). A history row takes a
@@ -1981,7 +1981,7 @@ older ones.
   send, stop and restart in red; the generator's last answer is shown beside
   the buttons. Only while monitoring: a dialog answered after a drop sends
   nothing and says so. Without `test` (production) there is no control.
-  Verified against app B's controller at 500 msg/s: each control moved
+  Verified against app B's node A at 500 msg/s: each control moved
   the three yunos as expected.
 - New i18n keys (en, es): `monitor test`, the five control names, their
   confirmations (arrive as variables), `monitor commands that will run`,
@@ -3023,10 +3023,10 @@ gobj-ui 7.23.168 does the same for the treedb views of both yunos.
 A local copy of a yuno carries the production names in its config (that is how
 it reaches its production peers), so its endpoint is the production url too.
 The export keeps one connection per url, and it kept the FIRST row: the
-development machine sorts first by host, so `central.app.example:4620` went
-out as `dev-laptop^4620`. Now the row whose node the url names wins --
-the node sharing the most words with the url's host (`app-central` and
-`central.app.example` share two) -- and a tie still keeps the first.
+development machine sorts first by host, so `north.app.example:7301` went
+out as `dev-laptop^7301`. Now the row whose node the url names wins --
+the node sharing the most words with the url's host (`app-north` and
+`north.app.example` share two) -- and a tie still keeps the first.
 
 #### gui_treedb's About does not list the connections (gui_treedb 0.17.32)
 
@@ -4993,8 +4993,8 @@ when it was written). `0.14.0` sits above both.
     upgrade the node, not to guess in the browser.
 
     Verified on the deployed plane against one node holding both cases:
-    `gate_hub^4020`'s replica of `treedb_authzs` mounted with **0** new /
-    delete / edit buttons and **0** in-row trash icons, `db_history^4620`'s
+    `gate_b^7401`'s replica of `treedb_authzs` mounted with **0** new /
+    delete / edit buttons and **0** in-row trash icons, `db_history^7301`'s
     own `treedb_system_schema` with all of them, no console errors.
 
 - **The Schemas picker says whether a yuno can be EDITED: master, read only or
@@ -5019,8 +5019,8 @@ when it was written). `0.14.0` sits above both.
     — a node older than the command replies "command not available", and
     counting that as "not master" would label every pre-7.13.0 node read-only,
     which is a claim this app cannot make. Verified live against a node whose
-    yunos were in all three states at once: `db_history^4620` *Master*,
-    `gate_hub^4020` *Read only* (4620 holds the shared store), and the two
+    yunos were in all three states at once: `db_history^7301` *Master*,
+    `gate_b^7401` *Read only* (7301 holds the shared store), and the two
     yunos still on an older binary showing nothing.
 
 - **The Schemas picker lists only yunos that HAVE a treedb.** They used to be
