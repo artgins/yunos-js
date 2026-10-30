@@ -8,6 +8,29 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.2.6, gui_treedb 1.1.2 (2026-10-30)
+
+- **gui_agent: every call to the auth BFF has a deadline.** `/auth/login`,
+  `/auth/refresh` (the restore on load and the live refresh) and
+  `/auth/logout` had none, so each waited for ever on a silent BFF, and a
+  refresh that never resolved let the session drift to expiry. They go
+  through one helper with 15 s, as gui_treedb's. A failed restore on load is
+  an event of the login FSM, no longer a state change inside the fetch
+  callback.
+- **gui_treedb: `/auth/token` has a deadline, and a login the BFF does not
+  answer in time says `auth_timeout`.** A silent `/auth/token` held the login
+  in `ST_WAIT_TOKEN` for as long as the BFF stayed silent. A refresh denied
+  with no `error_code` is `refresh_denied`.
+- **Both: a denial of the login or of the session says its `error_code` in
+  the language of the app** (`t(error_code)` for the codes of
+  `AUTH_ERROR_I18N_KEYS`), not the BFF's English `error` text, which the
+  BFF's contract keeps as a developer fallback. gui_agent gets the 12 codes
+  in en and es, gui_treedb `token_too_large`.
+- **gui_agent: the scenario examples use a neutral load generator**
+  (`set-clients`, `set-streams`, `set-interval`, `pause-load`,
+  `resume-load`, `gen2`..`gen5`, a switch of 100 clients).
+- Both on gobj-ui `^7.29.4`.
+
 ## gui_agent 1.2.5, gui_treedb 1.1.1 (2026-10-30)
 
 - **Both yunos on gobj-ui `^7.29.3` and gobj-js `^7.29.2`**, with
