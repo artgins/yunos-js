@@ -157,10 +157,10 @@ function close_card(child)
 
 describe("the gobj tree window of a card, on the real gobj-ui", () => {
     for(const yuno of [
-        {key: "gate", id: "2120", node: ""},           /*  local~gate  */
-        {key: "x^y", id: "2120", node: "n"},           /*  a `^`: %5E  */
-        {key: "a.b", id: "2120", node: "n.o"},         /*  dots  */
-        {key: "Gate", id: "2120", node: "Central"},    /*  uppercase  */
+        {key: "gate", id: "4120", node: ""},           /*  local~gate  */
+        {key: "x^y", id: "4120", node: "n"},           /*  a `^`: %5E  */
+        {key: "a.b", id: "4120", node: "n.o"},         /*  dots  */
+        {key: "Gate", id: "4120", node: "Central"},    /*  uppercase  */
     ]) {
         test(`node ${JSON.stringify(yuno.node)}, key ${JSON.stringify(yuno.key)}: ` +
                 `the window opens and its tree finds its canvas`, async () => {
@@ -184,8 +184,8 @@ describe("the gobj tree window of a card, on the real gobj-ui", () => {
     }
 
     test("two cards whose keys differ only in case: two windows", async () => {
-        const one = open_card({key: "Gate", id: "2120", node: "n"});
-        const two = open_card({key: "gate", id: "2121", node: "n"});
+        const one = open_card({key: "Gate", id: "4120", node: "n"});
+        const two = open_card({key: "gate", id: "4121", node: "n"});
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(one.priv.view && one.priv.view.win).toBeTruthy();
         expect(two.priv.view && two.priv.view.win).toBeTruthy();

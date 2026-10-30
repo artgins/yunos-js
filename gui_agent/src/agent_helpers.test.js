@@ -231,8 +231,8 @@ describe("apply_shortkey", () => {
     });
 
     test("positional args land in $1 $2 $3", () => {
-        expect(apply_shortkey(KEYS, "two 2046 __yuno__ services"))
-            .toBe("command-yuno id=2046 service=__yuno__ command=services");
+        expect(apply_shortkey(KEYS, "two 4046 __yuno__ services"))
+            .toBe("command-yuno id=4046 service=__yuno__ command=services");
     });
 
     test("a quoted argument reaches $1 whole", () => {
@@ -255,7 +255,7 @@ describe("apply_shortkey", () => {
     test("a $N with no argument for it is left in place, not blanked", () => {
         /*  Better a visible "$2" the operator can see and fix than a
          *  silently truncated command.  */
-        expect(apply_shortkey(KEYS, "two 2046")).toBe("command-yuno id=2046 service=$2 command=$3");
+        expect(apply_shortkey(KEYS, "two 4046")).toBe("command-yuno id=4046 service=$2 command=$3");
     });
 
     test("extra arguments beyond the template's $N are dropped", () => {
@@ -344,8 +344,8 @@ describe("normalize_history", () => {
 
 describe("cmd2agent_service", () => {
     test("addresses a managed yuno through command-yuno", () => {
-        expect(cmd2agent_service("1630", "treedb_authzs", "topics")).toBe(
-            'command-yuno id="1630" service="treedb_authzs" command="topics"'
+        expect(cmd2agent_service("4630", "treedb_authzs", "topics")).toBe(
+            'command-yuno id="4630" service="treedb_authzs" command="topics"'
         );
     });
 
@@ -357,7 +357,7 @@ describe("cmd2agent_service", () => {
 
     test("tells the agent sentinel from a real yuno id", () => {
         expect(is_agent_yuno(AGENT_YUNO_ID)).toBe(true);
-        expect(is_agent_yuno("1630")).toBe(false);
+        expect(is_agent_yuno("4630")).toBe(false);
         expect(is_agent_yuno("")).toBe(false);
         expect(is_agent_yuno(undefined)).toBe(false);
     });

@@ -189,17 +189,17 @@ A scenario, as the control center keeps it and as the editor writes it:
 ```json
 {
     "id": "stress-demo",
-    "description": "sim_fleet -> gate_central -> db_tracks, both nodes",
+    "description": "sim_load -> gate_hub -> db_tracks, both nodes",
     "node": "node-a",
     "yunos": [
-        {"key": "sim",       "id": "stress", "service": "sim_fleet", "rate": "tx"},
-        {"key": "gate_co",   "id": "2120",   "label": "gate_central",
+        {"key": "sim",         "id": "stress", "service": "sim_load", "rate": "tx"},
+        {"key": "gate_edge",   "id": "4120",   "label": "gate_hub",
          "queue_service": "__output_side__"},
-        {"key": "tracks_co", "id": "5120",   "label": "db_tracks"},
-        {"key": "gate_ce",   "id": "2120",   "label": "gate_central", "node": "node-b"},
-        {"key": "tracks_ce", "id": "5120",   "label": "db_tracks", "node": "node-b"}
+        {"key": "tracks_edge", "id": "4520",   "label": "db_tracks"},
+        {"key": "gate_hub",    "id": "4120",   "label": "gate_hub", "node": "node-b"},
+        {"key": "tracks_hub",  "id": "4520",   "label": "db_tracks", "node": "node-b"}
     ],
-    "links": [["sim", "gate_co"], ["gate_co", "tracks_co"], ["gate_ce", "tracks_ce"]],
+    "links": [["sim", "gate_edge"], ["gate_edge", "tracks_edge"], ["gate_hub", "tracks_hub"]],
     "actions": {
         "start":  [{"yuno": "sim", "command": "set-period period=2000"},
                    {"yuno": "sim", "command": "set-controllers controllers=10"},
@@ -207,7 +207,7 @@ A scenario, as the control center keeps it and as the editor writes it:
         "pause":  [{"yuno": "sim", "command": "pause-generation"}],
         "resume": [{"yuno": "sim", "command": "resume-generation"}],
         "stop":   [{"yuno": "sim", "command": "set-controllers controllers=0"}],
-        "report": [{"yuno": "gate_co", "service": "__yuno__", "command": "view-config"}]
+        "report": [{"yuno": "gate_edge", "service": "__yuno__", "command": "view-config"}]
     },
     "view": {"mode": "graph"}
 }
@@ -235,7 +235,7 @@ steps as those of an action; a step that names no `yuno` goes to the switch's
 own:
 
 ```json
-{"key": "pp12", "id": "pp12", "service": "sim_fleet", "rate": "tx", "node": "artgins",
+{"key": "gen12", "id": "gen12", "service": "sim_load", "rate": "tx", "node": "node-a",
  "switch": {
      "on":  [{"command": "set-controllers controllers=125"}, {"command": "resume-generation"}],
      "off": [{"command": "pause-generation"}, {"command": "set-controllers controllers=0"}]
@@ -245,7 +245,7 @@ own:
 The switch shows ON while the yuno's throughput (`rate`) is not zero -- what
 the yuno does, not what was last clicked. A click runs the other one at once,
 with no confirmation, through the control center (`run-scenario action=on|off
-scenario_yuno=pp12`); its title says what a click does, or why it cannot be
+scenario_yuno=gen12`); its title says what a click does, or why it cannot be
 used now. `on` is offered only while the scenario RUNS, so the `max_run` stop
 is always there to stop it; `off` in any state. A switch run changes neither
 the state of the scenario nor its max_run, and is listed in its Runs; the
@@ -968,7 +968,7 @@ The same tab has a second view, **Roles** (`<tab>/roles`, a route: a link, and
 what a reload keeps; the *Users* / *Roles* buttons move it). A table of the
 roles of the store: what each GRANTS -- its `permission`, and each entry of its
 `permissions`, a red *Deny* tag on a denied one -- and **for what**, its scope
-(`only scenario_id=load-20k`); who holds it; its service; enabled or
+(`only scenario_id=load-test`); who holds it; its service; enabled or
 not, protected (a seed role). A click opens its **sheet**:
 
 - id (fixed once created), description, **service** and **realm**;
@@ -997,7 +997,7 @@ not, protected (a seed role). A click opens its **sheet**:
 | delete | `delete-node topic_name=roles record={id}` |
 
 So letting a user run a scenario it can only watch is a role, not a code
-change: with `load-20k-viewer` (read) and `load-20k-operator` (read and run)
+change: with `load-test-viewer` (read) and `load-test-operator` (read and run)
 in the store, the user's sheet gives or takes the second with one checkbox.
 `scripts/qa.mjs --check roles` reads the view; `--check roleswrite` creates,
 edits and deletes a `qa-tmp-*` role and leaves the store as it found it.

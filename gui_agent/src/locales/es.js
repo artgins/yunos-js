@@ -923,7 +923,7 @@ const es = {
         "role in use": "Un rol con usuarios o roles hijos no se puede borrar: quítaselo antes",
         "role realm required": "El realm es obligatorio",
         "role scope": "Ámbito",
-        "role scope placeholder": "scenario_id=load-20k (vacío: todo)",
+        "role scope placeholder": "scenario_id=load-test (vacío: todo)",
         "role scope help": "Limita los permisos a esos valores, p. ej. scenario_id=a,b. Vacío: sin límite.",
         "role realm help": "El realm del yuno, o * para cualquiera.",
         "role service help": "El servicio cuyos permisos concede el rol.",

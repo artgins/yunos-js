@@ -26,8 +26,8 @@
  *                  "node": "my-node",
  *                  "yunos": [
  *                      {"key": "sim", "id": "stress", "service": "generator", "rate": "tx"},
- *                      {"key": "gate", "id": "2120"},
- *                      {"key": "tracks", "id": "5120", "node": "other-node"}
+ *                      {"key": "gate", "id": "4120"},
+ *                      {"key": "tracks", "id": "4520", "node": "other-node"}
  *                  ],
  *                  "links": [["sim", "gate"], ["gate", "tracks"]],
  *                  "actions": {
@@ -95,8 +95,8 @@ const SCENARIO_TEMPLATE = {
     node: "my-node",
     yunos: [
         {key: "sim", id: "stress", service: "generator", label: "generator", rate: "tx"},
-        {key: "gate", id: "2120", label: "gate"},
-        {key: "store", id: "5120", label: "store"}
+        {key: "gate", id: "4120", label: "gate"},
+        {key: "store", id: "4520", label: "store"}
     ],
     links: [["sim", "gate"], ["gate", "store"]],
     actions: {

@@ -943,7 +943,7 @@ describe("every control is named, in a language that can change", () => {
 });
 
 /*
- *  The scan itself, on the shapes a review got past it: each one
+ *  The scan itself, on the shapes that once got past it: each one
  *  must be found.
  */
 describe("the scan finds what it says it finds", () => {

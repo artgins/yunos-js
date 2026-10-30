@@ -27,11 +27,16 @@
  *      of the control center it runs against. They come from the
  *      environment or from `~/.yuneta/.qa-creds`, as KEY=value lines:
  *      QA_PW, QA_SCHEMA_NODE, QA_SCHEMA_YUNO, QA_SCHEMA_TREEDB,
+ *      QA_SCHEMA_TOPICS (two topics of that treedb, comma separated),
  *      QA_HELD_SCENARIO, QA_ROLES_ROLE, QA_QUEUE_GATES (the gates of the
  *      held scenario, comma separated), QA_SWITCH_COUNT (its generators),
  *      QA_NODE_CODES (the 3-letter codes of its nodes, comma separated),
- *      and QA_ROLES_NODE, QA_ROLES_YUNO, which have defaults. A check
- *      whose id is not set fails before it opens anything, naming it.
+ *      QA_PERM_OFF and QA_PERM_ON (the shell commands of --check
+ *      permlive, taken as written, quotes included), and QA_ROLES_NODE,
+ *      QA_ROLES_YUNO, which have defaults. A list with no item that is not
+ *      empty ("," or " , ") is not set. A check whose setting is not set
+ *      fails before the browser is launched, naming it: nothing is opened
+ *      and nobody signs in.
  *
  *      Usage:
  *
@@ -49,8 +54,7 @@
  *          node scripts/qa.mjs --check switches        # every generator's card has its switch, nodes in 3 letters everywhere (read only)
  *          node scripts/qa.mjs --check roles           # the roles of a store: what each grants, its sheet
  *          node scripts/qa.mjs --check roleswrite      # a role created, edited and deleted (leaves none)
- *          QA_PERM_OFF='<cmd>' QA_PERM_ON='<cmd>' \
- *          node scripts/qa.mjs --check permlive        # controls follow a role taken and given, no reload
+ *          node scripts/qa.mjs --check permlive        # controls follow a role taken and given, no reload (QA_PERM_OFF, QA_PERM_ON)
  *
  *      A BUILD NOT DEPLOYED YET is checked against the same live plane with
  *      --dist: every GET of the plane's origin that names a file of that
@@ -172,28 +176,51 @@ function read_creds_file() {
 }
 
 /*
- *  An id of the installation: from the environment, else from
- *  ~/.yuneta/.qa-creds, else the default given. With none, a text that
- *  matches nothing on the page and names the setting, so the check that
- *  needs it fails saying what to set.
+ *  The list settings, and how many items each must hold to be set.
  */
-function qa_setting(name, default_value) {
-    const v = process.env[name] || read_creds_file()[name] || default_value;
-    if(v) {
-        return v;
-    }
-    return `<${name} not set: set it in the environment or in ~/.yuneta/.qa-creds>`;
-}
+const LIST_SETTINGS = {
+    QA_SCHEMA_TOPICS: 2,
+    QA_QUEUE_GATES: 1,
+    QA_NODE_CODES: 1,
+};
 
-function qa_setting_is_set(name) {
-    return !!(process.env[name] || read_creds_file()[name]);
+/*
+ *  A setting as given: from the environment, else from
+ *  ~/.yuneta/.qa-creds; "" when it is in neither.
+ */
+function qa_setting_raw(name) {
+    return process.env[name] || read_creds_file()[name] || "";
 }
 
 /*
  *  A list setting ("a,b,c"), its items trimmed, empty ones dropped.
  */
 function qa_setting_list(name) {
-    return qa_setting(name).split(",").map((x) => x.trim()).filter((x) => x);
+    return qa_setting_raw(name).split(",").map((x) => x.trim()).filter((x) => x);
+}
+
+/*
+ *  Is it set? A list is set when it holds as many items that are not
+ *  empty as LIST_SETTINGS asks: "," is no list.
+ */
+function qa_setting_is_set(name) {
+    if(name in LIST_SETTINGS) {
+        return qa_setting_list(name).length >= LIST_SETTINGS[name];
+    }
+    return !!qa_setting_raw(name);
+}
+
+/*
+ *  An id of the installation: as given, else the default given. With
+ *  none, a text that matches nothing on the page and names the setting,
+ *  so the check that needs it fails saying what to set.
+ */
+function qa_setting(name, default_value) {
+    const v = qa_setting_raw(name) || default_value;
+    if(v) {
+        return v;
+    }
+    return `<${name} not set: set it in the environment or in ~/.yuneta/.qa-creds>`;
 }
 
 function get_credentials() {
@@ -245,7 +272,7 @@ function get_credentials() {
 const SCHEMA_NODE = qa_setting("QA_SCHEMA_NODE");
 const SCHEMA_YUNO = qa_setting("QA_SCHEMA_YUNO");
 const SCHEMA_TREEDB = qa_setting("QA_SCHEMA_TREEDB");
-const SCHEMA_TOPICS = ["devices", "places"];
+const SCHEMA_TOPICS = qa_setting_list("QA_SCHEMA_TOPICS");
 
 async function check_schemaback(page, args, step, out_dir)
 {
@@ -662,8 +689,8 @@ async function check_roleswrite(page, args, step, out_dir)
  */
 async function check_permlive(page, args, step, out_dir)
 {
-    const off = process.env.QA_PERM_OFF || "";
-    const on = process.env.QA_PERM_ON || "";
+    const off = qa_setting_raw("QA_PERM_OFF");
+    const on = qa_setting_raw("QA_PERM_ON");
     if(!off || !on) {
         step("check permlive", false, "set QA_PERM_OFF and QA_PERM_ON");
         return false;
@@ -1074,12 +1101,12 @@ const CHECKS = {
 
 /*
  *  The settings each check cannot run without (those with a default are
- *  not listed). A check missing one fails before it opens anything, with
- *  a message that names it -- not with "no row" or "no card" for an id
- *  that was never given.
+ *  not listed). A check missing one fails before the browser is launched,
+ *  with a message that names it -- not with "no row" or "no card" for an
+ *  id that was never given.
  */
 const CHECK_SETTINGS = {
-    schemaback: ["QA_SCHEMA_NODE", "QA_SCHEMA_YUNO", "QA_SCHEMA_TREEDB"],
+    schemaback: ["QA_SCHEMA_NODE", "QA_SCHEMA_YUNO", "QA_SCHEMA_TREEDB", "QA_SCHEMA_TOPICS"],
     gobjtree: ["QA_SCHEMA_NODE", "QA_SCHEMA_YUNO"],
     chartsheld: ["QA_HELD_SCENARIO"],
     controlhelp: ["QA_HELD_SCENARIO"],
@@ -1090,8 +1117,31 @@ const CHECK_SETTINGS = {
     controlstate: ["QA_HELD_SCENARIO"],
     roles: ["QA_ROLES_ROLE"],
     roleswrite: [],
-    permlive: ["QA_HELD_SCENARIO"],
+    permlive: ["QA_HELD_SCENARIO", "QA_PERM_OFF", "QA_PERM_ON"],
 };
+
+/*
+ *  The checks asked for that cannot run: a name that is no check, or a
+ *  setting that is not set. Asked before the browser is launched, so a
+ *  run that cannot do what it was asked opens nothing and signs nobody
+ *  in.
+ */
+function checks_not_runnable(names) {
+    const out = [];
+    for(const name of names) {
+        if(!CHECKS[name]) {
+            out.push(`check ${name} — no such check`);
+            continue;
+        }
+        const unset = (CHECK_SETTINGS[name] || []).filter((n) => !qa_setting_is_set(n));
+        if(unset.length) {
+            const said = unset.map((n) => (LIST_SETTINGS[n] > 1)? `${n} (${LIST_SETTINGS[n]} items)` : n);
+            out.push(`check ${name} — ${said.join(", ")} not set: ` +
+                "set it in the environment or in ~/.yuneta/.qa-creds");
+        }
+    }
+    return out;
+}
 
 
                     /***************************
@@ -1105,6 +1155,16 @@ async function main() {
         console.log(readFileSync(new URL(import.meta.url)).toString()
             .split("Usage:")[1].split("*/")[0].replace(/^\s*\*/gm, ""));
         return 0;
+    }
+
+    const not_runnable = checks_not_runnable(args.checks);
+    if(not_runnable.length) {
+        console.log(`\nQA: ${args.url}  (nothing opened)\n`);
+        for(const line of not_runnable) {
+            console.log(`  FAIL  ${line}`);
+        }
+        console.log("");
+        return 1;
     }
 
     const pw_path = qa_setting("QA_PW");
@@ -1241,20 +1301,7 @@ async function main() {
 
                 args.problems = problems;
                 for(const name of args.checks) {
-                    const fn = CHECKS[name];
-                    if(!fn) {
-                        step(`check ${name}`, false, "no such check");
-                        failed = true;
-                        continue;
-                    }
-                    const unset = (CHECK_SETTINGS[name] || []).filter((n) => !qa_setting_is_set(n));
-                    if(unset.length) {
-                        step(`check ${name}`, false,
-                            `${unset.join(", ")} not set: set it in the environment or in ~/.yuneta/.qa-creds`);
-                        failed = true;
-                        continue;
-                    }
-                    const ok = await fn(page, args, step, out_dir);
+                    const ok = await CHECKS[name](page, args, step, out_dir);
                     failed ||= !ok;
                 }
 

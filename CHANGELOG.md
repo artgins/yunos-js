@@ -15,11 +15,25 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   number of generators and the node codes of `--check switches`
   (`QA_SWITCH_COUNT`, `QA_NODE_CODES`) are settings now too, with no default:
   they were the ports, the count and the node codes of one installation.
+- **`scripts/qa.mjs`: that failure comes before the browser is launched.** It
+  came after the sign in, so a run that could not do what it was asked still
+  opened the plane and signed in. Now nothing is opened, and an unknown check
+  is refused the same way. The two topics of `--check schemaback` are a
+  setting with no default (`QA_SCHEMA_TOPICS`, two items); `QA_PERM_OFF` and
+  `QA_PERM_ON` are read from `~/.yuneta/.qa-creds` as the other settings are
+  (they were read from the environment only), and `--check permlive` needs
+  them; a list with no item that is not empty (`,`) is not set.
+- **The examples and tests of gui_agent name no scenario, yuno or port of an
+  application**: the stress topology of the README and the monitor's tests
+  use `sim_load`, `gate_edge` / `gate_hub`, `node-a` and the ports 4120 /
+  4520; the placeholder of a role's scope reads `scenario_id=load-test`.
+- **This CHANGELOG cites no review in words** either: its entries say what
+  each version changed.
 
 ## gui_agent 1.2.3 (2026-10-30)
 
 - **The examples name no private project, client or node.** The placeholder
-  of a role's scope reads `scenario_id=load-20k`, the comments and tests of
+  of a role's scope reads a generic scenario id, the comments and tests of
   both yunos use generic names and cite no private review, and the README of
   each yuno lists all four shapes the controls test cannot see (it named only
   one of them).
@@ -251,8 +265,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   memory tag of each node, the cards mode and the commands a confirmation
   lists; the full name in the title.
 - **The series of a chart name the yuno by label, id and node**
-  (`series_label()`: `sim_fleet pp1 (n1)`): yunos that share a label
-  -- the 14 fleets of load-20k are all `sim_fleet` -- were
+  (`series_label()`: `sim_load gen1 (n1)`): yunos that share a label
+  -- the generators of load-test are all `sim_load` -- were
   14 lines of the same name.
 
 ## gui_agent 1.1.3 (2026-10-25)
@@ -365,7 +379,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   is still refused by it ("a run is in flight, one at a time"). A user who
   may not run a scenario still sees no buttons at all (`run-scenarios`, as
   before).
-- QA: `--check controlstate` reads the buttons of `load-20k` and
+- QA: `--check controlstate` reads the buttons of `load-test` and
   checks them against its state, clicking none. Seen running: Start and
   Resume off, "No disponible: el escenario está en marcha".
 
@@ -391,7 +405,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   against the live plane (the plane's files answered from the local
   `dist/`), `--viewport WxH` sets the window, and `--check livelayout` says
   where the charts are and opens and folds a chart's series. Run at 1920,
-  1440 and 390 px on `load-20k`.
+  1440 and 390 px on `load-test`.
 
 ## gui_agent 1.0.6 (2026-10-24)
 
@@ -411,7 +425,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   that service answers per output gate (`{"output-qiogate-0":
   {"msgs_in_queue": 0, ...}}`), and the view only read a `msgs_in_queue` at
   the top. `queue_in_stats()` takes the top one, or the sum of the
-  children's. Seen on the live view of `load-20k`.
+  children's. Seen on the live view of `load-test`.
 
 ## gui_agent 1.0.4 (2026-10-24)
 
@@ -436,7 +450,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   its first reading: the cards start without the row, and a card that
   learns it has one makes the graph lay out again, once, on the next turn
   (`EV_RELAYOUT`, posted, never in the middle of a paint). In
-  `load-20k` the gates and the store are 124 px high, the
+  `load-test` the gates and the store are 124 px high, the
   simulators 124 (output and queue).
 
 ## gui_agent 1.0.2 (2026-10-24)
@@ -446,7 +460,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   that always read "-": its card has no input row now, and is 124 px high
   instead of 148 (`only_emitters()`; `layout_graph()` takes a height per
   card, `heights`, stacks a column with them and meets each card at its own
-  middle). The 8 simulators of `load-20k` take ~190 px less. In a
+  middle). The 8 simulators of `load-test` take ~190 px less. In a
   scenario with no links nobody is an emitter: the flow is not known.
 
 ## gui_agent 1.0.1 (2026-10-24)
@@ -482,7 +496,7 @@ unreadable. gui_treedb 1.0.0 is the code of 0.17.172 renumbered.
 
 - **Users has a Roles view**: `<tab>/roles` (a route; the *Users* / *Roles*
   buttons move it). Every role of the store with what it grants or denies
-  and for what -- its scope, `only scenario_id=load-20k` -- who
+  and for what -- its scope, `only scenario_id=load-test` -- who
   holds it, its service, enabled or not, protected. Its **sheet** edits it:
   description, service, realm, the permission and *Deny*, the role's scope as
   text (`scenario_id=a,b`), more permissions each with its own scope, and
@@ -539,7 +553,7 @@ offered and asked as before, with one warning each in the console.
   `run-scenarios` on it, edit and delete `write-scenarios`, and "read once"
   and a card's gobj tree `command-agent`.
 - QA, on artgins.yunetacontrol.com against the control center of 7.27.13:
-  the route opens `load-20k` in a fresh browser, `--check
+  the route opens `load-test` in a fresh browser, `--check
   chartsheld` passes, and the console shows only the two expected
   fallback warnings (`my-permissions`, `watch-scenario` not available).
 
@@ -547,12 +561,12 @@ offered and asked as before, with one warning each in the console.
 
 - **A run that failed with no step done changes nothing.** 0.29.112 read any
   failed run as "state not known" and let the charts follow: the newest run
-  of `load-20k` was a `start` refused at its first step (its
+  of `load-test` was a `start` refused at its first step (its
   yunos were down), so the stopped scenario kept scrolling. Now such a run
   is skipped and the one before it decides; a run, or a control from here,
   that failed half way still leaves the state not known.
 - QA: `node scripts/qa.mjs --check chartsheld` opens a stopped scenario
-  (`QA_HELD_SCENARIO`, default `load-20k`), waits for the held
+  (`QA_HELD_SCENARIO`, default `load-test`), waits for the held
   note and checks the messages chart is not redrawn over 6 s; read only.
   Passed on artgins.yunetacontrol.com.
 
@@ -609,7 +623,7 @@ serves the new bundle, and its console shows only the 401 of
 ## gui_agent 0.29.108, gui_treedb 0.17.170 + gobj-ui ^7.27.33 (2026-10-22)
 
 - Deployed by the round (274 and 74 tests). QA on the deployed plane:
-  `--check gobjtree` opens the tree of `db_history^1620` (a key with a
+  `--check gobjtree` opens the tree of `db_history^4620` (a key with a
   `^`) and its canvas is drawn; 0 console messages of concern.
 
 - **gobj-ui 7.27.33: the tree window finds its canvas again.** Since 0.29.106
@@ -689,7 +703,7 @@ serves the new bundle, and its console shows only the 401 of
   and sent the tree's lines to the node of whatever yuno the NEW scenario
   held under that key. The key defaults to the yuno id, so two
   control-center scenarios with the same id on two nodes collided: the
-  status line said `ctrl · 2120`, and a `set-gclass-trace` reached the
+  status line said `ctrl · 4120`, and a `set-gclass-trace` reached the
   other node's yuno, where the trace is saved and survives a restart. Now a
   tree is closed when its key names another yuno (node, id, service) or
   the scenario moves to another agent or control center, and each request
@@ -781,13 +795,13 @@ and .ovh, artgins.ytreedb.com), console clean.
   yuno*. gui_agent sends `set-global-trace` for that third scope
   (`EV_SET_TRACE_LEVEL` with `scope: "global"`) and then reads the root's
   gclass again, whose answer carries the yuno's levels.
-- **The gclass viewer reviewed**: laid out by its own width, the short zones
+- **The gclass viewer**: laid out by its own width, the short zones
   first, attributes and commands across the whole width and capped at 20
   rows, the methods in the head, the lit state naming its instance.
 - New i18n keys of gobj-ui 7.27.27 in both locales of both yunos.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live:
   the three scopes on db_history_edge^1630 (app B's controller node, read
-  only), and set and put back in each scope on gate_plug^2046 (app A:
+  only), and set and put back in each scope on gate_plug^4046 (app A:
   `start_stop` for a C_TIMER and for its gclass, `authzs` for the yuno).
   Console clean but for G6's two usual warnings.
 
@@ -1015,14 +1029,14 @@ No change of the app's own code.
 
 ## gui_agent 0.29.77, gui_treedb 0.17.143 + gobj-ui ^7.26.59 (2026-10-15)
 
-the gobj-ui 7.26.59 round (the thirty-fourth review): the topic table
+the gobj-ui 7.26.59 round: the topic table
 cancels an open cell editor only when the update changes the edited
 field, so the echo of the reader's own write no longer closes the next
 cell's editor. No change of the app's own code.
 
 ## gui_agent 0.29.76, gui_treedb 0.17.142 + gobj-ui ^7.26.58 (2026-10-15)
 
-the gobj-ui 7.26.58 round (the thirty-third review): the topic table
+the gobj-ui 7.26.58 round: the topic table
 cancels an open cell editor before it updates that row from the backend
 (the echo of the reader's own write threw and left the row half painted),
 and the cell editor is re-opened after a column change only when it still
@@ -1030,21 +1044,21 @@ can. No change of the app's own code.
 
 ## gui_agent 0.29.75, gui_treedb 0.17.141 + gobj-ui ^7.26.57 (2026-10-15)
 
-the gobj-ui 7.26.57 round (the thirty-second review): the topic table
+the gobj-ui 7.26.57 round: the topic table
 closes an open cell editor before it reloads or is destroyed (it threw page
 errors), and a cell editor also survives `addColumn`,
 `updateColumnDefinition` and `moveColumn`. No change of the app's own code.
 
 ## gui_agent 0.29.74, gui_treedb 0.17.140 + gobj-ui ^7.26.56, gobj-js ^7.26.29 (2026-10-15)
 
-the gobj-ui 7.26.56 and gobj-js 7.26.29 rounds (the thirty-first
-review), with the dependencies up to date: i18next ^26.4.5 (26.4.4 fixes a
-ReDoS on an interpolated value holding an unclosed `$t(`; no locale uses the
-`$t(` nesting), maplibre-gl ^6.14.0 (fixes; the worker is self-contained
-since 6.13) and vite ^8.3.4 (build fixes). Also: a time field can clear a
-value it cannot show, a cell editor survives `setColumns`, and `gobj_play()`
-fails when its start does. The two rounds ran back to back: the version
-between them was deployed and has no commit.
+the gobj-ui 7.26.56 and gobj-js 7.26.29 rounds, with the dependencies up to
+date: i18next ^26.4.5 (26.4.4 fixes a ReDoS on an interpolated value holding
+an unclosed `$t(`; no locale uses the `$t(` nesting), maplibre-gl ^6.14.0
+(fixes; the worker is self-contained since 6.13) and vite ^8.3.4 (build
+fixes). Also: a time field can clear a value it cannot show, a cell editor
+survives `setColumns`, and `gobj_play()` fails when its start does. The two
+rounds ran back to back: the version between them was deployed and has no
+commit.
 
 ## gui_agent 0.29.72, gui_treedb 0.17.138 + gobj-ui ^7.26.54 (2026-10-14)
 
@@ -1064,7 +1078,7 @@ the yunos' own code. Built, tested, deployed; console check clean.
 
 ## gui_agent 0.29.69, gui_treedb 0.17.135 + gobj-ui ^7.26.51, gobj-js ^7.26.28 (2026-10-14)
 
-the gobj-ui 7.26.51 and gobj-js 7.26.28 rounds (the thirtieth review):
+the gobj-ui 7.26.51 and gobj-js 7.26.28 rounds:
 saving a form time field untouched no longer goes back one hour in the
 repeated autumn hour; the retirement of dead Back entries stays in its
 document and follows the reader's traversals; `node_uuid()` is stable for the
@@ -1079,52 +1093,52 @@ Built, tested, deployed; console check clean.
 
 ## gui_agent 0.29.67, gui_treedb 0.17.133 + gobj-ui ^7.26.50 (2026-10-14)
 
-the gobj-ui 7.26.50 round: a menu item's badge is the v1 pill again,
-with no ring of the page's colour (in the dark theme it read as a black
-circle that ate the tone; red and yellow were hard to tell apart). No change of the yunos'
+the gobj-ui 7.26.50 round: a menu item's badge is the v1 pill again, with no
+ring of the page's colour (in the dark theme it read as a black circle that
+ate the tone; red and yellow were hard to tell apart). No change of the yunos'
 own code. Built, tested, deployed; console check clean.
 
 ## gui_agent 0.29.66, gui_treedb 0.17.132 + gobj-ui ^7.26.49, gobj-js ^7.26.27 (2026-10-14)
 
-the gobj-ui 7.26.49 and gobj-js 7.26.27 rounds (the twenty-ninth
-review): a logout with an overlay up no longer leaves dead Back entries; a
-focus trap whose panel left is warned; a time cell confirmed unchanged no
-longer goes back one hour in the repeated autumn hour; a template time field
-shows its time again; gobj-js no longer throws with the site's data blocked
-(the app did not start), floors the reconnection retry at 1000 ms, and its
-walks step over a gobj already destroyed. The two rounds ran back to back:
-the version between them was deployed and has no commit. No change of the yunos' own code. Built,
-tested, deployed; console check clean.
+the gobj-ui 7.26.49 and gobj-js 7.26.27 rounds: a logout with an overlay up no
+longer leaves dead Back entries; a focus trap whose panel left is warned; a
+time cell confirmed unchanged no longer goes back one hour in the repeated
+autumn hour; a template time field shows its time again; gobj-js no longer
+throws with the site's data blocked (the app did not start), floors the
+reconnection retry at 1000 ms, and its walks step over a gobj already
+destroyed. The two rounds ran back to back: the version between them was
+deployed and has no commit. No change of the yunos' own code. Built, tested,
+deployed; console check clean.
 
 ## gui_agent 0.29.64, gui_treedb 0.17.130 + gobj-ui ^7.26.47, gobj-js ^7.26.26 (2026-10-14)
 
-the gobj-ui 7.26.47 and gobj-js 7.26.26 rounds (the twenty-eighth
-review): an incomplete date no longer erases a stored time; Enter in a box
-of a form no longer adds a row or reloads the page; a cancelled cell edit is
-not a change; the header checkbox is named `select all rows` (new key, added
-in en/es where the app mounts a form); a stopping shell no longer moves the
-browser history; a panel that only moves keeps its focus trap; gobj-js
-refuses values whose text says another thing (NaN, `toJSON`, an `undefined`
-in an array) and a getter that throws, resets the backoff after a long
-session and removes a corrupt localStorage entry. The two rounds ran back to
-back: the version between them was deployed and has no commit. No change of the yunos' own code but the
-new key. Built, tested, deployed; console check clean.
+the gobj-ui 7.26.47 and gobj-js 7.26.26 rounds: an incomplete date no longer
+erases a stored time; Enter in a box of a form no longer adds a row or reloads
+the page; a cancelled cell edit is not a change; the header checkbox is named
+`select all rows` (new key, added in en/es where the app mounts a form); a
+stopping shell no longer moves the browser history; a panel that only moves
+keeps its focus trap; gobj-js refuses values whose text says another thing
+(NaN, `toJSON`, an `undefined` in an array) and a getter that throws, resets
+the backoff after a long session and removes a corrupt localStorage entry. The
+two rounds ran back to back: the version between them was deployed and has no
+commit. No change of the yunos' own code but the new key. Built, tested,
+deployed; console check clean.
 
 ## gui_agent 0.29.62, gui_treedb 0.17.128 + gobj-ui ^7.26.46, gobj-js ^7.26.25 (2026-10-14)
 
-the gobj-ui 7.26.46 and gobj-js 7.26.25 rounds (the twenty-seventh
-review): a stopped shell closes its overlays (their focus traps left later
-windows without focus after a logout); the checkbox column respects
-`selectable`; a time column is editable without luxon; `C_IEVENT_CLI`
-refuses the transport's own events from the server and closes with 4002 on
-a server fault without resetting the backoff; URLs and queries encoded
-inside a value are masked. The two rounds ran back to back: the version
-between them was deployed and has no commit. No change of the yunos' own code. Built,
-tested (gui_agent 251, gui_treedb 72), deployed; console check clean.
+the gobj-ui 7.26.46 and gobj-js 7.26.25 rounds: a stopped shell closes its
+overlays (their focus traps left later windows without focus after a logout);
+the checkbox column respects `selectable`; a time column is editable without
+luxon; `C_IEVENT_CLI` refuses the transport's own events from the server and
+closes with 4002 on a server fault without resetting the backoff; URLs and
+queries encoded inside a value are masked. The two rounds ran back to back:
+the version between them was deployed and has no commit. No change of the
+yunos' own code. Built, tested (gui_agent 251, gui_treedb 72), deployed;
+console check clean.
 
 ## gui_agent 0.29.60, gui_treedb 0.17.126 + gobj-ui ^7.26.45, gobj-js ^7.26.24 (2026-10-14)
 
-the gobj-ui 7.26.45 and gobj-js 7.26.24 rounds (the twenty-sixth review):
+the gobj-ui 7.26.45 and gobj-js 7.26.24 rounds:
 `selectable` is Tabulator's `selectableRowsCheck`; an open cell editor no
 longer breaks a reload; a window yields Escape to a newer overlay; a session
 cut uncleanly is a WARNING again and `EV_ON_CLOSE` carries `code`, `reason`
@@ -1135,11 +1149,11 @@ tested (gui_agent 251, gui_treedb 72), deployed; console check clean.
 
 ## gui_agent 0.29.58, gui_treedb 0.17.124 + gobj-js ^7.26.23 (2026-10-14)
 
-gobj-js 7.26.23: `C_IEVENT_CLI` no longer warns when a session ends
-(every close was a warning, the clean one of a logout included; it is
-`EV_ON_CLOSE` now, as in C), and the reason of a failed open is masked. No change of the yunos' own code. Versions
-raised, built, tested (gui_agent 251, gui_treedb 72) and deployed by gobj-ui's
-deploy round; console check clean on every host.
+gobj-js 7.26.23: `C_IEVENT_CLI` no longer warns when a session ends (every
+close was a warning, the clean one of a logout included; it is `EV_ON_CLOSE`
+now, as in C), and the reason of a failed open is masked. No change of the
+yunos' own code. Versions raised, built, tested (gui_agent 251, gui_treedb 72)
+and deployed by gobj-ui's deploy round; console check clean on every host.
 
 ## gui_agent 0.29.57, gui_treedb 0.17.123 + gobj-ui ^7.26.44 (2026-10-14)
 
@@ -1151,7 +1165,7 @@ deploy round.
 
 ## gui_agent 0.29.56, gui_treedb 0.17.122 + gobj-js ^7.26.22 (2026-10-14)
 
-gobj-js 7.26.22, the gobj-js 7.26.22 round (the twenty-fifth review, parity with the C kernel
+gobj-js 7.26.22, the gobj-js 7.26.22 round (parity with the C kernel
 of 7.26.10): a token in a URL query is masked; an attribute's value is read
 as its type by the command parser's grammar (a value that is not is not
 written, and said); and a gobj destroyed under code still running on it is
@@ -1161,13 +1175,13 @@ tested (gui_agent 251, gui_treedb 72) and deployed by gobj-ui's deploy round.
 
 ## gui_agent 0.29.55, gui_treedb 0.17.121 + gobj-ui ^7.26.43 (2026-10-14)
 
-gobj-ui 7.26.43, the gobj-ui 7.26.43 round (the twenty-fifth review): Undo reverts a form's
-tables and the record stays as loaded; nested tables live as long as their
-row; a table loads in one call; `C_YUI_WINDOW` is a named dialog with
-Escape and focus; the shell's dialogs are named and reachable from the
-keyboard; the floating dock no longer covers a full-screen window. No change of the yunos' own
-code. Versions raised, built, tested (gui_agent 251, gui_treedb 72) and
-deployed by gobj-ui's deploy round.
+gobj-ui 7.26.43, the gobj-ui 7.26.43 round: Undo reverts a form's tables and
+the record stays as loaded; nested tables live as long as their row; a table
+loads in one call; `C_YUI_WINDOW` is a named dialog with Escape and focus; the
+shell's dialogs are named and reachable from the keyboard; the floating dock
+no longer covers a full-screen window. No change of the yunos' own code.
+Versions raised, built, tested (gui_agent 251, gui_treedb 72) and deployed by
+gobj-ui's deploy round.
 
 ## gui_agent 0.29.54, gui_treedb 0.17.120 (2026-10-14)
 
@@ -1195,8 +1209,7 @@ the local gobj-js 7.26.22 / gobj-ui 7.26.43.
 
 ## gui_agent 0.29.53, gui_treedb 0.17.119 + gobj-js ^7.26.21 (2026-10-13)
 
-gobj-js 7.26.21, the masking of the twenty-fourth review and of the security
-review of its C commit: after
+gobj-js 7.26.21, the masking of the C kernel: after
 `Bearer` or `Basic` only a word that can be a credential is masked; a JWE, a
 JWT a cap cut and a `name: value` whose name is a secret's are masked; and each
 rule judges the text as it came, so no rule hides a value from the next. No
@@ -1205,7 +1218,7 @@ gui_treedb 70) and deployed by gobj-ui's deploy round.
 
 ## gui_agent 0.29.52, gui_treedb 0.17.118 + gobj-ui ^7.26.42 (2026-10-13)
 
-gobj-ui 7.26.42, the twenty-fourth review's library and validator round: every
+gobj-ui 7.26.42, the library and validator round: every
 change of a badge is said, as text; the canvas of a graph -- the monitor's,
 the gobj tree, the treedb and schema graphs, the JSON viewer -- is named and
 shows its focus, with four new keys in both locales (`json graph`, `gobj tree
@@ -1270,8 +1283,7 @@ code; versions raised by gobj-ui's deploy round, built and deployed by it.
 
 ## gui_agent 0.29.45, gui_treedb 0.17.111 + gobj-ui ^7.26.35, gobj-js ^7.26.20 (2026-10-13)
 
-The twenty-third review, and the libraries
-of its round.
+The libraries of gobj-ui 7.26.35 and gobj-js 7.26.20.
 
 - **gui_agent: every key the monitor BUILDS is published and pinned by a
   test.** `monitor_i18n_keys.test.js` requires `C_AGENT_MONITOR_I18N_KEYS`
@@ -1303,21 +1315,19 @@ of its round.
 
 ## gui_agent 0.29.44: gobj-ui ^7.26.32 (2026-10-13)
 
-The twenty-second review. The monitor
-BUILDS keys from a control's name, `monitor ${control}` (the label of its
-confirmation) and `monitor confirm ${control}` (its question), and marked them
-as data, so no key of either was ever asked of the locales. It publishes both
-sets now (`C_AGENT_MONITOR_I18N_KEYS`, `C_AGENT_MONITOR_CONFIRM_I18N_KEYS`: the
-six controls a scenario can offer) and its five calls name those lists, which
-the `validate-locales` of gobj-ui 7.26.32 asks for -- a control added to
-`SCENARIO_ACTIONS` needs its two keys added there. gui_treedb only raises its
-range (no change of its code).
+The monitor BUILDS keys from a control's name, `monitor ${control}` (the label
+of its confirmation) and `monitor confirm ${control}` (its question), and
+marked them as data, so no key of either was ever asked of the locales. It
+publishes both sets now (`C_AGENT_MONITOR_I18N_KEYS`,
+`C_AGENT_MONITOR_CONFIRM_I18N_KEYS`: the six controls a scenario can offer)
+and its five calls name those lists, which the `validate-locales` of gobj-ui
+7.26.32 asks for -- a control added to `SCENARIO_ACTIONS` needs its two keys
+added there. gui_treedb only raises its range (no change of its code).
 
 ## gui_agent 0.29.43, gui_treedb 0.17.110: gobj-ui ^7.26.29 (2026-10-12)
 
-The twenty-first review. The
-`validate-locales` of gobj-ui 7.26.29 holds the app's own code to the per-call
-rule the library keeps, with the file and the line:
+The `validate-locales` of gobj-ui 7.26.29 holds the app's own code to the
+per-call rule the library keeps, with the file and the line:
 
 - Both apps handed the install prompt `t("install this app")`, a translated
   text where the function takes the KEY: it was translated again and marked
@@ -1333,10 +1343,10 @@ rule the library keeps, with the file and the line:
 
 ## gui_agent 0.29.42, gui_treedb 0.17.109: gobj-ui ^7.26.28 (2026-10-12)
 
-The twentieth review. The `validate-locales`
-of gobj-ui 7.26.28 reads a key where it is handed to a FUNCTION of the library
-(`yui_shell_show_error`, `icon_button`, the popover rows...), and the shell's
-fallback names are keys now. Keys both apps lacked, which reached the page raw:
+The `validate-locales` of gobj-ui 7.26.28 reads a key where it is handed to a
+FUNCTION of the library (`yui_shell_show_error`, `icon_button`, the popover
+rows...), and the shell's fallback names are keys now. Keys both apps lacked,
+which reached the page raw:
 
 - gui_agent: `expand loaded`, `click to load`, `please select some row`,
   `user menu`, `menu`, `print-tranger failed`, `schema-file failed`, `enum`,
@@ -1350,14 +1360,12 @@ fallback names are keys now. Keys both apps lacked, which reached the page raw:
 
 ## gui_agent 0.29.41, gui_treedb 0.17.108: gobj-ui ^7.26.27 (2026-10-12)
 
-The nineteenth review: the property popovers
-of the treedb's node graph (`C_G6_NODES_TREE`) name their controls and change language (gobj-ui 7.26.27);
-the published `validate-locales` reads the keys the library's modules publish
-as data. Both pass with no change of their catalogs.
+The property popovers of the treedb's node graph (`C_G6_NODES_TREE`) name
+their controls and change language (gobj-ui 7.26.27); the published
+`validate-locales` reads the keys the library's modules publish as data. Both
+pass with no change of their catalogs.
 
 ## gui_agent 0.29.40, gui_treedb 0.17.107: gobj-ui ^7.26.26 (2026-10-12)
-
-The eighteenth review.
 
 - Key `node id required` (both): the treedb node graph's create popover said
   `t('node id') + ' required'`, with "required" in English for ever.
@@ -1368,8 +1376,6 @@ The eighteenth review.
 
 ## gui_agent 0.29.39, gui_treedb 0.17.106: gobj-ui ^7.26.25 (2026-10-12)
 
-The seventeenth review.
-
 - Both run the `validate-locales` gobj-ui publishes
   (`node node_modules/@yuneta/gobj-ui/scripts/validate-locales.mjs`) and keep
   no copy: the copies of the apps had drifted into three families with
@@ -1379,30 +1385,30 @@ The seventeenth review.
 
 ## gui_agent 0.29.38, gui_treedb 0.17.105: gobj-js ^7.26.19, gobj-ui ^7.26.24 (2026-10-11)
 
-The sixteenth review: an import conflict of the schema editor names the bad
-name; the reentrancy guard of gobj-js no longer swallows console lines.
+An import conflict of the schema editor names the bad name; the reentrancy
+guard of gobj-js no longer swallows console lines.
 
 ## gui_agent 0.29.37, gui_treedb 0.17.104: gobj-js ^7.26.18, gobj-ui ^7.26.23 (2026-10-11)
 
-The fifteenth review. `validate-locales` (both yunos) scans the gobj-ui it
-BUILDS with -- the installed package, the yunetas checkout only when there is
-none -- and fails when it finds neither or misses a module (a lone clone
-scanned the app alone and passed); it also reads the codes of gobj-ui's
-schema checks (`add("error", "…")`, `code: "…"`), so gui_agent's 2 new keys
-(`treedb name breaks the name rule`, `column has no name`) are checked.
+`validate-locales` (both yunos) scans the gobj-ui it BUILDS with -- the
+installed package, the yunetas checkout only when there is none -- and fails
+when it finds neither or misses a module (a lone clone scanned the app alone
+and passed); it also reads the codes of gobj-ui's schema checks (`add("error",
+"…")`, `code: "…"`), so gui_agent's 2 new keys (`treedb name breaks the name
+rule`, `column has no name`) are checked.
 
 ## gui_agent 0.29.36, gui_treedb 0.17.103: gobj-js ^7.26.17, gobj-ui ^7.26.22 (2026-10-11)
 
-The fourteenth review: two name rules in the schema editor (a topic is a
-directory, a column only a key), its import stops before any write on a name
-the treedb refuses, and gui_agent's locales carry the four keys that say it;
-no log path of gobj-js throws.
+Two name rules in the schema editor (a topic is a directory, a column only a
+key), its import stops before any write on a name the treedb refuses, and
+gui_agent's locales carry the four keys that say it; no log path of gobj-js
+throws.
 
 ## gui_agent 0.29.35, gui_treedb 0.17.102: gobj-js ^7.26.16, gobj-ui ^7.26.21 (2026-10-11)
 
-The thirteenth review: the schema editor refuses a topic or column name that
-breaks the treedb name rule (`.`, `..`, `/`, `` ` ``), with its new key in
-gui_agent's locales; a log line with `%s`/`%d`/`%f` can no longer throw.
+The schema editor refuses a topic or column name that breaks the treedb name
+rule (`.`, `..`, `/`, `` ` ``), with its new key in gui_agent's locales; a log
+line with `%s`/`%d`/`%f` can no longer throw.
 
 ## gui_agent 0.29.34, gui_treedb 0.17.101: gobj-js ^7.26.15 (2026-10-11)
 
@@ -1410,8 +1416,8 @@ gobj-js 7.26.15: a log line can no longer throw, whatever it prints.
 
 ## gui_agent 0.29.33, gui_treedb 0.17.100: gobj-js ^7.26.14, gobj-ui ^7.26.20 (2026-10-11)
 
-The eleventh review: `KW_CREATE` over another type is logged, a `null` is
-replaced as in C; the G6 long press on a monotonic clock.
+`KW_CREATE` over another type is logged, a `null` is replaced as in C; the G6
+long press on a monotonic clock.
 
 ## gui_agent 0.29.32, gui_treedb 0.17.99: gobj-js ^7.26.13 (2026-10-11)
 
@@ -1420,73 +1426,69 @@ as the C writer does now.
 
 ## gui_agent 0.29.31, gui_treedb 0.17.98: gobj-js ^7.26.12, gobj-ui ^7.26.19 (2026-10-11)
 
-The tenth review of the implementation: the markup check of the `prebuild`
-sees markup behind a blank prefix of a `replace()`; the jdb refuses a record
-that is not an object.
+The markup check of the `prebuild` sees markup behind a blank prefix of a
+`replace()`; the jdb refuses a record that is not an object.
 
 ## gui_agent 0.29.30, gui_treedb 0.17.97: gobj-js ^7.26.11, gobj-ui ^7.26.18 (2026-10-11)
 
-The ninth review of the implementation. Through gobj-ui 7.26.18: the markup
-check of the `prebuild` sees a regex `replace()` on data again. Through gobj-js
-7.26.11: a failed `jdb_update()` leaves the jdb as it was.
+Through gobj-ui 7.26.18: the markup check of the `prebuild` sees a regex
+`replace()` on data again. Through gobj-js 7.26.11: a failed `jdb_update()`
+leaves the jdb as it was.
 
 ## gui_agent 0.29.29, gui_treedb 0.17.96: gobj-js ^7.26.10, gobj-ui ^7.26.17 (2026-10-11)
 
-The eighth review of the implementation. Through gobj-ui 7.26.17: the markup
-check of the `prebuild` no longer reads a `replace()` whose pattern cannot
-match at the start as built markup. Through gobj-js 7.26.10: the jdb and an
-empty kw path log what they do not do.
+Through gobj-ui 7.26.17: the markup check of the `prebuild` no longer reads a
+`replace()` whose pattern cannot match at the start as built markup. Through
+gobj-js 7.26.10: the jdb and an empty kw path log what they do not do.
 
 ## gui_agent 0.29.28, gui_treedb 0.17.95: gobj-js ^7.26.9, gobj-ui ^7.26.16 (2026-10-11)
 
-The seventh review of the implementation. Through gobj-ui 7.26.16: Forward onto
-an entry stamped for an earlier dialog no longer closes a panel the reader has
-not left, and after a reload a Back over a reopened panel closes it instead of
-being lost. Through gobj-js 7.26.9: `jdb_init()` creates its topics.
+Through gobj-ui 7.26.16: Forward onto an entry stamped for an earlier dialog
+no longer closes a panel the reader has not left, and after a reload a Back
+over a reopened panel closes it instead of being lost. Through gobj-js 7.26.9:
+`jdb_init()` creates its topics.
 
 ## gui_agent 0.29.27, gui_treedb 0.17.94: gobj-js ^7.26.8, gobj-ui ^7.26.15 (2026-10-11)
 
-The sixth review of the implementation. Through gobj-ui 7.26.15: a link (or a
-menu click) back to the hash a panel was opened on no longer closes the panel
-nor leaves the URL and the view on screen disagreeing; a navigation made while
-the shell retires an overlay's history entry has a bounded wait and says when
-it is replaced or dropped, and a menu click waits for it too. Through gobj-js
-7.26.8: `kw_set_subdict_value()` and `jdb_update()`/`jdb_delete()` refuse a
-path they cannot write.
+Through gobj-ui 7.26.15: a link (or a menu click) back to the hash a panel was
+opened on no longer closes the panel nor leaves the URL and the view on screen
+disagreeing; a navigation made while the shell retires an overlay's history
+entry has a bounded wait and says when it is replaced or dropped, and a menu
+click waits for it too. Through gobj-js 7.26.8: `kw_set_subdict_value()` and
+`jdb_update()`/`jdb_delete()` refuse a path they cannot write.
 
 ## gui_agent 0.29.26, gui_treedb 0.17.93: gobj-ui ^7.26.14 (2026-10-11)
 
-The close of the review. Through gobj-ui 7.26.14: Back over a panel opened
-before a replace navigation keeps the position, and closing a panel and
-navigating in the same turn no longer undoes the navigation (both found and
-checked in Chromium and Firefox); the window manager refuses the legacy form
-of its events (BREAKING for a sender of them; none here).
+Through gobj-ui 7.26.14: Back over a panel opened before a replace navigation
+keeps the position, and closing a panel and navigating in the same turn no
+longer undoes the navigation (both found and checked in Chromium and Firefox);
+the window manager refuses the legacy form of its events (BREAKING for a
+sender of them; none here).
 
 ## gui_agent 0.29.25, gui_treedb 0.17.92: gobj-js ^7.26.7, gobj-ui ^7.26.13 (2026-10-11)
 
-The sixth check of the review. Through gobj-ui 7.26.13: a panel that stays
-across navigation closes with Back again after the view under it wrote its
-position with a replace, and that position survives the close; no orphan
-history marker after a dropped back(). Through gobj-js 7.26.7: a path that is
-not a string is an error, not a TypeError.
+Through gobj-ui 7.26.13: a panel that stays across navigation closes with Back
+again after the view under it wrote its position with a replace, and that
+position survives the close; no orphan history marker after a dropped back().
+Through gobj-js 7.26.7: a path that is not a string is an error, not a
+TypeError.
 
 ## gui_agent 0.29.24, gui_treedb 0.17.91: gobj-js ^7.26.6, gobj-ui ^7.26.12 (2026-10-11)
 
-The fifth check of the review. Through gobj-ui 7.26.12: a `back()` the browser
-dropped no longer closes the overlay that waited for its marker, the gclass
-view header and the treedb graph legend show data as text, and the markup
-check sees more shapes. Through gobj-js 7.26.6: `kw_delete()` answers as C.
+Through gobj-ui 7.26.12: a `back()` the browser dropped no longer closes the
+overlay that waited for its marker, the gclass view header and the treedb
+graph legend show data as text, and the markup check sees more shapes. Through
+gobj-js 7.26.6: `kw_delete()` answers as C.
 
 ## gui_agent 0.29.23, gui_treedb 0.17.90: gobj-js ^7.26.5, gobj-ui ^7.26.11 (2026-10-11)
 
-The fourth check of the review. `check-markup` runs the script gobj-ui
-publishes (`node_modules/@yuneta/gobj-ui/scripts/check-markup-strings.mjs`);
-the copies under `scripts/` are gone. Through gobj-ui 7.26.11: more runtime
-data as text (icon cells, schema editor selects, Tabulator list editors and
-filters, gclass method chips), and a Back the browser dropped no longer
-swallows the next one. Through gobj-js 7.26.4/7.26.5: path writers read a
-list as the reader does, and a treedb template record keeps an own
-`__proto__` as a key.
+`check-markup` runs the script gobj-ui publishes
+(`node_modules/@yuneta/gobj-ui/scripts/check-markup-strings.mjs`); the copies
+under `scripts/` are gone. Through gobj-ui 7.26.11: more runtime data as text
+(icon cells, schema editor selects, Tabulator list editors and filters, gclass
+method chips), and a Back the browser dropped no longer swallows the next one.
+Through gobj-js 7.26.4/7.26.5: path writers read a list as the reader does,
+and a treedb template record keeps an own `__proto__` as a key.
 
 ## gui_agent 0.29.22, gui_treedb 0.17.89: gobj-js ^7.26.3, gobj-ui ^7.26.10 (2026-10-11)
 
@@ -1500,32 +1502,31 @@ not the gobj.
 
 ## gui_agent 0.29.21, gui_treedb 0.17.88: gobj-js ^7.26.2, gobj-ui ^7.26.9 (2026-10-11)
 
-The third check of the review of 2026-10-10. Through gobj-ui 7.26.9: more
-runtime data shown as text (treedb topic cards and info panel, schema editor,
-delete confirmation, column titles from a schema `header`, traffic keys of the
-dev window), a node colour from `__graphs__` is checked before it is painted,
-and Back after a window's question answered by a button no longer leaves the
-app or gets swallowed. Through gobj-js 7.26.2: a url the browser refuses
-publishes `EV_ON_OPEN_ERROR` and retries, and the copies of a kw keep an own
-`__proto__` as a key.
+Through gobj-ui 7.26.9: more runtime data shown as text (treedb topic cards
+and info panel, schema editor, delete confirmation, column titles from a
+schema `header`, traffic keys of the dev window), a node colour from
+`__graphs__` is checked before it is painted, and Back after a window's
+question answered by a button no longer leaves the app or gets swallowed.
+Through gobj-js 7.26.2: a url the browser refuses publishes `EV_ON_OPEN_ERROR`
+and retries, and the copies of a kw keep an own `__proto__` as a key.
 
 ## gui_agent 0.29.20, gui_treedb 0.17.87: gobj-js ^7.26.1, gobj-ui ^7.26.8 (2026-10-10)
 
-The second check of the review of 2026-10-10. Through gobj-ui 7.26.8: the
-labels the apps feed into the nav at run time (`list-agents` hosts in
-gui_agent, the selected treedb in gui_treedb) are text, never markup; a form
-with a table destroyed right after saving no longer throws; Back closes the
-"unsaved changes" question again. Through gobj-js 7.26.1: a link restarted
-against a url that fails no longer delivers the old close twice.
+Through gobj-ui 7.26.8: the labels the apps feed into the nav at run time
+(`list-agents` hosts in gui_agent, the selected treedb in gui_treedb) are
+text, never markup; a form with a table destroyed right after saving no longer
+throws; Back closes the "unsaved changes" question again. Through gobj-js
+7.26.1: a link restarted against a url that fails no longer delivers the old
+close twice.
 
 ## gui_agent 0.29.19, gui_treedb 0.17.86: gobj-js ^7.26.0, gobj-ui ^7.26.7 (2026-10-10)
 
-The libraries of the review of 2026-10-10: `log_*()` substitute their
+The libraries of gobj-js 7.26.0 and gobj-ui 7.26.7: `log_*()` substitute their
 arguments again, a subscription filter on a false value matches, a link
-stopped and started in the same turn keeps working, a json field that does
-not parse is refused instead of saved as `{}`, and data shown in window
-titles and remote gclass views is text, never markup. New locale keys
-`restore` (both yunos) and `navigation` (gui_treedb).
+stopped and started in the same turn keeps working, a json field that does not
+parse is refused instead of saved as `{}`, and data shown in window titles and
+remote gclass views is text, never markup. New locale keys `restore` (both
+yunos) and `navigation` (gui_treedb).
 
 ## gui_agent 0.29.18, gui_treedb 0.17.85: gobj-ui ^7.26.6 (2026-10-10)
 
@@ -1715,9 +1716,9 @@ Goes with SDK 7.25.21 (agent + control center), and works with older ones.
 
 ## gui_agent 0.29.3 (2026-09-30)
 
-A review of the Scenarios workspace, after running the `fleet-stress`
-scenario end to end from it. Goes with SDK 7.25.15 (control center + agent),
-and works with older ones.
+Fixes of the Scenarios workspace, found running a stress scenario end to
+end from it. Goes with SDK 7.25.15 (control center + agent), and works with
+older ones.
 
 - **The agents' watches are stopped when the view leaves them.** Disconnect,
   the view being stopped and another scenario being shown now send
@@ -2944,8 +2945,8 @@ gobj-ui 7.23.168 does the same for the treedb views of both yunos.
 A local copy of a yuno carries the production names in its config (that is how
 it reaches its production peers), so its endpoint is the production url too.
 The export keeps one connection per url, and it kept the FIRST row: the
-development machine sorts first by host, so `central.app.example:1620` went
-out as `dev-laptop^1620`. Now the row whose node the url names wins --
+development machine sorts first by host, so `central.app.example:4620` went
+out as `dev-laptop^4620`. Now the row whose node the url names wins --
 the node sharing the most words with the url's host (`app-central` and
 `central.app.example` share two) -- and a tie still keeps the first.
 
@@ -4914,8 +4915,8 @@ when it was written). `0.14.0` sits above both.
     upgrade the node, not to guess in the browser.
 
     Verified on the deployed plane against one node holding both cases:
-    `gate_central^2020`'s replica of `treedb_authzs` mounted with **0** new /
-    delete / edit buttons and **0** in-row trash icons, `db_history^1620`'s
+    `gate_hub^4020`'s replica of `treedb_authzs` mounted with **0** new /
+    delete / edit buttons and **0** in-row trash icons, `db_history^4620`'s
     own `treedb_system_schema` with all of them, no console errors.
 
 - **The Schemas picker says whether a yuno can be EDITED: master, read only or
@@ -4940,8 +4941,8 @@ when it was written). `0.14.0` sits above both.
     — a node older than the command replies "command not available", and
     counting that as "not master" would label every pre-7.13.0 node read-only,
     which is a claim this app cannot make. Verified live against a node whose
-    yunos were in all three states at once: `db_history^1620` *Master*,
-    `gate_central^2020` *Read only* (1620 holds the shared store), and the two
+    yunos were in all three states at once: `db_history^4620` *Master*,
+    `gate_hub^4020` *Read only* (4620 holds the shared store), and the two
     yunos still on an older binary showing nothing.
 
 - **The Schemas picker lists only yunos that HAVE a treedb.** They used to be

@@ -129,7 +129,7 @@ let n_views = 0;
 
 const SAVED = {
     id: "stress", node: "ctrl", description: "sim -> gate",
-    yunos: [{key: "sim", id: "stress", service: "sim_fleet", rate: "tx"}, {key: "gate", id: "2120"}],
+    yunos: [{key: "sim", id: "stress", service: "sim_load", rate: "tx"}, {key: "gate", id: "4120"}],
     links: [["sim", "gate"]],
     actions: {
         start: [{yuno: "sim", command: "set-controllers controllers=10"}],
@@ -471,10 +471,10 @@ describe("the live view of a scenario the control center keeps", () => {
             __md_iev__: {monitor_kind: "watch", monitor_gen: mon.priv.generation, monitor_node: "ctrl"}
         }, link);
         /*  The gate's own counters say no queue; its __output_side__ says 1200  */
-        push({yuno_id: "2120", kind: "app", service: "", result: 0, data: {rxMsgsec: 7000}});
-        push({yuno_id: "2120", kind: "app", service: "__output_side__", result: 0,
+        push({yuno_id: "4120", kind: "app", service: "", result: 0, data: {rxMsgsec: 7000}});
+        push({yuno_id: "4120", kind: "app", service: "__output_side__", result: 0,
               data: {"output-qiogate-0": {msgs_in_queue: 1200, pending_acks: 0}}});
-        push({yuno_id: "2120", kind: "app", service: "", result: 0, data: {rxMsgsec: 7100}});
+        push({yuno_id: "4120", kind: "app", service: "", result: 0, data: {rxMsgsec: 7100}});
         expect(mon.priv.model.gate.queue).toBe(1200);
         expect(mon.priv.model.gate.rx).toBe(7100);
         expect(mon.priv.cards.gate.$q.textContent).toBe("1200");
@@ -488,7 +488,7 @@ describe("the live view of a scenario the control center keeps", () => {
 
     test("memory and disk: on the cards, coloured when low, the node's once, '–' from an older yuno", () => {
         const TWO = JSON.parse(JSON.stringify(SAVED));
-        TWO.yunos.push({key: "tracks", id: "5120"});
+        TWO.yunos.push({key: "tracks", id: "4520"});
         TWO.links.push(["gate", "tracks"]);
         const mon = new_monitor();
         watch_saved(TWO);
@@ -499,7 +499,7 @@ describe("the live view of a scenario the control center keeps", () => {
         }, link);
         const card = (k) => mon.priv.cards[k];
         /*  A yuno older than 7.28.4: its cpu, nothing else  */
-        push({yuno_id: "stress", kind: "cpu", service: "sim_fleet", result: 0,
+        push({yuno_id: "stress", kind: "cpu", service: "sim_load", result: 0,
               data: {cpu: 3, disk_free_percent: 73, disk_size_in_gigas: 1832}});
         expect(card("sim").$mem.textContent).toBe("–");
         expect(card("sim").$disk.textContent).toBe("–");
@@ -509,10 +509,10 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(mon.priv.$node_mems.classList.contains("is-hidden")).toBe(true);
 
         /*  7.28.4: a ramdisk at 4 % free is danger, 15 % is warning  */
-        push({yuno_id: "2120", kind: "cpu", service: "", result: 0, data: {cpu: 20,
+        push({yuno_id: "4120", kind: "cpu", service: "", result: 0, data: {cpu: 20,
               mem_rss_kb: 5324, mem_node_total_mb: 31885, mem_node_available_percent: 15,
               disk_min_free_percent: 4, disk_min_free_path: "/mnt/simram/queues", disk_min_free_size_gigas: 26}});
-        push({yuno_id: "5120", kind: "cpu", service: "", result: 0, data: {cpu: 20,
+        push({yuno_id: "4520", kind: "cpu", service: "", result: 0, data: {cpu: 20,
               mem_rss_kb: 204800, mem_node_total_mb: 31885, mem_node_available_percent: 15,
               disk_min_free_percent: 15, disk_min_free_path: "/yuneta/store", disk_min_free_size_gigas: 1832}});
         expect(card("gate").$mem.textContent).toBe("5.2 MB");
@@ -583,7 +583,7 @@ describe("the live view of a scenario the control center keeps", () => {
 
     test("a click on a card highlights it, the cards linked to it and their links", () => {
         const CHAIN = JSON.parse(JSON.stringify(SAVED));
-        CHAIN.yunos.push({key: "tracks", id: "5120"});
+        CHAIN.yunos.push({key: "tracks", id: "4520"});
         CHAIN.links.push(["gate", "tracks"]);
         const mon = new_monitor();
         watch_saved(CHAIN);
@@ -741,13 +741,13 @@ describe("the live view of a scenario the control center keeps", () => {
 
         answer(mon, runs[0], {comment: "controlcenter^x: run stress.1: report done, 1 steps", data: [{
             id: "stress.1", result: 0,
-            steps: [{yuno: "gate", line: "command-yuno id=2120 service=__yuno__ command=view-config",
+            steps: [{yuno: "gate", line: "command-yuno id=4120 service=__yuno__ command=view-config",
                      result: 0, comment: "", data: {a: 1}}]
         }]});
         expect(mon.priv.control.ok).toBe(true);
         expect(mon.priv.control.running).toBe(false);
         expect(mon.priv.control.outputs).toEqual([{yuno: "gate",
-            line: "command-yuno id=2120 service=__yuno__ command=view-config",
+            line: "command-yuno id=4120 service=__yuno__ command=view-config",
             result: 0, comment: "", data: {a: 1}}]);
 
         gobj_send_event(mon, "EV_SHOW_OUTPUT", {}, mon);
@@ -991,7 +991,7 @@ describe("a scenario that is not the control center's", () => {
         expect(find("run-scenario").length).toBe(0);
         let steps = find("command-agent").filter((r) => /set-controllers/.test(r.kw.cmd2agent));
         expect(steps.map((r) => [r.kw.agent_id, r.kw.cmd2agent])).toEqual([
-            ["ctrl", "command-yuno id=stress service=sim_fleet command=set-controllers controllers=10"]
+            ["ctrl", "command-yuno id=stress service=sim_load command=set-controllers controllers=10"]
         ]);
     });
 
@@ -1015,24 +1015,24 @@ describe("a scenario that is not the control center's", () => {
         /*  The live tab is created the first time it is visited; the tree
          *  tab is used before that.  */
         agent_config_toggle_selected_node(config, "scenarios",
-            {id: stats_sel_id("local", "2020"), host: "gate_central^2020"});
+            {id: stats_sel_id("local", "4020"), host: "gate_hub^4020"});
         const mon = new_monitor();
         expect(mon.priv.source).toBe("selection");
-        expect(mon.priv.scenario.yunos.map((y) => y.id)).toEqual(["2020"]);
+        expect(mon.priv.scenario.yunos.map((y) => y.id)).toEqual(["4020"]);
         expect(gobj_current_state(mon)).toBe("ST_MONITORING");
         agent_config_toggle_selected_node(config, "scenarios",
-            {id: stats_sel_id("local", "2020"), host: "gate_central^2020"});
+            {id: stats_sel_id("local", "4020"), host: "gate_hub^4020"});
         expect(mon.priv.scenario).toBe(null);
     });
 
     test("the yunos ticked in the tree are watched as cards", () => {
         const mon = new_monitor();
         agent_config_toggle_selected_node(config, "scenarios",
-            {id: stats_sel_id("node1", "1620"), host: "db_history^1620"});
+            {id: stats_sel_id("node1", "4620"), host: "db_history^4620"});
         let m = agent_config_get_monitor(config);
         expect(m.source).toBe("selection");
         expect(mon.priv.scenario.yunos.map((y) => [y.id, y.node, y.label]))
-            .toEqual([["1620", "node1", "db_history^1620"]]);
+            .toEqual([["4620", "node1", "db_history^4620"]]);
         expect(mon.priv.view_mode).toBe("cards");
         expect(gobj_current_state(mon)).toBe("ST_MONITORING");
 
@@ -1043,7 +1043,7 @@ describe("a scenario that is not the control center's", () => {
 
         /*  none ticked, none watched  */
         agent_config_toggle_selected_node(config, "scenarios",
-            {id: stats_sel_id("node1", "1620"), host: "db_history^1620"});
+            {id: stats_sel_id("node1", "4620"), host: "db_history^4620"});
         expect(mon.priv.scenario).toBe(null);
         expect(errors()).toEqual([]);
     });
@@ -1056,11 +1056,11 @@ describe("a scenario that is not the control center's", () => {
         gobj_send_event(mon, "EV_ON_OPEN", {}, mlink);
         const watches = () => sent.filter((r) => r.direct && /^watch-yuno-stats /.test(r.command))
             .map((r) => r.command);
-        expect(watches()).toEqual(["watch-yuno-stats ids=stress:sim_fleet,2120 period=2000"]);
+        expect(watches()).toEqual(["watch-yuno-stats ids=stress:sim_load,4120 period=2000"]);
 
         sent.length = 0;
         gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "sim"}, mon);
-        expect(watches()).toEqual(["watch-yuno-stats ids=2120 period=2000"]);
+        expect(watches()).toEqual(["watch-yuno-stats ids=4120 period=2000"]);
         expect(mon.priv.stats_cards.sim.$paused.classList.contains("is-hidden")).toBe(false);
 
         /*  a reading the watch before the pause still pushes is dropped  */
@@ -1082,7 +1082,7 @@ describe("a scenario that is not the control center's", () => {
 
         sent.length = 0;
         gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "sim"}, mon);
-        expect(watches()).toEqual(["watch-yuno-stats ids=stress:sim_fleet period=2000"]);
+        expect(watches()).toEqual(["watch-yuno-stats ids=stress:sim_load period=2000"]);
         expect(mon.priv.stats_cards.sim.$paused.classList.contains("is-hidden")).toBe(true);
         expect(errors()).toEqual([]);
         expect(logged.filter((l) => l.level === "warning")).toEqual([]);
@@ -1117,11 +1117,11 @@ describe("a scenario that is not the control center's", () => {
         sent.length = 0;
         gobj_send_event(mon, "EV_READ_ONCE", {key: "gate"}, mon);
         expect(sent.map((r) => r.command)).toEqual([
-            "list-yunos id=2120",
-            "stats-yuno id=2120 service=__yuno__",
-            "stats-yuno id=2120"
+            "list-yunos id=4120",
+            "stats-yuno id=4120 service=__yuno__",
+            "stats-yuno id=4120"
         ]);
-        answer(mon, sent[0], {data: [{id: "2120", yuno_running: true, yuno_playing: true}]});
+        answer(mon, sent[0], {data: [{id: "4120", yuno_running: true, yuno_playing: true}]});
         expect(mon.priv.model.gate.run).toBe("playing");
         expect(mon.priv.model.sim.run).toBe("unknown");
         /*  "updated at": a clock of 24 hours, whatever the language  */
@@ -1163,7 +1163,7 @@ describe("the gobj tree of a yuno of the live view", () => {
     const TREE_OPTIONS = '["fullname","shortname","gclass","name","parent","state","running",' +
         '"playing","service","disabled","volatil","gobj_flags","gobj_trace_level","bottom_gobj","commands",' +
         '"play_methods"]';
-    const cmd = (r) => r.command.replace(/^command-yuno id=2120 service=__yuno__ command=/, "");
+    const cmd = (r) => r.command.replace(/^command-yuno id=4120 service=__yuno__ command=/, "");
 
     test("opens with the tree of the yuno, read through the view's transport", () => {
         const mon = open_gate();
@@ -1199,7 +1199,7 @@ describe("the gobj tree of a yuno of the live view", () => {
         const child = mon.priv.ytrees.gate;
         sent.length = 0;
         gobj_send_event(child, "EV_TRACE_INFO_WANTED", {gclass: "C_TCP"}, child);
-        expect(lines().map((r) => r.command.replace(/^command-yuno id=2120 service=__yuno__ command=/, "")))
+        expect(lines().map((r) => r.command.replace(/^command-yuno id=4120 service=__yuno__ command=/, "")))
             .toEqual(["info-gclass-trace gclass=C_TCP", "info-global-trace",
                       "get-gclass-trace gclass=C_TCP", "get-global-trace"]);
         const [lv, glv, on, gon] = lines();
@@ -1223,7 +1223,7 @@ describe("the gobj tree of a yuno of the live view", () => {
         sent.length = 0;
         gobj_send_event(child, "EV_SET_TRACE_LEVEL", {scope: "gobj", gobj: "C_YUNO^gate`C_TCP^tcp1",
             gclass: "C_TCP", levels: ["traffic", "machine"], set: false}, child);
-        expect(lines().map((r) => r.command.replace(/^command-yuno id=2120 service=__yuno__ command=/, "")))
+        expect(lines().map((r) => r.command.replace(/^command-yuno id=4120 service=__yuno__ command=/, "")))
             .toEqual(["set-gobj-trace gobj=C_YUNO^gate`C_TCP^tcp1 level=traffic set=0",
                       "set-gobj-trace gobj=C_YUNO^gate`C_TCP^tcp1 level=machine set=0"]);
         const sets = lines();
@@ -1239,7 +1239,7 @@ describe("the gobj tree of a yuno of the live view", () => {
         sent.length = 0;
         gobj_send_event(child, "EV_SET_TRACE_LEVEL", {scope: "gclass", gobj: "C_YUNO^gate`C_TCP^tcp1",
             gclass: "C_TCP", levels: ["connections"], set: true}, child);
-        expect(lines().map((r) => r.command.replace(/^command-yuno id=2120 service=__yuno__ command=/, "")))
+        expect(lines().map((r) => r.command.replace(/^command-yuno id=4120 service=__yuno__ command=/, "")))
             .toEqual(["set-gclass-trace gclass=C_TCP level=connections set=1"]);
 
         /*  The yuno's scope: set-global-trace, then the root's gclass is
@@ -1394,7 +1394,7 @@ describe("the gobj tree of a yuno of the live view", () => {
         watch_saved(Object.assign({}, SAVED, {description: "the same yunos"}));
         expect(mon.priv.ytrees.gate).toBe(child);
 
-        /*  `gate` is now the 2120 of another node: its tree is not that one  */
+        /*  `gate` is now the 4120 of another node: its tree is not that one  */
         sent.length = 0;
         watch_saved(Object.assign({}, SAVED, {node: "other"}));
         expect(mon.priv.ytrees.gate).toBe(undefined);
@@ -1415,7 +1415,7 @@ describe("the gobj tree of a yuno of the live view", () => {
 
         sent.length = 0;
         gobj_send_event(mon, "EV_YUNO_TREE_REQUEST", {key: "gate", what: "set", seq: 99,
-            line: "command-yuno id=2120 service=__yuno__ command=set-global-trace level=machine set=1"}, host);
+            line: "command-yuno id=4120 service=__yuno__ command=set-global-trace level=machine set=1"}, host);
         expect(sent).toEqual([]);
         expect(errors().some((m) => /not the gobj tree of 'gate'/.test(m))).toBe(true);
     });
@@ -1423,7 +1423,7 @@ describe("the gobj tree of a yuno of the live view", () => {
     test("two cards of one yuno: each tree has its own window", () => {
         const mon = new_monitor();
         const two = Object.assign({}, SAVED, {
-            yunos: SAVED.yunos.concat([{key: "gate_tcp", id: "2120", service: "tcp"}])
+            yunos: SAVED.yunos.concat([{key: "gate_tcp", id: "4120", service: "tcp"}])
         });
         expect(validate_scenario(two).ok).toBe(true);
         watch_saved(two);
@@ -1445,10 +1445,10 @@ describe("the gobj tree of a yuno of the live view", () => {
     test("two cards whose node and key read alike still get two windows", () => {
         const window_name = (h) => clean_name(h.opts.name);
         for(const [one, two] of [
-            [{key: "b-c", id: "2120", node: "a"},   {key: "c", id: "2121", node: "a-b"}],
-            [{key: "x^y", id: "2120", node: "n"},   {key: "x_y", id: "2121", node: "n"}],
-            [{key: "Gate", id: "2120", node: "n"},  {key: "gate", id: "2121", node: "n"}],
-            [{key: "Gate", id: "2120", node: "Central"}, {key: "gate", id: "2121", node: "central"}],
+            [{key: "b-c", id: "4120", node: "a"},   {key: "c", id: "4121", node: "a-b"}],
+            [{key: "x^y", id: "4120", node: "n"},   {key: "x_y", id: "4121", node: "n"}],
+            [{key: "Gate", id: "4120", node: "n"},  {key: "gate", id: "4121", node: "n"}],
+            [{key: "Gate", id: "4120", node: "Central"}, {key: "gate", id: "4121", node: "central"}],
         ]) {
             const mon = new_monitor();
             const sc = Object.assign({}, SAVED, {yunos: [one, two], links: [],
