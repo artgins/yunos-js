@@ -192,7 +192,7 @@ A scenario, as the control center keeps it and as the editor writes it:
     "description": "sim_load -> gate_hub -> db_tracks, both nodes",
     "node": "node-a",
     "yunos": [
-        {"key": "sim",         "id": "stress", "service": "sim_load", "rate": "tx"},
+        {"key": "sim",         "id": "gen1",   "service": "sim_load", "rate": "tx"},
         {"key": "gate_edge",   "id": "4120",   "label": "gate_hub",
          "queue_service": "__output_side__"},
         {"key": "tracks_edge", "id": "4520",   "label": "db_tracks"},
@@ -237,7 +237,7 @@ own:
 ```json
 {"key": "gen12", "id": "gen12", "service": "sim_load", "rate": "tx", "node": "node-a",
  "switch": {
-     "on":  [{"command": "set-controllers controllers=125"}, {"command": "resume-generation"}],
+     "on":  [{"command": "set-controllers controllers=100"}, {"command": "resume-generation"}],
      "off": [{"command": "pause-generation"}, {"command": "set-controllers controllers=0"}]
  }}
 ```
@@ -1354,7 +1354,7 @@ summary.
   (`C_AGENT_STATS`, `stats-yuno id=<yuno>`) — a single tab holding a card per
   selected yuno (default), or a tab per yuno (Preferences toggle). Fetches are
   tagged `console_purpose` + `console_node` + `console_yuno` (echoed in
-  `__md_iev__`, [[md_iev round-trip]]) so each answer updates exactly its own
+  `__md_iev__`) so each answer updates exactly its own
   card and other panels ignore it. Integer counters get fixed "." grouping
   (Intl-free — the `navigator.language` crash landmine). The cards **auto-refresh**
   on a timer (default 2 s, Preferences "Auto-refresh stats", 0 = off; a deliberate

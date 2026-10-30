@@ -2013,7 +2013,7 @@ function send_command(gobj)
      *  and is re-published to EVERY console panel.  The display mode, this
      *  panel's node id, and the request seq travel in __md_iev__ and are
      *  echoed back, so each panel renders only its own node's answer to its
-     *  own latest command ([[__md_iev__ round-trip]] / ycommand parity).  */
+     *  own latest command (the __md_iev__ round-trip, as in ycommand).  */
     let kw_send = {agent_id: node, cmd2agent: cmd};
     msg_iev_write_key(kw_send, "display_mode", mode);
     msg_iev_write_key(kw_send, "console_node", node);

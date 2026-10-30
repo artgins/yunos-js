@@ -255,21 +255,21 @@ function build_ui(gobj)
     );
 
     /*
-     *  DOS CARAS, Y UNA MANERA DE PASAR DE UNA A OTRA.
+     *  TWO FACES, AND ONE WAY TO GO FROM ONE TO THE OTHER.
      *
-     *  El treedb de sistema se lee de dos formas: el EDITOR, que enseña
-     *  el esquema como esquema, y las TABLAS, que enseñan lo mismo como
-     *  lo que en realidad es -- filas de `treedbs`, `topics` y `cols`.
-     *  Las dos tenían dirección desde el principio (`edit` y `raw`) y el
-     *  mapa del sitio las listaba, pero NADA en la pantalla llevaba a las
-     *  tablas: había que teclear la ruta o pescarla del mapa.
+     *  The system treedb is read in two ways: the EDITOR, which shows the
+     *  schema as a schema, and the TABLES, which show the same thing as
+     *  what it really is -- rows of `treedbs`, `topics` and `cols`. Both
+     *  had an address from the start (`edit` and `raw`) and the site map
+     *  listed them, but NOTHING on the screen led to the tables: the route
+     *  had to be typed or fished out of the map.
      *
-     *  Es un MODO, no una acción, así que la opción activa se ve PULSADA
-     *  en vez de tomar un color de la paleta -- cada uno de esos colores
-     *  nombra una clase de acción.
+     *  It is a MODE, not an action, so the active option looks PRESSED
+     *  instead of taking a colour of the palette -- each of those colours
+     *  names a kind of action.
      *
-     *  Sólo se construye donde hay dos caras que elegir: en un treedb de
-     *  datos no hay editor, y una barra con una sola opción es ruido.
+     *  It is built only where there are two faces to choose from: a data
+     *  treedb has no editor, and a bar with a single option is noise.
      */
     priv.$modes = null;
     if(has_editor(gobj)) {
@@ -288,10 +288,10 @@ function build_ui(gobj)
 }
 
 /***************************************************************
- *  Las dos caras del treedb de sistema, como conmutador.
+ *  The two faces of the system treedb, as a switch.
  *
- *  Cada botón MANDA UN EVENTO y no navega por su cuenta: la ruta
- *  la escribe la acción, que es la que sabe dónde estamos.
+ *  Each button SENDS AN EVENT and does not navigate by itself: the
+ *  route is written by the action, which is what knows where we are.
  ***************************************************************/
 function build_modes_bar(gobj)
 {
@@ -318,10 +318,10 @@ function build_modes_bar(gobj)
     let $bar = createElement2(
         ["div", {class: "TREEDB_VIEW_MODES p-2 is-flex is-align-items-center",
                  style: "flex:none; gap:.35rem;"}, [
-            /*  "editor" y no "esquema": las TABLAS llevan ya un boton
-             *  suyo rotulado `schema`, que es otra cosa -- su grafo de
-             *  esquema.  Dos botones con el mismo rotulo en la misma
-             *  pantalla haciendo cosas distintas es una trampa.  */
+            /*  "editor" and not "schema": the TABLES already carry a
+             *  button of their own labelled `schema`, which is another
+             *  thing -- their schema graph.  Two buttons with the same
+             *  label on the same screen doing different things is a trap.  */
             mode_button("TREEDB_VIEW_MODE_SCHEMA", "yi-pen",
                 "schema editor", "EV_SHOW_SCHEMA_VIEW"),
             mode_button("TREEDB_VIEW_MODE_TABLES", "yi-table",
@@ -333,13 +333,13 @@ function build_modes_bar(gobj)
 }
 
 /***************************************************************
- *  Cual de las dos caras se esta mirando.
+ *  Which of the two faces is being looked at.
  ***************************************************************/
 function paint_modes(gobj, which)
 {
     let priv = gobj.priv;
 
-    priv.face = which;      /*  lo lee apply_seg: ver la rama de ruta vacia  */
+    priv.face = which;      /*  read by apply_seg: see the empty-route branch  */
     if(!priv.$modes) {
         return;
     }
@@ -743,12 +743,12 @@ function ac_normalize_route(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Los dos modos del treedb de sistema.
+ *  The two modes of the system treedb.
  *
- *  Escriben la ruta y la aplican, que es lo mismo que hace
- *  cualquier otra navegacion de esta vista: la URL es la
- *  posicion, asi que un F5 vuelve a la cara que se estaba
- *  mirando y el enlace se puede compartir.
+ *  They write the route and apply it, which is what every other
+ *  navigation of this view does: the URL is the position, so an
+ *  F5 goes back to the face being looked at and the link can be
+ *  shared.
  ***************************************************************/
 function ac_show_schema_view(gobj, event, kw, src)
 {
@@ -804,7 +804,7 @@ function apply_seg(gobj, seg)
         return;
     }
     if(is_graph_seg(seg)) {
-        paint_modes(gobj, "");      /*  el grafo no es ninguna de las dos  */
+        paint_modes(gobj, "");      /*  the graph is neither of the two  */
         if(show_pane(gobj, "graph") < 0) {
             return;     /*  Error already logged  */
         }
@@ -817,20 +817,20 @@ function apply_seg(gobj, seg)
     }
 
     /*
-     *  UNA RUTA VACIA DENTRO DE LAS TABLAS NO ES "VETE AL EDITOR".
+     *  AN EMPTY ROUTE INSIDE THE TABLES IS NOT "GO TO THE EDITOR".
      *
-     *  El aterrizaje de las tablas se reporta a si mismo como ruta vacia,
-     *  asi que salir de su grafo de esquema -- que es un boton SUYO, y
-     *  esta rotulado `schema` -- llegaba aqui con el seg vacio y expulsaba
-     *  al operador al editor, sin que nada dijera por que.
+     *  The landing of the tables reports itself as an empty route, so
+     *  leaving their schema graph -- a button of THEIR OWN, labelled
+     *  `schema` -- arrived here with an empty seg and threw the operator
+     *  out to the editor, with nothing saying why.
      *
-     *  La normalizacion sigue en pie para una llegada limpia: es lo que
-     *  hace que entrar en este treedb aterrice en el editor.  Lo que no
-     *  puede hacer es mover a nadie de cara.
+     *  The normalization still stands for a clean arrival: it is what
+     *  makes entering this treedb land on the editor.  What it cannot do
+     *  is move anybody to another face.
      */
     if(empty_string(seg) && has_editor(gobj) && priv.face === "tables") {
         gobj_post_event(gobj, "EV_NORMALIZE_ROUTE", {seg: RAW_SEG}, gobj);
-        /*  y sigue de largo, a la rama de las tablas  */
+        /*  and goes on, to the branch of the tables  */
     } else if(empty_string(seg) && has_editor(gobj)) {
         /*
          *  Normalize: the position is the editor's, so the url says so and
@@ -860,8 +860,8 @@ function apply_seg(gobj, seg)
         return;
     }
 
-    /*  Todo lo que queda es la cara de TABLAS: `raw`, un topic por su
-     *  nombre, o el aterrizaje de un treedb sin editor.  */
+    /*  All that is left is the TABLES face: `raw`, a topic by its
+     *  name, or the landing of a treedb with no editor.  */
     paint_modes(gobj, "tables");
     show_pane(gobj, "view");
     if(empty_string(seg) || seg === RAW_SEG) {

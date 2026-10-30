@@ -15,7 +15,7 @@
  *      BFF httpOnly cookie cannot reach them; instead the SPA obtains the
  *      access_token from the BFF (POST /auth/token, opt-in) and forwards
  *      it in each C_IEVENT_CLI identity_card. See
- *      [[project_gui_treedb_v2_migration]] and YUNO_AUTH.md §2.2.
+ *      YUNO_AUTH.md §2.2 in yunetas.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.

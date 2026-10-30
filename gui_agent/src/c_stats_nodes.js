@@ -534,10 +534,10 @@ function build_dom(gobj)
     $c.appendChild(priv.$tablewrap);
 
     /*
-     *  La linea de estado: cuantos nodos hay.  Misma decision y mismo
-     *  sitio que en la tabla plana (`NODES_STATUS`): debajo de lo que
-     *  cuenta, con la cifra y la palabra en nodos distintos porque solo
-     *  la palabra se traduce.
+     *  The status line: how many nodes there are.  Same decision and
+     *  same place as in the flat table (`NODES_STATUS`): below what it
+     *  counts, with the figure and the word in different nodes because
+     *  only the word is translated.
      */
     priv.$count = createElement2(
         ["span", {class: "STATNODES_STATUS_COUNT has-text-weight-medium"}, ""]);

@@ -8,6 +8,24 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+- **Both yunos on gobj-ui `^7.29.2` and gobj-js `^7.29.1`**, with
+  `package.json` and `package-lock.json` raised together: the lockfiles had
+  kept gobj-ui 7.28.1, so a local build bundled the older library. Tests:
+  gui_agent 360, gui_treedb 99.
+- **`README-KEYCLOAK.md` is a design note**: how the two SPAs log in through
+  their auth BFF, the `/auth/token` exception for backends on other hosts,
+  and the Keycloak client settings with the reason for each. It said that
+  the SPAs used the PKCE redirect flow, which they no longer do, and that
+  Direct access grants must be off, which breaks `/auth/login`.
+- **No private trace in comments and docs.** The comments of
+  `c_agent_treedb_view.js`, `c_nodes.js` and `c_stats_nodes.js` are in
+  English; the notes of `gui_treedb`'s `main.js`, `conf/deploy.js` and
+  `locales.js` and the `gui_agent` console point at public documents; the
+  CSP comment of `gui_treedb/index.html` no longer names a file that does
+  not exist; the yuno ids of this CHANGELOG are `db_history_edge^4630` and
+  `gate_energy^4046`; and the scenario examples of the gui_agent README use
+  the generator `gen1` and a switch of 100 controllers. No code change.
+
 ## gui_agent 1.2.4 (2026-10-30)
 
 - **`scripts/qa.mjs`: a check whose setting is not set fails before it opens
@@ -785,7 +803,7 @@ and .ovh, artgins.ytreedb.com), console clean.
   header of `C_AGENT_YUNO_TREE` says the same. Three new i18n keys in both
   locales of both yunos.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live on
-  db_history_edge^1630: the C_TRANGER card (a service) and a C_TIMER card each
+  db_history_edge^4630: the C_TRANGER card (a service) and a C_TIMER card each
   carry their note; the C_TRANGER card reads `●` now that the backend (7.27.3)
   answers `play_methods`. Console clean but for G6's two usual warnings.
 
@@ -802,8 +820,8 @@ and .ovh, artgins.ytreedb.com), console clean.
   rows, the methods in the head, the lit state naming its instance.
 - New i18n keys of gobj-ui 7.27.27 in both locales of both yunos.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live:
-  the three scopes on db_history_edge^1630 (app B's controller node, read
-  only), and set and put back in each scope on gate_plug^4046 (app A:
+  the three scopes on db_history_edge^4630 (app B's controller node, read
+  only), and set and put back in each scope on gate_energy^4046 (app A:
   `start_stop` for a C_TIMER and for its gclass, `authzs` for the yuno).
   Console clean but for G6's two usual warnings.
 
@@ -819,7 +837,7 @@ and .ovh, artgins.ytreedb.com), console clean.
   A yuno built before that SDK ignores the name, and its gobjs keep reading
   paused until it is rebuilt.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live
-  on artgins.yunetacontrol.com: the tree of db_history_edge^1630 opens with its
+  on artgins.yunetacontrol.com: the tree of db_history_edge^4630 opens with its
   minimap; console clean but for G6's two usual warnings, on both planes and
   on artgins.ytreedb.com.
 

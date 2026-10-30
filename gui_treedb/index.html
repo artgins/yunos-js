@@ -8,7 +8,7 @@
   <!--
     CSP_PLACEHOLDER is replaced at build time by the Vite yuneta-html-transform plugin.
     The connect-src origins are read from config.json "csp_connect_src" array.
-    Keep that array in sync with backend_config.js (backend_urls + bff_urls + keycloak auth-server-url).
+    Its "_comment" says why it lists the wss: and https: schemes rather than origins.
   -->
     <!--
         Catch the install offer before the bundle exists: Chrome fires

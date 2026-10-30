@@ -385,14 +385,14 @@ function build_dom(gobj)
     $c.appendChild(priv.$tablewrap);
 
     /*
-     *  La linea de estado: cuantos registros hay.
+     *  The status line: how many records there are.
      *
-     *  Va DEBAJO de la tabla y no como un numero suelto en la toolbar,
-     *  que es donde estaba: un `31` junto a un buscador no dice de que
-     *  habla, y con el filtro puesto la pregunta es justo cual de los dos
-     *  numeros se esta mirando.  La cifra y la palabra van en nodos
-     *  distintos porque solo la palabra se traduce -- `refresh_language()`
-     *  alcanza al que LLEVA su clave.
+     *  It goes BELOW the table and not as a loose number in the toolbar,
+     *  where it was: a `31` beside a search box does not say what it is
+     *  about, and with the filter on the question is precisely which of
+     *  the two numbers is being looked at.  The figure and the word go in
+     *  different nodes because only the word is translated --
+     *  `refresh_language()` reaches the one that CARRIES its key.
      */
     priv.$count = createElement2(
         ["span", {class: "NODES_STATUS_COUNT has-text-weight-medium"}, ""]);

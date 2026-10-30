@@ -14,7 +14,7 @@
  *          SPA authenticates once at the co-located auth_bff and forwards
  *          the access_token in each C_IEVENT_CLI identity_card to the
  *          (possibly remote) treedb backends. See
- *          [[project_gui_treedb_v2_migration]] and YUNO_AUTH.md §2.2.
+ *          YUNO_AUTH.md §2.2 in yunetas.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.

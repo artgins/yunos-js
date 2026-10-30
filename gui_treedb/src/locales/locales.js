@@ -53,7 +53,7 @@ function setup_locale()
             debug: Number(kw_get_local_storage_value("trace_i18n", 0, false)) ? true : false,
             resources: locales,
             /*  Treat the entire string as the key.  Default is "."
-             *  which would interpret e.g. "enchufe.power_on" as a
+             *  which would interpret e.g. "plug.power_on" as a
              *  nested lookup and silently fall through.  Free-text
              *  keys never use ".", but defensive: protocol-ID and
              *  device-namespace keys are safe to add later.  */
