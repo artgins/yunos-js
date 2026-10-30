@@ -248,12 +248,12 @@ describe("actions", () => {
 
     it("keep their steps, in the order of the actions, and offer restart when it can start", () => {
         let r = with_actions({
-            stop:   [{yuno: "g", command: "set-controllers   controllers=0"}],
+            stop:   [{yuno: "g", command: "set-clients   clients=0"}],
             report: [{yuno: "s", service: "__yuno__", command: "view-config"}],
             start:  [{yuno: "g", service: "sim", command: "a x=1"}, {yuno: "s", command: "b"}]
         });
         expect(r.ok).toBe(true);
-        expect(r.scenario.actions.stop).toEqual([{yuno: "g", command: "set-controllers controllers=0"}]);
+        expect(r.scenario.actions.stop).toEqual([{yuno: "g", command: "set-clients clients=0"}]);
         expect(scenario_controls(r.scenario)).toEqual(["start", "stop", "report", "restart"]);
     });
 
@@ -294,7 +294,7 @@ describe("actions", () => {
 
     it("refuse a framework key, as the control center does", () => {
         for(let k of ["__md_iev__", "__username__", "__md_command__", "__x"]) {
-            let r = with_actions({start: [{yuno: "g", command: `resume-generation ${k}=x`}]});
+            let r = with_actions({start: [{yuno: "g", command: `resume-load ${k}=x`}]});
             expect(r.ok).toBe(false);
             expect(r.error.key).toBe("scenario framework step parameter");
             expect(r.error.detail).toBe(`start: ${k}`);
@@ -328,15 +328,15 @@ describe("the old form", () => {
             node: "c",
             yunos: [{id: "stress", rate: "tx"}, {id: "4120"}],
             test: {yuno: "stress", service: "sim_load",
-                   start: ["set-controllers controllers=10", "resume-generation"],
-                   stop: ["set-controllers controllers=0"]}
+                   start: ["set-clients clients=10", "resume-load"],
+                   stop: ["set-clients clients=0"]}
         }));
         expect(r.ok).toBe(true);
         expect(r.scenario.id).toBe("stress-test-central");
         expect(r.scenario.description).toBe("Stress test (central)");
         expect(r.scenario.actions.start).toEqual([
-            {yuno: "stress", service: "sim_load", command: "set-controllers controllers=10"},
-            {yuno: "stress", service: "sim_load", command: "resume-generation"}
+            {yuno: "stress", service: "sim_load", command: "set-clients clients=10"},
+            {yuno: "stress", service: "sim_load", command: "resume-load"}
         ]);
         expect(scenario_controls(r.scenario)).toEqual(["start", "stop", "restart"]);
     });
@@ -436,7 +436,7 @@ describe("where the yunos are", () => {
                 {key: "gate_edge", id: "4120", node: "field"}
             ],
             links: [["sim", "gate"]],
-            test: {yuno: "sim", service: "sim_load", stop: ["set-controllers controllers=0"]}
+            test: {yuno: "sim", service: "sim_load", stop: ["set-clients clients=0"]}
         }));
         expect(r.ok).toBe(true);
         expect(r.scenario.place).toBe("control_center");
@@ -444,7 +444,7 @@ describe("where the yunos are", () => {
             ["sim@field", "gate@central", "gate_edge@field"]);
         expect(scenario_nodes(r.scenario)).toEqual(["field", "central"]);
         expect(action_steps(r.scenario, "stop")).toEqual([{key: "sim", node: "field",
-            line: "command-yuno id=stress service=sim_load command=set-controllers controllers=0"}]);
+            line: "command-yuno id=stress service=sim_load command=set-clients clients=0"}]);
     });
 
     it("refuses a scenario that says both, or neither", () => {
@@ -675,14 +675,14 @@ describe("switch", () => {
         id: "sw",
         node: "node2",
         yunos: [
-            {key: "gen12", id: "gen12", service: "sim_load", rate: "tx", node: "node1",
+            {key: "gen2", id: "gen2", service: "sim_load", rate: "tx", node: "node1",
              switch: {
-                 on: [{command: "set-controllers controllers=125"}, {command: "resume-generation"}],
-                 off: [{command: "pause-generation"}, {command: "set-controllers controllers=0"}]
+                 on: [{command: "set-clients clients=100"}, {command: "resume-load"}],
+                 off: [{command: "pause-load"}, {command: "set-clients clients=0"}]
              }},
             {key: "g", id: "4120"}
         ],
-        links: [["gen12", "g"]],
+        links: [["gen2", "g"]],
         actions: {start: [{yuno: "g", command: "play-yuno"}], stop: [{yuno: "g", command: "pause-yuno"}]},
         view: {mode: "graph", node_labels: {node1: "n1", node2: "n2"}}
     });
@@ -690,10 +690,10 @@ describe("switch", () => {
     it("a switch's steps go to its own yuno when they name none", () => {
         let r = validate_scenario(base());
         expect(r.ok).toBe(true);
-        expect(r.scenario.yunos[0].switch.on[0]).toEqual({yuno: "gen12", command: "set-controllers controllers=125"});
-        expect(switch_steps(r.scenario, "gen12", "off").map((s) => s.line)).toEqual([
-            "command-yuno id=gen12 service=sim_load command=pause-generation",
-            "command-yuno id=gen12 service=sim_load command=set-controllers controllers=0"
+        expect(r.scenario.yunos[0].switch.on[0]).toEqual({yuno: "gen2", command: "set-clients clients=100"});
+        expect(switch_steps(r.scenario, "gen2", "off").map((s) => s.line)).toEqual([
+            "command-yuno id=gen2 service=sim_load command=pause-load",
+            "command-yuno id=gen2 service=sim_load command=set-clients clients=0"
         ]);
         expect(switch_steps(r.scenario, "g", "on")).toEqual([]);
     });
@@ -731,7 +731,7 @@ describe("switch", () => {
 
     it("a series is named by label, id when the label lacks it, and short node", () => {
         let r = validate_scenario(base());
-        expect(series_label(r.scenario, r.scenario.yunos[0])).toBe("gen12 (n1)");
+        expect(series_label(r.scenario, r.scenario.yunos[0])).toBe("gen2 (n1)");
         expect(series_label(r.scenario, {label: "sim_load", id: "gen1", node: "node3"}))
             .toBe("sim_load gen1 (node3)");
         expect(series_label(r.scenario, {label: "gate_hub 4120", id: "4120", node: "node2"}))

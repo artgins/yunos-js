@@ -31,9 +31,9 @@
  *                  ],
  *                  "links": [["sim", "gate"], ["gate", "tracks"]],
  *                  "actions": {
- *                      "start":  [{"yuno": "sim", "command": "set-controllers controllers=10"},
- *                                 {"yuno": "sim", "command": "resume-generation"}],
- *                      "stop":   [{"yuno": "sim", "command": "set-controllers controllers=0"}],
+ *                      "start":  [{"yuno": "sim", "command": "set-clients clients=10"},
+ *                                 {"yuno": "sim", "command": "resume-load"}],
+ *                      "stop":   [{"yuno": "sim", "command": "set-clients clients=0"}],
  *                      "report": [{"yuno": "gate", "service": "__yuno__", "command": "view-config"}]
  *                  },
  *                  "view": {"mode": "graph"}
@@ -100,11 +100,11 @@ const SCENARIO_TEMPLATE = {
     ],
     links: [["sim", "gate"], ["gate", "store"]],
     actions: {
-        start:  [{yuno: "sim", command: "set-controllers controllers=10"},
-                 {yuno: "sim", command: "resume-generation"}],
-        pause:  [{yuno: "sim", command: "pause-generation"}],
-        resume: [{yuno: "sim", command: "resume-generation"}],
-        stop:   [{yuno: "sim", command: "set-controllers controllers=0"}]
+        start:  [{yuno: "sim", command: "set-clients clients=10"},
+                 {yuno: "sim", command: "resume-load"}],
+        pause:  [{yuno: "sim", command: "pause-load"}],
+        resume: [{yuno: "sim", command: "resume-load"}],
+        stop:   [{yuno: "sim", command: "set-clients clients=0"}]
     },
     view: {mode: "graph"}
 };

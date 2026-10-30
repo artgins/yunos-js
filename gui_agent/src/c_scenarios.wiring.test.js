@@ -132,8 +132,8 @@ const SAVED = {
     yunos: [{key: "sim", id: "stress", service: "sim_load", rate: "tx"}, {key: "gate", id: "4120"}],
     links: [["sim", "gate"]],
     actions: {
-        start: [{yuno: "sim", command: "set-controllers controllers=10"}],
-        stop:  [{yuno: "sim", command: "set-controllers controllers=0"}],
+        start: [{yuno: "sim", command: "set-clients clients=10"}],
+        stop:  [{yuno: "sim", command: "set-clients clients=0"}],
         report: [{yuno: "gate", service: "__yuno__", command: "view-config"}]
     }
 };
@@ -700,8 +700,8 @@ describe("the live view of a scenario the control center keeps", () => {
         });
         const SW = JSON.parse(JSON.stringify(SAVED));
         SW.yunos[0].switch = {
-            on:  [{command: "set-controllers controllers=10"}],
-            off: [{command: "set-controllers controllers=0"}]
+            on:  [{command: "set-clients clients=10"}],
+            off: [{command: "set-clients clients=0"}]
         };
         const mon = new_monitor();
         watch_saved(SW);
@@ -989,9 +989,9 @@ describe("a scenario that is not the control center's", () => {
         sent.length = 0;
         gobj_send_event(mon, "EV_TEST_CONFIRMED", {control: "start"}, mon);
         expect(find("run-scenario").length).toBe(0);
-        let steps = find("command-agent").filter((r) => /set-controllers/.test(r.kw.cmd2agent));
+        let steps = find("command-agent").filter((r) => /set-clients/.test(r.kw.cmd2agent));
         expect(steps.map((r) => [r.kw.agent_id, r.kw.cmd2agent])).toEqual([
-            ["ctrl", "command-yuno id=stress service=sim_load command=set-controllers controllers=10"]
+            ["ctrl", "command-yuno id=stress service=sim_load command=set-clients clients=10"]
         ]);
     });
 

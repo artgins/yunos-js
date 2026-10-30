@@ -201,12 +201,12 @@ A scenario, as the control center keeps it and as the editor writes it:
     ],
     "links": [["sim", "gate_edge"], ["gate_edge", "tracks_edge"], ["gate_hub", "tracks_hub"]],
     "actions": {
-        "start":  [{"yuno": "sim", "command": "set-period period=2000"},
-                   {"yuno": "sim", "command": "set-controllers controllers=10"},
-                   {"yuno": "sim", "command": "resume-generation"}],
-        "pause":  [{"yuno": "sim", "command": "pause-generation"}],
-        "resume": [{"yuno": "sim", "command": "resume-generation"}],
-        "stop":   [{"yuno": "sim", "command": "set-controllers controllers=0"}],
+        "start":  [{"yuno": "sim", "command": "set-interval interval=2000"},
+                   {"yuno": "sim", "command": "set-clients clients=10"},
+                   {"yuno": "sim", "command": "resume-load"}],
+        "pause":  [{"yuno": "sim", "command": "pause-load"}],
+        "resume": [{"yuno": "sim", "command": "resume-load"}],
+        "stop":   [{"yuno": "sim", "command": "set-clients clients=0"}],
         "report": [{"yuno": "gate_edge", "service": "__yuno__", "command": "view-config"}]
     },
     "view": {"mode": "graph"}
@@ -235,17 +235,17 @@ steps as those of an action; a step that names no `yuno` goes to the switch's
 own:
 
 ```json
-{"key": "gen12", "id": "gen12", "service": "sim_load", "rate": "tx", "node": "node-a",
+{"key": "gen2", "id": "gen2", "service": "sim_load", "rate": "tx", "node": "node-a",
  "switch": {
-     "on":  [{"command": "set-controllers controllers=100"}, {"command": "resume-generation"}],
-     "off": [{"command": "pause-generation"}, {"command": "set-controllers controllers=0"}]
+     "on":  [{"command": "set-clients clients=100"}, {"command": "resume-load"}],
+     "off": [{"command": "pause-load"}, {"command": "set-clients clients=0"}]
  }}
 ```
 
 The switch shows ON while the yuno's throughput (`rate`) is not zero -- what
 the yuno does, not what was last clicked. A click runs the other one at once,
 with no confirmation, through the control center (`run-scenario action=on|off
-scenario_yuno=gen12`); its title says what a click does, or why it cannot be
+scenario_yuno=gen2`); its title says what a click does, or why it cannot be
 used now. `on` is offered only while the scenario RUNS, so the `max_run` stop
 is always there to stop it; `off` in any state. A switch run changes neither
 the state of the scenario nor its max_run, and is listed in its Runs; the
