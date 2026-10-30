@@ -45,6 +45,28 @@ const GCLASS_NAME = "C_AGENT_LOGIN";
  *  rejected): keep the session and retry, instead of tearing the shell down
  *  to the login form for a failure that heals itself. Mirrors gui_treedb.
  */
+/*
+ *  A BFF call that never answers must not hang the login or the session:
+ *  every call to the BFF (/auth/login, /auth/refresh, /auth/logout) is
+ *  aborted after this, and ends as a call that failed. Without it a
+ *  stalled /auth/refresh never resolved, so the refresh timer was never
+ *  re-armed and the session drifted to expiry with nothing retrying.
+ */
+const BFF_TIMEOUT_MS = 15000;
+
+/*
+ *  The error_code a denial can carry that the app shows translated (the
+ *  BFF's catalog, c_auth_bff.h, plus the codes this module gives a call
+ *  the BFF never answered); any other code shows the BFF's English
+ *  `error`.
+ */
+export const AUTH_ERROR_I18N_KEYS = [
+    "invalid_credentials", "session_expired", "account_disabled", "auth_rate_limited",
+    "auth_service_unavailable", "auth_config_error", "auth_unexpected_error",
+    "auth_empty_response", "auth_timeout", "token_too_large", "network_error",
+    "server_busy"
+];
+
 const REFRESH_RETRY_MIN_MS = 5000;
 const REFRESH_RETRY_MAX_MS = 60000;
 
@@ -163,6 +185,28 @@ function bff_base(gobj)
 }
 
 /***************************************************************
+ *  POST to the BFF /auth/<segment> with a deadline (BFF_TIMEOUT_MS):
+ *  the fetch() promise, which rejects with an AbortError when the BFF
+ *  did not answer in time.
+ ***************************************************************/
+function post_bff(gobj, segment, body)
+{
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), BFF_TIMEOUT_MS);
+    let request = {
+        method:      "POST",
+        credentials: "include",
+        headers:     {"Content-Type": "application/json"},
+        signal:      controller.signal
+    };
+    if(body !== undefined) {
+        request.body = JSON.stringify(body);
+    }
+    return fetch(`${bff_base(gobj)}/auth/${segment}`, request)
+        .finally(() => clearTimeout(timer));
+}
+
+/***************************************************************
  *  POST username/password to the BFF /auth/login. The BFF sets
  *  httpOnly cookies and returns {success, username, expires_in,
  *  refresh_expires_in}.
@@ -171,12 +215,7 @@ async function do_bff_login(gobj, username, password)
 {
     let url = `${bff_base(gobj)}/auth/login`;
     try {
-        let resp = await fetch(url, {
-            method:      "POST",
-            credentials: "include",
-            headers:     {"Content-Type": "application/json"},
-            body:        JSON.stringify({username, password})
-        });
+        let resp = await post_bff(gobj, "login", {username, password});
         let data = await resp.json().catch(() => ({}));
         if(resp.ok && data.success) {
             gobj_write_attr(gobj, "username", data.username || data.email || username);
@@ -189,8 +228,11 @@ async function do_bff_login(gobj, username, password)
         }
     } catch(err) {
         log_error(`${gobj_short_name(gobj)}: BFF login failed: ${err.message}`);
-        gobj_send_event(gobj, "EV_LOGIN_DENIED",
-            {error_code: "network_error", error: bff_hint(err, url)}, gobj);
+        let timed_out = !!(err && err.name === "AbortError");
+        gobj_send_event(gobj, "EV_LOGIN_DENIED", {
+            error_code: timed_out ? "auth_timeout" : "network_error",
+            error:      timed_out ? `no answer from the BFF at ${url} in time` : bff_hint(err, url)
+        }, gobj);
     }
 }
 
@@ -206,10 +248,7 @@ async function do_bff_login(gobj, username, password)
  ***************************************************************/
 function do_bff_refresh(gobj)
 {
-    fetch(`${bff_base(gobj)}/auth/refresh`, {
-        method: "POST", credentials: "include",
-        headers: {"Content-Type": "application/json"}
-    })
+    post_bff(gobj, "refresh")
     .then((resp) => resp.json()
         .then((data) => ({
             ok:        resp.ok,
@@ -227,7 +266,7 @@ function do_bff_refresh(gobj)
         ok:        false,
         status:    0,
         data:      {error: err && err.message ? err.message : String(err)},
-        transient: true    /*  fetch rejected: offline, DNS, TLS  */
+        transient: true    /*  fetch rejected: offline, DNS, TLS, or our abort  */
     }))
     .then(({ok, status, data, transient}) => {
         if(transient) {
@@ -253,10 +292,7 @@ function do_bff_refresh(gobj)
  ***************************************************************/
 function do_bff_logout(gobj)
 {
-    fetch(`${bff_base(gobj)}/auth/logout`, {
-        method: "POST", credentials: "include",
-        headers: {"Content-Type": "application/json"}
-    })
+    post_bff(gobj, "logout")
     .then(resp => resp.json().catch(() => ({})))
     .then(() => gobj_send_event(gobj, "EV_LOGOUT_DONE", {}, gobj))
     .catch(err => {
@@ -274,10 +310,7 @@ function do_bff_logout(gobj)
  ***************************************************************/
 function try_restore_session(gobj)
 {
-    fetch(`${bff_base(gobj)}/auth/refresh`, {
-        method: "POST", credentials: "include",
-        headers: {"Content-Type": "application/json"}
-    })
+    post_bff(gobj, "refresh")
     .then(resp => resp.json().catch(() => ({})))
     .then(data => {
         if(data.success) {

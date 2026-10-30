@@ -643,6 +643,20 @@ const es = {
         "auth config saved": "Configuración de autenticación guardada",
         "login failed":      "Error de inicio de sesión",
 
+        /* auth_bff error codes: the error_code of a denial (c_auth_bff.h) */
+        "invalid_credentials":       "Usuario o contraseña incorrectos",
+        "session_expired":           "Su sesión ha caducado. Por favor, inicie sesión de nuevo.",
+        "account_disabled":          "Cuenta deshabilitada o no configurada. Contacte con el administrador.",
+        "auth_rate_limited":         "Demasiados intentos. Espere un momento e inténtelo de nuevo.",
+        "auth_service_unavailable":  "Servicio de autenticación no disponible. Inténtelo más tarde.",
+        "auth_config_error":         "No se pudo iniciar sesión. Inténtelo más tarde o contacte con el administrador.",
+        "auth_unexpected_error":     "No se pudo iniciar sesión. Si el problema persiste, contacte con el administrador.",
+        "auth_empty_response":       "No se pudo iniciar sesión. Inténtelo más tarde.",
+        "auth_timeout":              "No se pudo iniciar sesión. Inténtelo más tarde.",
+        "token_too_large":           "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
+        "network_error":             "Error de red. Compruebe la conexión e inténtelo de nuevo.",
+        "server_busy":               "El servidor está ocupado. Inténtelo en un momento.",
+
         /* preferencias */
         "select language":   "Seleccionar idioma",
         "select theme":      "Seleccionar tema",

@@ -635,6 +635,20 @@ const en = {
         "auth config saved": "Authentication settings saved",
         "login failed":      "Login failed",
 
+        /* auth_bff error codes: the error_code of a denial (c_auth_bff.h) */
+        "invalid_credentials":       "Invalid username or password",
+        "session_expired":           "Your session has expired. Please log in again.",
+        "account_disabled":          "Account disabled or not fully configured. Please contact the administrator.",
+        "auth_rate_limited":         "Too many login attempts. Please wait a moment and try again.",
+        "auth_service_unavailable":  "Authentication service unavailable. Please try again later.",
+        "auth_config_error":         "Could not log in. Please try again later or contact the administrator.",
+        "auth_unexpected_error":     "Could not log in. If the problem persists, please contact the administrator.",
+        "auth_empty_response":       "Could not log in. Please try again later.",
+        "auth_timeout":              "Could not log in. Please try again later.",
+        "token_too_large":           "Could not log in. Please contact the administrator.",
+        "network_error":             "Network error. Please check your connection and try again.",
+        "server_busy":               "The server is busy. Please try again in a moment.",
+
         /* prefs */
         "select language":   "Select Language",
         "select theme":      "Select Theme",

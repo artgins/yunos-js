@@ -82,6 +82,7 @@ import {setup_json_pad} from "@yuneta/gobj-ui/src/yui_json_pad.js";
 import {switch_locale, current_locale} from "./locales/locales.js";
 import {current_theme, apply_theme, toggle_theme} from "./theme.js";
 import {mount_login} from "./login.js";
+import {AUTH_ERROR_I18N_KEYS} from "./c_agent_login.js";
 
 
 /***************************************************************
@@ -880,6 +881,20 @@ function ac_on_open_error(gobj, event, kw, src)
 }
 
 /***************************************************************
+ *  What a denial says, in the language of the app: t(error_code) when the
+ *  code is a key of the locales (AUTH_ERROR_I18N_KEYS), else the BFF's
+ *  English `error` (a code no locale knows: a newer BFF), else the code.
+ ***************************************************************/
+function denial_message(kw)
+{
+    let code = (kw && kw.error_code) || "";
+    if(AUTH_ERROR_I18N_KEYS.includes(code)) {
+        return t(/* i18n: AUTH_ERROR_I18N_KEYS */ code);
+    }
+    return (kw && (kw.error || kw.error_code)) || t("login failed");
+}
+
+/***************************************************************
  *  Login refused / refresh failed. If a shell is up, the session
  *  expired mid-use → tear down + back to login; else paint the error.
  ***************************************************************/
@@ -887,7 +902,7 @@ function ac_login_denied(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     priv.nak_recovering = false;
-    let msg = (kw && (kw.error || kw.error_code)) || t("login failed");
+    let msg = denial_message(kw);
 
     if(priv.shell) {
         destroy_shell(gobj);

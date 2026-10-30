@@ -60,8 +60,22 @@ const GCLASS_NAME = "C_TREEDB_LOGIN";
 /*  A BFF call that never answers must not hang the session: without a
  *  deadline a stalled /auth/refresh simply never resolved, so the refresh
  *  timer was never re-armed and the session drifted to expiry with nothing
- *  ever retrying.  */
+ *  ever retrying. Every call to the BFF has it: /auth/login, /auth/refresh,
+ *  /auth/logout and /auth/token.  */
 const BFF_TIMEOUT_MS = 15000;
+
+/*  The error_code a denial of the login or of the session can carry, all
+ *  keys of the locales: the BFF's catalog (c_auth_bff.h) and the codes
+ *  this module gives a failure the BFF never answered. The app shows
+ *  t(error_code) when it is one of these, so the message changes with the
+ *  language; the BFF's `error` text is a developer fallback, English
+ *  only, and is shown only for a code that is not here.  */
+export const AUTH_ERROR_I18N_KEYS = [
+    "invalid_credentials", "session_expired", "account_disabled", "auth_rate_limited",
+    "auth_service_unavailable", "auth_config_error", "auth_unexpected_error",
+    "auth_empty_response", "auth_timeout", "token_too_large", "network_error",
+    "refresh_denied", "server_busy"
+];
 
 /*  Backoff for a refresh that failed for a TRANSIENT reason (the network
  *  went, the BFF answered 502). The session is NOT dead — the refresh token
@@ -189,8 +203,9 @@ function mt_destroy(gobj)
 
 
 /***************************************************************
- *  POST to a BFF /auth/<segment> endpoint, with a deadline, and always
- *  resolve to the same shape: {ok, status, data, transient}.
+ *  POST to a BFF /auth/<segment> endpoint (with `body` as its JSON, when
+ *  given), with a deadline, and always resolve to the same shape:
+ *  {ok, status, data, transient, timed_out}.
  *
  *  `transient` is the distinction the whole session hangs on: a failure of
  *  the TRANSPORT (the network went, the request timed out, the BFF answered
@@ -200,18 +215,22 @@ function mt_destroy(gobj)
  *  logged the user out and tore down every open card. Only the BFF ANSWERING
  *  "no" is a denial.
  ***************************************************************/
-function post_bff(gobj, segment)
+function post_bff(gobj, segment, body)
 {
     const bff_url = gobj_read_attr(gobj, "bff_url");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), BFF_TIMEOUT_MS);
 
-    return fetch(build_path(bff_url, "auth", segment), {
+    let request = {
         method:      "POST",
         credentials: "include",
         headers:     {"Content-Type": "application/json"},
         signal:      controller.signal
-    })
+    };
+    if(body !== undefined) {
+        request.body = JSON.stringify(body);
+    }
+    return fetch(build_path(bff_url, "auth", segment), request)
     .then((resp) => resp.json()
         .then((data) => ({
             ok:        resp.ok,
@@ -232,9 +251,33 @@ function post_bff(gobj, segment)
         ok:        false,
         status:    0,
         data:      {error: err && err.message ? err.message : String(err)},
-        transient: true    /*  fetch rejected: offline, DNS, TLS, or our abort  */
+        transient: true,   /*  fetch rejected: offline, DNS, TLS, or our abort  */
+        timed_out: !!(err && err.name === "AbortError")
     }))
     .finally(() => clearTimeout(timer));
+}
+
+/***************************************************************
+ *  The error_code of a call the BFF did not answer with one: no answer
+ *  in BFF_TIMEOUT_MS is "auth_timeout", no answer at all
+ *  "network_error", an answer of a gateway (5xx, no json)
+ *  "auth_service_unavailable"; any other is `http_<status>`.
+ ***************************************************************/
+function bff_error_code({status, data, timed_out})
+{
+    if(data && data.error_code) {
+        return data.error_code;
+    }
+    if(timed_out) {
+        return "auth_timeout";
+    }
+    if(status === 0) {
+        return "network_error";
+    }
+    if(status >= 500) {
+        return "auth_service_unavailable";
+    }
+    return `http_${status}`;
 }
 
 /***************************************************************
@@ -242,36 +285,24 @@ function post_bff(gobj, segment)
  ***************************************************************/
 function do_bff_login(gobj, username, password)
 {
-    const bff_url = gobj_read_attr(gobj, "bff_url");
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), BFF_TIMEOUT_MS);
-
-    fetch(build_path(bff_url, "auth", "login"), {
-        method:      "POST",
-        credentials: "include",
-        headers:     {"Content-Type": "application/json"},
-        body:        JSON.stringify({username, password}),
-        signal:      controller.signal
-    })
-    .then(resp => resp.json().then(data => ({ok: resp.ok, status: resp.status, data})))
-    .then(({ok, status, data}) => {
+    post_bff(gobj, "login", {username, password}).then((answer) => {
+        const {ok, status, data} = answer;
         if(ok && data.success) {
             gobj_write_attr(gobj, "username", data.username || data.email || "");
             gobj_send_event(gobj, "EV_LOGIN_ACCEPTED", data, gobj);
+            return;
+        }
+        const error_code = bff_error_code(answer);
+        const error      = data.error || `HTTP ${status}`;
+        if(status === 0) {
+            log_error(sprintf("%s: BFF login fetch failed: %s (%s)",
+                gobj_short_name(gobj), error_code, error));
         } else {
-            const error_code = data.error_code || `http_${status}`;
-            const error      = data.error || `HTTP ${status}`;
             log_info(sprintf("%s: BFF login error: %s (%s)",
                 gobj_short_name(gobj), error_code, error));
-            gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error}, gobj);
         }
-    })
-    .catch(err => {
-        log_error(`${gobj_short_name(gobj)}: BFF login fetch failed: ${err.message}`);
-        gobj_send_event(gobj, "EV_LOGIN_DENIED",
-            {error_code: "network_error", error: "Network error during login"}, gobj);
-    })
-    .finally(() => clearTimeout(timer));
+        gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error}, gobj);
+    });
 }
 
 /***************************************************************
@@ -311,7 +342,7 @@ function do_bff_refresh(gobj)
             gobj_send_event(gobj, "EV_LOGIN_REFRESHED", data, gobj);
             return;
         }
-        const error_code = data.error_code || `http_${status}`;
+        const error_code = data.error_code || "refresh_denied";
         const error      = data.error || "Refresh denied";
         log_info(sprintf("%s: BFF refresh denied: %s (%s)",
             gobj_short_name(gobj), error_code, error));
@@ -347,25 +378,23 @@ function try_restore_session(gobj)
  ***************************************************************/
 function fetch_and_publish(gobj, out_event)
 {
-    const bff_url = gobj_read_attr(gobj, "bff_url");
-
-    fetch(build_path(bff_url, "auth", "token"), {
-        method:      "POST",
-        credentials: "include",
-        headers:     {"Content-Type": "application/json"}
-    })
-    .then(resp => resp.json().then(data => ({ok: resp.ok, data})))
-    .then(({ok, data}) => {
+    post_bff(gobj, "token").then(({ok, status, data, timed_out}) => {
         let token = (ok && data.success && data.access_token) ? data.access_token : "";
         if(!token) {
-            log_warning(sprintf("%s: /auth/token returned no access_token "
-                + "(is expose_access_token enabled on the BFF?)", gobj_short_name(gobj)));
+            if(status === 0) {
+                log_warning(sprintf("%s: /auth/token fetch failed: %s",
+                    gobj_short_name(gobj), timed_out ? "no answer in time" : (data.error || "?")));
+            } else {
+                log_warning(sprintf("%s: /auth/token returned no access_token "
+                    + "(is expose_access_token enabled on the BFF?)", gobj_short_name(gobj)));
+            }
         }
         gobj_write_attr(gobj, "access_token", token);
         /*
-         *  Resolve the username for the avatar initials. /auth/login returns
-         *  it, but /auth/refresh (session restore on F5) does NOT — so fall
-         *  back to the identity claims in the access_token (the authoritative
+         *  Resolve the username for the avatar initials. /auth/login and
+         *  /auth/refresh return it, read from the access_token's claims;
+         *  when the BFF could not read them it answers it empty, so fall
+         *  back to the claims of the token here (the authoritative
          *  identity; gui_agent gets its name from the control-center's
          *  EV_ON_OPEN instead, which gui_treedb has no single equivalent of).
          */
@@ -378,13 +407,6 @@ function fetch_and_publish(gobj, out_event)
         }
         gobj_send_event(gobj, "EV_TOKEN_FETCHED",
             {out_event: out_event, username: username, access_token: token}, gobj);
-    })
-    .catch(err => {
-        log_warning(`${gobj_short_name(gobj)}: /auth/token fetch failed: ${err.message}`);
-        gobj_write_attr(gobj, "access_token", "");
-        gobj_send_event(gobj, "EV_TOKEN_FETCHED",
-            {out_event: out_event, username: gobj_read_attr(gobj, "username"),
-             access_token: ""}, gobj);
     });
 }
 

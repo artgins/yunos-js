@@ -85,6 +85,7 @@ import {switch_locale, current_locale} from "./locales/locales.js";
 import {current_theme, toggle_theme} from "./theme.js";
 import {mount_login} from "./login.js";
 import {deploy_info} from "./conf/deploy.js";
+import {AUTH_ERROR_I18N_KEYS} from "./c_login.js";
 
 
 /***************************************************************
@@ -929,6 +930,20 @@ function forget_nak_state(gobj)
 }
 
 /***************************************************************
+ *  What a denial says, in the language of the app: t(error_code) when the
+ *  code is a key of the locales (AUTH_ERROR_I18N_KEYS), else the BFF's
+ *  English `error` (a code no locale knows: a newer BFF), else the code.
+ ***************************************************************/
+function denial_message(kw)
+{
+    let code = (kw && kw.error_code) || "";
+    if(AUTH_ERROR_I18N_KEYS.includes(code)) {
+        return t(/* i18n: AUTH_ERROR_I18N_KEYS */ code);
+    }
+    return (kw && (kw.error || kw.error_code)) || t("login failed");
+}
+
+/***************************************************************
  *  The BFF refused the credentials (ST_LOGGED_OUT): paint the error on
  *  the login form. There is no shell and no link to tear down — which is
  *  the whole reason this is a STATE and no longer an `if(priv.shell)`
@@ -939,7 +954,7 @@ function ac_login_denied(gobj, event, kw, src)
     let priv = gobj.priv;
     forget_nak_state(gobj);
 
-    let msg = (kw && (kw.error || kw.error_code)) || t("login failed");
+    let msg = denial_message(kw);
     show_login_screen(gobj);
     if(priv.login_ui) {
         priv.login_ui.set_busy(false);
@@ -963,7 +978,7 @@ function ac_session_expired(gobj, event, kw, src)
     let priv = gobj.priv;
     forget_nak_state(gobj);
 
-    let msg = (kw && (kw.error || kw.error_code)) || t("login failed");
+    let msg = denial_message(kw);
 
     destroy_shell(gobj);
     let links = gobj_find_service("treedb_links", false);

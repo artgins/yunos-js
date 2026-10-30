@@ -16,10 +16,9 @@
  *      This test asks the SAME reader the prebuild runs (the
  *      validate-locales of the gobj-ui this app builds with) which keys of
  *      the English locale it finds used, and compares the rest with
- *      UNSEEN below -- the keys nobody has made visible yet: some come as
- *      data from a backend (error codes), some are asked for by gobj-ui at
- *      run time, some reach t() through a helper nobody marked, and some
- *      may be dead. The list may only shrink:
+ *      UNSEEN below -- the keys nobody has made visible yet: some are
+ *      asked for by gobj-ui at run time, some reach t() through a helper
+ *      nobody marked, and some may be dead. The list may only shrink:
  *
  *        - a key that is unseen and not in the list fails: publish and mark
  *          it, never add it here;
@@ -46,15 +45,8 @@ const UNSEEN = [
     "1-based; negative = from end",
     "__icons__",
     "_xxx",
-    "account_disabled",
     "application",
     "auth bff",
-    "auth_config_error",
-    "auth_empty_response",
-    "auth_rate_limited",
-    "auth_service_unavailable",
-    "auth_timeout",
-    "auth_unexpected_error",
     "bad services answer",
     "browse every service",
     "browse this service",
@@ -74,14 +66,12 @@ const UNSEEN = [
     "hook column",
     "hook topic",
     "host",
-    "invalid_credentials",
     "item",
     "keys (regex)",
     "leave blank for the full key",
     "legend",
     "load more",
     "logged in as",
-    "network_error",
     "no methods declared",
     "no registered url for remote service",
     "no yuneta backend url available",
@@ -90,7 +80,6 @@ const UNSEEN = [
     "page",
     "previous page",
     "realtime coming soon",
-    "refresh_denied",
     "regex over the keys",
     "remote service",
     "remove selected",
@@ -103,9 +92,7 @@ const UNSEEN = [
     "search in the loaded records",
     "search records",
     "select dates please",
-    "server_busy",
     "services failed",
-    "session_expired",
     "show services",
     "slide bar to choose option",
     "state",

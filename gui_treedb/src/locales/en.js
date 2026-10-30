@@ -290,6 +290,7 @@ const en = {
         "auth_unexpected_error":              "Could not log in. If the problem persists, please contact the administrator.",
         "auth_empty_response":                "Could not log in. Please try again later.",
         "auth_timeout":                       "Could not log in. Please try again later.",
+        "token_too_large":                    "Could not log in. Please contact the administrator.",
         "network_error":                      "Network error. Please check your connection and try again.",
         "refresh_denied":                     "Your session has expired. Please log in again.",
         "server_busy":                        "The server is busy. Please try again in a moment.",

@@ -294,6 +294,7 @@ const es = {
         "auth_unexpected_error":              "No se pudo iniciar sesión. Si el problema persiste, contacte con el administrador.",
         "auth_empty_response":                "No se pudo iniciar sesión. Inténtelo más tarde.",
         "auth_timeout":                       "No se pudo iniciar sesión. Inténtelo más tarde.",
+        "token_too_large":                    "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
         "network_error":                      "Error de red. Compruebe la conexión e inténtelo de nuevo.",
         "refresh_denied":                     "Su sesión ha caducado. Por favor, inicie sesión de nuevo.",
         "server_busy":                        "El servidor está ocupado. Inténtelo en un momento.",
