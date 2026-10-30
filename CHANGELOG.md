@@ -8,6 +8,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.2.9, gui_treedb 1.1.5 + gobj-ui ^7.29.7, gobj-js ^7.29.4 (2026-10-30)
+
 - **Both: a refresh answered with something that is not the BFF's json is
   `auth_bad_response`, an ERROR, and the session is kept and retried.** A
   200 json with neither `success` nor `error_code`, or a 4xx with no
