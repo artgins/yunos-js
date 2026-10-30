@@ -19,8 +19,16 @@
  *      or from `CLAUDIA_PASS` for CI. Nothing in clear text on disk.
  *
  *      Playwright is not a dependency of this yuno. It is borrowed from
- *      wattyzer's gui, which already carries it, so a QA run adds nothing
- *      to what this SPA ships. Point QA_PW elsewhere to override.
+ *      another checkout that already carries it (QA_PW), so a QA run adds
+ *      nothing to what this SPA ships.
+ *
+ *      THE IDS OF THE INSTALLATION NEVER LIVE IN THE REPO EITHER: the
+ *      node, yuno, treedb, scenario and role each check opens are the ones
+ *      of the control center it runs against. They come from the
+ *      environment or from `~/.yuneta/.qa-creds`, as KEY=value lines:
+ *      QA_PW, QA_SCHEMA_NODE, QA_SCHEMA_YUNO, QA_SCHEMA_TREEDB,
+ *      QA_HELD_SCENARIO, QA_ROLES_ROLE (and QA_ROLES_NODE, QA_ROLES_YUNO,
+ *      which have defaults). A check whose id is not set fails, naming it.
  *
  *      Usage:
  *
@@ -29,7 +37,7 @@
  *          node scripts/qa.mjs --no-login              # login screen only
  *          node scripts/qa.mjs --check schemaback      # the schema editor's ← = browser Back
  *          node scripts/qa.mjs --check gobjtree        # a card's gobj tree opens and draws its canvas
- *          node scripts/qa.mjs --check chartsheld      # a stopped scenario's charts hold (renfe-20k-hidraulia)
+ *          node scripts/qa.mjs --check chartsheld      # a stopped scenario's charts hold (QA_HELD_SCENARIO)
  *          node scripts/qa.mjs --check controlhelp     # each control of a scenario says what it does
  *          node scripts/qa.mjs --check queues          # the gates' queues: on their cards and charted
  *          node scripts/qa.mjs --check focus           # a clicked card lights up with its links
@@ -77,7 +85,6 @@ const DEFAULTS = {
     URL:     "https://artgins.yunetacontrol.com",
     TIMEOUT: 30000,
     OUT:     "/tmp/agent-qa-out",
-    PW:      "/yuneta/development/projects/wattyzer/gui/node_modules/playwright",
 };
 
 /*
@@ -161,6 +168,20 @@ function read_creds_file() {
     return out;
 }
 
+/*
+ *  An id of the installation: from the environment, else from
+ *  ~/.yuneta/.qa-creds, else the default given. With none, a text that
+ *  matches nothing on the page and names the setting, so the check that
+ *  needs it fails saying what to set.
+ */
+function qa_setting(name, default_value) {
+    const v = process.env[name] || read_creds_file()[name] || default_value;
+    if(v) {
+        return v;
+    }
+    return `<${name} not set: set it in the environment or in ~/.yuneta/.qa-creds>`;
+}
+
 function get_credentials() {
     const file = read_creds_file();
     const user = process.env.CLAUDIA_USER || file.CLAUDIA_USER;
@@ -207,9 +228,9 @@ function get_credentials() {
  *  picker to get its tab, and unselected again at the end when it was not
  *  selected before -- a check leaves the app as it found it.
  */
-const SCHEMA_NODE = process.env.QA_SCHEMA_NODE || "yunovatios-central";
-const SCHEMA_YUNO = process.env.QA_SCHEMA_YUNO || "db_history_ce";
-const SCHEMA_TREEDB = process.env.QA_SCHEMA_TREEDB || "treedb_yunovatioscedb";
+const SCHEMA_NODE = qa_setting("QA_SCHEMA_NODE");
+const SCHEMA_YUNO = qa_setting("QA_SCHEMA_YUNO");
+const SCHEMA_TREEDB = qa_setting("QA_SCHEMA_TREEDB");
 const SCHEMA_TOPICS = ["devices", "places"];
 
 async function check_schemaback(page, args, step, out_dir)
@@ -376,12 +397,12 @@ async function check_gobjtree(page, args, step, out_dir)
 /*
  *  --check chartsheld: the charts of a STOPPED scenario take no rows.
  *  Opens HELD_SCENARIO from the list (a scenario of the control center
- *  whose last run is a stop: the yunos of renfe-20k-hidraulia are left up
+ *  whose last run is a stop: the yunos of a load scenario are left up
  *  and idle between runs), waits for the held note, and checks that the
  *  messages chart holds the same number of points over a few periods.
  *  Read only: it runs no action.
  */
-const HELD_SCENARIO = process.env.QA_HELD_SCENARIO || "renfe-20k-hidraulia";
+const HELD_SCENARIO = qa_setting("QA_HELD_SCENARIO");
 
 async function check_chartsheld(page, args, step, out_dir)
 {
@@ -464,9 +485,9 @@ async function check_controlhelp(page, args, step, out_dir)
  *  for what, and a role's sheet saying what its service declares. Read
  *  only: nothing is saved.
  */
-const ROLES_NODE = process.env.QA_ROLES_NODE || "artgins";
-const ROLES_YUNO = process.env.QA_ROLES_YUNO || "controlcenter";
-const ROLES_ROLE = process.env.QA_ROLES_ROLE || "renfe-20k-operator";
+const ROLES_NODE = qa_setting("QA_ROLES_NODE", "artgins");
+const ROLES_YUNO = qa_setting("QA_ROLES_YUNO", "controlcenter");
+const ROLES_ROLE = qa_setting("QA_ROLES_ROLE");
 
 async function check_roles(page, args, step, out_dir)
 {
@@ -768,10 +789,10 @@ async function check_focus(page, args, step, out_dir)
 }
 
 /*
- *  --check switches: every generator of renfe-20k-hidraulia has an on/off
+ *  --check switches: every generator of HELD_SCENARIO has an on/off
  *  switch on its card (role=switch, a name, a title, aria-checked), drawn
- *  inside its card; the cards name their node by its 3 letters (hid, wat,
- *  art) with the full name in the title. Read only: the scenario is not
+ *  inside its card; the cards name their node by its 3 letters (the
+ *  first three of its name) with the full name in the title. Read only: the scenario is not
  *  run, so with it stopped every switch is off and disabled, its title
  *  saying why.
  */
@@ -1040,7 +1061,7 @@ async function main() {
         return 0;
     }
 
-    const pw_path = process.env.QA_PW || DEFAULTS.PW;
+    const pw_path = qa_setting("QA_PW");
     if(!existsSync(pw_path)) {
         throw new Error(
             `playwright not found at ${pw_path}. Set QA_PW to a checkout that has it.`
