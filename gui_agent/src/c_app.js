@@ -82,7 +82,7 @@ import {setup_json_pad} from "@yuneta/gobj-ui/src/yui_json_pad.js";
 import {switch_locale, current_locale} from "./locales/locales.js";
 import {current_theme, apply_theme, toggle_theme} from "./theme.js";
 import {mount_login} from "./login.js";
-import {AUTH_ERROR_I18N_KEYS} from "./c_agent_login.js";
+import {AUTH_ERROR_I18N_KEYS, agent_login_is_logged_in} from "./c_agent_login.js";
 
 
 /***************************************************************
@@ -927,6 +927,14 @@ function ac_on_id_nak(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     let login = gobj_find_service("agent_login", false);
+
+    /*  No session to refresh: a logout is in flight (it ends the link
+     *  when it settles), and the login takes no refresh then.  */
+    if(login && !agent_login_is_logged_in(login)) {
+        log_info(`${gobj_short_name(gobj)}: identity refused with no session to refresh: ` +
+            `${(kw && kw.comment) || "?"}`);
+        return 0;
+    }
 
     /*  A WebSocket NAK after sleep is usually just an expired access token
      *  while the refresh token is still valid (an F5 would restore the

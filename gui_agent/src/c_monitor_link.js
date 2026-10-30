@@ -22,6 +22,11 @@
  *          looks like; C_IEVENT_CLI retries by itself with the new one.
  *      A second NAK in a row is a real refusal (the user is not in that
  *      agent's authz): the link gives up and says so (EV_LINK_FAILED).
+ *      Only the answer of the last token asked for is taken: each
+ *      request carries a number, and EV_CONNECT, EV_DISCONNECT and every
+ *      new request move it, so a token of a link dropped before it came
+ *      (the session ended, another link was asked for) never opens the
+ *      next link, and a renewal answered late never replaces a newer one.
  *
  *      States: ST_IDLE (no link) -> ST_FETCHING (asking for the token)
  *      -> ST_LINKED (a C_IEVENT_CLI exists; it may be in session or
@@ -92,6 +97,7 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     token:      "",     /*  last access_token from the BFF  */
+    token_req:  0,      /*  the token request whose answer is awaited  */
     nak_retry:  false,  /*  a NAK already asked for a fresh token  */
     seq:        0,      /*  name of the next transport  */
     login_watched: false, /*  subscribed to the login's cookie refreshes  */
@@ -161,21 +167,39 @@ function mt_destroy(gobj)
  *  Ask the BFF for the access_token of this session, with the
  *  deadline of every call to the BFF (post_bff), so a silent BFF
  *  ends in EV_TOKEN_FETCHED with no token too. The answer is an OS
- *  notification, so it only becomes an event; the token stays out of
- *  the kw (the machine trace dumps it).
+ *  notification, so it only becomes an event, with the number of its
+ *  request; the token travels in it as `access_token`, a name the
+ *  machine trace masks.
  ***************************************************************/
 function fetch_token(gobj)
 {
+    const token_req = ++gobj.priv.token_req;
     post_bff(gobj, "token").then(({ok, status, data, timed_out}) => {
         let token = (ok && data.success && data.access_token) ? data.access_token : "";
-        gobj.priv.token = token;
         gobj_send_event(gobj, "EV_TOKEN_FETCHED", {
-            ok:        !!token,
-            status:    status,
-            timed_out: timed_out,
-            error:     data.error || ""
+            ok:           !!token,
+            access_token: token,
+            status:       status,
+            timed_out:    timed_out,
+            error:        data.error || "",
+            token_req:    token_req
         }, gobj);
     });
+}
+
+/***************************************************************
+ *  True when `kw` answers a token request that is no longer awaited:
+ *  a newer request, a connect or a disconnect came after it. Its
+ *  action drops it.
+ ***************************************************************/
+function is_stale_token(gobj, kw)
+{
+    if(kw && kw.token_req === gobj.priv.token_req) {
+        return false;
+    }
+    log_info(`${gobj_short_name(gobj)}: access_token of an earlier request dropped ` +
+        `(request ${kw && kw.token_req}, now ${gobj.priv.token_req})`);
+    return true;
 }
 
 /***************************************************************
@@ -286,6 +310,7 @@ function ac_connect(gobj, event, kw, src)
     }
     gobj_write_str_attr(gobj, "url", url);
     gobj.priv.nak_retry = false;
+    gobj.priv.token = "";
     fetch_token(gobj);
     return 0;
 }
@@ -296,6 +321,8 @@ function ac_connect(gobj, event, kw, src)
 function ac_disconnect(gobj, event, kw, src)
 {
     let had_link = !!gobj_read_attr(gobj, "iev");
+    gobj.priv.token_req++;      /*  no token asked for so far is awaited now  */
+    gobj.priv.token = "";
     close_link(gobj);
     if(had_link) {
         watch_login(gobj, false);
@@ -304,10 +331,15 @@ function ac_disconnect(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  The token for a new link.
+ *  The token for a new link. The state changes here, after
+ *  is_stale_token(): a transition in the FSM table would move the
+ *  link for an answer to drop.
  ***************************************************************/
 function ac_token_for_link(gobj, event, kw, src)
 {
+    if(is_stale_token(gobj, kw)) {
+        return 0;
+    }
     if(!kw.ok) {
         let code = token_error_code(kw);
         log_warning(`${gobj_short_name(gobj)}: no access_token from the BFF ` +
@@ -318,6 +350,8 @@ function ac_token_for_link(gobj, event, kw, src)
             comment:    kw.error || `HTTP ${kw.status}`
         });
     }
+    gobj.priv.token = kw.access_token;
+    gobj_change_state(gobj, "ST_LINKED");
     watch_login(gobj, true);
     open_link(gobj);
     return 0;
@@ -329,11 +363,15 @@ function ac_token_for_link(gobj, event, kw, src)
  ***************************************************************/
 function ac_token_renewed(gobj, event, kw, src)
 {
+    if(is_stale_token(gobj, kw)) {
+        return 0;
+    }
     if(!kw.ok) {
         log_warning(`${gobj_short_name(gobj)}: the access_token could not be renewed ` +
             `(status ${kw.status}${kw.error ? ", " + kw.error : ""})`);
         return 0;
     }
+    gobj.priv.token = kw.access_token;
     let iev = gobj_read_attr(gobj, "iev");
     if(iev) {
         gobj_write_str_attr(iev, "jwt", gobj.priv.token);
@@ -471,7 +509,7 @@ function create_gclass(gclass_name)
         ["ST_FETCHING", [
             ["EV_CONNECT",              ac_connect,             null],
             ["EV_DISCONNECT",           ac_disconnect,          "ST_IDLE"],
-            ["EV_TOKEN_FETCHED",        ac_token_for_link,      "ST_LINKED"],
+            ["EV_TOKEN_FETCHED",        ac_token_for_link,      null],
             ["EV_ON_CLOSE",             ac_on_close,            null]
         ]],
         ["ST_LINKED", [

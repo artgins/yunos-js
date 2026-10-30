@@ -26,11 +26,11 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t,
-    gclass_create, log_error, log_warning, gobj_short_name,
+    gclass_create, log_error, log_warning, log_info, gobj_short_name,
     gobj_read_attr, gobj_write_str_attr,
     gobj_create_service, gobj_create_pure_child,
     gobj_subscribe_event, gobj_send_event, gobj_post_event,
-    gobj_change_state,
+    gobj_change_state, gobj_current_state,
     gobj_find_service,
     gobj_start_tree, gobj_stop_tree, gobj_destroy, gobj_is_running,
     createElement2, refresh_language,
@@ -861,13 +861,21 @@ function ac_on_id_nak(gobj, event, kw, src)
         return 0;
     }
 
+    /*  No session to refresh: a logout is in flight (it closes the links
+     *  when it settles), and the login takes no refresh then.  */
+    let login = gobj_find_service("treedb_login", false);
+    if(login && gobj_current_state(login) !== "ST_LOGIN") {
+        log_info(`${gobj_short_name(gobj)}: connection '${conn_id}' refused the identity ` +
+            `with no session to refresh: ${(kw && kw.comment) || "?"}`);
+        return 0;
+    }
+
     if(conn_id) {
         priv.nak_conns[conn_id] = true;
     }
     /*  `refreshing` dedupes concurrent NAKs into a single refresh request. */
     if(!priv.refreshing) {
         priv.refreshing = true;
-        let login = gobj_find_service("treedb_login", false);
         if(login) {
             gobj_send_event(login, "EV_DO_REFRESH", {}, gobj);
         }
@@ -999,9 +1007,10 @@ function ac_session_expired(gobj, event, kw, src)
  *  {error_code, error, retry_ms} -- a token refresh failed for a reason
  *  that may pass (network down, BFF unreachable or 5xx, a 429 of the BFF,
  *  an answer that is not the BFF's json). The session is alive — the
- *  login service is already retrying with backoff — so change NOTHING: the shell, the links and the open cards stay. But say
- *  so, because until it succeeds the links are running on a token that will
- *  expire, and a NAK afterwards must not read as a mystery.
+ *  login service is already retrying with backoff — so change NOTHING: the
+ *  shell, the links and the open cards stay. But say so, because until it
+ *  succeeds the links are running on a token that will expire, and a NAK
+ *  afterwards must not read as a mystery.
  *
  *  `refreshing` is cleared: it dedupes concurrent NAKs into ONE refresh, and
  *  leaving it set after a failed one would swallow the next NAK's recovery.

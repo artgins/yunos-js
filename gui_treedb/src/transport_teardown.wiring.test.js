@@ -67,6 +67,9 @@ const {
 const {register_c_app} = await import("./c_app.js");
 
 const logged = [];
+const log_sink = (level, msg) => {
+    logged.push({level: String(level), msg: String(msg)});
+};
 const heard = [];
 let yuno = null;
 
@@ -87,9 +90,7 @@ function service_subscription(gobj)
 
 beforeAll(() => {
     gobj_start_up(null, null, null, null, null, null, null);
-    set_log_callback((level, msg) => {
-        logged.push({level: String(level), msg: String(msg)});
-    });
+    set_log_callback(log_sink);
     register_c_timer();
     register_c_treedb_config();
     register_c_treedb_links();
@@ -140,12 +141,16 @@ beforeAll(() => {
         "C_TREEDB_LOGIN",
         login_out.map((ev) => [ev, event_flag_t.EVF_OUTPUT_EVENT | event_flag_t.EVF_NO_WARN_SUBS])
             .concat([["EV_DO_REFRESH", 0]]),
-        [["ST_IDLE", [
-            ["EV_DO_REFRESH", (gobj, event) => {
-                heard.push(event);
-                return 0;
-            }, null]
-        ]]],
+        [
+            ["ST_LOGIN", [
+                ["EV_DO_REFRESH", (gobj, event) => {
+                    heard.push(event);
+                    return 0;
+                }, null]
+            ]],
+            /*  A logout in flight: the real login takes no refresh then.  */
+            ["ST_LOGGING_OUT", []],
+        ],
         {mt_create: service_subscription},
         0,
         [SDATA(data_type_t.DTP_POINTER, "subscriber", 0, null, ""), SDATA_END()],
@@ -197,6 +202,36 @@ function errors()
 
 const CONN = {id: "c1", url: "wss://backend.example:1800", enabled: true,
     remote_yuno_role: "db", remote_yuno_service: "treedb_db"};
+
+describe("a connection refused while a logout is in flight", () => {
+
+    test("asks for no refresh: the logout closes the links when it settles", () => {
+        const app = gobj_create_service("treedb_app", "C_TREEDB_APP", {}, yuno);
+        built.push(app);
+        gobj_start(app);
+        gobj_change_state(app, "ST_SESSION");
+        const links = gobj_find_service("treedb_links", true);
+        gobj_send_event(links, "EV_SYNC_CONNECTIONS", {connections: [CONN]}, app);
+        const iev = treedb_links_get_iev(links, "c1");
+        expect(iev).toBeTruthy();
+        gobj_change_state(iev, "ST_SESSION");
+        /*  The app may arm another log sink: take the log back.  */
+        set_log_callback(log_sink);
+        logged.length = 0;
+
+        const login = gobj_find_service("treedb_login", true);
+        gobj_change_state(login, "ST_LOGGING_OUT");
+        gobj_send_event(iev, "EV_FAKE_NAK", {comment: "token expired"}, iev);
+        vi.advanceTimersToNextTimer();
+        gobj_change_state(login, "ST_LOGIN");
+
+        expect(heard).toEqual([]);
+        expect(app.priv.refreshing).toBeFalsy();
+        expect(errors().filter((m) => /NOT DEFINED/.test(m))).toEqual([]);
+        expect(logged.filter((l) => l.level === "info" && /no session to refresh/.test(l.msg)).length)
+            .toBe(1);
+    });
+});
 
 describe("a connection refused again after a token refresh", () => {
 

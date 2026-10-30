@@ -8,6 +8,12 @@
  *      fails out loud (EV_LINK_FAILED "monitor token unreachable", back
  *      to ST_IDLE) instead of staying in ST_FETCHING for ever.
  *
+ *      Only the answer of the last token asked for is taken: a token of
+ *      a link dropped before it came (the session ended, another link
+ *      was asked for) does not open the next link, and a renewal answered
+ *      after a newer one does not replace it. The token reaches the link
+ *      through EV_TOKEN_FETCHED, whose trace masks it.
+ *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
@@ -24,10 +30,10 @@ globalThis.addEventListener = () => {};
 globalThis.removeEventListener = () => {};
 
 const {
-    SDATA_END,
+    SDATA, SDATA_END, data_type_t,
     gclass_create,
     gobj_start_up, gobj_create_yuno, gobj_create_service,
-    gobj_start, gobj_send_event, gobj_current_state,
+    gobj_start, gobj_send_event, gobj_current_state, gobj_read_attr,
     set_log_callback,
 } = await import("@yuneta/gobj-js");
 const {register_c_monitor_link} = await import("./c_monitor_link.js");
@@ -37,6 +43,8 @@ const BFF_TIMEOUT_MS = 15000;
 const heard = [];
 const asked = [];
 let stall_body = false;    /*  the headers come, the body never does  */
+const later = [];          /*  when not null: each request waits here for give(token)  */
+let answer_later = false;
 let link = null;
 
 function abort_error()
@@ -61,11 +69,22 @@ function until_aborted(signal)
 function fake_fetch(url, request)
 {
     asked.push(String(url).split("/").pop());
+    if(answer_later) {
+        return new Promise((resolve) => {
+            later.push((token) => resolve({
+                ok:      true,
+                status:  200,
+                headers: new Headers(),
+                json:    () => Promise.resolve({success: true, access_token: token}),
+            }));
+        });
+    }
     if(stall_body) {
         return Promise.resolve({
-            ok:     true,
-            status: 200,
-            json:   () => until_aborted(request.signal),
+            ok:      true,
+            status:  200,
+            headers: new Headers(),
+            json:    () => until_aborted(request.signal),
         });
     }
     return until_aborted(request.signal);
@@ -78,6 +97,22 @@ beforeAll(() => {
     gobj_start_up(null, null, null, null, null, null, null);
     set_log_callback(() => {});
     register_c_monitor_link();
+
+    /*  A transport that only holds its attrs: the jwt is what is looked at.  */
+    gclass_create(
+        "C_IEVENT_CLI", [], [["ST_IDLE", []]], {}, 0,
+        [
+            SDATA(data_type_t.DTP_STRING, "url", 0, "", ""),
+            SDATA(data_type_t.DTP_STRING, "remote_yuno_role", 0, "", ""),
+            SDATA(data_type_t.DTP_STRING, "remote_yuno_service", 0, "", ""),
+            SDATA(data_type_t.DTP_STRING, "remote_yuno_name", 0, "", ""),
+            SDATA(data_type_t.DTP_STRING, "jwt", 0, "", ""),
+            SDATA(data_type_t.DTP_LIST, "required_services", 0, "[]", ""),
+            SDATA(data_type_t.DTP_POINTER, "subscriber", 0, null, ""),
+            SDATA_END()
+        ],
+        {}, 0, 0, 0, 0
+    );
 
     gclass_create("C_TEST_YUNO", [], [["ST_IDLE", []]], {}, 0, [SDATA_END()], {}, 0, 0, 0, 0);
 
@@ -140,5 +175,49 @@ describe("C_MONITOR_LINK: /auth/token has a deadline", () => {
         expect(heard.map((h) => h.event)).toEqual(["EV_LINK_FAILED"]);
         expect(heard[0].kw.error_code).toBe("monitor token unreachable");
         expect(gobj_current_state(link)).toBe("ST_IDLE");
+    });
+});
+
+describe("C_MONITOR_LINK: only the answer of the last token asked for is taken", () => {
+    test("a token of a link dropped before it came does not open the next link", async () => {
+        heard.length = 0;
+        asked.length = 0;
+        stall_body = false;
+        answer_later = true;
+        later.length = 0;
+
+        gobj_send_event(link, "EV_CONNECT", {url: "wss://node-a:1993"}, link);
+        gobj_send_event(link, "EV_DISCONNECT", {}, link);
+        expect(gobj_current_state(link)).toBe("ST_IDLE");
+        gobj_send_event(link, "EV_CONNECT", {url: "wss://node-a:1993"}, link);
+        expect(gobj_current_state(link)).toBe("ST_FETCHING");
+        expect(later.length).toBe(2);
+
+        later[0]("token-of-the-dropped-link");
+        await pass_time(10);
+        expect(gobj_current_state(link)).toBe("ST_FETCHING");
+        expect(gobj_read_attr(link, "iev")).toBe(null);
+
+        later[1]("token-of-this-link");
+        await pass_time(10);
+        expect(gobj_current_state(link)).toBe("ST_LINKED");
+        expect(gobj_read_attr(gobj_read_attr(link, "iev"), "jwt")).toBe("token-of-this-link");
+    });
+
+    test("a renewal answered after a newer one does not replace it", async () => {
+        later.length = 0;
+        gobj_send_event(link, "EV_LOGIN_REFRESHED", {}, link);
+        gobj_send_event(link, "EV_LOGIN_REFRESHED", {}, link);
+        expect(later.length).toBe(2);
+
+        later[1]("token-2");
+        await pass_time(10);
+        later[0]("token-1");
+        await pass_time(10);
+        expect(gobj_current_state(link)).toBe("ST_LINKED");
+        expect(gobj_read_attr(gobj_read_attr(link, "iev"), "jwt")).toBe("token-2");
+
+        gobj_send_event(link, "EV_DISCONNECT", {}, link);
+        answer_later = false;
     });
 });

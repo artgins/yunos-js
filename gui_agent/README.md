@@ -280,7 +280,10 @@ has the deadline of every call to the BFF (15 s, headers and body): a BFF that
 does not answer in time is said as unreachable, and the link does not wait
 for it. The token is renewed whenever the login rotates the cookies, and once
 after an identity NAK (an expired token); a second NAK in a row is a refusal of the user by
-that agent, and the view says that too. Two conditions on the agent: the user
+that agent, and the view says that too. Only the answer of the last token asked
+for is taken: a token of a link dropped before it came (the session ended,
+another agent was picked) never opens the next link, and a renewal answered
+late never replaces a newer one. Two conditions on the agent: the user
 has to be in its authz, and its port 1993 must serve a certificate the
 BROWSER trusts — `agent.example.com` with a public CA does; an agent still serving the
 self-signed `yuneta_agent.yuneta.io` cannot be reached from a browser.
@@ -1422,16 +1425,27 @@ summary.
   token refresh (unreachable / 5xx, e.g. while a node reboots) is likewise
   ridden out: the session, shell, link and open views are kept and the refresh
   retries with backoff (5s→60s), and so does a `429 auth_rate_limited` of the
-  BFF. A denial the BFF gives with its `error_code` (a 4xx) logs out, and so
-  does an `error_code` a retry would give again (`token_too_large`,
-  `auth_unexpected_error`, `auth_config_error`, `internal_error`), with its
-  message on the login form. An answer that is not the BFF's json (a page of a
-  proxy, a json with neither `success` nor `error_code`) is
-  `auth_bad_response`, logged as an ERROR, and retried the same way; the fifth
-  in a row since the last refresh that landed ends the session and the login
-  form says it. The answer of a request made for an earlier session (a refresh
-  in flight while the user logged out and in again) is dropped. Mirrors
-  gui_treedb.
+  BFF. A retry waits for the `Retry-After` of the answer (seconds or an
+  HTTP-date) when it is longer than the backoff, up to 5 minutes; a 429 whose
+  `Retry-After` is longer, or the fifth 429 since the last refresh that
+  landed, ends the session with `auth_rate_limited` on the login form. (A
+  browser reads `Retry-After` from a BFF on another origin only when the BFF
+  sends `Access-Control-Expose-Headers: Retry-After`.) A denial the BFF gives
+  with its `error_code` (a 4xx) logs out, and so does an `error_code` a retry
+  would give again (`token_too_large`, `auth_unexpected_error`,
+  `auth_config_error`, `internal_error`), with its message on the login form.
+  An answer that is not the BFF's json (a page of a proxy, a json with neither
+  `success` nor `error_code`) is `auth_bad_response`, logged as an ERROR, and
+  retried the same way; the fifth such answer since the last refresh that
+  landed ends the session and the login form says it (answers of another kind
+  in between do not start the count over). The answer of a request made for an
+  earlier session (a refresh in flight while the user logged out and in again)
+  is dropped. **A logout in flight** (`ST_LOGGING_OUT` of `C_AGENT_LOGIN`)
+  lets no refresh out, and an identity NAK then asks for none; a login asked
+  for meanwhile (the form shows as soon as a session is refused) waits for the
+  logout to settle, so the cookies the logout clears are cleared before the
+  new ones are written, and only the end of that logout ends the session.
+  Mirrors gui_treedb.
 - **Developer monitor & window manager.** The avatar → **Developer** window was
   reworked (in gobj-ui) from a raw traffic dumper into a yuno-monitor console: a
   folding **bullet** traffic log, a persistent view selector (Detailed / Compact

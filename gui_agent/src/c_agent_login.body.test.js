@@ -35,6 +35,22 @@
  *      flight when the user logged out and in again) is dropped: it does
  *      not end, or re-arm, the session that replaced it.
  *
+ *      A retried refresh waits for the Retry-After of its answer (seconds
+ *      or an HTTP-date) when it is longer than the backoff, up to 5
+ *      minutes; a 429 whose Retry-After is longer, or the fifth 429 since
+ *      the last refresh that landed, ends the session with
+ *      "auth_rate_limited". The count of answers that are not the BFF's
+ *      json is not started over by answers of another kind, only by a
+ *      refresh that lands.
+ *
+ *      A logout in flight (ST_LOGGING_OUT) lets no refresh out (one asked
+ *      for is refused out loud), a login asked for meanwhile waits for the
+ *      logout to settle, and only the end of that logout ends the session.
+ *
+ *      The catalog of c_auth_bff.h is read line by line: a code with a
+ *      digit or a tab is read, and a code line that cannot be read fails
+ *      the reading instead of being skipped.
+ *
  *      And a denial is said in the language of the app: every error_code
  *      of the BFF's catalog is a key of AUTH_ERROR_I18N_KEYS and of every
  *      locale (a refresh with no cookie left is "missing_refresh_token").
@@ -88,17 +104,44 @@ const BFF_ERROR_CODES_COPY = [
 const BFF_HEADER = fileURLToPath(
     new URL("../../../../kernel/c/root-linux/src/c_auth_bff.h", import.meta.url));
 
-/*  The codes of the catalog of c_auth_bff.h: its lines
- *  " *  <code>  <http status>  <meaning>". null when the header is not
- *  there (this repo checked out alone).  */
+/*  The codes of the catalog in `text`, a c_auth_bff.h: from its first
+ *  "Codes emitted" to "New codes MUST", every line that starts within
+ *  four blanks (spaces or tabs) of the " *" -- the meanings go on far
+ *  deeper -- and is not a rule or a heading is a code line,
+ *  " *  <code>  <http status>  <meaning>", whatever blanks separate them.
+ *  A code line the reading cannot take (a code that is not snake_case, a
+ *  status that is not three digits) throws: it is never skipped. A code
+ *  can be listed once per status it is answered with.  */
+function parse_bff_catalog(text)
+{
+    const from = text.indexOf("Codes emitted");
+    const to = text.indexOf("New codes MUST");
+    if(from < 0 || to < from) {
+        throw new Error("c_auth_bff.h: no catalog from \"Codes emitted\" to \"New codes MUST\"");
+    }
+    let codes = [];
+    for(const line of text.slice(from, to).split("\n")) {
+        const head = line.match(/^ \*[ \t]{1,4}(\S.*)$/);
+        if(!head || /^-+$/.test(head[1]) || head[1].startsWith("Codes emitted")) {
+            continue;
+        }
+        const code = head[1].match(/^([a-z][a-z0-9_]*)[ \t]+\d{3}(?:[ \t]|$)/);
+        if(!code) {
+            throw new Error(`c_auth_bff.h: a line of the catalog that is not "<code> <status> <meaning>": ${line}`);
+        }
+        codes.push(code[1]);
+    }
+    return [...new Set(codes)];
+}
+
+/*  The codes of the catalog of c_auth_bff.h at `path`, or null when the
+ *  header is not there (this repo checked out alone).  */
 function read_bff_catalog(path)
 {
     if(!existsSync(path)) {
         return null;
     }
-    const text = readFileSync(path, "utf8");
-    /*  A code can be listed once per status it is answered with.  */
-    return [...new Set([...text.matchAll(/^ \*  ([a-z][a-z_]*) +(\d{3}) /gm)].map((m) => m[1]))];
+    return parse_bff_catalog(readFileSync(path, "utf8"));
 }
 
 const BFF_CATALOG = read_bff_catalog(BFF_HEADER);
@@ -139,9 +182,10 @@ function fake_fetch(url, request)
     }
     if(answer === STALL) {
         return Promise.resolve({
-            ok:     true,
-            status: 200,
-            json:   () => new Promise((resolve, reject) => {
+            ok:      true,
+            status:  200,
+            headers: new Headers(),
+            json:    () => new Promise((resolve, reject) => {
                 if(!request.signal) {
                     return;     /*  a call with no deadline: it waits for ever  */
                 }
@@ -154,9 +198,10 @@ function fake_fetch(url, request)
         });
     }
     return Promise.resolve({
-        ok:     answer.status >= 200 && answer.status < 300,
-        status: answer.status,
-        json:   () => answer.reject ? Promise.reject(answer.reject) : Promise.resolve(answer.data),
+        ok:      answer.status >= 200 && answer.status < 300,
+        status:  answer.status,
+        headers: new Headers(answer.headers || {}),
+        json:    () => answer.reject ? Promise.reject(answer.reject) : Promise.resolve(answer.data),
     });
 }
 
@@ -237,9 +282,10 @@ function later_answer()
     let give = null;
     const answer = () => new Promise((resolve) => {
         give = (status, data) => resolve({
-            ok:     status >= 200 && status < 300,
-            status: status,
-            json:   () => Promise.resolve(data),
+            ok:      status >= 200 && status < 300,
+            status:  status,
+            headers: new Headers(),
+            json:    () => Promise.resolve(data),
         });
     });
     return {answer, give: (status, data) => give(status, data)};
@@ -619,5 +665,246 @@ describe("C_AGENT_LOGIN: the answer of a request of an earlier session is droppe
         expect(logged.filter((l) => l.level === "info" && l.msg.includes("superseded")).length)
             .toBe(1);
         await log_out();
+    });
+});
+
+describe("C_AGENT_LOGIN: a refresh answered with a 429, with or without Retry-After", () => {
+    const rate_limited = (headers) => ({status: 429, headers: headers, data: {
+        success: false, error_code: "auth_rate_limited", error: "Too many login attempts"
+    }});
+
+    test("Retry-After in seconds: the retry waits for it, not for the backoff", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = rate_limited({"Retry-After": "30"});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        expect(heard[0].kw.retry_ms).toBe(30000);
+        await pass_time(5000 + 10);
+        expect(asked).toEqual(["refresh"]);
+
+        heard.length = 0;
+        answers.refresh = {status: 200, data: {success: true, expires_in: 300}};
+        await pass_time(25000);
+        expect(asked).toEqual(["refresh", "refresh"]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_REFRESHED"]);
+        await log_out();
+    });
+
+    test("Retry-After as an HTTP-date: the retry waits until that date", async () => {
+        heard.length = 0;
+        await log_in();
+
+        const when = new Date(Math.ceil((Date.now() + 20000) / 1000) * 1000);
+        answers.refresh = rate_limited({"Retry-After": when.toUTCString()});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        expect(heard[0].kw.retry_ms).toBeGreaterThan(19000);
+        expect(heard[0].kw.retry_ms).toBeLessThanOrEqual(21000);
+        await log_out();
+    });
+
+    test("an unreadable Retry-After: the backoff, and the WARNING says what came", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = rate_limited({"Retry-After": "soon"});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard[0].kw.retry_ms).toBe(5000);
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("Retry-After: soon")).length)
+            .toBe(1);
+        await log_out();
+    });
+
+    test("Retry-After longer than 5 minutes: the session ends at once with auth_rate_limited", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = rate_limited({"Retry-After": "3600"});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(AUTH_ERROR_I18N_KEYS).toContain("auth_rate_limited");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+        await pass_time(2 * 3600 * 1000);
+        expect(asked).toEqual(["refresh"]);
+    });
+
+    test("no Retry-After: the fifth 429 since the last refresh that landed ends the session", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = rate_limited();
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        for(const backoff of [5000, 10000, 20000, 40000]) {
+            expect(gobj_current_state(login)).toBe("ST_LOGIN");
+            await pass_time(backoff + 10);
+        }
+        expect(heard.map((h) => h.event)).toEqual([
+            "EV_REFRESH_FAILED", "EV_REFRESH_FAILED", "EV_REFRESH_FAILED", "EV_REFRESH_FAILED",
+            "EV_LOGIN_DENIED"
+        ]);
+        expect(heard[4].kw.error_code).toBe("auth_rate_limited");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+        await pass_time(15 * 60 * 1000);
+        expect(asked.filter((x) => x === "refresh").length).toBe(5);
+    });
+
+    test("Retry-After of an outage longer than 5 minutes: the session is kept, the retry waits 5 minutes", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = {status: 503, headers: {"Retry-After": "3600"}, data: {
+            success: false, error_code: "server_busy", error: "Pending queue full"
+        }};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        expect(heard[0].kw.retry_ms).toBe(5 * 60 * 1000);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        await log_out();
+    });
+});
+
+describe("C_AGENT_LOGIN: what the count of answers that are not the BFF's json counts", () => {
+    test("an answer of another kind in between does not start it over: only a refresh that lands does", async () => {
+        heard.length = 0;
+        await log_in();
+
+        const bad = {status: 200, data: {}};
+        const outage = {status: 502, data: {success: false, error_code: "auth_service_unavailable", error: "x"}};
+        const sequence = [bad, bad, outage, bad, outage, bad, bad];
+        answers.refresh = sequence[0];
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        for(let i = 1; i < sequence.length; i++) {
+            expect(gobj_current_state(login)).toBe("ST_LOGIN");
+            answers.refresh = sequence[i];
+            await pass_time(heard[heard.length - 1].kw.retry_ms + 10);
+        }
+        expect(asked.length).toBe(7);
+        expect(heard.map((h) => h.event).slice(-1)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[heard.length - 1].kw.error_code).toBe("auth_bad_response");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+});
+
+describe("C_AGENT_LOGIN: a logout in flight", () => {
+    test("no refresh leaves while it is in flight, and it closes nothing but its own session", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        const logout = later_answer();
+        answers.logout = logout.answer;
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        expect(gobj_current_state(login)).toBe("ST_LOGGING_OUT");
+
+        /*  A refresh asked for now is refused out loud and does not leave.  */
+        answers.refresh = {status: 401, data: {
+            success: false, error_code: "session_expired", error: "Session expired"
+        }};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(asked).toEqual(["logout"]);
+        expect(logged.filter((l) => l.level === "error" && l.msg.includes("EV_DO_REFRESH")).length)
+            .toBe(1);
+
+        /*  A login asked for now waits for the logout.  */
+        answers.login = OK_LOGIN;
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(10);
+        expect(asked).toEqual(["logout"]);
+        expect(heard).toEqual([]);
+
+        logout.give(200, {success: true});
+        await pass_time(10);
+        expect(asked).toEqual(["logout", "login"]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE", "EV_LOGIN_ACCEPTED"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        expect(logged.filter((l) => l.msg.includes("NOT DEFINED") && !l.msg.includes("EV_DO_REFRESH")))
+            .toEqual([]);
+        await log_out();
+    });
+
+    test("a logout asked again while it is in flight sends nothing more, and drops a login that waited", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        const logout = later_answer();
+        answers.logout = logout.answer;
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        logout.give(200, {success: true});
+        await pass_time(10);
+        expect(asked).toEqual(["logout"]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+    });
+
+    test("no refresh timer fires while it is in flight", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.logout = STALL;
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(BFF_TIMEOUT_MS + 10);
+        expect(asked).toEqual(["logout"]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        await pass_time(15 * 60 * 1000);
+        expect(asked).toEqual(["logout"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+});
+
+describe("the reading of the catalog of c_auth_bff.h", () => {
+    const block = (lines) => [
+        " *  ---------------------------------------------------------------------",
+        " *  Codes emitted by the login/token path (after talking to IdP)",
+        " *  ---------------------------------------------------------------------",
+        ...lines,
+        " *",
+        " *  New codes MUST be added here first",
+    ].join("\n");
+
+    test("a code with a digit, and a tab after the status, are read", () => {
+        expect(parse_bff_catalog(block([
+            " *  invalid_credentials       401  Wrong username or password",
+            " *                                 a meaning that goes on",
+            " *  oauth2_failed             401  A code with a digit",
+            " *  tabbed_code\t400\tA tab after the status",
+            " *\ttab_indented              400  A tab before the code",
+        ]))).toEqual(["invalid_credentials", "oauth2_failed", "tabbed_code", "tab_indented"]);
+    });
+
+    test.each([
+        ["a code with a hyphen", " *  oauth-failed              401  x"],
+        ["a code in capitals", " *  OAuth_failed              401  x"],
+        ["a status that is not three digits", " *  oauth2_failed             4xx  x"],
+    ])("%s is not skipped: the reading fails", (label, line) => {
+        expect(() => parse_bff_catalog(block([line]))).toThrow(/catalog/);
+    });
+
+    test("a code added to the real header is seen, so the copy no longer matches it", (ctx) => {
+        ctx.skip(!BFF_CATALOG, BFF_CATALOG_MISSING);
+        const text = readFileSync(BFF_HEADER, "utf8").replace(
+            " *  server_busy ",
+            " *  oauth2_failed             401  A code with a digit\n *  server_busy "
+        );
+        const mutant = parse_bff_catalog(text);
+        expect(mutant).toContain("oauth2_failed");
+        expect([...mutant].sort()).not.toEqual([...BFF_ERROR_CODES_COPY].sort());
     });
 });

@@ -148,10 +148,20 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   `internal_error`), with its message on the login form. An answer that is
   not the BFF's json (a page of a proxy, a json with neither `success` nor
   `error_code`) is `auth_bad_response`, an ERROR, and is retried the same
-  way; the fifth in a row since the last refresh that landed ends the session
-  and the login form says it. The answer of a request made for an earlier
-  session (a refresh in flight while you logged out and in again) is
-  dropped. Because a background tab's timers are throttled — so the refresh of a
+  way; the fifth such answer since the last refresh that landed ends the
+  session and the login form says it (answers of another kind in between do
+  not start the count over). A retry waits for the `Retry-After` of the
+  answer (seconds or an HTTP-date) when it is longer than the backoff, up to
+  5 minutes; a 429 whose `Retry-After` is longer, or the fifth 429 since the
+  last refresh that landed, ends the session with `auth_rate_limited` (a
+  browser reads `Retry-After` from a BFF on another origin only when the BFF
+  sends `Access-Control-Expose-Headers: Retry-After`). The answer of a
+  request made for an earlier session (a refresh in flight while you logged
+  out and in again) is dropped. A logout in flight (`ST_LOGGING_OUT` of
+  `C_TREEDB_LOGIN`) lets no refresh out, a wake-up and an identity NAK then
+  ask for none, and a login asked for meanwhile waits for the logout to
+  settle, so the cookies the logout clears are cleared before the new ones
+  are written. Because a background tab's timers are throttled — so the refresh of a
   sleeping laptop fires after the token is already dead — `visibilitychange` /
   `online` enter the FSM as `EV_WAKEUP` and refresh on the spot if the deadline
   has passed. A backend that NAKs the identity even after a fresh token is

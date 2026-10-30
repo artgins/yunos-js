@@ -57,9 +57,10 @@ function fake_fetch(url, request)
     if(answers[segment]) {
         const data = answers[segment];
         return Promise.resolve({
-            ok:     true,
-            status: 200,
-            json:   () => Promise.resolve(data),
+            ok:      true,
+            status:  200,
+            headers: new Headers(),
+            json:    () => Promise.resolve(data),
         });
     }
     return new Promise((resolve, reject) => {
