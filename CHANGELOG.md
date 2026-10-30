@@ -8,14 +8,69 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.1, gui_treedb 1.1.7 (2026-10-30)
+
+- **Both: a logout in flight is a state of its own, and only its own answer
+  ends the session.** While the BFF answered `/auth/logout`, the login
+  service stayed in `ST_LOGIN`: a refresh asked for then still went out and
+  re-armed its retries, and if the BFF denied it and the user logged in
+  again, the late `EV_LOGOUT_DONE` carried no session. It closed the new
+  session, or raised *"Event NOT DEFINED in state: ..., ST_WAIT_TOKEN,
+  EV_LOGOUT_DONE"* while the new login was in flight, and its `Set-Cookie`
+  could clear the new session's cookies. Now `EV_DO_LOGOUT` moves to
+  `ST_LOGGING_OUT`, where no refresh leaves (one asked for is refused out
+  loud) and a wake-up refreshes nothing. A login asked for meanwhile waits
+  until the logout settles, so the cookies the logout clears are cleared
+  before the new ones are written. A second logout sends nothing.
+  `EV_LOGOUT_DONE` carries the session of its logout and is dropped when
+  that session is gone. An identity NAK during the logout asks for no
+  refresh (an INFO). In 7.29.3 (gui_agent 1.1.8, gui_treedb 1.0.6) and in
+  gui_agent 1.3.0, gui_treedb 1.1.6.
+- **Both: a 429 to the refresh honours `Retry-After` and is no longer
+  retried for ever.** A 429 was retried every 60 s once the backoff topped
+  out, with a WARNING each time and nothing shown, whatever its
+  `Retry-After` said. Now a retried refresh waits for the answer's
+  `Retry-After` (seconds or an HTTP-date) when it is longer than the
+  backoff, up to 5 minutes. A 429 whose `Retry-After` is longer, or the
+  fifth 429 since the last refresh that landed (about 75 s without the
+  header), ends the session with `auth_rate_limited` on the login form. An
+  unreadable `Retry-After` is named in the WARNING and ignored. A browser
+  reads the header from a BFF on another origin only when the BFF sends
+  `Access-Control-Expose-Headers: Retry-After` (the SDK's `auth_bff` does,
+  after 7.29.3). In gui_agent 1.3.0 and gui_treedb 1.1.6; in 7.29.3 a 429
+  ended the session at once.
+- **gui_agent: the monitor link takes only the answer of the last token it
+  asked for.** `/auth/token` carried no request identity: a token of a link
+  dropped before it came (the session ended, another agent was picked)
+  opened the next link, and a renewal answered late replaced a newer one.
+  The token was also written in the fetch callback, outside the FSM. Now
+  each request carries a number moved by every request, connect and
+  disconnect, a stale answer is dropped with an INFO, and the token travels
+  in `EV_TOKEN_FETCHED` as `access_token`, which the trace masks, and the
+  action stores it. In 7.29.3.
+- **Both: the count of answers that are not the BFF's json says what it
+  counts.** The fifth such answer *since the last refresh that landed* ends
+  the session; answers of another kind in between (a 5xx, no answer) do not
+  start the count over. The comments and READMEs said "in a row". A test
+  pins it. Docs and tests.
+- **Both: the test of the `error_code` catalog reads every code line of
+  `c_auth_bff.h`.** Its regular expression missed a code with a digit
+  (`oauth2_failed`) and a tab after the status. It reads the catalog block
+  line by line and fails on a code line it cannot read; a test adds a code
+  with a digit to the real header and sees the copy no longer match. The
+  wiring tests of both apps take the log back from the developer-window sink
+  the app arms, so their *"NOT DEFINED"* checks see the lines logged after
+  the app is built. Tests only.
+- **gui_treedb: a comment line of 125 characters is wrapped.**
+
 ## gui_agent 1.3.0, gui_treedb 1.1.6 + gobj-ui ^7.29.8 (2026-10-30)
 
 - **Both: the test of the `error_code` catalog reads each code once**, as a
   code can be listed once per status it is answered with
   (`token_too_large` is a 500 and a 400). Tests only.
 - **Both: an answer to the refresh that is not the BFF's json ends the
-  session at the fifth in a row, with `auth_bad_response` on the login
-  form.** The login page of a proxy (a 401 in HTML) or a 200 `{}` never
+  session at the fifth since the last refresh that landed, with
+  `auth_bad_response` on the login form.** The login page of a proxy (a 401 in HTML) or a 200 `{}` never
   changes, and it was retried for ever: one request every 60 s once the
   backoff topped out, an ERROR each, the session hanging and nothing shown
   to the user. Now the fifth such answer since the last refresh that landed
