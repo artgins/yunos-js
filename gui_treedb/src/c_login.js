@@ -10,7 +10,7 @@
  *    with the IdP server-side and sets httpOnly, Secure, SameSite=Strict
  *    cookies that JS cannot read. Refresh/logout go through the BFF too.
  *    So for the co-located BFF the JS side only ever sees
- *    {username, expires_in, refresh_expires_in} — SEC-06.
+ *    {username, expires_in, refresh_expires_in}.
  *  - THE TREEDB EXCEPTION: this SPA also connects to treedb backends on
  *    OTHER hosts, where the BFF cookie cannot travel. After a successful
  *    login/refresh it therefore fetches the access_token from the BFF

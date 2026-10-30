@@ -4,7 +4,7 @@
  *      C_AGENT_LOGIN — OIDC login via the auth BFF (named service
  *      "agent_login"), the same model gui_treedb and the applications use.
  *
- *      Security (SEC-06): tokens are NEVER in JavaScript. The browser
+ *      Security: tokens are NEVER in JavaScript. The browser
  *      POSTs username/password to the BFF /auth/login; the BFF exchanges
  *      them with Keycloak server-side and writes access/refresh tokens as
  *      httpOnly, Secure, SameSite=Strict cookies scoped to this host.
