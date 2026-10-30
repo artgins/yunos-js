@@ -298,6 +298,15 @@ const es = {
         "network_error":                      "Error de red. Compruebe la conexión e inténtelo de nuevo.",
         "refresh_denied":                     "Su sesión ha caducado. Por favor, inicie sesión de nuevo.",
         "server_busy":                        "El servidor está ocupado. Inténtelo en un momento.",
+        "method_not_allowed":                 "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
+        "missing_body":                       "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
+        "missing_params":                     "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
+        "redirect_uri_not_allowed":           "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
+        "origin_not_allowed":                 "Esta aplicación no está autorizada a usar el servicio de autenticación. Contacte con el administrador.",
+        "missing_refresh_token":              "Su sesión ha caducado. Por favor, inicie sesión de nuevo.",
+        "missing_access_token":               "Su sesión ha caducado. Por favor, inicie sesión de nuevo.",
+        "unknown_endpoint":                   "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
+        "internal_error":                     "No se pudo iniciar sesión. Inténtelo más tarde.",
 
         /* mantener al final — insertar nuevas claves antes */
         "sign in":                            "Iniciar sesión",

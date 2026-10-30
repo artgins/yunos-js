@@ -11,6 +11,14 @@
  *          (before, the fetch had no deadline and the session hung in
  *          ST_WAIT_TOKEN for as long as the BFF stayed silent).
  *
+ *      The deadline covers the BODY too: a login whose headers come and
+ *      whose body never does is "auth_timeout" as well, not `http_200`.
+ *
+ *      And every error_code of the BFF's catalog (c_auth_bff.h) is a key
+ *      of AUTH_ERROR_I18N_KEYS and of every locale: a refresh with no
+ *      cookie left ("missing_refresh_token") is said in the language of
+ *      the app.
+ *
  *      The BFF is a fetch() that never answers: only its AbortSignal can
  *      end it, as a browser does.
  *
@@ -38,8 +46,35 @@ const {
     set_log_callback,
 } = await import("@yuneta/gobj-js");
 const {register_c_login, AUTH_ERROR_I18N_KEYS} = await import("./c_login.js");
+const {en} = await import("./locales/en.js");
+const {es} = await import("./locales/es.js");
 
 const BFF_TIMEOUT_MS = 15000;
+
+/*  The error_code catalog of the BFF (c_auth_bff.h).  */
+const BFF_ERROR_CODES = [
+    "invalid_credentials", "session_expired", "account_disabled", "auth_rate_limited",
+    "auth_service_unavailable", "auth_config_error", "auth_unexpected_error",
+    "auth_empty_response", "auth_timeout", "token_too_large",
+    "method_not_allowed", "missing_body", "missing_params", "redirect_uri_not_allowed",
+    "origin_not_allowed", "missing_refresh_token", "missing_access_token",
+    "unknown_endpoint", "server_busy", "internal_error"
+];
+
+const STALL = "stall";  /*  the headers come, the body never does  */
+
+/*  An answer with its own status (the others are a 200).  */
+function answer_with(status, data)
+{
+    return {__status__: status, data: data};
+}
+
+function abort_error()
+{
+    const err = new Error("The operation was aborted");
+    err.name = "AbortError";
+    return err;
+}
 
 const heard = [];
 const asked = [];
@@ -52,24 +87,30 @@ function fake_fetch(url, request)
 {
     const segment = String(url).split("/").pop();
     asked.push(segment);
-    if(answers[segment]) {
-        const data = answers[segment];
-        return Promise.resolve({
-            ok:     true,
-            status: 200,
-            json:   () => Promise.resolve(data),
-        });
-    }
-    return new Promise((resolve, reject) => {
+    const until_aborted = () => new Promise((resolve, reject) => {
         if(!request.signal) {
             return;     /*  a call with no deadline: it waits for ever  */
         }
-        request.signal.addEventListener("abort", () => {
-            const err = new Error("The operation was aborted");
-            err.name = "AbortError";
-            reject(err);
-        });
+        request.signal.addEventListener("abort", () => reject(abort_error()));
     });
+    if(answers[segment] === STALL) {
+        return Promise.resolve({
+            ok:     true,
+            status: 200,
+            json:   until_aborted,
+        });
+    }
+    if(answers[segment]) {
+        const answer = answers[segment];
+        const status = answer.__status__ || 200;
+        const data   = answer.__status__ ? answer.data : answer;
+        return Promise.resolve({
+            ok:     status >= 200 && status < 300,
+            status: status,
+            json:   () => Promise.resolve(data),
+        });
+    }
+    return until_aborted();
 }
 
 beforeAll(() => {
@@ -150,5 +191,62 @@ describe("C_TREEDB_LOGIN: a BFF that never answers", () => {
         expect(heard[0].kw.access_token).toBe("");
         expect(heard[0].kw.username).toBe("u");
         expect(gobj_current_state(login)).toBe("ST_LOGIN");
+    });
+
+    test("a login whose body never comes: denied with auth_timeout", async () => {
+        heard.length = 0;
+        answers.logout = {success: true};
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+
+        heard.length = 0;
+        answers.login = STALL;
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(BFF_TIMEOUT_MS - 10);
+        expect(heard).toEqual([]);
+        await pass_time(20);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("auth_timeout");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+
+    test("a refresh with no cookie left: missing_refresh_token, a key of the locales", async () => {
+        heard.length = 0;
+        answers = {
+            login: {success: true, username: "u", expires_in: 300, refresh_expires_in: 1800},
+            token: {success: true, access_token: "x.y.z"},
+        };
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_ACCEPTED"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+
+        heard.length = 0;
+        answers.refresh = answer_with(401, {
+            success: false, error_code: "missing_refresh_token", error: "Missing refresh_token cookie"
+        });
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("missing_refresh_token");
+        expect(AUTH_ERROR_I18N_KEYS).toContain("missing_refresh_token");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+});
+
+describe("AUTH_ERROR_I18N_KEYS", () => {
+    test("every error_code of the BFF's catalog is a key the app translates", () => {
+        for(const code of BFF_ERROR_CODES) {
+            expect(AUTH_ERROR_I18N_KEYS, code).toContain(code);
+        }
+    });
+
+    test("every key of AUTH_ERROR_I18N_KEYS is in every locale", () => {
+        for(const code of AUTH_ERROR_I18N_KEYS) {
+            expect(en.translation[code], `en ${code}`).toBeTypeOf("string");
+            expect(es.translation[code], `es ${code}`).toBeTypeOf("string");
+        }
     });
 });

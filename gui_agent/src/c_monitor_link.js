@@ -73,7 +73,7 @@ import {
     gobj_short_name,
 } from "@yuneta/gobj-js";
 
-import {deploy_info} from "./conf/deploy.js";
+import {post_bff} from "./c_agent_login.js";
 
 /***************************************************************
  *              Constants
@@ -158,36 +158,22 @@ function mt_destroy(gobj)
 
 
 /***************************************************************
- *  Ask the BFF for the access_token of this session. The answer is
- *  an OS notification, so it only becomes an event; the token stays
- *  out of the kw (the machine trace dumps it).
+ *  Ask the BFF for the access_token of this session, with the
+ *  deadline of every call to the BFF (post_bff), so a silent BFF
+ *  ends in EV_TOKEN_FETCHED with no token too. The answer is an OS
+ *  notification, so it only becomes an event; the token stays out of
+ *  the kw (the machine trace dumps it).
  ***************************************************************/
 function fetch_token(gobj)
 {
-    let url = `${deploy_info().bff_url}/auth/token`;
-    fetch(url, {
-        method:      "POST",
-        credentials: "include",
-        headers:     {"Content-Type": "application/json"}
-    })
-    .then((resp) => resp.json()
-        .catch(() => ({}))
-        .then((data) => ({status: resp.status, data: data || {}})))
-    .then(({status, data}) => {
-        let token = (data.success && data.access_token) ? data.access_token : "";
+    post_bff(gobj, "token").then(({ok, status, data, timed_out}) => {
+        let token = (ok && data.success && data.access_token) ? data.access_token : "";
         gobj.priv.token = token;
         gobj_send_event(gobj, "EV_TOKEN_FETCHED", {
-            ok:     !!token,
-            status: status,
-            error:  data.error || ""
-        }, gobj);
-    })
-    .catch((err) => {
-        gobj.priv.token = "";
-        gobj_send_event(gobj, "EV_TOKEN_FETCHED", {
-            ok:     false,
-            status: 0,
-            error:  (err && err.message) ? err.message : String(err)
+            ok:        !!token,
+            status:    status,
+            timed_out: timed_out,
+            error:     data.error || ""
         }, gobj);
     });
 }
@@ -197,11 +183,11 @@ function fetch_token(gobj)
  ***************************************************************/
 function token_error_code(kw)
 {
+    if(kw.timed_out || kw.status === 0) {
+        return "monitor token unreachable";
+    }
     if(kw.status === 404) {
         return "monitor token not exposed";
-    }
-    if(kw.status === 0) {
-        return "monitor token unreachable";
     }
     return "monitor token refused";
 }

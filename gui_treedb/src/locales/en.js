@@ -294,6 +294,15 @@ const en = {
         "network_error":                      "Network error. Please check your connection and try again.",
         "refresh_denied":                     "Your session has expired. Please log in again.",
         "server_busy":                        "The server is busy. Please try again in a moment.",
+        "method_not_allowed":                 "Could not log in. Please contact the administrator.",
+        "missing_body":                       "Could not log in. Please contact the administrator.",
+        "missing_params":                     "Could not log in. Please contact the administrator.",
+        "redirect_uri_not_allowed":           "Could not log in. Please contact the administrator.",
+        "origin_not_allowed":                 "This application is not allowed to use the authentication service. Please contact the administrator.",
+        "missing_refresh_token":              "Your session has expired. Please log in again.",
+        "missing_access_token":               "Your session has expired. Please log in again.",
+        "unknown_endpoint":                   "Could not log in. Please contact the administrator.",
+        "internal_error":                     "Could not log in. Please try again later.",
 
         /* keep this last so adding new keys above never hits the comma trap */
         "sign in":                            "Sign in",

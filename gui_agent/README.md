@@ -273,9 +273,11 @@ session is the BFF's httpOnly cookie, which never reaches another host, so the
 link asks the BFF for the access_token (`POST /auth/token`) and puts it in the
 identity card. **That needs `expose_access_token: true` on this plane's BFF**
 (`auth_bff` 1806 on `artgins.yunetacontrol.com` has it since config v3,
-2026-09-29); without it the view says so and does not connect. The token is
-renewed whenever the login rotates the cookies, and once after an identity
-NAK (an expired token); a second NAK in a row is a refusal of the user by
+2026-09-29); without it the view says so and does not connect. The request
+has the deadline of every call to the BFF (15 s, headers and body): a BFF that
+does not answer in time is said as unreachable, and the link does not wait
+for it. The token is renewed whenever the login rotates the cookies, and once
+after an identity NAK (an expired token); a second NAK in a row is a refusal of the user by
 that agent, and the view says that too. Two conditions on the agent: the user
 has to be in its authz, and its port 1993 must serve a certificate the
 BROWSER trusts — `agent.example.com` with a public CA does; an agent still serving the

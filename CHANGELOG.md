@@ -8,6 +8,39 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+- **gui_agent: the deadline of a call to the auth BFF covers the body of the
+  answer, not only its headers.** It was cleared when the headers came, so
+  the `resp.json()` of the restore on load, of `/auth/login` and of
+  `/auth/logout` had none: a BFF or a proxy that sent the headers and half a
+  body and went silent left the load, the login or the logout waiting for
+  ever. The helper now reads the body inside the 15 s and answers one shape
+  (`ok`, `status`, `data`, `transient`, `timed_out`), as gui_treedb's: a
+  body that does not come is `auth_timeout` at the login, a retry of the
+  refresh, `EV_RESTORE_FAILED` on load and `EV_LOGOUT_DONE` at the logout. A
+  login answered by a gateway with a 5xx and no json is
+  `auth_service_unavailable`, translated, no longer `http_502`. In gui_agent
+  1.2.6 (at the yunetas 7.29.3 pin these calls had no deadline at all).
+- **gui_agent: the Monitor's `/auth/token` has that deadline too.** It was a
+  `fetch` with no `AbortController`, so with a silent BFF the monitor link
+  stayed in `ST_FETCHING` and the view never said why; now it fails as
+  "monitor token unreachable" after 15 s. In 7.29.3 and gui_agent 1.2.6.
+- **Both: every `error_code` of the BFF's catalog is said in the language of
+  the app.** `missing_refresh_token` (a refresh with no cookie left: a laptop
+  that slept past `refresh_expires_in`, or a logout in another tab) showed
+  *"Missing refresh_token cookie"* in English, and so did the other codes of
+  `c_auth_bff.h` that were not in `AUTH_ERROR_I18N_KEYS`
+  (`method_not_allowed`, `missing_body`, `missing_params`,
+  `redirect_uri_not_allowed`, `origin_not_allowed`, `missing_access_token`,
+  `unknown_endpoint`, `internal_error`); they are in the list and in en and
+  es, and a test holds the list to the catalog. In gui_agent a refresh
+  denied with no `error_code` is `refresh_denied`, as in gui_treedb (it said
+  *"Refresh denied"* in English). In gui_agent 1.2.6 and gui_treedb 1.1.2,
+  which brought the translation of a denial.
+- **gui_treedb: a login whose body does not come in time is `auth_timeout`**,
+  translated, not `http_200`, and a `/auth/token` whose body does not come
+  is logged as no answer, not as a BFF without `expose_access_token`. In
+  7.29.3 and gui_treedb 1.1.2.
+
 ## gui_agent 1.2.6, gui_treedb 1.1.2 (2026-10-30)
 
 - **gui_agent: every call to the auth BFF has a deadline.** `/auth/login`,
@@ -49,7 +82,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   CSP comment of `gui_treedb/index.html` no longer names a file that does
   not exist; the yuno ids of this CHANGELOG are `db_history_edge^4630` and
   `gate_energy^4046`; and the scenario examples of the gui_agent README use
-  the generator `gen1` and a switch of 100 controllers. No code change.
+  the generator `gen1` and a switch of 100 clients. No code change.
 
 ## gui_agent 1.2.4 (2026-10-30)
 

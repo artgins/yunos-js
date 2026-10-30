@@ -65,16 +65,19 @@ const GCLASS_NAME = "C_TREEDB_LOGIN";
 const BFF_TIMEOUT_MS = 15000;
 
 /*  The error_code a denial of the login or of the session can carry, all
- *  keys of the locales: the BFF's catalog (c_auth_bff.h) and the codes
- *  this module gives a failure the BFF never answered. The app shows
+ *  keys of the locales: the whole catalog of the BFF (c_auth_bff.h) and
+ *  the codes this module gives a failure the BFF never answered. The app shows
  *  t(error_code) when it is one of these, so the message changes with the
  *  language; the BFF's `error` text is a developer fallback, English
  *  only, and is shown only for a code that is not here.  */
 export const AUTH_ERROR_I18N_KEYS = [
     "invalid_credentials", "session_expired", "account_disabled", "auth_rate_limited",
     "auth_service_unavailable", "auth_config_error", "auth_unexpected_error",
-    "auth_empty_response", "auth_timeout", "token_too_large", "network_error",
-    "refresh_denied", "server_busy"
+    "auth_empty_response", "auth_timeout", "token_too_large",
+    "method_not_allowed", "missing_body", "missing_params", "redirect_uri_not_allowed",
+    "origin_not_allowed", "missing_refresh_token", "missing_access_token",
+    "unknown_endpoint", "server_busy", "internal_error",
+    "network_error", "refresh_denied"
 ];
 
 /*  Backoff for a refresh that failed for a TRANSIENT reason (the network
@@ -238,15 +241,19 @@ function post_bff(gobj, segment, body)
             data:      data || {},
             transient: !resp.ok && resp.status >= 500
         }))
-        .catch(() => ({
-            /*  A body that is not JSON is never a verdict on the user: it is a
-             *  gateway/proxy page. 4xx keeps its meaning (denied), 5xx and the
-             *  rest are transport noise.  */
-            ok:        false,
-            status:    resp.status,
-            data:      {},
-            transient: !(resp.status >= 400 && resp.status < 500)
-        })))
+        .catch((err) => {
+            /*  A body that did not come in time, or that is not JSON (a
+             *  gateway/proxy page), is never a verdict on the user. 4xx keeps
+             *  its meaning (denied), 5xx and the rest are transport noise.  */
+            const timed_out = !!(err && err.name === "AbortError");
+            return {
+                ok:        false,
+                status:    resp.status,
+                data:      {},
+                transient: timed_out || !(resp.status >= 400 && resp.status < 500),
+                timed_out: timed_out
+            };
+        }))
     .catch((err) => ({
         ok:        false,
         status:    0,
@@ -381,7 +388,7 @@ function fetch_and_publish(gobj, out_event)
     post_bff(gobj, "token").then(({ok, status, data, timed_out}) => {
         let token = (ok && data.success && data.access_token) ? data.access_token : "";
         if(!token) {
-            if(status === 0) {
+            if(status === 0 || timed_out) {
                 log_warning(sprintf("%s: /auth/token fetch failed: %s",
                     gobj_short_name(gobj), timed_out ? "no answer in time" : (data.error || "?")));
             } else {
