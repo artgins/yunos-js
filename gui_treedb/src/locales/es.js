@@ -297,6 +297,7 @@ const es = {
         "token_too_large":                    "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
         "network_error":                      "Error de red. Compruebe la conexión e inténtelo de nuevo.",
         "refresh_denied":                     "Su sesión ha caducado. Por favor, inicie sesión de nuevo.",
+        "auth_bad_response":                  "El servicio de autenticación dio una respuesta que no se pudo leer. Inténtelo más tarde.",
         "server_busy":                        "El servidor está ocupado. Inténtelo en un momento.",
         "method_not_allowed":                 "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
         "missing_body":                       "No se pudo iniciar sesión. Póngase en contacto con el administrador.",

@@ -293,6 +293,7 @@ const en = {
         "token_too_large":                    "Could not log in. Please contact the administrator.",
         "network_error":                      "Network error. Please check your connection and try again.",
         "refresh_denied":                     "Your session has expired. Please log in again.",
+        "auth_bad_response":                  "The authentication service gave an answer that could not be read. Please try again later.",
         "server_busy":                        "The server is busy. Please try again in a moment.",
         "method_not_allowed":                 "Could not log in. Please contact the administrator.",
         "missing_body":                       "Could not log in. Please contact the administrator.",

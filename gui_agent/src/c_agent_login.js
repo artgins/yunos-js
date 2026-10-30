@@ -68,7 +68,7 @@ export const AUTH_ERROR_I18N_KEYS = [
     "method_not_allowed", "missing_body", "missing_params", "redirect_uri_not_allowed",
     "origin_not_allowed", "missing_refresh_token", "missing_access_token",
     "unknown_endpoint", "server_busy", "internal_error",
-    "network_error", "refresh_denied"
+    "network_error", "refresh_denied", "auth_bad_response"
 ];
 
 const REFRESH_RETRY_MIN_MS = 5000;
@@ -230,7 +230,9 @@ export function post_bff(gobj, segment, body)
             return {
                 ok:        false,
                 status:    resp.status,
-                data:      timed_out ? {error: `no answer from the BFF at ${url} in time`} : {},
+                data:      {error: timed_out ?
+                    `no answer from the BFF at ${url} in time` :
+                    `HTTP ${resp.status} with a body that is not the BFF's json (${err && err.message})`},
                 transient: timed_out || !(resp.status >= 400 && resp.status < 500),
                 timed_out: timed_out
             };
@@ -259,8 +261,11 @@ function is_abort(err)
 /***************************************************************
  *  The error_code of a login the BFF did not answer with one: no
  *  answer in BFF_TIMEOUT_MS is "auth_timeout", no answer at all
- *  "network_error", an answer of a gateway (5xx, no json)
- *  "auth_service_unavailable"; any other is `http_<status>`.
+ *  "network_error", a 5xx with no error_code (a gateway, or a BFF
+ *  down behind one) "auth_service_unavailable", and any other answer
+ *  with no error_code "auth_bad_response": an empty body, a body cut
+ *  halfway, a page in HTML, a json that is not the BFF's, whatever
+ *  its status.
  ***************************************************************/
 function bff_error_code({status, data, timed_out})
 {
@@ -276,7 +281,7 @@ function bff_error_code({status, data, timed_out})
     if(status >= 500) {
         return "auth_service_unavailable";
     }
-    return `http_${status}`;
+    return "auth_bad_response";
 }
 
 /***************************************************************
@@ -295,7 +300,10 @@ function do_bff_login(gobj, username, password)
         }
         const error_code = bff_error_code(answer);
         const error      = data.error || `HTTP ${status}`;
-        if(status === 0 || timed_out) {
+        if(data.error_code) {
+            /*  The BFF's own denial: it logged the cause itself.  */
+            log_info(`${gobj_short_name(gobj)}: BFF login denied: ${error_code} (${error})`);
+        } else {
             log_error(`${gobj_short_name(gobj)}: BFF login failed: ${error_code} (${error})`);
         }
         gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error}, gobj);

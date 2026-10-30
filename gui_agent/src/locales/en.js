@@ -658,6 +658,7 @@ const en = {
         "unknown_endpoint":          "Could not log in. Please contact the administrator.",
         "internal_error":            "Could not log in. Please try again later.",
         "refresh_denied":            "Your session has expired. Please log in again.",
+        "auth_bad_response":         "The authentication service gave an answer that could not be read. Please try again later.",
 
         /* prefs */
         "select language":   "Select Language",

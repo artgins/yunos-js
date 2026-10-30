@@ -37,9 +37,11 @@ because the deployment identity is **derived from the serving hostname**
 without the source maps: the build makes them `hidden` (kept in `dist/` to decode
 a stack from the remote log) and the rsync hides `*.map`.
 Everything is co-located on the SPA's own host, which is what makes the flow
-work: the cookie the BFF sets (`Domain=<host>`) reaches both the BFF and the
-control center, and one letsencrypt cert covers all of it. A new tenant is a
-new DNS name + cert + a redirect URI in the IdP — no rebuild.
+work: a cookie is not scoped by port, so the cookie the BFF sets reaches both
+the BFF and the control center, and one letsencrypt cert covers all of it. The
+BFF writes `Domain` only when its `cookie_domain` matches the request's `Host`;
+otherwise the cookie binds to the exact host, which is all this layout needs. A
+new tenant is a new DNS name + cert + a redirect URI in the IdP — no rebuild.
 
 ## Key design choice: no private data in the repo
 

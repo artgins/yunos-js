@@ -666,6 +666,7 @@ const es = {
         "unknown_endpoint":          "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
         "internal_error":            "No se pudo iniciar sesión. Inténtelo más tarde.",
         "refresh_denied":            "Su sesión ha caducado. Por favor, inicie sesión de nuevo.",
+        "auth_bad_response":         "El servicio de autenticación dio una respuesta que no se pudo leer. Inténtelo más tarde.",
 
         /* preferencias */
         "select language":   "Seleccionar idioma",

@@ -13,9 +13,12 @@
  *          - bff_url : https://<host>:1806      (auth BFF)
  *          - tenant  : first label of the host  ("artgins")
  *
- *      The cookie the BFF sets (Domain=<host>) therefore flows to both the
- *      BFF and the control center (same host), and the browser trusts the
- *      single letsencrypt cert for <host>.
+ *      A cookie is not scoped by port, so the cookie the BFF sets travels
+ *      to both the BFF and the control center (same host, other port).
+ *      The BFF writes `Domain` only when its `cookie_domain` matches the
+ *      request's Host; otherwise the cookie binds to the exact host, which
+ *      is all this layout needs. The browser trusts the single
+ *      letsencrypt cert for <host>.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.

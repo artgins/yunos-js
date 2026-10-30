@@ -12,16 +12,26 @@
  *          the session and retries;
  *        - /auth/logout: EV_LOGOUT_DONE.
  *
+ *      A login answered with something that is not the BFF's json (an
+ *      empty 200, a 200 in HTML, a body cut halfway, a 4xx page of a
+ *      proxy) is "auth_bad_response", translated, and logged as an ERROR,
+ *      as every failure that is not the BFF's own answer is; a denial the
+ *      BFF gives with its error_code is logged as INFO.
+ *
  *      And a denial is said in the language of the app: a refresh denied
  *      with no error_code is "refresh_denied", and every error_code of the
- *      BFF's catalog (c_auth_bff.h) is a key of AUTH_ERROR_I18N_KEYS and of
- *      every locale (a refresh with no cookie left is
- *      "missing_refresh_token").
+ *      BFF's catalog is a key of AUTH_ERROR_I18N_KEYS and of every locale
+ *      (a refresh with no cookie left is "missing_refresh_token"). The
+ *      catalog is read from c_auth_bff.h when this repo is checked out
+ *      inside the SDK, and the copy below must be equal to it; checked out
+ *      alone, the copy is used and the test says so.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
 import {describe, test, expect, beforeAll, afterAll, vi} from "vitest";
+import {existsSync, readFileSync} from "node:fs";
+import {fileURLToPath} from "node:url";
 
 globalThis.document = {
     visibilityState: "visible",
@@ -47,8 +57,9 @@ const {es} = await import("./locales/es.js");
 
 const BFF_TIMEOUT_MS = 15000;
 
-/*  The error_code catalog of the BFF (c_auth_bff.h).  */
-const BFF_ERROR_CODES = [
+/*  A copy of the error_code catalog of the BFF (c_auth_bff.h), for a
+ *  checkout of this repo without the SDK around it.  */
+const BFF_ERROR_CODES_COPY = [
     "invalid_credentials", "session_expired", "account_disabled", "auth_rate_limited",
     "auth_service_unavailable", "auth_config_error", "auth_unexpected_error",
     "auth_empty_response", "auth_timeout", "token_too_large",
@@ -57,10 +68,33 @@ const BFF_ERROR_CODES = [
     "unknown_endpoint", "server_busy", "internal_error"
 ];
 
+const BFF_HEADER = fileURLToPath(
+    new URL("../../../../kernel/c/root-linux/src/c_auth_bff.h", import.meta.url));
+
+/*  The codes of the catalog of c_auth_bff.h: its lines
+ *  " *  <code>  <http status>  <meaning>". null when the header is not
+ *  there (this repo checked out alone).  */
+function read_bff_catalog(path)
+{
+    if(!existsSync(path)) {
+        return null;
+    }
+    const text = readFileSync(path, "utf8");
+    return [...text.matchAll(/^ \*  ([a-z][a-z_]*) +(\d{3}) /gm)].map((m) => m[1]);
+}
+
+const BFF_CATALOG = read_bff_catalog(BFF_HEADER);
+if(!BFF_CATALOG) {
+    console.warn(`c_auth_bff.h not found at ${BFF_HEADER}: ` +
+        "the error_code catalog checked is the copy in this test");
+}
+const BFF_ERROR_CODES = BFF_CATALOG || BFF_ERROR_CODES_COPY;
+
 const STALL = "stall";  /*  the headers come, the body never does  */
 
 const heard = [];
 const asked = [];
+const logged = [];     /*  {level, msg} of every log of the module  */
 let answers = {};      /*  segment -> STALL, or {status, data}  */
 let login = null;
 
@@ -99,7 +133,7 @@ function fake_fetch(url, request)
     return Promise.resolve({
         ok:     answer.status >= 200 && answer.status < 300,
         status: answer.status,
-        json:   () => Promise.resolve(answer.data),
+        json:   () => answer.reject ? Promise.reject(answer.reject) : Promise.resolve(answer.data),
     });
 }
 
@@ -108,7 +142,9 @@ beforeAll(() => {
     vi.stubGlobal("fetch", fake_fetch);
 
     gobj_start_up(null, null, null, null, null, null, null);
-    set_log_callback(() => {});
+    set_log_callback((level, msg) => {
+        logged.push({level, msg: String(msg)});
+    });
     register_c_timer();
     register_c_agent_login();
 
@@ -232,7 +268,73 @@ describe("C_AGENT_LOGIN: a BFF that sends the headers and then goes silent", () 
     });
 });
 
+describe("C_AGENT_LOGIN: a login answered with something that is not the BFF's json", () => {
+    const not_json = new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON");
+    const cut = new TypeError("network error");
+
+    async function login_answered(answer)
+    {
+        heard.length = 0;
+        logged.length = 0;
+        answers = {login: answer};
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+        return heard[0].kw;
+    }
+
+    function errors_naming(code)
+    {
+        return logged.filter((l) => l.level === "error" && l.msg.includes(code));
+    }
+
+    test.each([
+        ["an empty 200", {status: 200, reject: new SyntaxError("Unexpected end of JSON input")}],
+        ["a 200 in HTML", {status: 200, reject: not_json}],
+        ["a body cut halfway", {status: 200, reject: cut}],
+        ["a 200 json that is not the BFF's", {status: 200, data: {}}],
+        ["a 404 page of a proxy", {status: 404, reject: not_json}],
+    ])("%s: auth_bad_response, translated, and an ERROR", async (label, answer) => {
+        const kw = await login_answered(answer);
+        expect(kw.error_code).toBe("auth_bad_response");
+        expect(AUTH_ERROR_I18N_KEYS).toContain("auth_bad_response");
+        expect(errors_naming("auth_bad_response").length).toBe(1);
+    });
+
+    test("a 5xx with no error_code is auth_service_unavailable, an ERROR", async () => {
+        const kw = await login_answered({status: 502, reject: not_json});
+        expect(kw.error_code).toBe("auth_service_unavailable");
+        expect(errors_naming("auth_service_unavailable").length).toBe(1);
+    });
+
+    test("a body that does not come in time is auth_timeout, an ERROR", async () => {
+        heard.length = 0;
+        logged.length = 0;
+        answers = {login: STALL};
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(BFF_TIMEOUT_MS + 10);
+        expect(heard[0].kw.error_code).toBe("auth_timeout");
+        expect(errors_naming("auth_timeout").length).toBe(1);
+    });
+
+    test("a denial the BFF gives with its error_code is INFO, not an ERROR", async () => {
+        const kw = await login_answered({status: 401, data: {
+            success: false, error_code: "invalid_credentials", error: "Invalid user credentials"
+        }});
+        expect(kw.error_code).toBe("invalid_credentials");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+        expect(logged.filter((l) => l.level === "info" && l.msg.includes("invalid_credentials")).length)
+            .toBe(1);
+    });
+});
+
 describe("AUTH_ERROR_I18N_KEYS", () => {
+    test.skipIf(!BFF_CATALOG)("the copy in this test is the catalog of c_auth_bff.h", () => {
+        expect(BFF_CATALOG.length).toBeGreaterThan(0);
+        expect([...BFF_ERROR_CODES_COPY].sort()).toEqual([...BFF_CATALOG].sort());
+    });
+
     test("every error_code of the BFF's catalog is a key the app translates", () => {
         for(const code of BFF_ERROR_CODES) {
             expect(AUTH_ERROR_I18N_KEYS, code).toContain(code);
