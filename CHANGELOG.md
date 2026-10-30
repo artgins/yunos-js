@@ -8,7 +8,9 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
-- **Both yunos on gobj-ui `^7.29.2` and gobj-js `^7.29.1`**, with
+## gui_agent 1.2.5, gui_treedb 1.1.1 (2026-10-30)
+
+- **Both yunos on gobj-ui `^7.29.3` and gobj-js `^7.29.2`**, with
   `package.json` and `package-lock.json` raised together: the lockfiles had
   kept gobj-ui 7.28.1, so a local build bundled the older library. Tests:
   gui_agent 360, gui_treedb 99.
