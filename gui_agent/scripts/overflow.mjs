@@ -26,9 +26,10 @@
  *      turns an overflow into "the data is not there". Tabulator's own
  *      horizontal scroll shows up as `scrollable` and is by design.
  *
- *      Credentials as everywhere else: CLAUDIA_USER from
- *      ~/.yuneta/.qa-creds or the environment, the password from the OS
- *      keyring (or CLAUDIA_PASS).
+ *      Credentials as in qa.mjs: QA_USER from the environment or
+ *      ~/.yuneta/.qa-creds, the password from QA_PASS in the environment
+ *      or from the OS keyring. The older key names are still read, after
+ *      these.
  *
  *      Usage:
  *
@@ -53,13 +54,47 @@ const api = pw.chromium ? pw : (pw.default || {});
 const engine = (process.env.PROBE_BROWSER === "firefox") ? api.firefox : api.chromium;
 
 const CREDS = join(homedir(), ".yuneta", ".qa-creds");
-let user = process.env.CLAUDIA_USER || "";
-if(!user && existsSync(CREDS)) {
-    const m = /CLAUDIA_USER=(.*)/.exec(readFileSync(CREDS, "utf8"));
-    user = m ? m[1].trim().replace(/^"|"$/g, "") : "";
+const USER_KEYS = ["QA_USER", "CLAUDIA_USER"];
+const PASS_KEYS = ["QA_PASS", "CLAUDIA_PASS"];
+
+/*  The KEY=value lines of ~/.yuneta/.qa-creds.  */
+function read_creds_file() {
+    const out = {};
+    if(!existsSync(CREDS)) {
+        return out;
+    }
+    for(const line of readFileSync(CREDS, "utf8").split("\n")) {
+        const s = line.trim();
+        if(!s || s.startsWith("#")) {
+            continue;
+        }
+        const i = s.indexOf("=");
+        if(i > 0) {
+            out[s.slice(0, i).trim()] = s.slice(i + 1).trim().replace(/^"|"$/g, "");
+        }
+    }
+    return out;
 }
-const pass = execFileSync("secret-tool",
-    ["lookup", "service", "yunetacontrol", "user", user], {encoding: "utf8"}).replace(/\n$/, "");
+
+const creds = read_creds_file();
+let user = "";
+for(const k of USER_KEYS) {
+    user = user || process.env[k] || creds[k] || "";
+}
+if(!user) {
+    throw new Error("no user: set QA_USER, or QA_USER= in ~/.yuneta/.qa-creds");
+}
+let pass = "";
+for(const k of PASS_KEYS) {
+    pass = pass || process.env[k] || "";
+}
+if(!pass) {
+    pass = execFileSync("secret-tool",
+        ["lookup", "service", "yunetacontrol", "user", user], {encoding: "utf8"}).replace(/\n$/, "");
+}
+if(!pass) {
+    throw new Error(`no password for ${user}: not in QA_PASS, nor in the keyring`);
+}
 
 const URL = process.argv[2];
 const routes = (process.argv[3] || "").split(",").filter(Boolean);
@@ -80,7 +115,9 @@ const scan = async (label) => {
         const out = [];
         for(const el of document.querySelectorAll("*")) {
             const over = el.scrollWidth - el.clientWidth;
-            if(over <= 2 || el.clientWidth === 0) { continue; }
+            if(over <= 2 || el.clientWidth === 0) {
+                continue;
+            }
             const cs = getComputedStyle(el);
             /*  A box that cannot scroll is a box that CLIPS.  */
             const scrollable = /auto|scroll/.test(cs.overflowX);
@@ -90,7 +127,9 @@ const scan = async (label) => {
                 const r = kid.getBoundingClientRect();
                 if(r.width > 0 && r.right > b.right + 1) {
                     outside++;
-                    if(!sample) { sample = (kid.textContent || "").trim().slice(0, 24); }
+                    if(!sample) {
+                        sample = (kid.textContent || "").trim().slice(0, 24);
+                    }
                 }
             }
             out.push({
@@ -103,7 +142,10 @@ const scan = async (label) => {
         return out.sort((a, b) => b.over - a.over).slice(0, 8);
     });
     console.log(`--- ${label} ---`);
-    if(!found.length) { console.log("   nothing overflows"); return; }
+    if(!found.length) {
+        console.log("   nothing overflows");
+        return;
+    }
     for(const f of found) {
         console.log(`   ${f.tag}.${f.cls || "(no class)"}  over=${f.over}px w=${f.w} ` +
                     `${f.scrollable ? "scrollable" : "CLIPS"} outside=${f.children_outside}` +

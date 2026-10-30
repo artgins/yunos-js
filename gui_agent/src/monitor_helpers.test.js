@@ -478,51 +478,56 @@ describe("where the yunos are", () => {
 
 
 describe("links from the configs", () => {
-    /*  The shapes of the real view-config of the yunos of a stress test.  */
-    const gate = {
+    /*  Configs in the shape view-config answers: a relay that listens on
+     *  two input urls and sends to a store, a sender that connects to the
+     *  relay. Only the leaves named by the convention count (the input
+     *  and top urls listen, the output urls and target_url connect); a
+     *  template not resolved, a log handler url and a websocket of
+     *  another service do not.  */
+    const relay = {
         environment: {daemon_log_handlers: {to_udp: {url: "udp://127.0.0.1:1992"}}},
         global: {
             "__top_side__.__json_config_variables__": {"__url__": "ws://127.0.0.1:11102"},
             "__input_side__.__json_config_variables__": {
-                "__input_mqtt_url__": "tcp://0.0.0.0:7601",
-                "__input_mqtts_url__": "tcps://0.0.0.0:7603"
+                "__input_a_url__": "tcp://0.0.0.0:7611",
+                "__input_b_url__": "tcps://0.0.0.0:7624"
             },
-            "__output_side__.__json_config_variables__": {"__output_url__": "tcp://127.0.0.1:7501"}
+            "__output_side__.__json_config_variables__": {"__output_url__": "tcp://127.0.0.1:7640"}
         },
         services: [{children: [{kw: {url: "(^^__output_url__^^)"}}]}, {kw: {url: "ws://127.0.0.1:1991"}}]
     };
-    const db_events = {
-        global: {"__input_side__.__json_config_variables__": {"__input_url__": "tcp://127.0.0.1:7501"}},
+    const store = {
+        global: {"__input_side__.__json_config_variables__": {"__input_url__": "tcp://127.0.0.1:7640"}},
         services: [{kw: {url: "ws://127.0.0.1:11100"}}]
     };
-    const sim_local = {global: {"sim_load.target_url": "tcps://127.0.0.1:7603"},
-                       services: [{target_url: "tcps://127.0.0.1:7603"}]};
-    const sim_remote = {global: {"sim_load.target_url": "tcps://node-b.example.com:7603"}};
+    const sender_local = {global: {"sender.target_url": "tcps://127.0.0.1:7624"},
+                          services: [{target_url: "tcps://127.0.0.1:7624"}]};
+    const sender_remote = {global: {"sender.target_url": "tcps://relay.example.com:7624"}};
 
     it("reads what a yuno listens on and what it connects to", () => {
-        let e = config_endpoints(gate);
-        expect(e.listen.map((x) => x.port).sort()).toEqual([7601, 7603]);
-        expect(e.connect).toEqual([{host: "127.0.0.1", port: 7501}]);
+        let e = config_endpoints(relay);
+        expect(e.listen.map((x) => x.port).sort()).toEqual([7611, 7624]);
+        expect(e.connect).toEqual([{host: "127.0.0.1", port: 7640}]);
     });
 
     it("proposes the chain of one node", () => {
         expect(derive_links([
-            {key: "stress", config: sim_local},
-            {key: "7601", config: gate},
-            {key: "7501", config: db_events}
-        ])).toEqual([["stress", "7601"], ["7601", "7501"]]);
+            {key: "sender", config: sender_local},
+            {key: "relay", config: relay},
+            {key: "store", config: store}
+        ])).toEqual([["sender", "relay"], ["relay", "store"]]);
     });
 
     it("looks for a local address on the same node only, and for a host on any node", () => {
         let entries = [
-            {key: "sim_local", node: "node-a", config: sim_local},
-            {key: "sim_remote", node: "node-a", config: sim_remote},
-            {key: "gate_b", node: "node-b", config: gate},
-            {key: "events_b", node: "node-b", config: db_events}
+            {key: "sender_local", node: "node-a", config: sender_local},
+            {key: "sender_remote", node: "node-a", config: sender_remote},
+            {key: "relay", node: "node-b", config: relay},
+            {key: "store", node: "node-b", config: store}
         ];
         expect(derive_links(entries)).toEqual([
-            ["sim_remote", "gate_b"],
-            ["gate_b", "events_b"]
+            ["sender_remote", "relay"],
+            ["relay", "store"]
         ]);
     });
 });

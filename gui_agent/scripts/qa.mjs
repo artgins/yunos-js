@@ -14,9 +14,10 @@
  *      a `curl` of the static files cannot answer.
  *
  *      CREDENTIALS NEVER LIVE IN THE REPO. The user (not a secret) comes
- *      from `~/.yuneta/.qa-creds` (`CLAUDIA_USER=`) or the environment;
- *      the password comes from the OS keyring (libsecret / `secret-tool`)
- *      or from `CLAUDIA_PASS` for CI. Nothing in clear text on disk.
+ *      from the environment or `~/.yuneta/.qa-creds` (`QA_USER=`); the
+ *      password comes from `QA_PASS` in the environment, for CI, or from
+ *      the OS keyring (libsecret / `secret-tool`). Nothing in clear text
+ *      on disk. The older key names are still read, after these.
  *
  *      Playwright is not a dependency of this yuno. It is borrowed from
  *      another checkout that already carries it (QA_PW), so a QA run adds
@@ -223,15 +224,28 @@ function qa_setting(name, default_value) {
     return `<${name} not set: set it in the environment or in ~/.yuneta/.qa-creds>`;
 }
 
+/*
+ *  The key names of the user and of the password, and the older names
+ *  read after them.
+ */
+const USER_KEYS = ["QA_USER", "CLAUDIA_USER"];
+const PASS_KEYS = ["QA_PASS", "CLAUDIA_PASS"];
+
 function get_credentials() {
     const file = read_creds_file();
-    const user = process.env.CLAUDIA_USER || file.CLAUDIA_USER;
+    let user = "";
+    for(const k of USER_KEYS) {
+        user = user || process.env[k] || file[k] || "";
+    }
     if(!user) {
         throw new Error(
-            "no user: set CLAUDIA_USER, or CLAUDIA_USER= in ~/.yuneta/.qa-creds"
+            "no user: set QA_USER, or QA_USER= in ~/.yuneta/.qa-creds"
         );
     }
-    let pass = process.env.CLAUDIA_PASS;
+    let pass = "";
+    for(const k of PASS_KEYS) {
+        pass = pass || process.env[k] || "";
+    }
     if(!pass) {
         /*  The keyring is the only place the password is allowed to live.  */
         try {
@@ -242,7 +256,7 @@ function get_credentials() {
             ).replace(/\n$/, "");
         } catch(e) {
             throw new Error(
-                `no password for ${user}: not in CLAUDIA_PASS, and the keyring ` +
+                `no password for ${user}: not in QA_PASS, and the keyring ` +
                 `lookup failed (secret-tool lookup service yunetacontrol user ${user})`
             );
         }

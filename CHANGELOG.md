@@ -8,6 +8,42 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+- **Both: a login answered with something that is not the BFF's json is
+  `auth_bad_response`, translated, and an ERROR in the log.** An empty 200,
+  a 200 in HTML, a body cut halfway, a json without `success` or
+  `error_code`, or a 4xx page of a proxy came out as `http_<status>`, shown
+  as *"HTTP 200"* in English, and gui_agent did not log it. A 5xx with no
+  `error_code` stays `auth_service_unavailable`. The log level now says who
+  answered, the same in both yunos: a denial the BFF gives with its
+  `error_code` is INFO (the BFF logged the cause), and every other failure
+  (no answer, no answer in time, a gateway, an answer that is not the
+  BFF's) is an ERROR. gui_treedb gave INFO to a deadline that expired in
+  the body and ERROR to one that expired in the headers. New key
+  `auth_bad_response` in en and es. In 7.29.3 (gui_agent 1.1.8, gui_treedb
+  1.0.6) and in gui_agent 1.2.7, gui_treedb 1.1.3.
+- **Both: the test of the error_code catalog reads `c_auth_bff.h`.** In a
+  checkout inside the SDK it reads the catalog from
+  `kernel/c/root-linux/src/c_auth_bff.h`, fails when its copy differs, and
+  checks the codes of the header against `AUTH_ERROR_I18N_KEYS`; checked out
+  alone it uses the copy and says so. The copy was the only list read, so a
+  code added to the header passed unseen. Tests only; in gui_agent 1.2.7 and
+  gui_treedb 1.1.3.
+- **gui_agent: the README and `conf/deploy.js` say how the BFF's cookie
+  reaches the control center.** A cookie is not scoped by port, so it
+  travels to both ports of the host; the BFF writes `Domain` only when its
+  `cookie_domain` matches the request's `Host`. They said the BFF set
+  `Domain=<host>`. Docs and comments only; in 7.29.3.
+- **gui_agent: `scripts/qa.mjs` and `scripts/overflow.mjs` take the user and
+  the password as `QA_USER` and `QA_PASS`**, from the environment or (the
+  user) `~/.yuneta/.qa-creds`; the older key names are still read after
+  them. `overflow.mjs` also reads the password from the environment, as
+  `qa.mjs` does, and fails naming the user when there is none. QA scripts
+  only, not shipped; in 7.29.3.
+- **gui_agent: the monitor test of the links read from the configs uses a
+  generic relay, store and sender** with their own ports. Tests only.
+- **The entries of gui_agent 1.2.4 and 1.2.5 describe their examples
+  without ids**, and every entry says what its version changed. Docs only.
+
 ## gui_agent 1.2.7, gui_treedb 1.1.3 + gobj-ui ^7.29.5, gobj-js ^7.29.3 (2026-10-30)
 
 - **gui_agent: the deadline of a call to the auth BFF covers the body of the
@@ -42,10 +78,10 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   translated, not `http_200`, and a `/auth/token` whose body does not come
   is logged as no answer, not as a BFF without `expose_access_token`. In
   7.29.3 and gui_treedb 1.1.2.
-
-- **Neutral example ids**: `db_history^7301`/`7302`, `gate_a`/`gate_b` with
-  the role label `gate`, `events_a`/`events_b`, `db_events`, ports
-  7601-7603/7501, nodes `node-a`/`node-b`, the ramdisk `/mnt/ramdisk`.
+- **The examples use generic ids**: `db_history^7301`/`7302`,
+  `gate_a`/`gate_b` with the role label `gate`, `events_a`/`events_b`,
+  `db_events`, ports 7601-7603/7501, nodes `node-a`/`node-b`, the ramdisk
+  `/mnt/ramdisk`.
 
 ## gui_agent 1.2.6, gui_treedb 1.1.2 (2026-10-30)
 
@@ -81,14 +117,13 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   and the Keycloak client settings with the reason for each. It said that
   the SPAs used the PKCE redirect flow, which they no longer do, and that
   Direct access grants must be off, which breaks `/auth/login`.
-- **No private trace in comments and docs.** The comments of
-  `c_agent_treedb_view.js`, `c_nodes.js` and `c_stats_nodes.js` are in
-  English; the notes of `gui_treedb`'s `main.js`, `conf/deploy.js` and
-  `locales.js` and the `gui_agent` console point at public documents; the
-  CSP comment of `gui_treedb/index.html` no longer names a file that does
-  not exist; the yuno ids of this CHANGELOG are `db_history^7302` and
-  `gate_probe^7701`; and the scenario examples of the gui_agent README use
-  the generator `gen1` and a switch of 100 clients. No code change.
+- **Comments and docs are in English and point at public documents.** The
+  comments of `c_agent_treedb_view.js`, `c_nodes.js` and `c_stats_nodes.js`
+  are in English; the notes of `gui_treedb`'s `main.js`, `conf/deploy.js`
+  and `locales.js` and the `gui_agent` console point at public documents;
+  the CSP comment of `gui_treedb/index.html` names only files that exist;
+  the yuno ids of this CHANGELOG and the scenario examples of the gui_agent
+  README are generic. No code change.
 
 ## gui_agent 1.2.4 (2026-10-30)
 
@@ -98,7 +133,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   gates of `--check queues` and `--check focus` (`QA_QUEUE_GATES`), the
   number of generators and the node codes of `--check switches`
   (`QA_SWITCH_COUNT`, `QA_NODE_CODES`) are settings now too, with no default:
-  they were the ports, the count and the node codes of one installation.
+  they depend on the installation the check runs against.
 - **`scripts/qa.mjs`: that failure comes before the browser is launched.** It
   came after the sign in, so a run that could not do what it was asked still
   opened the plane and signed in. Now nothing is opened, and an unknown check
@@ -107,20 +142,18 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   `QA_PERM_ON` are read from `~/.yuneta/.qa-creds` as the other settings are
   (they were read from the environment only), and `--check permlive` needs
   them; a list with no item that is not empty (`,`) is not set.
-- **The examples and tests of gui_agent name no scenario, yuno or port of an
-  application**: the stress topology of the README and the monitor's tests
-  use `sim_load`, `gate_a` / `gate_b`, `node-a` and the ports 7601 /
-  7501; the placeholder of a role's scope reads `scenario_id=load-test`.
-- **This CHANGELOG cites no review in words** either: its entries say what
-  each version changed.
+- **The examples and tests of gui_agent use generic names**: the stress
+  topology of the README and the monitor's tests use a generic load
+  generator, gates, nodes and ports; the placeholder of a role's scope reads
+  `scenario_id=load-test`.
+- **Each entry of this CHANGELOG says what its version changed.**
 
 ## gui_agent 1.2.3 (2026-10-30)
 
-- **The examples name no private project, client or node.** The placeholder
-  of a role's scope reads a generic scenario id, the comments and tests of
-  both yunos use generic names and cite no private review, and the README of
-  each yuno lists all four shapes the controls test cannot see (it named only
-  one of them).
+- **The examples use generic names.** The placeholder of a role's scope
+  reads a generic scenario id, the comments and tests of both yunos use
+  generic names, and the README of each yuno lists all four shapes the
+  controls test cannot see (it named only one of them).
 - **`scripts/qa.mjs` keeps the ids of the installation out of the repo**: the
   node, yuno, treedb, scenario and role each check opens, and the playwright
   checkout, come from the environment or `~/.yuneta/.qa-creds`. A check whose
@@ -2041,11 +2074,10 @@ older ones.
   showing it twice.
 - **gui_treedb: new i18n key `the connection dropped`** (en, es). gui_agent
   already had it.
-- This CHANGELOG no longer cites internal review rounds or finding ids: each
-  entry says what changed. The 0.22.96 entry about the console's JSON viewer
-  is corrected: the console was the viewer's subscriber by the CHILD model
-  and did not declare `EV_EXPAND_PATH`, so each click logged *"Event NOT
-  DEFINED in state"*; it was not silent.
+- Each entry of this CHANGELOG says what changed. The 0.22.96 entry about
+  the console's JSON viewer is corrected: the console was the viewer's
+  subscriber by the CHILD model and did not declare `EV_EXPAND_PATH`, so
+  each click logged *"Event NOT DEFINED in state"*; it was not silent.
 
 ## gui_agent 0.22.97, gui_treedb 0.17.70 + gobj-js ^7.25.8 (2026-09-25)
 
@@ -2294,7 +2326,7 @@ older ones.
   string. No code of these yunos depended on the old behaviour.
 - New gui_agent locale key, en and es: `the view moved: open the dialog
   again`. validate-locales: OK in both yunos.
-- Comments and test titles no longer cite review rounds.
+- Comments and test titles say what they check.
 
 ## gui_treedb 0.17.61 + gobj-ui ^7.25.14 (2026-09-23)
 
@@ -5440,8 +5472,8 @@ when it was written). `0.14.0` sits above both.
     exists is worse than a failure.
 
     Credentials never touch the repo: the user comes from `~/.yuneta/.qa-creds`
-    or the environment, the password from the OS keyring (or `CLAUDIA_PASS` for
-    CI). Playwright is borrowed from app A's `node_modules` rather than added
+    or the environment, the password from the OS keyring (or an environment
+    variable, for CI). Playwright is borrowed from app A's `node_modules` rather than added
     as a dependency, so the SPA ships nothing extra. It defaults to **firefox**,
     the engine this machine has downloaded — and firefox reports
     `navigator.language` as the literal string `"undefined"` under Playwright,
