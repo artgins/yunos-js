@@ -21,8 +21,19 @@
  *      A refresh answered with something that is not the BFF's json (a
  *      json with neither success nor error_code, a page in HTML, whatever
  *      its status) is "auth_bad_response", an ERROR, and keeps the
- *      session: EV_REFRESH_FAILED, retried with backoff. Only a denial the
- *      BFF gives with its error_code ends it.
+ *      session: EV_REFRESH_FAILED, retried with backoff. The fifth such
+ *      answer since the last refresh that landed ends the session with
+ *      "auth_bad_response" (the login page of a proxy never changes).
+ *
+ *      A refresh the BFF answers with an error_code ends the session when
+ *      a retry would give it again (a 4xx, and the 5xx token_too_large,
+ *      auth_unexpected_error, auth_config_error, internal_error), and is
+ *      retried otherwise (an outage, and the 429 auth_rate_limited). The
+ *      published EV_REFRESH_FAILED carries the error_code.
+ *
+ *      An answer of a request made for an earlier session (a refresh in
+ *      flight when the user logged out and in again) is dropped: it does
+ *      not end, or re-arm, the session that replaced it.
  *
  *      And a denial is said in the language of the app: every error_code
  *      of the BFF's catalog is a key of AUTH_ERROR_I18N_KEYS and of every
@@ -115,12 +126,16 @@ function abort_error()
 }
 
 /*  A fetch whose body, for a STALL segment, only its AbortSignal can
- *  end, as a browser does.  */
+ *  end, as a browser does. An answer that is a function answers the
+ *  request itself (later_answer()).  */
 function fake_fetch(url, request)
 {
     const segment = String(url).split("/").pop();
     asked.push(segment);
     const answer = answers[segment];
+    if(typeof answer === "function") {
+        return answer(request);
+    }
     if(answer === STALL) {
         return Promise.resolve({
             ok:     true,
@@ -192,6 +207,9 @@ async function pass_time(ms)
 
 async function log_in()
 {
+    if(gobj_current_state(login) === "ST_LOGIN") {
+        await log_out();    /*  what an earlier test left  */
+    }
     answers.login = OK_LOGIN;
     gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
     await pass_time(10);
@@ -199,6 +217,31 @@ async function log_in()
     expect(gobj_current_state(login)).toBe("ST_LOGIN");
     heard.length = 0;
     asked.length = 0;
+}
+
+async function log_out()
+{
+    answers.logout = {status: 200, data: {success: true}};
+    gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+    await pass_time(10);
+    expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    heard.length = 0;
+    asked.length = 0;
+}
+
+/*  An answer the test gives when it wants: `answer` goes into `answers`,
+ *  and `give(status, data)` sends it.  */
+function later_answer()
+{
+    let give = null;
+    const answer = () => new Promise((resolve) => {
+        give = (status, data) => resolve({
+            ok:     status >= 200 && status < 300,
+            status: status,
+            json:   () => Promise.resolve(data),
+        });
+    });
+    return {answer, give: (status, data) => give(status, data)};
 }
 
 describe("C_AGENT_LOGIN: a BFF that sends the headers and then goes silent", () => {
@@ -389,5 +432,191 @@ describe("AUTH_ERROR_I18N_KEYS", () => {
             expect(en.translation[code], `en ${code}`).toBeTypeOf("string");
             expect(es.translation[code], `es ${code}`).toBeTypeOf("string");
         }
+    });
+});
+
+describe("C_AGENT_LOGIN: a refresh answered for ever with something that is not the BFF's json", () => {
+    const not_json = new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON");
+
+    test.each([
+        ["a 401 page in HTML (the login page of a proxy)", {status: 401, reject: not_json}],
+        ["a 200 {}", {status: 200, data: {}}],
+    ])("%s: 5 tries, then the session ends with auth_bad_response", async (label, answer) => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = answer;
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        for(const backoff of [5000, 10000, 20000, 40000]) {
+            expect(gobj_current_state(login)).toBe("ST_LOGIN");
+            await pass_time(backoff + 10);
+        }
+        expect(asked.filter((x) => x === "refresh").length).toBe(5);
+        const events = heard.map((h) => h.event);
+        expect(events).toEqual([
+            "EV_REFRESH_FAILED", "EV_REFRESH_FAILED", "EV_REFRESH_FAILED", "EV_REFRESH_FAILED",
+            "EV_LOGIN_DENIED"
+        ]);
+        expect(heard[4].kw.error_code).toBe("auth_bad_response");
+        expect(AUTH_ERROR_I18N_KEYS).toContain("auth_bad_response");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+
+        await pass_time(15 * 60 * 1000);
+        expect(asked.filter((x) => x === "refresh").length).toBe(5);
+    });
+
+    test("a refresh that lands in between starts the count over", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = {status: 200, data: {}};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        for(const backoff of [5000, 10000, 20000]) {
+            await pass_time(backoff + 10);
+        }
+        expect(heard.map((h) => h.event).filter((e) => e === "EV_REFRESH_FAILED").length).toBe(4);
+
+        answers.refresh = {status: 200, data: {success: true, expires_in: 300}};
+        await pass_time(40000 + 10);
+        expect(heard[heard.length - 1].event).toBe("EV_LOGIN_REFRESHED");
+
+        heard.length = 0;
+        answers.refresh = {status: 200, data: {}};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        for(const backoff of [5000, 10000, 20000]) {
+            await pass_time(backoff + 10);
+        }
+        expect(heard.map((h) => h.event)).toEqual([
+            "EV_REFRESH_FAILED", "EV_REFRESH_FAILED", "EV_REFRESH_FAILED", "EV_REFRESH_FAILED"
+        ]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        await log_out();
+    });
+});
+
+describe("C_AGENT_LOGIN: a refresh the BFF answers with an error_code", () => {
+    test("429 auth_rate_limited passes with time: retried, a WARNING, the error_code published", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = {status: 429, data: {
+            success: false, error_code: "auth_rate_limited", error: "Too many login attempts"
+        }};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(heard[0].kw.retry_ms).toBe(5000);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("auth_rate_limited")).length)
+            .toBe(1);
+
+        heard.length = 0;
+        answers.refresh = {status: 200, data: {success: true, expires_in: 300}};
+        await pass_time(5000 + 10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_REFRESHED"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        await log_out();
+    });
+
+    test.each([
+        [500, "token_too_large"],
+        [502, "auth_unexpected_error"],
+        [500, "auth_config_error"],
+        [500, "internal_error"],
+    ])("%i %s comes back on every retry: the session ends with its message", async (status, code) => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = {status: status, data: {success: false, error_code: code, error: "x"}};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe(code);
+        expect(AUTH_ERROR_I18N_KEYS).toContain(code);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+        await pass_time(120000);
+        expect(asked.filter((x) => x === "refresh").length).toBe(1);
+    });
+
+    test.each([
+        [502, "auth_service_unavailable"],
+        [503, "server_busy"],
+        [504, "auth_timeout"],
+        [502, "auth_empty_response"],
+    ])("%i %s is an outage: retried with the session kept", async (status, code) => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = {status: status, data: {success: false, error_code: code, error: "x"}};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        expect(heard[0].kw.error_code).toBe(code);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        await log_out();
+    });
+});
+
+describe("C_AGENT_LOGIN: the answer of a request of an earlier session is dropped", () => {
+    test("a refresh denied after a logout and a new login does not end the new session", async () => {
+        heard.length = 0;
+        await log_in();
+
+        const refresh = later_answer();
+        answers.refresh = refresh.answer;
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        await log_out();
+
+        logged.length = 0;
+        const new_login = later_answer();
+        answers.login = new_login.answer;
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(10);
+        expect(gobj_current_state(login)).toBe("ST_WAIT_TOKEN");
+
+        refresh.give(401, {success: false, error_code: "session_expired", error: "Session expired"});
+        await pass_time(10);
+        expect(heard).toEqual([]);
+        expect(gobj_current_state(login)).toBe("ST_WAIT_TOKEN");
+
+        new_login.give(200, OK_LOGIN.data);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_ACCEPTED"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        expect(logged.filter((l) => l.msg.includes("NOT DEFINED"))).toEqual([]);
+        expect(logged.filter((l) => l.level === "info" && l.msg.includes("superseded")).length)
+            .toBe(1);
+        await log_out();
+    });
+
+    test("a refresh of the old session that lands in the new one arms nothing", async () => {
+        heard.length = 0;
+        await log_in();
+
+        const refresh = later_answer();
+        answers.refresh = refresh.answer;
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        await log_out();
+        await log_in();
+
+        logged.length = 0;
+        refresh.give(200, {});
+        await pass_time(10);
+        expect(heard).toEqual([]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        await pass_time(5000 + 10);
+        expect(asked).toEqual([]);
+        expect(logged.filter((l) => l.msg.includes("NOT DEFINED"))).toEqual([]);
+        expect(logged.filter((l) => l.level === "info" && l.msg.includes("superseded")).length)
+            .toBe(1);
+        await log_out();
     });
 });

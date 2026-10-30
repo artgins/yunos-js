@@ -141,10 +141,17 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 - **A session that survives the real world.** The access_token is refreshed
   before it expires, and a refresh that could not be MADE (network down, BFF
   502, request timed out) is not a denial: it retries with backoff and keeps the
-  session, the shell and every open card. Only the BFF *answering* "no", with
-  its `error_code`, logs you out; an answer that is not the BFF's json (a page
-  of a proxy, a json with neither `success` nor `error_code`) is
-  `auth_bad_response`, an ERROR, and is retried the same way. Because a background tab's timers are throttled — so the refresh of a
+  session, the shell and every open card; so does a `429 auth_rate_limited`
+  of the BFF. The BFF *answering* "no" with its `error_code` (a 4xx) logs you
+  out, and so does an `error_code` a retry would give again
+  (`token_too_large`, `auth_unexpected_error`, `auth_config_error`,
+  `internal_error`), with its message on the login form. An answer that is
+  not the BFF's json (a page of a proxy, a json with neither `success` nor
+  `error_code`) is `auth_bad_response`, an ERROR, and is retried the same
+  way; the fifth in a row since the last refresh that landed ends the session
+  and the login form says it. The answer of a request made for an earlier
+  session (a refresh in flight while you logged out and in again) is
+  dropped. Because a background tab's timers are throttled — so the refresh of a
   sleeping laptop fires after the token is already dead — `visibilitychange` /
   `online` enter the FSM as `EV_WAKEUP` and refresh on the spot if the deadline
   has passed. A backend that NAKs the identity even after a fresh token is

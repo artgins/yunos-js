@@ -1421,11 +1421,17 @@ summary.
   instead of dropping to the login screen. A **transient** BFF outage during a
   token refresh (unreachable / 5xx, e.g. while a node reboots) is likewise
   ridden out: the session, shell, link and open views are kept and the refresh
-  retries with backoff (5s→60s) — only a denial the BFF gives with its
-  `error_code` (a 4xx) logs out. An answer that is not the BFF's json (a page
-  of a proxy, a json with neither `success` nor `error_code`) is
-  `auth_bad_response`, logged as an ERROR, and retried the same way. Mirrors
-  the design gui_treedb already had.
+  retries with backoff (5s→60s), and so does a `429 auth_rate_limited` of the
+  BFF. A denial the BFF gives with its `error_code` (a 4xx) logs out, and so
+  does an `error_code` a retry would give again (`token_too_large`,
+  `auth_unexpected_error`, `auth_config_error`, `internal_error`), with its
+  message on the login form. An answer that is not the BFF's json (a page of a
+  proxy, a json with neither `success` nor `error_code`) is
+  `auth_bad_response`, logged as an ERROR, and retried the same way; the fifth
+  in a row since the last refresh that landed ends the session and the login
+  form says it. The answer of a request made for an earlier session (a refresh
+  in flight while the user logged out and in again) is dropped. Mirrors
+  gui_treedb.
 - **Developer monitor & window manager.** The avatar → **Developer** window was
   reworked (in gobj-ui) from a raw traffic dumper into a yuno-monitor console: a
   folding **bullet** traffic log, a persistent view selector (Detailed / Compact

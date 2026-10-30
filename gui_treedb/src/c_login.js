@@ -81,12 +81,30 @@ export const AUTH_ERROR_I18N_KEYS = [
     "network_error", "auth_bad_response"
 ];
 
-/*  Backoff for a refresh that failed for a TRANSIENT reason (the network
- *  went, the BFF answered 502). The session is NOT dead — the refresh token
- *  in the httpOnly cookie is still there — so retry instead of logging the
- *  user out, and back off so a BFF that is down is not hammered.  */
+/*  Backoff for a refresh that failed for a reason that may pass (the
+ *  network went, the BFF answered 502 or 429). The session is NOT dead —
+ *  the refresh token in the httpOnly cookie is still there — so retry
+ *  instead of logging the user out, and back off so a BFF that is down is
+ *  not hammered.  */
 const REFRESH_RETRY_MIN_MS = 5000;
 const REFRESH_RETRY_MAX_MS = 60000;
+
+/*  A refresh the BFF answers with an error_code ends the session when its
+ *  status is a 4xx (the BFF's "no") and is retried when it is a 5xx (an
+ *  outage). These codes say the opposite of their status: a 429 passes
+ *  with time, and these 5xx come back on every retry (a BFF misconfigured,
+ *  an IdP answer the BFF cannot use, a token too large for a cookie, a bug
+ *  of the BFF), so the session ends with their message.  */
+const REFRESH_RETRIED_CODES = ["auth_rate_limited"];
+const REFRESH_FINAL_CODES = [
+    "auth_config_error", "auth_unexpected_error", "token_too_large", "internal_error"
+];
+
+/*  An answer that is not the BFF's json (the login page of a proxy, a 200
+ *  {}) may never change: after this many since the last refresh that
+ *  landed, the session ends with "auth_bad_response" and the login form
+ *  says it, instead of retrying for ever with nothing shown.  */
+const REFRESH_BAD_ANSWERS_MAX = 5;
 
 
 /***************************************************************
@@ -108,6 +126,8 @@ let PRIVATE_DATA = {
     gobj_timer:         null,
     refresh_at:         0,      /*  epoch ms the refresh timer is due at  */
     retry_ms:           0,      /*  current transient-failure backoff (0 = none)  */
+    bad_answers:        0,      /*  answers not the BFF's json since the last refresh that landed  */
+    generation:         0,      /*  the session the requests in flight belong to  */
     on_wake:            null,   /*  visibilitychange / online listener  */
 };
 
@@ -209,15 +229,11 @@ function mt_destroy(gobj)
 /***************************************************************
  *  POST to a BFF /auth/<segment> endpoint (with `body` as its JSON, when
  *  given), with a deadline, and always resolve to the same shape:
- *  {ok, status, data, transient, timed_out}.
- *
- *  `transient` is the distinction the whole session hangs on: a failure of
- *  the TRANSPORT (the network went, the request timed out, the BFF answered
- *  5xx, the body was not JSON — a proxy error page) says NOTHING about the
- *  user's credentials. Reading `resp.json()` unguarded made a 502 throw and
- *  land in the same catch as a real rejection, so a blink of the network
- *  logged the user out and tore down every open card. Only the BFF ANSWERING
- *  "no" is a denial.
+ *  {ok, status, data, timed_out}: `status` 0 is no answer, and `data` is
+ *  {error} when the body is not json or did not come in time
+ *  (bff_error_code() names each case). `resp.json()` is guarded: a body
+ *  that is not json (a proxy error page) is a failure of the call, never
+ *  a rejection of the user.
  ***************************************************************/
 function post_bff(gobj, segment, body)
 {
@@ -240,12 +256,9 @@ function post_bff(gobj, segment, body)
             ok:        resp.ok,
             status:    resp.status,
             data:      data || {},
-            transient: !resp.ok && resp.status >= 500
+            timed_out: false
         }))
         .catch((err) => {
-            /*  A body that did not come in time, or that is not JSON (a
-             *  gateway/proxy page), is never a verdict on the user. 4xx keeps
-             *  its meaning (denied), 5xx and the rest are transport noise.  */
             const timed_out = !!(err && err.name === "AbortError");
             return {
                 ok:        false,
@@ -253,7 +266,6 @@ function post_bff(gobj, segment, body)
                 data:      {error: timed_out ?
                     "no answer from the BFF in time" :
                     `HTTP ${resp.status} with a body that is not the BFF's json (${err && err.message})`},
-                transient: timed_out || !(resp.status >= 400 && resp.status < 500),
                 timed_out: timed_out
             };
         }))
@@ -261,7 +273,6 @@ function post_bff(gobj, segment, body)
         ok:        false,
         status:    0,
         data:      {error: err && err.message ? err.message : String(err)},
-        transient: true,   /*  fetch rejected: offline, DNS, TLS, or our abort  */
         timed_out: !!(err && err.name === "AbortError")
     }))
     .finally(() => clearTimeout(timer));
@@ -293,15 +304,70 @@ function bff_error_code({status, data, timed_out})
 }
 
 /***************************************************************
+ *  True when a refresh the BFF answered with `error_code` ends the
+ *  session (see REFRESH_RETRIED_CODES / REFRESH_FINAL_CODES).
+ ***************************************************************/
+function refresh_code_ends_session(error_code, status)
+{
+    if(REFRESH_RETRIED_CODES.includes(error_code)) {
+        return false;
+    }
+    if(REFRESH_FINAL_CODES.includes(error_code)) {
+        return true;
+    }
+    return status < 500;
+}
+
+/***************************************************************
+ *  True when `kw` is the answer of a request made for an earlier
+ *  session: a logout, a denial or a new login came after the request
+ *  went out (priv.generation moved). Its action drops it, so a late
+ *  answer never moves the session that replaced it.
+ ***************************************************************/
+function is_superseded(gobj, event, kw)
+{
+    const generation = gobj.priv.generation;
+    if(kw && kw.generation === generation) {
+        return false;
+    }
+    log_info(sprintf("%s: %s of a superseded request dropped (request of session %s, now %d)",
+        gobj_short_name(gobj), event, String(kw && kw.generation), generation));
+    return true;
+}
+
+/***************************************************************
+ *  The session ends: no refresh left armed, ST_LOGOUT, every request
+ *  still in flight superseded, and EV_LOGIN_DENIED published with the
+ *  cause for the login form.
+ ***************************************************************/
+function end_session(gobj, error_code, error)
+{
+    let priv = gobj.priv;
+    clear_timeout(priv.gobj_timer);
+    priv.generation++;
+    gobj_write_attr(gobj, "username", "");
+    gobj_write_attr(gobj, "access_token", "");
+    gobj_change_state(gobj, "ST_LOGOUT");
+    gobj_publish_event(gobj, "EV_LOGIN_DENIED", {
+        error_code: error_code || "",
+        error:      error || ""
+    });
+}
+
+/***************************************************************
  *  POST username/password to the BFF /auth/login endpoint.
  ***************************************************************/
 function do_bff_login(gobj, username, password)
 {
+    const generation = gobj.priv.generation;
     post_bff(gobj, "login", {username, password}).then((answer) => {
         const {ok, status, data} = answer;
         if(ok && data.success) {
-            gobj_write_attr(gobj, "username", data.username || data.email || "");
-            gobj_send_event(gobj, "EV_LOGIN_ACCEPTED", data, gobj);
+            gobj_send_event(gobj, "EV_LOGIN_ACCEPTED", {
+                ...data,
+                username:   data.username || data.email || "",
+                generation: generation
+            }, gobj);
             return;
         }
         const error_code = bff_error_code(answer);
@@ -314,7 +380,7 @@ function do_bff_login(gobj, username, password)
             log_error(sprintf("%s: BFF login failed: %s (%s)",
                 gobj_short_name(gobj), error_code, error));
         }
-        gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error}, gobj);
+        gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error, generation}, gobj);
     });
 }
 
@@ -336,40 +402,44 @@ function do_bff_logout(gobj)
 /***************************************************************
  *  Call the BFF /auth/refresh endpoint.
  *
- *  Only the BFF answering "no" with its error_code (a 4xx) ends the
- *  session: EV_LOGIN_DENIED. Anything else keeps it: EV_REFRESH_FAILED
- *  retries with backoff and leaves the shell, the links and the open
- *  cards exactly as they are. The error_code is the one of a login
- *  (bff_error_code): a failure of the transport (no answer, no answer in
- *  time, 5xx) is a WARNING; an answer that is not the BFF's json (a page
- *  of a proxy, a json with neither success nor error_code, whatever its
- *  status) is "auth_bad_response", an ERROR, as at the login.
+ *  A refresh the BFF answers with an error_code that a retry would give
+ *  again ends the session: EV_LOGIN_DENIED (refresh_code_ends_session()).
+ *  Anything else keeps it: EV_REFRESH_FAILED retries with backoff and
+ *  leaves the shell, the links and the open cards exactly as they are,
+ *  and ac_refresh_failed() ends the session after REFRESH_BAD_ANSWERS_MAX
+ *  answers that are not the BFF's json. The error_code is the one of a
+ *  login (bff_error_code): a failure of the transport (no answer, no
+ *  answer in time, 5xx) or a 429 is a WARNING; an answer that is not the
+ *  BFF's json (a page of a proxy, a json with neither success nor
+ *  error_code, whatever its status) is "auth_bad_response", an ERROR, as
+ *  at the login.
  ***************************************************************/
 function do_bff_refresh(gobj)
 {
+    const generation = gobj.priv.generation;
     post_bff(gobj, "refresh").then((answer) => {
         const {ok, status, data} = answer;
         if(ok && data.success) {
-            gobj_send_event(gobj, "EV_LOGIN_REFRESHED", data, gobj);
+            gobj_send_event(gobj, "EV_LOGIN_REFRESHED", {...data, generation}, gobj);
             return;
         }
         const error_code = bff_error_code(answer);
         const error      = data.error || `HTTP ${status}`;
-        if(data.error_code && status > 0 && status < 500) {
-            /*  The BFF's own denial: it logged the cause itself.  */
+        if(data.error_code && refresh_code_ends_session(error_code, status)) {
+            /*  The BFF's own answer: it logged the cause itself.  */
             log_info(sprintf("%s: BFF refresh denied: %s (%s)",
                 gobj_short_name(gobj), error_code, error));
-            gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error}, gobj);
+            gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error, generation}, gobj);
             return;
         }
-        const msg = sprintf("%s: BFF refresh failed: %s (%s) — retrying",
+        const msg = sprintf("%s: BFF refresh failed: %s (%s)",
             gobj_short_name(gobj), error_code, error);
         if(error_code === "auth_bad_response") {
             log_error(msg);
         } else {
             log_warning(msg);
         }
-        gobj_send_event(gobj, "EV_REFRESH_FAILED", {error_code, error}, gobj);
+        gobj_send_event(gobj, "EV_REFRESH_FAILED", {error_code, error, generation}, gobj);
     });
 }
 
@@ -381,13 +451,17 @@ function do_bff_refresh(gobj)
  ***************************************************************/
 function try_restore_session(gobj)
 {
+    const generation = gobj.priv.generation;
     post_bff(gobj, "refresh").then(({ok, data}) => {
         if(ok && data.success) {
-            gobj_write_attr(gobj, "username", data.username || data.email || "");
-            gobj_send_event(gobj, "EV_LOGIN_ACCEPTED", data, gobj);
+            gobj_send_event(gobj, "EV_LOGIN_ACCEPTED", {
+                ...data,
+                username:   data.username || data.email || "",
+                generation: generation
+            }, gobj);
             return;
         }
-        gobj_send_event(gobj, "EV_RESTORE_FAILED", {}, gobj);
+        gobj_send_event(gobj, "EV_RESTORE_FAILED", {generation}, gobj);
     });
 }
 
@@ -401,6 +475,7 @@ function try_restore_session(gobj)
  ***************************************************************/
 function fetch_and_publish(gobj, out_event)
 {
+    const generation = gobj.priv.generation;
     post_bff(gobj, "token").then(({ok, status, data, timed_out}) => {
         let token = (ok && data.success && data.access_token) ? data.access_token : "";
         if(!token) {
@@ -412,24 +487,8 @@ function fetch_and_publish(gobj, out_event)
                     + "(is expose_access_token enabled on the BFF?)", gobj_short_name(gobj)));
             }
         }
-        gobj_write_attr(gobj, "access_token", token);
-        /*
-         *  Resolve the username for the avatar initials. /auth/login and
-         *  /auth/refresh return it, read from the access_token's claims;
-         *  when the BFF could not read them it answers it empty, so fall
-         *  back to the claims of the token here (the authoritative
-         *  identity; gui_agent gets its name from the control-center's
-         *  EV_ON_OPEN instead, which gui_treedb has no single equivalent of).
-         */
-        let username = gobj_read_attr(gobj, "username");
-        if(!username && token) {
-            username = username_from_jwt(token);
-            if(username) {
-                gobj_write_attr(gobj, "username", username);
-            }
-        }
         gobj_send_event(gobj, "EV_TOKEN_FETCHED",
-            {out_event: out_event, username: username, access_token: token}, gobj);
+            {out_event: out_event, access_token: token, generation: generation}, gobj);
     });
 }
 
@@ -476,6 +535,7 @@ function save_session_info(gobj, data)
         priv.timeout_refresh = 2;
     }
     priv.retry_ms = 0;      /*  a refresh landed: the backoff starts over  */
+    priv.bad_answers = 0;
     arm_refresh(gobj, priv.timeout_refresh * 1000);
 }
 
@@ -502,16 +562,26 @@ function arm_refresh(gobj, ms)
 
 
 
+/***************************************************************
+ *  A new login: every request of the session before it is superseded.
+ ***************************************************************/
 function ac_do_login(gobj, event, kw, src)
 {
+    gobj.priv.generation++;
     const username = (kw && kw.username) ? kw.username : "";
     const password = (kw && kw.password) ? kw.password : "";
     do_bff_login(gobj, username, password);
     return 0;
 }
 
+/***************************************************************
+ *  The user ends the session: every request of it still in flight is
+ *  superseded from now on, and no refresh is armed.
+ ***************************************************************/
 function ac_do_logout(gobj, event, kw, src)
 {
+    gobj.priv.generation++;
+    clear_timeout(gobj.priv.gobj_timer);
     do_bff_logout(gobj);
     return 0;
 }
@@ -525,9 +595,18 @@ function ac_do_refresh(gobj, event, kw, src)
 /***************************************************************
  *  EV_LOGIN_ACCEPTED — BFF login/restore succeeded. Fetch the
  *  access_token, then publish EV_LOGIN_ACCEPTED with it.
+ *
+ *  The answers of the BFF change the state in their action, after
+ *  is_superseded(): a transition in the FSM table runs before the
+ *  action, so it would move the session for an answer to drop.
  ***************************************************************/
 function ac_login_accepted(gobj, event, kw, src)
 {
+    if(is_superseded(gobj, event, kw)) {
+        return 0;
+    }
+    gobj_change_state(gobj, "ST_LOGIN");
+    gobj_write_attr(gobj, "username", kw.username || "");
     save_session_info(gobj, kw);
     fetch_and_publish(gobj, "EV_LOGIN_ACCEPTED");
     return 0;
@@ -539,6 +618,9 @@ function ac_login_accepted(gobj, event, kw, src)
  ***************************************************************/
 function ac_login_refreshed(gobj, event, kw, src)
 {
+    if(is_superseded(gobj, event, kw)) {
+        return 0;
+    }
     save_session_info(gobj, kw);
     fetch_and_publish(gobj, "EV_LOGIN_REFRESHED");
     return 0;
@@ -546,15 +628,16 @@ function ac_login_refreshed(gobj, event, kw, src)
 
 function ac_login_denied(gobj, event, kw, src)
 {
-    clear_timeout(gobj.priv.gobj_timer);    // session dead: no dangling refresh timer into ST_LOGOUT
-    gobj_write_attr(gobj, "username", "");
-    gobj_write_attr(gobj, "access_token", "");
-    gobj_publish_event(gobj, "EV_LOGIN_DENIED", kw);
+    if(is_superseded(gobj, event, kw)) {
+        return 0;
+    }
+    end_session(gobj, kw.error_code, kw.error);
     return 0;
 }
 
 function ac_logout_done(gobj, event, kw, src)
 {
+    gobj.priv.generation++;     /*  and a refresh asked for while the logout was in flight  */
     clear_timeout(gobj.priv.gobj_timer);    // session dead: no dangling refresh timer into ST_LOGOUT
     gobj_write_attr(gobj, "username", "");
     gobj_write_attr(gobj, "access_token", "");
@@ -581,6 +664,10 @@ function ac_clear_session(gobj, event, kw, src)
  ***************************************************************/
 function ac_restore_failed(gobj, event, kw, src)
 {
+    if(is_superseded(gobj, event, kw)) {
+        return 0;
+    }
+    gobj_change_state(gobj, "ST_LOGOUT");
     gobj_publish_event(gobj, "EV_RESTORE_FAILED", {});
     return 0;
 }
@@ -590,18 +677,37 @@ function ac_restore_failed(gobj, event, kw, src)
  *  output event the flow asked for (EV_LOGIN_ACCEPTED on a fresh login /
  *  restore, EV_LOGIN_REFRESHED on a rotation) with the token, so the app
  *  can forward it in every C_IEVENT_CLI identity_card.
+ *
+ *  The username is for the avatar initials. /auth/login and /auth/refresh
+ *  return it, read from the access_token's claims; when the BFF could not
+ *  read them it answers it empty, so it falls back to the claims of the
+ *  token here (the authoritative identity; gui_agent gets its name from
+ *  the control-center's EV_ON_OPEN instead, which gui_treedb has no single
+ *  equivalent of).
  ***************************************************************/
 function ac_token_fetched(gobj, event, kw, src)
 {
+    if(is_superseded(gobj, event, kw)) {
+        return 0;
+    }
     let out_event = (kw && kw.out_event) || "";
     if(out_event !== "EV_LOGIN_ACCEPTED" && out_event !== "EV_LOGIN_REFRESHED") {
         log_error(sprintf("%s: EV_TOKEN_FETCHED with a bad out_event: %s",
             gobj_short_name(gobj), out_event));
         return -1;
     }
+    const token = (kw && kw.access_token) || "";
+    gobj_write_attr(gobj, "access_token", token);
+    let username = gobj_read_attr(gobj, "username");
+    if(!username && token) {
+        username = username_from_jwt(token);
+        if(username) {
+            gobj_write_attr(gobj, "username", username);
+        }
+    }
     gobj_publish_event(gobj, out_event, {
-        username:     (kw && kw.username) || "",
-        access_token: (kw && kw.access_token) || ""
+        username:     username || "",
+        access_token: token
     });
     return 0;
 }
@@ -613,15 +719,36 @@ function ac_timeout(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  The refresh could not be MADE (network down, BFF 502, request timed
- *  out). The session is not denied — the refresh cookie is untouched — so
- *  keep it, back off, and try again. Tearing the SPA down to the login
- *  form on a blink of the network destroyed the shell, closed every link
- *  and lost every open card, for a failure that heals itself.
+ *  The refresh failed for a reason that may pass: network down, a 5xx,
+ *  a 429 of the BFF, a request timed out, an answer that is not the
+ *  BFF's json. The session is not denied — the refresh cookie is
+ *  untouched — so keep it, back off, and try again. Tearing the SPA down
+ *  to the login form on a blink of the network destroyed the shell,
+ *  closed every link and lost every open card, for a failure that heals
+ *  itself.
+ *
+ *  An answer that is not the BFF's json may never heal (the login page
+ *  of a proxy): after REFRESH_BAD_ANSWERS_MAX of them the session ends
+ *  with "auth_bad_response", which the login form shows translated.
  ***************************************************************/
 function ac_refresh_failed(gobj, event, kw, src)
 {
     let priv = gobj.priv;
+
+    if(is_superseded(gobj, event, kw)) {
+        return 0;
+    }
+
+    if(kw.error_code === "auth_bad_response") {
+        priv.bad_answers++;
+        if(priv.bad_answers >= REFRESH_BAD_ANSWERS_MAX) {
+            log_error(sprintf("%s: %d answers to the refresh that are not the BFF's json: "
+                + "the session ends", gobj_short_name(gobj), priv.bad_answers));
+            end_session(gobj, "auth_bad_response",
+                `${priv.bad_answers} answers that are not the BFF's json (${kw.error || ""})`);
+            return 0;
+        }
+    }
 
     priv.retry_ms = priv.retry_ms
         ? Math.min(priv.retry_ms * 2, REFRESH_RETRY_MAX_MS)
@@ -629,8 +756,9 @@ function ac_refresh_failed(gobj, event, kw, src)
     arm_refresh(gobj, priv.retry_ms);
 
     gobj_publish_event(gobj, "EV_REFRESH_FAILED", {
-        error:    (kw && kw.error) || "",
-        retry_ms: priv.retry_ms
+        error_code: kw.error_code || "",
+        error:      kw.error || "",
+        retry_ms:   priv.retry_ms
     });
     return 0;
 }
@@ -687,65 +815,51 @@ function create_gclass(gclass_name)
      *  came to the foreground, the network came back), not a user action — it
      *  lands whenever the OS decides, session or no session. Its action is the
      *  one that knows there is nothing to do without one.
+     *
+     *  So are the answers of the BFF (EV_LOGIN_ACCEPTED, EV_LOGIN_DENIED,
+     *  EV_LOGIN_REFRESHED, EV_REFRESH_FAILED, EV_RESTORE_FAILED,
+     *  EV_TOKEN_FETCHED): an answer can land after a logout, a denial or a
+     *  new login made its request superseded (the user logs out and in again
+     *  while a refresh is in flight), and its action drops it then
+     *  (is_superseded()) and changes the state itself otherwise.
      */
     const states = [
         ["ST_LOGOUT", [
             ["EV_DO_LOGIN",        ac_do_login,        "ST_WAIT_TOKEN"],
-            ["EV_LOGIN_DENIED",    ac_login_denied,    null],
             ["EV_WAKEUP",          ac_wakeup,          null],
             ["EV_DO_LOGOUT",       ac_clear_session,   null],
             ["EV_LOGOUT_DONE",     ac_clear_session,   null],
-            /*
-             *  A refresh is only ever initiated from ST_LOGIN (NAK recovery),
-             *  but its async result can resolve after a concurrent logout has
-             *  moved us here: EV_LOGIN_DENIED is already handled above, and a
-             *  stale EV_LOGIN_REFRESHED success is discarded (we are logged out
-             *  on purpose) instead of raising "event not defined".
-             */
-            ["EV_LOGIN_REFRESHED", ac_clear_session,   null],
-            /*
-             *  Same shape: the /auth/token fetch of a session that was logged
-             *  out while it was in flight. The token is stale — drop it.
-             */
-            ["EV_TOKEN_FETCHED",   ac_clear_session,   null],
-            /*
-             *  And the transient failure of a refresh that was in flight when
-             *  the user logged out: there is no session left to keep alive, so
-             *  it must NOT re-arm the retry timer.
-             */
-            ["EV_REFRESH_FAILED",  ac_clear_session,   null]
+            ["EV_LOGIN_ACCEPTED",  ac_login_accepted,  null],
+            ["EV_LOGIN_DENIED",    ac_login_denied,    null],
+            ["EV_LOGIN_REFRESHED", ac_login_refreshed, null],
+            ["EV_REFRESH_FAILED",  ac_refresh_failed,  null],
+            ["EV_RESTORE_FAILED",  ac_restore_failed,  null],
+            ["EV_TOKEN_FETCHED",   ac_token_fetched,   null]
         ]],
 
         ["ST_WAIT_TOKEN", [
             ["EV_DO_LOGIN",        ac_do_login,        null],
-            ["EV_LOGIN_ACCEPTED",  ac_login_accepted,  "ST_LOGIN"],
-            ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"],
-            ["EV_RESTORE_FAILED",  ac_restore_failed,  "ST_LOGOUT"],
             ["EV_WAKEUP",          ac_wakeup,          null],
-            /*
-             *  Leftovers of a session logged out an instant ago: a refresh
-             *  or /auth/token fetch in flight at logout lands HERE when the
-             *  user re-submits the login within its latency (this state is
-             *  one EV_DO_LOGIN away from ST_LOGOUT, and a stalled BFF holds
-             *  the fetch for seconds). Their only producers belong to a
-             *  session, so in this state they can only be stale — dropped
-             *  exactly as ST_LOGOUT drops them.
-             */
-            ["EV_LOGIN_REFRESHED", ac_clear_session,   null],
-            ["EV_TOKEN_FETCHED",   ac_clear_session,   null],
-            ["EV_REFRESH_FAILED",  ac_clear_session,   null]
+            ["EV_LOGIN_ACCEPTED",  ac_login_accepted,  null],
+            ["EV_LOGIN_DENIED",    ac_login_denied,    null],
+            ["EV_LOGIN_REFRESHED", ac_login_refreshed, null],
+            ["EV_REFRESH_FAILED",  ac_refresh_failed,  null],
+            ["EV_RESTORE_FAILED",  ac_restore_failed,  null],
+            ["EV_TOKEN_FETCHED",   ac_token_fetched,   null]
         ]],
 
         ["ST_LOGIN", [
             ["EV_DO_LOGOUT",       ac_do_logout,       null],
             ["EV_DO_REFRESH",      ac_do_refresh,      null],
+            ["EV_LOGOUT_DONE",     ac_logout_done,     "ST_LOGOUT"],
+            ["EV_TIMEOUT",         ac_timeout,         null],
+            ["EV_WAKEUP",          ac_wakeup,          null],
+            ["EV_LOGIN_ACCEPTED",  ac_login_accepted,  null],
+            ["EV_LOGIN_DENIED",    ac_login_denied,    null],
             ["EV_LOGIN_REFRESHED", ac_login_refreshed, null],
             ["EV_REFRESH_FAILED",  ac_refresh_failed,  null],
-            ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"],
-            ["EV_LOGOUT_DONE",     ac_logout_done,     "ST_LOGOUT"],
-            ["EV_TOKEN_FETCHED",   ac_token_fetched,   null],
-            ["EV_TIMEOUT",         ac_timeout,         null],
-            ["EV_WAKEUP",          ac_wakeup,          null]
+            ["EV_RESTORE_FAILED",  ac_restore_failed,  null],
+            ["EV_TOKEN_FETCHED",   ac_token_fetched,   null]
         ]]
     ];
 

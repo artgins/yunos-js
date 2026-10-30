@@ -8,6 +8,47 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+- **Both: an answer to the refresh that is not the BFF's json ends the
+  session at the fifth in a row, with `auth_bad_response` on the login
+  form.** The login page of a proxy (a 401 in HTML) or a 200 `{}` never
+  changes, and it was retried for ever: one request every 60 s once the
+  backoff topped out, an ERROR each, the session hanging and nothing shown
+  to the user. Now the fifth such answer since the last refresh that landed
+  (after about 75 s of backoff) ends the session as a denial does, with the
+  translated `auth_bad_response`. A refresh that lands starts the count
+  over. A 200 page in HTML was already retried for ever in 7.29.3 (gui_agent
+  1.1.8, gui_treedb 1.0.6); a 4xx page and a 200 json that is not the BFF's,
+  in gui_agent 1.2.9 and gui_treedb 1.1.5.
+- **Both: a refresh the BFF answers with an `error_code` is retried or ends
+  the session by what the code means, not only by its status.** A
+  `429 auth_rate_limited` passes with time and ended the session; it is now
+  retried with the backoff, as an outage is. `500 token_too_large`,
+  `502 auth_unexpected_error`, `500 auth_config_error` and
+  `500 internal_error` come back on every retry and were retried for ever;
+  they now end the session with their message. Any other code keeps the rule
+  of its status (a 4xx ends the session, a 5xx is retried). In 7.29.3.
+- **Both: the answer of a request made for an earlier session is dropped.**
+  A refresh in flight while the user logged out and in again was denied
+  after the new login went out: it moved the login service to `ST_LOGOUT`,
+  the app showed the denial, and the answer of the new login raised
+  *"Event NOT DEFINED in state: ..., ST_LOGOUT, EV_LOGIN_ACCEPTED"*. Every
+  request now carries the session it was made for (a counter moved by each
+  login, logout and denial), every answer of the BFF is declared in every
+  state, and its action drops it when the session moved on (an INFO) and
+  changes the state itself otherwise. In gui_treedb this also keeps the
+  `/auth/token` of the old session from replacing the token of the new
+  one. In 7.29.3.
+- **Both: the published `EV_REFRESH_FAILED` carries the `error_code`**, and
+  the app's warning names it. Only the English `error` reached the app. In
+  7.29.3.
+- **Both: comments say what the code does.** `post_bff()` no longer returns
+  a `transient` field nobody read (its comment said a 4xx was a denial);
+  the comments of `EV_DO_REFRESH`, `ac_refresh_failed()` and the app's
+  refresh handler name every outcome, not only "5xx / network". The READMEs
+  say the new rules. 13 of the 14 new tests of each yuno fail on the code
+  before this change (the 14th checks that a refresh that lands starts the
+  count over); gui_agent 399 tests, gui_treedb 132.
+
 ## gui_agent 1.2.9, gui_treedb 1.1.5 + gobj-ui ^7.29.7, gobj-js ^7.29.4 (2026-10-30)
 
 - **Both: a refresh answered with something that is not the BFF's json is

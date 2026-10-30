@@ -931,7 +931,7 @@ function ac_on_id_nak(gobj, event, kw, src)
     /*  A WebSocket NAK after sleep is usually just an expired access token
      *  while the refresh token is still valid (an F5 would restore the
      *  session).  Try a SILENT refresh + reconnect ONCE, keeping the shell
-     *  up; only fall back to the login screen if the refresh itself fails
+     *  up; only fall back to the login screen if the refresh is denied
      *  (login self-resets to ST_LOGOUT then) or a second NAK follows.  */
     if(login && !priv.nak_recovering) {
         priv.nak_recovering = true;
@@ -973,16 +973,20 @@ function ac_restore_failed(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Token refresh could not be MADE (BFF transiently down / 5xx). The
- *  session is NOT over — the login service is backing off and will
- *  retry — so keep the shell, the link and the open views up. Only a
- *  real EV_LOGIN_DENIED tears the session down to the login form.
+ *  {error_code, error, retry_ms} -- a token refresh failed for a reason
+ *  that may pass (no answer, a 5xx, a 429 of the BFF, an answer that is
+ *  not the BFF's json). The session is NOT over — the login service is
+ *  backing off and will retry — so keep the shell, the link and the open
+ *  views up. Only EV_LOGIN_DENIED tears the session down to the login
+ *  form: a denial, an error_code a retry would give again, or too many
+ *  answers that are not the BFF's json.
  ***************************************************************/
 function ac_refresh_failed(gobj, event, kw, src)
 {
     let secs = Math.round(((kw && kw.retry_ms) || 0) / 1000);
-    log_warning(`${gobj_short_name(gobj)}: token refresh failed ` +
-                `(${(kw && kw.error) || "?"}) — retrying in ${secs}s, session kept`);
+    log_warning(`${gobj_short_name(gobj)}: token refresh failed: ` +
+                `${(kw && kw.error_code) || "?"} (${(kw && kw.error) || "?"}) — ` +
+                `retrying in ${secs}s, session kept`);
     return 0;
 }
 

@@ -996,9 +996,10 @@ function ac_session_expired(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  A token refresh could not be MADE (network down, BFF unreachable). The
- *  session is alive — the login service is already retrying with backoff —
- *  so change NOTHING: the shell, the links and the open cards stay. But say
+ *  {error_code, error, retry_ms} -- a token refresh failed for a reason
+ *  that may pass (network down, BFF unreachable or 5xx, a 429 of the BFF,
+ *  an answer that is not the BFF's json). The session is alive — the
+ *  login service is already retrying with backoff — so change NOTHING: the shell, the links and the open cards stay. But say
  *  so, because until it succeeds the links are running on a token that will
  *  expire, and a NAK afterwards must not read as a mystery.
  *
@@ -1011,9 +1012,9 @@ function ac_refresh_failed(gobj, event, kw, src)
     priv.refreshing = false;
 
     let secs = Math.round(((kw && kw.retry_ms) || 0) / 1000);
-    log_warning(`${gobj_short_name(gobj)}: token refresh failed ` +
-                `(${(kw && kw.error) || "?"}) — retrying in ${secs}s, ` +
-                `session kept`);
+    log_warning(`${gobj_short_name(gobj)}: token refresh failed: ` +
+                `${(kw && kw.error_code) || "?"} (${(kw && kw.error) || "?"}) — ` +
+                `retrying in ${secs}s, session kept`);
     return 0;
 }
 
