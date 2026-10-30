@@ -8,6 +8,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.2.8, gui_treedb 1.1.4 + gobj-ui ^7.29.6 (2026-10-30)
+
 - **Both: a login answered with something that is not the BFF's json is
   `auth_bad_response`, translated, and an ERROR in the log.** An empty 200,
   a 200 in HTML, a body cut halfway, a json without `success` or
