@@ -317,13 +317,11 @@ function try_restore_session(gobj)
             gobj_write_attr(gobj, "username", data.username || data.email || "");
             gobj_send_event(gobj, "EV_LOGIN_ACCEPTED", data, gobj);
         } else {
-            gobj_change_state(gobj, "ST_LOGOUT");
-            gobj_publish_event(gobj, "EV_RESTORE_FAILED", {});
+            gobj_send_event(gobj, "EV_RESTORE_FAILED", {}, gobj);
         }
     })
     .catch(() => {
-        gobj_change_state(gobj, "ST_LOGOUT");
-        gobj_publish_event(gobj, "EV_RESTORE_FAILED", {});
+        gobj_send_event(gobj, "EV_RESTORE_FAILED", {}, gobj);
     });
 }
 
@@ -400,6 +398,18 @@ function ac_login_denied(gobj, event, kw, src)
         error_code: kw.error_code || "",
         error:      kw.error || ""
     });
+    return 0;
+}
+
+/***************************************************************
+ *  No session to restore on load (no/expired cookies, or the BFF did
+ *  not answer): the app shows the login form. The fetch callback SENDS
+ *  this instead of changing state and publishing by itself, so the
+ *  transition is the FSM's and the machine trace shows it.
+ ***************************************************************/
+function ac_restore_failed(gobj, event, kw, src)
+{
+    gobj_publish_event(gobj, "EV_RESTORE_FAILED", {});
     return 0;
 }
 
@@ -519,6 +529,7 @@ function create_gclass(gclass_name)
             ["EV_DO_LOGIN",        ac_do_login,        null],
             ["EV_LOGIN_ACCEPTED",  ac_login_accepted,  "ST_LOGIN"],
             ["EV_LOGIN_DENIED",    ac_login_denied,    "ST_LOGOUT"],
+            ["EV_RESTORE_FAILED",  ac_restore_failed,  "ST_LOGOUT"],
             /*
              *  A refresh in flight at logout lands HERE when the user
              *  re-submits the login within its latency (this state is one
