@@ -8,6 +8,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.2.7, gui_treedb 1.1.3 + gobj-ui ^7.29.5, gobj-js ^7.29.3 (2026-10-30)
+
 - **gui_agent: the deadline of a call to the auth BFF covers the body of the
   answer, not only its headers.** It was cleared when the headers came, so
   the `resp.json()` of the restore on load, of `/auth/login` and of
@@ -40,6 +42,10 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   translated, not `http_200`, and a `/auth/token` whose body does not come
   is logged as no answer, not as a BFF without `expose_access_token`. In
   7.29.3 and gui_treedb 1.1.2.
+
+- **Neutral example ids**: `db_history^7301`/`7302`, `gate_a`/`gate_b` with
+  the role label `gate`, `events_a`/`events_b`, `db_events`, ports
+  7601-7603/7501, nodes `node-a`/`node-b`, the ramdisk `/mnt/ramdisk`.
 
 ## gui_agent 1.2.6, gui_treedb 1.1.2 (2026-10-30)
 
