@@ -8,6 +8,11 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.0, gui_treedb 1.1.6 + gobj-ui ^7.29.8 (2026-10-30)
+
+- **Both: the test of the `error_code` catalog reads each code once**, as a
+  code can be listed once per status it is answered with
+  (`token_too_large` is a 500 and a 400). Tests only.
 - **Both: an answer to the refresh that is not the BFF's json ends the
   session at the fifth in a row, with `auth_bad_response` on the login
   form.** The login page of a proxy (a 401 in HTML) or a 200 `{}` never

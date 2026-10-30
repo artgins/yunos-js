@@ -97,7 +97,8 @@ function read_bff_catalog(path)
         return null;
     }
     const text = readFileSync(path, "utf8");
-    return [...text.matchAll(/^ \*  ([a-z][a-z_]*) +(\d{3}) /gm)].map((m) => m[1]);
+    /*  A code can be listed once per status it is answered with.  */
+    return [...new Set([...text.matchAll(/^ \*  ([a-z][a-z_]*) +(\d{3}) /gm)].map((m) => m[1]))];
 }
 
 const BFF_CATALOG = read_bff_catalog(BFF_HEADER);
