@@ -2,8 +2,8 @@
 /***********************************************************************
  *          tabulator_filter_names.test.js
  *
- *      A header filter keeps its name across every build of its columns
- *      (REV-CLOUD V46.3), in a real Tabulator under jsdom:
+ *      A header filter keeps its name across every build of its columns,
+ *      in a real Tabulator under jsdom:
  *
  *        - the Keys picker: built, then given its columns again by a
  *          language change (ac_language_changed);

@@ -1028,22 +1028,22 @@ describe("a scenario that is not the control center's", () => {
     test("the yunos ticked in the tree are watched as cards", () => {
         const mon = new_monitor();
         agent_config_toggle_selected_node(config, "scenarios",
-            {id: stats_sel_id("wattyzer", "1620"), host: "db_history^1620"});
+            {id: stats_sel_id("node1", "1620"), host: "db_history^1620"});
         let m = agent_config_get_monitor(config);
         expect(m.source).toBe("selection");
         expect(mon.priv.scenario.yunos.map((y) => [y.id, y.node, y.label]))
-            .toEqual([["1620", "wattyzer", "db_history^1620"]]);
+            .toEqual([["1620", "node1", "db_history^1620"]]);
         expect(mon.priv.view_mode).toBe("cards");
         expect(gobj_current_state(mon)).toBe("ST_MONITORING");
 
         /*  a tick in another workspace's tree is not ours  */
         agent_config_toggle_selected_node(config, "users",
-            {id: stats_sel_id("wattyzer", "1996"), host: "cc"});
+            {id: stats_sel_id("node1", "1996"), host: "cc"});
         expect(mon.priv.scenario.yunos.length).toBe(1);
 
         /*  none ticked, none watched  */
         agent_config_toggle_selected_node(config, "scenarios",
-            {id: stats_sel_id("wattyzer", "1620"), host: "db_history^1620"});
+            {id: stats_sel_id("node1", "1620"), host: "db_history^1620"});
         expect(mon.priv.scenario).toBe(null);
         expect(errors()).toEqual([]);
     });
@@ -1261,7 +1261,7 @@ describe("the gobj tree of a yuno of the live view", () => {
 
     /*  gobj-ui 7.27.33: an answer says which set it follows, so a read
      *  asked BEFORE a set and answered after it cannot unlock what the
-     *  set locked (REV-CLOUD V40.2).  */
+     *  set locked.  */
     test("the answers read after a set carry its set_id; any other read, null", () => {
         const mon = open_gate();
         const child = mon.priv.ytrees.gate;
@@ -1441,7 +1441,7 @@ describe("the gobj tree of a yuno of the live view", () => {
     /*  gobj-js registers and finds a service by its name LOWERCASED, so
      *  two names that differ only in case are one service too: the keys
      *  `Gate` and `gate` of one node, or of the nodes `Central` and
-     *  `central` (REV-CLOUD V40.3.2).  */
+     *  `central`.  */
     test("two cards whose node and key read alike still get two windows", () => {
         const window_name = (h) => clean_name(h.opts.name);
         for(const [one, two] of [

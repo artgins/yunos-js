@@ -279,8 +279,12 @@ The test's header lists exactly what it CANNOT see; that is checked on the
 deployed page, switching language: what a widget draws for itself (Tabulator's
 header filters and row boxes, Tom Select) and what gobj-ui builds; attrs
 reached through a parameter, a property, an import or a helper with several
-`return`s; a name written by another function; the key of a `t()` in a branch;
-an element whose tag is a parameter, a `let` or a `var`, a destructured
+`return`s, a variable given its attrs by a later `v = {...}`, or a spread or an
+`Object.assign()` argument it cannot read (the whole spec is skipped); a name
+written by another function, or into an element that no `createElement()` of
+the file made (a parameter, a query of the DOM); the key of a `t()` in a
+branch, and a name inside `${}` of an html string that is a branch
+(`title="${on ? "On" : "Off"}"`); an element whose tag is a parameter, a `let` or a `var`, a destructured
 const, a property, an import, a branch, a call, or a `+` with any of those
 in it (`"<" + tag + ">"`, `document.createElement(t)`: the whole element is
 skipped);

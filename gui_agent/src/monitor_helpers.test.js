@@ -399,14 +399,14 @@ describe("a control center that keeps no scenario", () => {
 describe("the yunos ticked in the tree", () => {
     it("make a scenario of cards, each yuno on its node", () => {
         let sc = selection_scenario([
-            {node: "wattyzer", yuno_id: "1620", label: "db_history^1620"},
+            {node: "node3", yuno_id: "1620", label: "db_history^1620"},
             {node: "local", yuno_id: "1620"},
             {node: "local", yuno_id: "1620"}
         ]);
         expect(sc.id).toBe("selection");
         expect(sc.view.mode).toBe("cards");
         expect(sc.yunos.map((y) => [y.key, y.id, y.node, y.label])).toEqual([
-            ["wattyzer.1620", "1620", "wattyzer", "db_history^1620"],
+            ["node3.1620", "1620", "node3", "db_history^1620"],
             ["local.1620", "1620", "local", "1620"]
         ]);
     });
@@ -478,7 +478,7 @@ describe("where the yunos are", () => {
 
 
 describe("links from the configs", () => {
-    /*  The shapes of the real view-config of yunovatios' stress yunos.  */
+    /*  The shapes of the real view-config of the yunos of a stress test.  */
     const gate = {
         environment: {daemon_log_handlers: {to_udp: {url: "udp://127.0.0.1:1992"}}},
         global: {
@@ -673,9 +673,9 @@ describe("queue_service", () => {
 describe("switch", () => {
     const base = () => ({
         id: "sw",
-        node: "hidrauliaconnect",
+        node: "node2",
         yunos: [
-            {key: "pp12", id: "pp12", service: "sim_controllers", rate: "tx", node: "artgins",
+            {key: "pp12", id: "pp12", service: "sim_controllers", rate: "tx", node: "node1",
              switch: {
                  on: [{command: "set-controllers controllers=125"}, {command: "resume-generation"}],
                  off: [{command: "pause-generation"}, {command: "set-controllers controllers=0"}]
@@ -684,7 +684,7 @@ describe("switch", () => {
         ],
         links: [["pp12", "g"]],
         actions: {start: [{yuno: "g", command: "play-yuno"}], stop: [{yuno: "g", command: "pause-yuno"}]},
-        view: {mode: "graph", node_labels: {artgins: "art", hidrauliaconnect: "hid"}}
+        view: {mode: "graph", node_labels: {node1: "n1", node2: "n2"}}
     });
 
     it("a switch's steps go to its own yuno when they name none", () => {
@@ -709,14 +709,14 @@ describe("switch", () => {
 
     it("node labels name the nodes, and survive the document", () => {
         let r = validate_scenario(base());
-        expect(node_label(r.scenario, "artgins")).toBe("art");
-        expect(node_label(r.scenario, "wattyzer")).toBe("wattyzer");
+        expect(node_label(r.scenario, "node1")).toBe("n1");
+        expect(node_label(r.scenario, "node3")).toBe("node3");
         let doc = scenario_document(r.scenario);
-        expect(doc.view.node_labels).toEqual({artgins: "art", hidrauliaconnect: "hid"});
+        expect(doc.view.node_labels).toEqual({node1: "n1", node2: "n2"});
         expect(doc.yunos[0].switch.off.length).toBe(2);
         expect(validate_scenario(doc).ok).toBe(true);
         let raw = base();
-        raw.view.node_labels = {artgins: "a-name-far-too-long"};
+        raw.view.node_labels = {node1: "a-name-far-too-long"};
         expect(validate_scenario(raw).error.key).toBe("scenario bad node labels");
     });
 
@@ -731,11 +731,11 @@ describe("switch", () => {
 
     it("a series is named by label, id when the label lacks it, and short node", () => {
         let r = validate_scenario(base());
-        expect(series_label(r.scenario, r.scenario.yunos[0])).toBe("pp12 (art)");
-        expect(series_label(r.scenario, {label: "sim_controllers", id: "pp1", node: "wattyzer"}))
-            .toBe("sim_controllers pp1 (wattyzer)");
-        expect(series_label(r.scenario, {label: "gate_central 2120", id: "2120", node: "hidrauliaconnect"}))
-            .toBe("gate_central 2120 (hid)");
+        expect(series_label(r.scenario, r.scenario.yunos[0])).toBe("pp12 (n1)");
+        expect(series_label(r.scenario, {label: "sim_controllers", id: "pp1", node: "node3"}))
+            .toBe("sim_controllers pp1 (node3)");
+        expect(series_label(r.scenario, {label: "gate_central 2120", id: "2120", node: "node2"}))
+            .toBe("gate_central 2120 (n2)");
     });
 
     it("a switch is on while its yuno moves messages", () => {

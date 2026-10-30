@@ -6,7 +6,7 @@
  *      name of the command that failed (`${command} failed`):
  *      validate-locales reads neither, and asks for those keys only
  *      because the view publishes them (C_TRANGER_VIEW_ERROR_I18N_KEYS).
- *      This test ties the list to the source (REV-CLOUD V23.5.3): a key
+ *      This test ties the list to the source: a key
  *      handed to show_error(), or a command whose failure reaches the
  *      generic error path, that the list lacks -- or a key the list holds
  *      that nothing hands -- fails here.
@@ -14,8 +14,8 @@
  *      The source is read, never run, with the reader validate-locales
  *      reads it with -- the one of the gobj-ui this app builds with --, so
  *      a command or a key named by a const, an import of one, or a call of
- *      a function that returns it is read as its value (REV-CLOUD V24.5:
- *      up to here only a literal was, and a command sent through a const
+ *      a function that returns it is read as its value (up
+ *      to then only a literal was, and a command sent through a const
  *      escaped). A command or a key the reader cannot follow fails, with
  *      its line, unless it is one of the few that are data on purpose.
  *
@@ -115,7 +115,7 @@ function keys_handed()
     return handed("show_error", 1, SHOW_ERROR_DATA);
 }
 
-describe("REV-CLOUD V23.5.3: what the error banner of C_TRANGER_VIEW says", () => {
+describe("what the error banner of C_TRANGER_VIEW says", () => {
     test("the commands answered before the generic error path still are, and the fallback is built there", () => {
         for(let c of ANSWERED_BEFORE) {
             expect(SOURCE, c).toContain(`if(command === "${c}"`);

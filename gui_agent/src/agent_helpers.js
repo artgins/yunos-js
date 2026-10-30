@@ -356,8 +356,8 @@ function cmd2agent_service(yuno_id, service, command)
  *      the config VARIABLE `__ssl_certificate__`; the rest say it where
  *      it is actually used -- a plain `ssl_certificate` inside the
  *      `crypto` of the gate -- and reading only the first form is how a
- *      backend whose cert says `hidrauliaconnect.es` got proposed as
- *      `demo.hidrauliaconnect.es`, its realm id, which resolves nowhere.
+ *      backend whose cert says `app.example.es` got proposed as
+ *      `demo.app.example.es`, its realm id, which resolves nowhere.
  *
  *      A yuno holds several gates (an mqtt one, a raw one) and they may
  *      carry different certificates, so the gate whose url wears the TOP

@@ -3,7 +3,7 @@
  *
  *      Three helpers of the app hand a key to t() through a parameter, so
  *      validate-locales reads their keys from the list each module
- *      publishes, never from the calls (REV-CLOUD V46.3):
+ *      publishes, never from the calls:
  *
  *          segment()       c_account_view.js   PREF_SEGMENT_I18N_KEYS
  *                          (the `name` of each option)

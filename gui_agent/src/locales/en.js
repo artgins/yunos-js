@@ -914,7 +914,7 @@ const en = {
         "role in use": "A role with users or child roles cannot be deleted: take it from them first",
         "role realm required": "The realm is required",
         "role scope": "Scope",
-        "role scope placeholder": "scenario_id=renfe-20k-hidraulia (empty: everything)",
+        "role scope placeholder": "scenario_id=load-20k (empty: everything)",
         "role scope help": "Limits the permissions to these values, e.g. scenario_id=a,b. Empty: no limit.",
         "role realm help": "The realm of the yuno, or * for any.",
         "role service help": "The service whose permissions the role grants.",

@@ -5,7 +5,7 @@
  *      a value validate-locales cannot follow (a parameter, a property of
  *      data, a `let` given anything but literals) is read by NOBODY at
  *      build time: if it is in no locale, i18next answers it with the key
- *      itself, and it renders raw, in every language (REV-CLOUD V47.2).
+ *      itself, and it renders raw, in every language.
  *      i18n_keys_seen.test.js cannot see it either: it starts from the
  *      keys the locales HAVE.
  *

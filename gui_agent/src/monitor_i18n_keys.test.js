@@ -7,13 +7,13 @@
  *      them only because the monitor publishes them, and checks a marker
  *      over such a template only against the SHAPE of the keys of its
  *      lists. What ties each list to the values the monitor can build it
- *      from is this test (REV-CLOUD V23.5.3): a key dropped from a list, or
+ *      from is this test: a key dropped from a list, or
  *      a control, a state or a source added without its key, fails here.
  *
  *      The states are read from the SOURCE with the reader validate-locales
  *      reads it with -- the one of the gobj-ui this app builds with --, so a
  *      state named by a const, an import of one, or a call of a function
- *      that returns it is read as its value (REV-CLOUD V24.5: up to here
+ *      that returns it is read as its value (up to here
  *      only a literal was, and a state written through a const escaped).
  *      A state the reader cannot follow fails, with its line.
  *
@@ -153,7 +153,7 @@ function every_run_state()
     return {strings: [...out.strings].sort(), unread: out.unread};
 }
 
-describe("REV-CLOUD V23.5.3: the keys the monitor builds from data", () => {
+describe("the keys the monitor builds from data", () => {
     test("the controls are read from the code that offers them", () => {
         expect(every_control().length).toBeGreaterThan(SCENARIO_ACTIONS.length - 1);
         expect(every_control()).toContain("restart");

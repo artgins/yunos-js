@@ -92,14 +92,14 @@ describe("user_rows", () => {
                 __md_treedb__: {immutable: true}
             },
             {
-                id: "claudia@artgins.com", roles: ["roles^controlcenter^users"],
+                id: "operator@example.com", roles: ["roles^controlcenter^users"],
                 disabled: true, time: 1790000000, __sessions: {s1: {}}
             }
         ];
         expect(user_rows(data)).toEqual([
             {id: "yuneta", roles: ["root"], disabled: false, time: 1789920406,
              sessions: 0, immutable: true},
-            {id: "claudia@artgins.com", roles: ["controlcenter"], disabled: true,
+            {id: "operator@example.com", roles: ["controlcenter"], disabled: true,
              time: 1790000000, sessions: 1, immutable: false}
         ]);
     });
@@ -239,14 +239,14 @@ describe("roles_change", () => {
 describe("refs of a role link", () => {
     it("names the role as parent through its users hook", () => {
         expect(role_parent_ref("root")).toBe("roles^root^users");
-        expect(user_child_ref("claudia@artgins.com")).toBe("users^claudia@artgins.com");
+        expect(user_child_ref("operator@example.com")).toBe("users^operator@example.com");
     });
 });
 
 
 describe("username_problem", () => {
     it("accepts an e-mail address", () => {
-        expect(username_problem("claudia@artgins.com")).toBe("");
+        expect(username_problem("operator@example.com")).toBe("");
         expect(username_problem("  yuneta  ")).toBe("");
     });
 

@@ -5,7 +5,7 @@
  *      C_AGENT_YUNO_TREE -> open_gobj_tree_view() -> C_YUI_WINDOW +
  *      C_YUI_GOBJ_TREE_JS. c_scenarios.wiring.test.js replaces
  *      open_gobj_tree_view() with a double, and that is how a window
- *      name gobj-ui could not handle shipped (REV-CLOUD V40.3.1): the
+ *      name gobj-ui could not handle shipped: the
  *      name `<node>~<key>` made the tree's canvas lookup answer null
  *      (`~` is a CSS combinator) or throw (`%5E`, a `^` encoded), so the
  *      canvas never resized and a `^` left an orphan window behind.

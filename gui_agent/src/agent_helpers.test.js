@@ -365,16 +365,16 @@ describe("cmd2agent_service", () => {
 
 
 describe("the certificate a scanned yuno serves", () => {
-    /*  The shape hidraulia's db_history really has: no `__ssl_certificate__`
+    /*  The shape a real db_history has: no `__ssl_certificate__`
      *  variable anywhere, the certificate written where it is used.  */
-    const hidraulia = {
+    const real = {
         global: {"__top_side__.__json_config_variables__": {__top_url__: "wss://0.0.0.0:1600"}},
         services: [{
             gclass: "C_IOGATE",
             children: [{
                 name: "secure_top_server",
                 kw: {
-                    crypto: {ssl_certificate: "/yuneta/store/certs/hidrauliaconnect.es.crt"},
+                    crypto: {ssl_certificate: "/yuneta/store/certs/app.example.es.crt"},
                     url: "wss://0.0.0.0:1600"
                 }
             }]
@@ -382,7 +382,7 @@ describe("the certificate a scanned yuno serves", () => {
     };
 
     test("is found where it is USED, not only as a config variable", () => {
-        expect(cert_host_of_config(hidraulia, "1600")).toBe("hidrauliaconnect.es");
+        expect(cert_host_of_config(real, "1600")).toBe("app.example.es");
     });
 
     test("the gate wearing the TOP port wins over the other gates", () => {
@@ -472,8 +472,8 @@ describe("agent_endpoint_of_cert", () => {
     });
 
     test("an RFC 2253 subject names it too", () => {
-        expect(agent_endpoint_of_cert({subject: "C=ES, CN=agent.central.yunovatios.es", url: "wss://0.0.0.0:1993"}))
-            .toEqual({port: "1993", host: "agent.central.yunovatios.es"});
+        expect(agent_endpoint_of_cert({subject: "C=ES, CN=agent.central.example.es", url: "wss://0.0.0.0:1993"}))
+            .toEqual({port: "1993", host: "agent.central.example.es"});
     });
 
     test("a certificate that names no domain gives no host", () => {

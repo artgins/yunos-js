@@ -56,8 +56,8 @@
  *      7.28.6) -- one generator turned on or off by hand while the others
  *      keep going. On only while the scenario runs; a switch run changes
  *      neither its state nor its max_run. `view.node_labels` gives each
- *      node the short name the view shows it by (`{"hidrauliaconnect":
- *      "hid"}`: cards, status line, chart series, confirmations), the full
+ *      node the short name the view shows it by (`{"node-b":
+ *      "b"}`: cards, status line, chart series, confirmations), the full
  *      name in the title.
  *
  *      ACTIONS are `start`, `pause`, `resume`, `stop` and `report`, each a
@@ -1147,7 +1147,7 @@ function layout_graph(ids, links, opts)
 /***************************************************************
  *  Messages per second in one direction ("rx"/"tx") from a stats
  *  answer. The yuno's own `<dir>Msgsec` is preferred: an application
- *  service (yunovatios' gates, the control center since SDK 7.25.21)
+ *  service (an application's gates, the control center since SDK 7.25.21)
  *  computes it on its own timer, whoever reads. Not every one does: the
  *  `<dir>Msgsec` of a C_IOGATE or C_CHANNEL below a service is computed by
  *  the reading itself (SDK TODO), and two readers disturb it. Without it the

@@ -217,7 +217,7 @@ const SERVICES = [
 const USERS = [
     {id: "yuneta", roles: [{id: "root", topic_name: "roles", hook_name: "users"}],
      disabled: false, time: 1789920406, __sessions: {}, __md_treedb__: {immutable: true}},
-    {id: "claudia@artgins.com", roles: ["roles^root^users"], disabled: false,
+    {id: "operator@example.com", roles: ["roles^root^users"], disabled: false,
      time: 1790000000, __sessions: {a: {}}}
 ];
 const ROLES = [
@@ -277,7 +277,7 @@ describe("reading a users store", () => {
         expect(gobj_current_state(v)).toBe("ST_READY");
         expect(v.priv.authzs.controlcenter.map((a) => a.id))
             .toEqual(["command-agent", "read-scenarios", "run-scenarios"]);
-        expect(v.priv.users.map((u) => u.id)).toEqual(["yuneta", "claudia@artgins.com"]);
+        expect(v.priv.users.map((u) => u.id)).toEqual(["yuneta", "operator@example.com"]);
         expect(v.priv.users[0].immutable).toBe(true);
         expect(v.priv.roles.map((r) => r.id)).toEqual(["controlcenter", "root"]);
         expect(v.priv.master).toBe(true);
@@ -402,7 +402,7 @@ describe("writing users", () => {
 
     test("roles: what was taken is unlinked and what was given is linked", () => {
         const v = ready_view();
-        gobj_send_event(v, "EV_SET_ROLES", {username: "claudia@artgins.com", roles: ["controlcenter"]}, v);
+        gobj_send_event(v, "EV_SET_ROLES", {username: "operator@example.com", roles: ["controlcenter"]}, v);
         expect(sent.map((r) => [inner(r), r.kw.parent_ref])).toEqual([
             ["unlink-nodes", "roles^root^users"],
             ["link-nodes", "roles^controlcenter^users"]
@@ -411,29 +411,29 @@ describe("writing users", () => {
 
     test("disable: asked first, then disable-user", async () => {
         const v = ready_view();
-        gobj_send_event(v, "EV_DISABLE_USER", {username: "claudia@artgins.com"}, v);
+        gobj_send_event(v, "EV_DISABLE_USER", {username: "operator@example.com"}, v);
         expect(sent).toEqual([]);
         expect(confirm.asked.map((a) => a.kind)).toEqual(["yesno"]);
         await Promise.resolve();
         await Promise.resolve();
         expect(sent.map(inner)).toEqual(["disable-user"]);
-        expect(sent[0].kw.username).toBe("claudia@artgins.com");
+        expect(sent[0].kw.username).toBe("operator@example.com");
     });
 
     test("delete: asked in red, and forced when the user holds roles", async () => {
         const v = ready_view();
-        gobj_send_event(v, "EV_DELETE_USER", {username: "claudia@artgins.com"}, v);
+        gobj_send_event(v, "EV_DELETE_USER", {username: "operator@example.com"}, v);
         expect(confirm.asked.map((a) => a.kind)).toEqual(["danger"]);
         await Promise.resolve();
         await Promise.resolve();
         expect(sent.map(inner)).toEqual(["delete-user"]);
-        expect(sent[0].kw).toMatchObject({username: "claudia@artgins.com", force: true});
+        expect(sent[0].kw).toMatchObject({username: "operator@example.com", force: true});
     });
 
     test("delete: a cancelled dialog sends nothing", async () => {
         const v = ready_view();
         confirm.answer = false;
-        gobj_send_event(v, "EV_DELETE_USER", {username: "claudia@artgins.com"}, v);
+        gobj_send_event(v, "EV_DELETE_USER", {username: "operator@example.com"}, v);
         await Promise.resolve();
         await Promise.resolve();
         expect(sent).toEqual([]);
@@ -441,9 +441,9 @@ describe("writing users", () => {
 
     test("a write asked for while another is in flight is not sent, and says so", () => {
         const v = ready_view();
-        gobj_send_event(v, "EV_ENABLE_USER", {username: "claudia@artgins.com"}, v);
+        gobj_send_event(v, "EV_ENABLE_USER", {username: "operator@example.com"}, v);
         expect(sent.length).toBe(1);
-        gobj_send_event(v, "EV_DELETE_CONFIRMED", {username: "claudia@artgins.com", force: true}, v);
+        gobj_send_event(v, "EV_DELETE_CONFIRMED", {username: "operator@example.com", force: true}, v);
         expect(sent.length).toBe(1);
         expect(v.priv.message).toEqual({kind: "error", key: "users write not sent"});
         expect(errors()).toEqual([]);
@@ -451,7 +451,7 @@ describe("writing users", () => {
 
     test("the session dropping ends the write and says it was not answered", () => {
         const v = ready_view();
-        gobj_send_event(v, "EV_ENABLE_USER", {username: "claudia@artgins.com"}, v);
+        gobj_send_event(v, "EV_ENABLE_USER", {username: "operator@example.com"}, v);
         gobj_change_state(iev, "ST_DISCONNECTED");
         gobj_send_event(v, "EV_ON_CLOSE", {}, link);
         expect(gobj_current_state(v)).toBe("ST_IDLE");
@@ -461,9 +461,9 @@ describe("writing users", () => {
 
     test("a row opens its sheet, read-only while the store is being read", () => {
         const v = ready_view();
-        gobj_send_event(v, "EV_OPEN_USER", {username: "claudia@artgins.com"}, v);
+        gobj_send_event(v, "EV_OPEN_USER", {username: "operator@example.com"}, v);
         expect(modals.length).toBe(1);
-        expect(modals[0].opts.title_prefix).toBe("claudia@artgins.com");
+        expect(modals[0].opts.title_prefix).toBe("operator@example.com");
         gobj_send_event(v, "EV_REFRESH", {}, v);
         expect(modals[0].closed).toBe(false);   /*  a refresh does not close it  */
         gobj_send_event(v, "EV_OPEN_USER", {username: "yuneta"}, v);
@@ -555,7 +555,7 @@ describe("the roles of the store", () => {
             expect($rows[0].querySelector(".USERS_ROLE_ENTRY_OWN").checked).toBe(true);
             expect($rows[1].querySelector(".USERS_ROLE_ENTRY_OWN").checked).toBe(false);
             /*  The box and the text beside it do two things, so they have
-             *  two names (REV-CLOUD V45.2: both were "own scope").  */
+             *  two names (both were "own scope").  */
             const $own = $rows[0].querySelector(".USERS_ROLE_ENTRY_OWN");
             const $scope = $rows[0].querySelector(".USERS_ROLE_ENTRY_SCOPE");
             expect($own.getAttribute("data-i18n-aria-label")).toBe("give own scope");
@@ -564,7 +564,7 @@ describe("the roles of the store", () => {
             expect($scope.getAttribute("data-i18n-title")).toBe("own scope of the permission");
             /*  WCAG label-in-name: a control wrapped in a <label> is named
              *  with a text that holds the one a sighted user reads beside
-             *  it, in every language (REV-CLOUD V46.3: in Spanish "Ámbito
+             *  it, in every language (in Spanish "Ámbito
              *  propio" was named "Dar a este permiso su propio ámbito...",
              *  and "Rol deshabilitado" was named "Deshabilitado").  */
             let pairs = 0;

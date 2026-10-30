@@ -241,7 +241,7 @@ function mt_destroy(gobj)
  *
  *  gobj-js registers and finds a service by its name LOWERCASED, so
  *  the keys `Gate` and `gate`, or the nodes `Central` and `central`,
- *  were one window (REV-CLOUD V40.3.2). An uppercase letter is
+ *  were one window. An uppercase letter is
  *  written `!` + the letter in lowercase (`Gate` -> `!gate`), and a
  *  `!` of the part itself is percent-encoded (`%21`): `!` starts no
  *  other token, so two parts that differ only in case still differ

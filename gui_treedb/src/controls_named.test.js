@@ -943,7 +943,7 @@ describe("every control is named, in a language that can change", () => {
 });
 
 /*
- *  The scan itself, on the shapes REV-CLOUD V46.3 got past it: each one
+ *  The scan itself, on the shapes a review got past it: each one
  *  must be found.
  */
 describe("the scan finds what it says it finds", () => {
@@ -999,7 +999,7 @@ describe("the scan finds what it says it finds", () => {
     });
 
     /*
-     *  REV-CLOUD V47.2: the shapes the scan of 1.1.9 / 1.0.7 got past
+     *  The shapes the scan of 1.1.9 / 1.0.7 got past
      */
     test("a name written as a template with no ${}, a branch or a const", () => {
         expect(faults('let a = ["button", {title: `Refresh`, "aria-label": t("k"), ' +
@@ -1053,7 +1053,7 @@ describe("the scan finds what it says it finds", () => {
     });
 
     /*
-     *  REV-CLOUD V48.2: a tag held in a const passed unnamed
+     *  A tag held in a const passed unnamed
      */
     test("a tag held in a const: in a spec, in html, in createElement()", () => {
         expect(faults('const TAG = "button";\nlet a = [TAG, {class: "x", type: "button"}];'))
@@ -1077,7 +1077,7 @@ describe("the scan finds what it says it finds", () => {
     });
 
     /*
-     *  REV-CLOUD V49.2: an upper-case tag, a tag of pieces, a const shadowed
+     *  An upper-case tag, a tag of pieces, a const shadowed
      *  in a block
      */
     test("an upper-case tag in a spec, as the DOM reads it", () => {

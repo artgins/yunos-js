@@ -188,16 +188,16 @@ A scenario, as the control center keeps it and as the editor writes it:
 
 ```json
 {
-    "id": "yunovatios-stress",
+    "id": "stress-demo",
     "description": "sim_controllers -> gate_central -> db_tracks_ce, both nodes",
-    "node": "yunovatios-controlador",
+    "node": "node-a",
     "yunos": [
         {"key": "sim",       "id": "stress", "service": "sim_controllers", "rate": "tx"},
         {"key": "gate_co",   "id": "2120",   "label": "gate_central",
          "queue_service": "__output_side__"},
         {"key": "tracks_co", "id": "5120",   "label": "db_tracks_ce"},
-        {"key": "gate_ce",   "id": "2120",   "label": "gate_central", "node": "yunovatios-central"},
-        {"key": "tracks_ce", "id": "5120",   "label": "db_tracks_ce", "node": "yunovatios-central"}
+        {"key": "gate_ce",   "id": "2120",   "label": "gate_central", "node": "node-b"},
+        {"key": "tracks_ce", "id": "5120",   "label": "db_tracks_ce", "node": "node-b"}
     ],
     "links": [["sim", "gate_co"], ["gate_co", "tracks_co"], ["gate_ce", "tracks_ce"]],
     "actions": {
@@ -256,8 +256,8 @@ on -- but disabled, its title saying why (1.1.7; it was enabled, and a click
 sent a `run-scenario` the control center refused).
 `view.node_labels` gives a node the short name the view shows it by (cards,
 status line, memory tags, chart series, confirmations; 1.1.4), with its full
-name in the title: `"view": {"mode": "graph", "node_labels": {"hidrauliaconnect":
-"hid", "wattyzer": "wat", "artgins": "art"}}` (16 characters at most).
+name in the title: `"view": {"mode": "graph", "node_labels": {"node-a":
+"a", "node-b": "b", "node-c": "c"}}` (16 characters at most).
 
 `links`
 gives the columns of the graph; each group of yunos that exchange messages is
@@ -278,7 +278,7 @@ renewed whenever the login rotates the cookies, and once after an identity
 NAK (an expired token); a second NAK in a row is a refusal of the user by
 that agent, and the view says that too. Two conditions on the agent: the user
 has to be in its authz, and its port 1993 must serve a certificate the
-BROWSER trusts — `agent.yunovatios.es` does; an agent still serving the
+BROWSER trusts — `agent.example.com` with a public CA does; an agent still serving the
 self-signed `yuneta_agent.yuneta.io` cannot be reached from a browser.
 
 **Each reading** is a `list-yunos` plus, per yuno, two `stats-yuno`: one with
@@ -288,7 +288,7 @@ INSIDE the command line (`stats-yuno service=__yuno__`), never in the kw:
 `C_IEVENT_CLI` reads `kw.service` as the service the command is ADDRESSED to,
 and the request would land on the agent's own `__yuno__`. A yuno's own
 `rxMsgsec`/`txMsgsec` is used when its service reports one (an application
-service such as yunovatios' gates or the control center of SDK 7.25.21
+service such as an application's gates or the control center of SDK 7.25.21
 computes it on its own timer, whoever reads; a `C_IOGATE`/`C_CHANNEL` below
 a service still computes its own on the reading, so two readers disturb it);
 otherwise the rate is
@@ -504,8 +504,8 @@ copy makes one `view-config` per yuno and reads:
   one whose url wears the top port wins, and a wildcard certificate names no
   host. Only then the realm id from the same config, which is the public FQDN
   for realms that publish and is not for the rest: reading the variable alone
-  proposed `demo.hidrauliaconnect.es` — a realm id that resolves nowhere — for
-  a backend whose certificate says `hidrauliaconnect.es`. Nothing here is
+  proposed `demo.app.example.es` — a realm id that resolves nowhere — for
+  a backend whose certificate says `app.example.es`. Nothing here is
   guaranteed, so the url stays a **proposal**: connections arrive
   **disconnected** in gui_treedb and the operator fixes the odd one in the
   table.
@@ -968,7 +968,7 @@ The same tab has a second view, **Roles** (`<tab>/roles`, a route: a link, and
 what a reload keeps; the *Users* / *Roles* buttons move it). A table of the
 roles of the store: what each GRANTS -- its `permission`, and each entry of its
 `permissions`, a red *Deny* tag on a denied one -- and **for what**, its scope
-(`only scenario_id=renfe-20k-hidraulia`); who holds it; its service; enabled or
+(`only scenario_id=load-20k`); who holds it; its service; enabled or
 not, protected (a seed role). A click opens its **sheet**:
 
 - id (fixed once created), description, **service** and **realm**;
@@ -997,7 +997,7 @@ not, protected (a seed role). A click opens its **sheet**:
 | delete | `delete-node topic_name=roles record={id}` |
 
 So letting a user run a scenario it can only watch is a role, not a code
-change: with `renfe-20k-viewer` (read) and `renfe-20k-operator` (read and run)
+change: with `load-20k-viewer` (read) and `load-20k-operator` (read and run)
 in the store, the user's sheet gives or takes the second with one checkbox.
 `scripts/qa.mjs --check roles` reads the view; `--check roleswrite` creates,
 edits and deletes a `qa-tmp-*` role and leaves the store as it found it.
@@ -1123,8 +1123,12 @@ The test's header lists exactly what it CANNOT see; that is checked on the
 deployed page, switching language: what a widget draws for itself (Tabulator's
 header filters and row boxes, Tom Select) and what gobj-ui builds; attrs
 reached through a parameter, a property, an import or a helper with several
-`return`s; a name written by another function; the key of a `t()` in a branch;
-an element whose tag is a parameter, a `let` or a `var`, a destructured
+`return`s, a variable given its attrs by a later `v = {...}`, or a spread or an
+`Object.assign()` argument it cannot read (the whole spec is skipped); a name
+written by another function, or into an element that no `createElement()` of
+the file made (a parameter, a query of the DOM); the key of a `t()` in a
+branch, and a name inside `${}` of an html string that is a branch
+(`title="${on ? "On" : "Off"}"`); an element whose tag is a parameter, a `let` or a `var`, a destructured
 const, a property, an import, a branch, a call, or a `+` with any of those
 in it (`"<" + tag + ">"`, `document.createElement(t)`: the whole element is
 skipped);
@@ -1200,7 +1204,7 @@ summary.
 
 ### 0.8.1
 
-- **A yuno tab names its NODE too** — `yuneta_agent · wattyzer`. Every node runs
+- **A yuno tab names its NODE too** — `yuneta_agent · node-a`. Every node runs
   a `yuneta_agent`, so two tabs of two nodes read the same and there was no way
   to tell which one you were typing into. The yuno stays first: it is what was
   picked and what the eye scans for, and a tab strip truncates at the end.

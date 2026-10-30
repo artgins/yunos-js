@@ -1203,7 +1203,7 @@ async function main() {
 
         /*  A message of concern fails the run: a page that loads and
          *  logs an ERROR is not a clean deploy, and printing the count
-         *  without failing let one through (REV-CLOUD V41.1).  */
+         *  without failing let one through.  */
         step("console has nothing of concern", problems.length === 0,
             problems.length ? `${problems.length}, the first: ${problems[0]}` : "");
         failed ||= problems.length > 0;

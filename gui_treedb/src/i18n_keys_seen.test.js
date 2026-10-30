@@ -4,7 +4,7 @@
  *      A key of the locales that validate-locales cannot see in the source
  *      is a key it cannot defend: deleted from a locale, the build still
  *      says OK, and the text renders as its raw key in every language
- *      (REV-CLOUD V46.3: `english`/`spanish`, the history's sort buttons and
+ *      (`english`/`spanish`, the history's sort buttons and
  *      the own scope of a role's permission reached t() through a
  *      parameter of a helper of the app, unmarked).
  *

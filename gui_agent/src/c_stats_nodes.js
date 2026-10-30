@@ -1308,11 +1308,11 @@ function ac_render_tree(gobj, event, kw, src)
  *       USED (`crypto.ssl_certificate` of the gate) — the same evidence
  *       written the other way, and the form the yunos that carry no such
  *       config variable use. Reading only form 1 is how a backend whose
- *       certificate says `hidrauliaconnect.es` was proposed as
- *       `demo.hidrauliaconnect.es`: its realm id, which resolves nowhere.
+ *       certificate says `app.example.es` was proposed as
+ *       `demo.app.example.es`: its realm id, which resolves nowhere.
  *    3. the realm id from this same config (`environment.realm_id`),
  *       which is the public FQDN for realms that publish
- *       (`app.wattyzer.com`) and is not for the ones that do not
+ *       (`app.example.com`) and is not for the ones that do not
  *       (`artgins.utilities.all`).
  *    4. nothing — and the operator fills it in.
  ***************************************************************/
@@ -1369,7 +1369,7 @@ function endpoint_of_config(config)
  *  (it comes from the yuno's own config) but the public host is not. A
  *  yuno binds 0.0.0.0 and its realm binds 127.0.0.1, so the only name
  *  anywhere near a public one is the realm's id — which IS the public
- *  FQDN for the realms that publish (`app.wattyzer.com`) and is not for
+ *  FQDN for the realms that publish (`app.example.com`) and is not for
  *  the ones that do not (`artgins.utilities.all`). The operator sees the
  *  url in the table and fixes it there; the connection arrives disabled
  *  either way, so a wrong guess opens no socket.
@@ -1441,7 +1441,7 @@ function conn_of_scanned(row, endpoint, services)
 
 /***************************************************************
  *  How much a node's name says about a url's host: the words they
- *  share (`yunovatios-central` and `central.yunovatios.es` share
+ *  share (`app-central` and `central.app.example` share
  *  two, `gines-nitroan51753` none).
  *
  *  It settles which row a url belongs to when two rows give the

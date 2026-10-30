@@ -145,7 +145,7 @@
  *      would reach the wrong yuno, and a trace set there is saved.
  *
  *      RATES. A yuno's own `rxMsgsec`/`txMsgsec` is used when its service
- *      reports one (an application service -- yunovatios' gates, the
+ *      reports one (an application service -- its gates, the
  *      control center -- computes it on its own timer; one that comes from
  *      a C_IOGATE/C_CHANNEL below is computed by the reading, see
  *      monitor_helpers.js); otherwise the rate comes from the `rxMsgs`/`txMsgs`

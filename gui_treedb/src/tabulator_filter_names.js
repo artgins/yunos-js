@@ -11,7 +11,7 @@
  *
  *      So a table with header filters names them after EVERY build of its
  *      columns, not once (yunetas CLAUDE.md: what a widget draws "is named
- *      after the render, and again on every rebuild"; REV-CLOUD V46.3).
+ *      after the render, and again on every rebuild").
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
