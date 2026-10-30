@@ -27,8 +27,11 @@
  *      of the control center it runs against. They come from the
  *      environment or from `~/.yuneta/.qa-creds`, as KEY=value lines:
  *      QA_PW, QA_SCHEMA_NODE, QA_SCHEMA_YUNO, QA_SCHEMA_TREEDB,
- *      QA_HELD_SCENARIO, QA_ROLES_ROLE (and QA_ROLES_NODE, QA_ROLES_YUNO,
- *      which have defaults). A check whose id is not set fails, naming it.
+ *      QA_HELD_SCENARIO, QA_ROLES_ROLE, QA_QUEUE_GATES (the gates of the
+ *      held scenario, comma separated), QA_SWITCH_COUNT (its generators),
+ *      QA_NODE_CODES (the 3-letter codes of its nodes, comma separated),
+ *      and QA_ROLES_NODE, QA_ROLES_YUNO, which have defaults. A check
+ *      whose id is not set fails before it opens anything, naming it.
  *
  *      Usage:
  *
@@ -180,6 +183,17 @@ function qa_setting(name, default_value) {
         return v;
     }
     return `<${name} not set: set it in the environment or in ~/.yuneta/.qa-creds>`;
+}
+
+function qa_setting_is_set(name) {
+    return !!(process.env[name] || read_creds_file()[name]);
+}
+
+/*
+ *  A list setting ("a,b,c"), its items trimmed, empty ones dropped.
+ */
+function qa_setting_list(name) {
+    return qa_setting(name).split(",").map((x) => x.trim()).filter((x) => x);
 }
 
 function get_credentials() {
@@ -692,7 +706,7 @@ async function check_permlive(page, args, step, out_dir)
  *  (__output_side__), so their cards show a queue with a number and the
  *  "messages in queue" chart is there. Read only.
  */
-const QUEUE_GATES = (process.env.QA_QUEUE_GATES || "2120,2130,2140").split(",");
+const QUEUE_GATES = qa_setting_list("QA_QUEUE_GATES");
 
 async function check_queues(page, args, step, out_dir)
 {
@@ -794,8 +808,16 @@ async function check_focus(page, args, step, out_dir)
  *  inside its card; the cards name their node by its 3 letters (the
  *  first three of its name) with the full name in the title. Read only: the scenario is not
  *  run, so with it stopped every switch is off and disabled, its title
- *  saying why.
+ *  saying why. How many generators (QA_SWITCH_COUNT) and which node
+ *  codes (QA_NODE_CODES) are the scenario's, so they come from outside.
  */
+const SWITCH_COUNT = parseInt(qa_setting("QA_SWITCH_COUNT"), 10);
+const NODE_CODES = qa_setting_list("QA_NODE_CODES");
+
+function escape_regexp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function check_switches(page, args, step, out_dir)
 {
     await page.evaluate((id) => {
@@ -837,9 +859,12 @@ async function check_switches(page, args, step, out_dir)
         return out;
     });
     await page.screenshot({path: join(out_dir, "check_switches.png"), fullPage: true});
+    const codes = NODE_CODES.map(escape_regexp).join("|");
+    const node_re = new RegExp(`^(${codes})$`);
+    const series_re = new RegExp(`\\((${codes})\\)$`);
     let bad = [];
-    if(r.switches.length !== 14) {
-        bad.push(`${r.switches.length} switches, 14 expected`);
+    if(r.switches.length !== SWITCH_COUNT) {
+        bad.push(`${r.switches.length} switches, ${SWITCH_COUNT} expected`);
     }
     for(const s of r.switches) {
         if(s.role !== "switch" || !s.label || !s.title || (s.checked !== "true" && s.checked !== "false") || !s.inside) {
@@ -847,17 +872,17 @@ async function check_switches(page, args, step, out_dir)
         }
     }
     for(const w of r.wheres) {
-        if(!/^(hid|wat|art)$/.test(w.text) || !w.title) {
+        if(!node_re.test(w.text) || !w.title) {
             bad.push(`node of ${w.id}: '${w.text}' (${w.title})`);
         }
     }
-    if(!r.via.split(", ").every((n) => /^(hid|wat|art)$/.test(n))) {
+    if(!r.via.split(", ").every((n) => node_re.test(n))) {
         bad.push(`status line: '${r.via}'`);
     }
-    if(!r.mems.length || !r.mems.every((n) => /^(hid|wat|art)$/.test(n))) {
+    if(!r.mems.length || !r.mems.every((n) => node_re.test(n))) {
         bad.push(`memory tags: ${JSON.stringify(r.mems)}`);
     }
-    if(new Set(r.series).size !== r.series.length || !r.series.every((n) => /\((hid|wat|art)\)$/.test(n))) {
+    if(new Set(r.series).size !== r.series.length || !r.series.every((n) => series_re.test(n))) {
         bad.push(`series: ${JSON.stringify(r.series)}`);
     }
     const first = r.switches[0] || {};
@@ -1047,6 +1072,27 @@ const CHECKS = {
     permlive: check_permlive,
 };
 
+/*
+ *  The settings each check cannot run without (those with a default are
+ *  not listed). A check missing one fails before it opens anything, with
+ *  a message that names it -- not with "no row" or "no card" for an id
+ *  that was never given.
+ */
+const CHECK_SETTINGS = {
+    schemaback: ["QA_SCHEMA_NODE", "QA_SCHEMA_YUNO", "QA_SCHEMA_TREEDB"],
+    gobjtree: ["QA_SCHEMA_NODE", "QA_SCHEMA_YUNO"],
+    chartsheld: ["QA_HELD_SCENARIO"],
+    controlhelp: ["QA_HELD_SCENARIO"],
+    queues: ["QA_HELD_SCENARIO", "QA_QUEUE_GATES"],
+    focus: ["QA_HELD_SCENARIO", "QA_QUEUE_GATES"],
+    switches: ["QA_HELD_SCENARIO", "QA_SWITCH_COUNT", "QA_NODE_CODES"],
+    livelayout: ["QA_HELD_SCENARIO"],
+    controlstate: ["QA_HELD_SCENARIO"],
+    roles: ["QA_ROLES_ROLE"],
+    roleswrite: [],
+    permlive: ["QA_HELD_SCENARIO"],
+};
+
 
                     /***************************
                      *      Run
@@ -1198,6 +1244,13 @@ async function main() {
                     const fn = CHECKS[name];
                     if(!fn) {
                         step(`check ${name}`, false, "no such check");
+                        failed = true;
+                        continue;
+                    }
+                    const unset = (CHECK_SETTINGS[name] || []).filter((n) => !qa_setting_is_set(n));
+                    if(unset.length) {
+                        step(`check ${name}`, false,
+                            `${unset.join(", ")} not set: set it in the environment or in ~/.yuneta/.qa-creds`);
                         failed = true;
                         continue;
                     }

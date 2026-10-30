@@ -8,6 +8,14 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+- **`scripts/qa.mjs`: a check whose setting is not set fails before it opens
+  anything, naming the setting.** Seven checks of the held scenario failed
+  with *"no card"* or *"no control"* when `QA_HELD_SCENARIO` was not set. The
+  gates of `--check queues` and `--check focus` (`QA_QUEUE_GATES`), the
+  number of generators and the node codes of `--check switches`
+  (`QA_SWITCH_COUNT`, `QA_NODE_CODES`) are settings now too, with no default:
+  they were the ports, the count and the node codes of one installation.
+
 ## gui_agent 1.2.3 (2026-10-30)
 
 - **The examples name no private project, client or node.** The placeholder
@@ -23,7 +31,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 ## gui_agent 1.2.2, gui_treedb 1.1.0 (2026-10-29)
 
 - **`src/controls_named.test.js` reads an upper-case tag, a tag written in
-  pieces, and a const shadowed in a block** (REV-CLOUD V49.2). Three shapes
+  pieces, and a const shadowed in a block**. Three shapes
   got past it, and its header did not say so:
     - a createElement2 spec with an upper-case tag (`["BUTTON", attrs]`) was
       dropped, although `createElement2()` makes a button of it and
@@ -51,31 +59,30 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## gui_agent 1.2.1, gui_treedb 1.0.9 (2026-10-29)
 
-- **`src/controls_named.test.js` reads a tag held in a const** (REV-CLOUD
-  V48.2): it read an element only when its tag was written as a string, so
-  `[TAG, {type: "button"}]`, `"<" + TAG + ">"` in html and
-  `document.createElement(TAG)` passed with no name, and its header did not
-  say so. A tag that is a const of the file given a text is now read like the
-  attrs are, with a case in the test's self-check (red on 1.2.0 / 1.0.8); a
-  tag it still cannot read -- a parameter, a `let`, a property, a branch, a
-  call -- skips the whole element, and the header and the README now list it.
-  No control of either app was built that way, so the scan finds nothing new.
-  The gap is in gui_agent 1.2.0 / gui_treedb 1.0.8 (unreleased in yunetas);
-  the test has no tag read but a literal since yunetas 7.29.3.
+- **`src/controls_named.test.js` reads a tag held in a const**: it read an
+  element only when its tag was written as a string, so `[TAG, {type:
+  "button"}]`, `"<" + TAG + ">"` in html and `document.createElement(TAG)`
+  passed with no name, and its header did not say so. A tag that is a const of
+  the file given a text is now read like the attrs are, with a case in the
+  test's self-check (red on 1.2.0 / 1.0.8); a tag it still cannot read -- a
+  parameter, a `let`, a property, a branch, a call -- skips the whole element,
+  and the header and the README now list it. No control of either app was
+  built that way, so the scan finds nothing new. The gap is in gui_agent 1.2.0
+  / gui_treedb 1.0.8 (unreleased in yunetas); the test has no tag read but a
+  literal since yunetas 7.29.3.
 
 ## gui_agent 1.2.0, gui_treedb 1.0.8 (2026-10-29)
 
-- **`src/controls_named.test.js` sees the names it claimed to see**
-  (REV-CLOUD V47.2): a name written as a template with no `${}`
-  (`` title: `Refresh` ``), a `+` of texts, a branch of `?:` / `||`, or a
-  const given one, passed as data; a `document.createElement()` was only
-  asked to HAVE a `title` and an `aria-label`, never what they were
-  (`$b.title = "Save"` passed); and attrs in a const of the module, of an
-  outer function, in a spread or returned by a helper of the module were not
-  read at all. Each shape is now read and held to the rule, with a case in the
-  test's self-check (red on 1.1.9 / 1.0.7), and the header lists exactly what
-  it reads and what it cannot see. The test has been there since gui_agent
-  1.1.8 / gui_treedb 1.0.6, in yunetas 7.29.3.
+- **`src/controls_named.test.js` sees the names it claimed to see**: a name
+  written as a template with no `${}` (`` title: `Refresh` ``), a `+` of
+  texts, a branch of `?:` / `||`, or a const given one, passed as data; a
+  `document.createElement()` was only asked to HAVE a `title` and an
+  `aria-label`, never what they were (`$b.title = "Save"` passed); and attrs
+  in a const of the module, of an outer function, in a spread or returned by a
+  helper of the module were not read at all. Each shape is now read and held
+  to the rule, with a case in the test's self-check (red on 1.1.9 / 1.0.7),
+  and the header lists exactly what it reads and what it cannot see. The test
+  has been there since gui_agent 1.1.8 / gui_treedb 1.0.6, in yunetas 7.29.3.
 - **The checkboxes made with `createElement()` carry their i18n keys**: the
   node and *open all shown* boxes of gui_agent's Stats, and the browse,
   *browse everything on screen* and picker boxes of gui_treedb, were named
@@ -84,7 +91,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   seen in the old language; with the key, `refresh_language()` reaches them
   as it reaches every other control (in yunetas 7.29.3 and older).
 - **A key read through a value nobody follows is listed, and a new one
-  fails** (V47.2): `src/i18n_keys_seen.test.js` starts from the keys the
+  fails**: `src/i18n_keys_seen.test.js` starts from the keys the
   locales HAVE, so a key handed to `t()` by a variable and in NO locale was
   seen by no check and rendered as the raw key. A new
   `src/i18n_key_reads.test.js` in each app asks the prebuild's reader for
@@ -101,7 +108,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 - **Three checkboxes of gui_agent have their `title`**: the row and
   *select all* boxes of Nodes and the row box of Stats had only an
   `aria-label`. Their `<input` is written in two string pieces, and the
-  check of 1.1.8 read each piece alone (REV-CLOUD V46.3; in yunetas 7.29.3).
+  check of 1.1.8 read each piece alone (in yunetas 7.29.3).
 - **The Display mode and Navigation buttons of gui_agent's preferences have
   a name again**: 1.1.8 named every segment button from an option's `name`,
   and those two segments had none, so each button was named "" and carried
@@ -112,7 +119,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   first record, the picker on a language change. Every table of the tranger
   view now names its filters after each build of its columns
   (`columnsLoaded`), through `keep_header_filters_named()`; checked by a new
-  jsdom test with the real Tabulator (V46.3; in 7.29.3).
+  jsdom test with the real Tabulator (in 7.29.3).
 - **Nine keys of gui_agent were invisible to `validate-locales`**:
   `english`/`spanish`, the history's two sort buttons, `give own scope`,
   `own scope of the permission`, `role id`, `realm` and `role scope` reached
@@ -123,12 +130,12 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   `src/i18n_keys_seen.test.js` in each app asks the prebuild's reader which
   keys it sees, and fails on a new one it does not; the keys nobody has made
   visible yet (180 in gui_agent, 79 in gui_treedb) are listed there, and the
-  list may only shrink (V46.3; in 7.29.3).
+  list may only shrink (in 7.29.3).
 - **A checkbox wrapped in its label is named with the label's text**
   (WCAG label-in-name): in Spanish *Ámbito propio* was named "Dar a este
   permiso su propio ámbito...", and a role's *Rol deshabilitado* box was
   named *Deshabilitado* in both languages. The name now starts with, or is,
-  the text beside the box (V46.3; in 7.29.3).
+  the text beside the box (in 7.29.3).
 - **`src/controls_named.test.js` reads more, and says what it reads**: a
   string `+` chain is read as one html string, attrs by `Object.assign()` or
   in a variable of the same function, `document.createElement()` of a
@@ -143,9 +150,9 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   two names** (gui_agent): both were *Own scope*. The box is `give own scope`
   ("Give this permission its own scope, not the role's"), the text `own scope
   of the permission` ("Own scope of this permission (JSON; empty:
-  unscoped)") (REV-CLOUD V45.2; since 1.1.7, in yunetas 7.29.2).
+  unscoped)") (since 1.1.7, in yunetas 7.29.2).
 - **Every control of both apps carries a `title` AND an `aria-label`, and a
-  name given with `t()` carries its key** (V45.2: nine had an `aria-label`
+  name given with `t()` carries its key** (nine had an `aria-label`
   and no `title`; the sweep found more). gui_agent: the searches of Nodes
   and Stats, the console's command line, the shortkey inputs, now with
   their `title`; the Refresh buttons, the theme and language buttons of the
@@ -174,31 +181,31 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   session open and each `EV_PERMISSIONS_CHANGED`) and the live view's
   `watch-scenario` were painted in every open console. An answer now has to
   echo the console's `console_seq` (or be its help fetch); the special case
-  for an unmarked `list-agents` is gone, covered by the rule (REV-CLOUD
-  V44.2.13; since 0.29.114 / 1.0.0, in yunetas 7.29.1).
+  for an unmarked `list-agents` is gone, covered by the rule (since 0.29.114 /
+  1.0.0, in yunetas 7.29.1).
 - **The switch of a scenario's yuno is disabled for a user who may not run
   the scenario**, its title saying so (`monitor control refused denied`): it
   was enabled, and a click sent a `run-scenario action=on|off` the control
   center refused. `control_refusal()` asks the permission first, so a click
   sent anyway is refused here too, with a warning. The switch stays, because
-  it also shows whether the yuno is on (V44.2.13; since 1.1.3, in 7.29.1).
+  it also shows whether the yuno is on (since 1.1.3, in 7.29.1).
 - **The roles sheet keeps a permission's own EMPTY scope** (`parameters:
   {}`): each "more permissions" row has an *Own scope* checkbox. Not ticked,
   no `parameters` and the role's scope applies; ticked, the text is the
   scope, and empty is `{}`, unscoped -- how a role scoped on `scenario_id`
   grants `command-agent`. The sheet showed both as "" and read `{}` as the
   role's scope: the save was refused (*scope key not declared*) or wrote the
-  narrower scope (V44.2.13; since 0.29.116, in 7.29.1).
+  narrower scope (since 0.29.116, in 7.29.1).
 - **Against a control center older than `watch-scenario`, every node is
   watched through `command-agent` at once**: the refusal comes once per node,
   and only the first was asked again; the others showed *no answer* until the
-  next renewal (V44.3; in 7.29.1).
+  next renewal (in 7.29.1).
 - **The brand of a viewer's shell goes to `/scenarios/list`**, not to
   `/commands/nodes`, which that shell does not have; `viewer_shell_config()`
-  re-aims every toolbar route out of the viewer's workspaces (V44.3; since
+  re-aims every toolbar route out of the viewer's workspaces (since
   0.29.114, in 7.29.1).
 - The placeholders of the roles sheet carry `data-i18n-placeholder`, so they
-  change language with the app (V44.3; in 7.29.1).
+  change language with the app (in 7.29.1).
 
 ## gui_treedb 1.0.5 (2026-10-27)
 
@@ -590,9 +597,9 @@ serves the new bundle, and its console shows only the 401 of
 
 - Deployed by the round (274 and 74 tests). gobj-ui 7.27.34: a gclass viewer
   no longer stays locked when a newer trace set of the gclass it waits for
-  overtakes the read it waited for (review V41.2.1).
+  overtakes the read it waited for.
 - **The QA fails on a console message of concern.** It printed their count
-  and exited 0, so a page that logged an ERROR passed (REV-CLOUD V41.1). A
+  and exited 0, so a page that logged an ERROR passed. A
   last step, "console has nothing of concern", now fails the run; and
   `--check gobjtree` fails when the console says anything after the click,
   because a canvas looked up by a broken selector is still drawn by G6 and
@@ -609,7 +616,7 @@ serves the new bundle, and its console shows only the 401 of
   every tree window logged "no canvas mount" and its canvas never followed
   the window (the `~` of its name read as a CSS combinator), and a `^` in
   the node or key (`%5E`) made it fail to open, leaving a window behind that
-  refused every later open of that card. (Review V40.3.1)
+  refused every later open of that card.
 - **Two cards whose keys differ only in case get two gobj tree windows.**
   gobj-js registers a service by its name lowercased, so the keys `Gate` and
   `gate` of one node shared a window name and the second tree was refused
@@ -617,10 +624,10 @@ serves the new bundle, and its console shows only the 401 of
   the letter in lowercase (`Gate` -> `!gate`), a `!` of the name itself is
   percent-encoded. The name changes again for a node or key with an
   uppercase letter, so such a window opens once at its default size and
-  arrangement. (Review V40.3.2)
+  arrangement.
 - **A read asked before a trace set no longer unlocks what the set locked.**
   The tree and trace info read after a set carry the set's `set_id`
-  (gobj-ui 7.27.33); every other answer says `set_id: null`. (Review V40.2)
+  (gobj-ui 7.27.33); every other answer says `set_id: null`.
 - New test `c_agent_yuno_tree.window.wiring.test.js`: the tree window through
   the real gobj-ui, with names holding `~`, `%5E`, `.` and `!`. New QA check
   `--check gobjtree` on the deployed plane: nothing opened a tree there, so
@@ -646,7 +653,7 @@ serves the new bundle, and its console shows only the 401 of
   the keys `x^y` and `x_y` of one node read alike. Each part is now
   percent-encoded and the two are joined by `~`. The saved size of a tree
   window and its arrangement are kept under the new name, so the first
-  opening after the upgrade starts from the defaults. (Review V39.3.1)
+  opening after the upgrade starts from the defaults.
 - gobj-ui 7.27.31: a gclass viewer reopened while a trace set of its gclass
   is in flight opens locked until the answer.
 
@@ -1189,7 +1196,7 @@ the local gobj-js 7.26.22 / gobj-ui 7.26.43.
 ## gui_agent 0.29.53, gui_treedb 0.17.119 + gobj-js ^7.26.21 (2026-10-13)
 
 gobj-js 7.26.21, the masking of the twenty-fourth review and of the security
-review of its C commit (`REV-CLOUD.md` V24.4.2, V24.4.3): after
+review of its C commit: after
 `Bearer` or `Basic` only a word that can be a credential is masked; a JWE, a
 JWT a cap cut and a `name: value` whose name is a secret's are masked; and each
 rule judges the text as it came, so no rule hides a value from the next. No
@@ -1198,21 +1205,20 @@ gui_treedb 70) and deployed by gobj-ui's deploy round.
 
 ## gui_agent 0.29.52, gui_treedb 0.17.118 + gobj-ui ^7.26.42 (2026-10-13)
 
-gobj-ui 7.26.42, the twenty-fourth review's library and validator round
-(`REV-CLOUD.md` V24.5): every change of a badge is said, as text; the
-canvas of a graph -- the monitor's, the gobj tree, the treedb and schema graphs,
-the JSON viewer -- is named and shows its focus, with four new keys in both
-locales (`json graph`, `gobj tree graph`, `treedb graph`, `fsm graph`); the
-items of the nav and of the toolbar are named by a key; validate-locales reads
-every write of an unmarked `let` and fails a translated text wherever a key is
-read. The built-key tests (`monitor_i18n_keys.test.js`,
-`tranger_view_i18n_keys.test.js`) read the sources with the published
-validator's reader, so a state or a command named by a const, an import or a
-function's return is followed too, and one the reader cannot follow fails
-with its file and line (proved by mutation: a const-named state or command
-without its key fails; refactoring a key into a const no longer raises a
-false alarm). Versions raised, built, tested (gui_agent 250, gui_treedb 70)
-and deployed by gobj-ui's deploy round.
+gobj-ui 7.26.42, the twenty-fourth review's library and validator round: every
+change of a badge is said, as text; the canvas of a graph -- the monitor's,
+the gobj tree, the treedb and schema graphs, the JSON viewer -- is named and
+shows its focus, with four new keys in both locales (`json graph`, `gobj tree
+graph`, `treedb graph`, `fsm graph`); the items of the nav and of the toolbar
+are named by a key; validate-locales reads every write of an unmarked `let`
+and fails a translated text wherever a key is read. The built-key tests
+(`monitor_i18n_keys.test.js`, `tranger_view_i18n_keys.test.js`) read the
+sources with the published validator's reader, so a state or a command named
+by a const, an import or a function's return is followed too, and one the
+reader cannot follow fails with its file and line (proved by mutation: a
+const-named state or command without its key fails; refactoring a key into a
+const no longer raises a false alarm). Versions raised, built, tested
+(gui_agent 250, gui_treedb 70) and deployed by gobj-ui's deploy round.
 
 ## gui_agent 0.29.51, gui_treedb 0.17.117 + gobj-ui ^7.26.41 (2026-10-13)
 
@@ -1264,7 +1270,7 @@ code; versions raised by gobj-ui's deploy round, built and deployed by it.
 
 ## gui_agent 0.29.45, gui_treedb 0.17.111 + gobj-ui ^7.26.35, gobj-js ^7.26.20 (2026-10-13)
 
-The twenty-third review (`REV-CLOUD.md` V23.5), and the libraries
+The twenty-third review, and the libraries
 of its round.
 
 - **gui_agent: every key the monitor BUILDS is published and pinned by a
@@ -1297,7 +1303,7 @@ of its round.
 
 ## gui_agent 0.29.44: gobj-ui ^7.26.32 (2026-10-13)
 
-The twenty-second review (`REV-CLOUD.md` V22.6.5). The monitor
+The twenty-second review. The monitor
 BUILDS keys from a control's name, `monitor ${control}` (the label of its
 confirmation) and `monitor confirm ${control}` (its question), and marked them
 as data, so no key of either was ever asked of the locales. It publishes both
@@ -1309,7 +1315,7 @@ range (no change of its code).
 
 ## gui_agent 0.29.43, gui_treedb 0.17.110: gobj-ui ^7.26.29 (2026-10-12)
 
-The twenty-first review (`REV-CLOUD.md` V21.4). The
+The twenty-first review. The
 `validate-locales` of gobj-ui 7.26.29 holds the app's own code to the per-call
 rule the library keeps, with the file and the line:
 
@@ -1327,7 +1333,7 @@ rule the library keeps, with the file and the line:
 
 ## gui_agent 0.29.42, gui_treedb 0.17.109: gobj-ui ^7.26.28 (2026-10-12)
 
-The twentieth review (`REV-CLOUD.md` V20.5). The `validate-locales`
+The twentieth review. The `validate-locales`
 of gobj-ui 7.26.28 reads a key where it is handed to a FUNCTION of the library
 (`yui_shell_show_error`, `icon_button`, the popover rows...), and the shell's
 fallback names are keys now. Keys both apps lacked, which reached the page raw:
@@ -1344,14 +1350,14 @@ fallback names are keys now. Keys both apps lacked, which reached the page raw:
 
 ## gui_agent 0.29.41, gui_treedb 0.17.108: gobj-ui ^7.26.27 (2026-10-12)
 
-The nineteenth review (`REV-CLOUD.md` V19.4): the property popovers
+The nineteenth review: the property popovers
 of the treedb's node graph (`C_G6_NODES_TREE`) name their controls and change language (gobj-ui 7.26.27);
 the published `validate-locales` reads the keys the library's modules publish
 as data. Both pass with no change of their catalogs.
 
 ## gui_agent 0.29.40, gui_treedb 0.17.107: gobj-ui ^7.26.26 (2026-10-12)
 
-The eighteenth review (`REV-CLOUD.md` V18.4).
+The eighteenth review.
 
 - Key `node id required` (both): the treedb node graph's create popover said
   `t('node id') + ' required'`, with "required" in English for ever.
@@ -1362,7 +1368,7 @@ The eighteenth review (`REV-CLOUD.md` V18.4).
 
 ## gui_agent 0.29.39, gui_treedb 0.17.106: gobj-ui ^7.26.25 (2026-10-12)
 
-The seventeenth review (`REV-CLOUD.md` V17.3.4-5).
+The seventeenth review.
 
 - Both run the `validate-locales` gobj-ui publishes
   (`node node_modules/@yuneta/gobj-ui/scripts/validate-locales.mjs`) and keep
