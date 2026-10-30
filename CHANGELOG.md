@@ -8,6 +8,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.2.4 (2026-10-30)
+
 - **`scripts/qa.mjs`: a check whose setting is not set fails before it opens
   anything, naming the setting.** Seven checks of the held scenario failed
   with *"no card"* or *"no control"* when `QA_HELD_SCENARIO` was not set. The
