@@ -8,6 +8,18 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.2.3 (2026-10-30)
+
+- **The examples name no private project, client or node.** The placeholder
+  of a role's scope reads `scenario_id=load-20k`, the comments and tests of
+  both yunos use generic names and cite no private review, and the README of
+  each yuno lists all four shapes the controls test cannot see (it named only
+  one of them).
+- **`scripts/qa.mjs` keeps the ids of the installation out of the repo**: the
+  node, yuno, treedb, scenario and role each check opens, and the playwright
+  checkout, come from the environment or `~/.yuneta/.qa-creds`. A check whose
+  id is not set fails, naming it.
+
 ## gui_agent 1.2.2, gui_treedb 1.1.0 (2026-10-29)
 
 - **`src/controls_named.test.js` reads an upper-case tag, a tag written in
