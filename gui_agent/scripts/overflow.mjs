@@ -26,10 +26,10 @@
  *      turns an overflow into "the data is not there". Tabulator's own
  *      horizontal scroll shows up as `scrollable` and is by design.
  *
- *      Credentials as in qa.mjs: QA_USER from the environment or
- *      ~/.yuneta/.qa-creds, the password from QA_PASS in the environment
- *      or from the OS keyring. The older key names are still read, after
- *      these.
+ *      Credentials as in qa.mjs: QA_USER from the environment, else from
+ *      ~/.yuneta/.qa-creds; the password from QA_PASS in the environment
+ *      (only with QA_USER there too), else from the OS keyring for that
+ *      user.
  *
  *      Usage:
  *
@@ -54,8 +54,6 @@ const api = pw.chromium ? pw : (pw.default || {});
 const engine = (process.env.PROBE_BROWSER === "firefox") ? api.firefox : api.chromium;
 
 const CREDS = join(homedir(), ".yuneta", ".qa-creds");
-const USER_KEYS = ["QA_USER", "CLAUDIA_USER"];
-const PASS_KEYS = ["QA_PASS", "CLAUDIA_PASS"];
 
 /*  The KEY=value lines of ~/.yuneta/.qa-creds.  */
 function read_creds_file() {
@@ -76,18 +74,16 @@ function read_creds_file() {
     return out;
 }
 
-const creds = read_creds_file();
-let user = "";
-for(const k of USER_KEYS) {
-    user = user || process.env[k] || creds[k] || "";
+const env_user = process.env.QA_USER || "";
+const env_pass = process.env.QA_PASS || "";
+if(env_pass && !env_user) {
+    throw new Error("QA_PASS is set without QA_USER: set both in the environment");
 }
+const user = env_user || read_creds_file().QA_USER || "";
 if(!user) {
     throw new Error("no user: set QA_USER, or QA_USER= in ~/.yuneta/.qa-creds");
 }
-let pass = "";
-for(const k of PASS_KEYS) {
-    pass = pass || process.env[k] || "";
-}
+let pass = env_pass;
 if(!pass) {
     pass = execFileSync("secret-tool",
         ["lookup", "service", "yunetacontrol", "user", user], {encoding: "utf8"}).replace(/\n$/, "");

@@ -13,11 +13,14 @@
  *      sign in, and mount its shell against a live control center — which
  *      a `curl` of the static files cannot answer.
  *
- *      CREDENTIALS NEVER LIVE IN THE REPO. The user (not a secret) comes
- *      from the environment or `~/.yuneta/.qa-creds` (`QA_USER=`); the
- *      password comes from `QA_PASS` in the environment, for CI, or from
- *      the OS keyring (libsecret / `secret-tool`). Nothing in clear text
- *      on disk. The older key names are still read, after these.
+ *      CREDENTIALS NEVER LIVE IN THE REPO. The user (not a secret) is
+ *      `QA_USER` in the environment, else `QA_USER=` in
+ *      `~/.yuneta/.qa-creds`; the environment wins. The password is
+ *      `QA_PASS` in the environment, for CI, or the one the OS keyring
+ *      (libsecret / `secret-tool`) holds for that user. Nothing in clear
+ *      text on disk. `QA_PASS` is taken only with `QA_USER` in the
+ *      environment too: a password from one place is never paired with a
+ *      user from another.
  *
  *      Playwright is not a dependency of this yuno. It is borrowed from
  *      another checkout that already carries it (QA_PW), so a QA run adds
@@ -225,27 +228,25 @@ function qa_setting(name, default_value) {
 }
 
 /*
- *  The key names of the user and of the password, and the older names
- *  read after them.
+ *  The user and the password, from one place: both from the environment
+ *  (QA_USER, QA_PASS), or the user from the environment or the file and
+ *  its password from the keyring, which is looked up by that user.
  */
-const USER_KEYS = ["QA_USER", "CLAUDIA_USER"];
-const PASS_KEYS = ["QA_PASS", "CLAUDIA_PASS"];
-
 function get_credentials() {
-    const file = read_creds_file();
-    let user = "";
-    for(const k of USER_KEYS) {
-        user = user || process.env[k] || file[k] || "";
+    const env_user = process.env.QA_USER || "";
+    const env_pass = process.env.QA_PASS || "";
+    if(env_pass && !env_user) {
+        throw new Error(
+            "QA_PASS is set without QA_USER: set both in the environment"
+        );
     }
+    const user = env_user || read_creds_file().QA_USER || "";
     if(!user) {
         throw new Error(
             "no user: set QA_USER, or QA_USER= in ~/.yuneta/.qa-creds"
         );
     }
-    let pass = "";
-    for(const k of PASS_KEYS) {
-        pass = pass || process.env[k] || "";
-    }
+    let pass = env_pass;
     if(!pass) {
         /*  The keyring is the only place the password is allowed to live.  */
         try {

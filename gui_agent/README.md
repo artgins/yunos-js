@@ -1101,6 +1101,20 @@ npm run qa         # drive the DEPLOYED plane in a real browser
 command history. Everything that needs a yuno, a shell and a backend is
 `scripts/qa.mjs`'s job instead.
 
+`src/c_agent_login.body.test.js` compares its copy of the BFF's `error_code`
+catalog with `kernel/c/root-linux/src/c_auth_bff.h`. It finds the header only
+when this repo is the `yunos/js` submodule of yunetas, so run it there:
+
+```bash
+git clone --recurse-submodules https://github.com/artgins/yunetas
+cd yunetas/yunos/js/gui_agent
+npm ci && npm test
+```
+
+In a checkout of yunos-js alone that one test is skipped, and the report counts
+it as skipped; `npx vitest run --reporter=verbose` prints the reason. The other
+tests of the catalog then use the copy.
+
 `src/controls_named.test.js` is a check of the SOURCE, not of the DOM: it
 parses every module of the app and never runs it. It reads createElement2 specs
 whose attrs it can follow -- written in place (spreads too), an
@@ -1407,8 +1421,11 @@ summary.
   instead of dropping to the login screen. A **transient** BFF outage during a
   token refresh (unreachable / 5xx, e.g. while a node reboots) is likewise
   ridden out: the session, shell, link and open views are kept and the refresh
-  retries with backoff (5s→60s) — only a real denial (4xx / `success:false`)
-  logs out. Mirrors the design gui_treedb already had.
+  retries with backoff (5s→60s) — only a denial the BFF gives with its
+  `error_code` (a 4xx) logs out. An answer that is not the BFF's json (a page
+  of a proxy, a json with neither `success` nor `error_code`) is
+  `auth_bad_response`, logged as an ERROR, and retried the same way. Mirrors
+  the design gui_treedb already had.
 - **Developer monitor & window manager.** The avatar → **Developer** window was
   reworked (in gobj-ui) from a raw traffic dumper into a yuno-monitor console: a
   folding **bullet** traffic log, a persistent view selector (Detailed / Compact

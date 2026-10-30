@@ -8,6 +8,40 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+- **Both: a refresh answered with something that is not the BFF's json is
+  `auth_bad_response`, an ERROR, and the session is kept and retried.** A
+  200 json with neither `success` nor `error_code`, or a 4xx with no
+  `error_code` (a page in HTML, a json of a proxy), ended the session as
+  `refresh_denied` (as `http_<status>` in gui_agent 1.1.8), logged as INFO;
+  a 200 page in HTML was retried as a WARNING. The same answers at the login
+  are `auth_bad_response` and an ERROR. Every error the BFF answers carries
+  its `error_code`, so such an answer comes from a gateway or a proxy and
+  says nothing about the user: it is now an `EV_REFRESH_FAILED`, retried
+  with the backoff of a failure of the transport (5 s to 60 s), with the
+  shell, the links and the open views kept. Only a denial the BFF gives with
+  its `error_code` (a 4xx) ends the session. The refresh names its failure
+  as the login does (`bff_error_code()`): a failure of the transport is a
+  WARNING, an answer that is not the BFF's an ERROR. `refresh_denied` is no
+  longer produced and leaves `AUTH_ERROR_I18N_KEYS` and the locales. In
+  7.29.3 (gui_agent 1.1.8, gui_treedb 1.0.6) and in gui_agent 1.2.8,
+  gui_treedb 1.1.4.
+- **Both: the test of the `error_code` catalog is skipped with its reason
+  when `c_auth_bff.h` is not there**, so a checkout of yunos-js alone
+  reports it as skipped and `--reporter=verbose` says why; it only warned on
+  stderr. The READMEs say how to run it inside yunetas. Tests and docs only;
+  in gui_agent 1.2.8 and gui_treedb 1.1.4.
+- **gui_agent: `scripts/qa.mjs` and `scripts/overflow.mjs` read only
+  `QA_USER` and `QA_PASS`, the environment wins over `~/.yuneta/.qa-creds`,
+  and the user and the password come from one place.** `QA_PASS` is taken
+  only with `QA_USER` in the environment too; otherwise the password is the
+  one the keyring holds for the user, looked up by that user. A password in
+  the environment with no user there is refused, naming both keys. QA
+  scripts only, not shipped; in gui_agent 1.2.8.
+- **The older entries describe their examples without ids**: gui_agent
+  0.14.0, 0.22.62, 0.29.100 to 0.29.108 and 0.29.113 to 1.1.4 say what was
+  checked (a database yuno, a gate, a load scenario, the ramdisk of 1.0.9)
+  with no specific name or figure. Docs only.
+
 ## gui_agent 1.2.8, gui_treedb 1.1.4 + gobj-ui ^7.29.6 (2026-10-30)
 
 - **Both: a login answered with something that is not the BFF's json is
@@ -37,10 +71,9 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   `Domain=<host>`. Docs and comments only; in 7.29.3.
 - **gui_agent: `scripts/qa.mjs` and `scripts/overflow.mjs` take the user and
   the password as `QA_USER` and `QA_PASS`**, from the environment or (the
-  user) `~/.yuneta/.qa-creds`; the older key names are still read after
-  them. `overflow.mjs` also reads the password from the environment, as
-  `qa.mjs` does, and fails naming the user when there is none. QA scripts
-  only, not shipped; in 7.29.3.
+  user) `~/.yuneta/.qa-creds`. `overflow.mjs` also reads the password from
+  the environment, as `qa.mjs` does, and fails naming the user when there
+  is none. QA scripts only, not shipped; in 7.29.3.
 - **gui_agent: the monitor test of the links read from the configs uses a
   generic relay, store and sender** with their own ports. Tests only.
 - **The entries of gui_agent 1.2.4 and 1.2.5 describe their examples
@@ -380,13 +413,12 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 ## gui_agent 1.1.4 (2026-10-25)
 
 - **`view.node_labels` everywhere a node is named**, not only on the cards:
-  the status line (*"through the control center: n1, n2, art"*), the
+  the status line (the nodes the control center reaches), the
   memory tag of each node, the cards mode and the commands a confirmation
   lists; the full name in the title.
 - **The series of a chart name the yuno by label, id and node**
-  (`series_label()`: `sim_load gen1 (n1)`): yunos that share a label
-  -- the generators of load-test are all `sim_load` -- were
-  14 lines of the same name.
+  (`series_label()`): yunos that share a label -- the generators of a load
+  scenario all carry one -- were lines of the same name.
 
 ## gui_agent 1.1.3 (2026-10-25)
 
@@ -397,8 +429,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   one generator turned on or off by hand while the others go on. `on` only
   while the scenario runs; a switch run changes neither the state of the
   scenario nor its `max_run`, and `run_state_of_runs()` skips it.
-- **`view.node_labels`**: the short name of a node on the cards (`"n2"` for
-  `node2.example.com`), the full name in its title.
+- **`view.node_labels`**: the short name of a node on the cards, the full
+  name in its title.
 
 ## gui_agent 1.1.2, gui_treedb 1.0.2 + gobj-js ^7.28.0, gobj-ui ^7.28.0 (2026-10-25)
 
@@ -448,9 +480,9 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## gui_agent 1.0.9 (2026-10-25)
 
-- **Memory and disk in the live view.** The simulators of app A filled a
-  26 GB ramdisk (`/mnt/ramdisk`) with their queues and died in a loop for a
-  day, and nothing on screen said so. Every yuno of SDK 7.28.4 sends, with
+- **Memory and disk in the live view.** The simulators of a load scenario
+  filled the ramdisk they wrote to with their queues and died in a loop for
+  a day, and nothing on screen said so. Every yuno of SDK 7.28.4 sends, with
   its cpu (the `__yuno__` stats, the `cpu` kind of `watch-yuno-stats`), its
   resident memory, the memory still available on its node, and the free
   space of the FULLEST filesystem it writes to (`/yuneta` and the store of
@@ -498,8 +530,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   is still refused by it ("a run is in flight, one at a time"). A user who
   may not run a scenario still sees no buttons at all (`run-scenarios`, as
   before).
-- QA: `--check controlstate` reads the buttons of `load-test` and
-  checks them against its state, clicking none. Seen running: Start and
+- QA: `--check controlstate` reads the buttons of a scenario and checks
+  them against its state, clicking none. Seen running: Start and
   Resume off, "No disponible: el escenario está en marcha".
 
 ## gui_agent 1.0.7 (2026-10-25)
@@ -524,7 +556,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   against the live plane (the plane's files answered from the local
   `dist/`), `--viewport WxH` sets the window, and `--check livelayout` says
   where the charts are and opens and folds a chart's series. Run at 1920,
-  1440 and 390 px on `load-test`.
+  1440 and 390 px on a load scenario.
 
 ## gui_agent 1.0.6 (2026-10-24)
 
@@ -544,7 +576,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   that service answers per output gate (`{"output-qiogate-0":
   {"msgs_in_queue": 0, ...}}`), and the view only read a `msgs_in_queue` at
   the top. `queue_in_stats()` takes the top one, or the sum of the
-  children's. Seen on the live view of `load-test`.
+  children's. Seen on the live view of a load scenario.
 
 ## gui_agent 1.0.4 (2026-10-24)
 
@@ -568,9 +600,9 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   empty band at the bottom. Whether a service reports a queue is known at
   its first reading: the cards start without the row, and a card that
   learns it has one makes the graph lay out again, once, on the next turn
-  (`EV_RELAYOUT`, posted, never in the middle of a paint). In
-  `load-test` the gates and the store are 124 px high, the
-  simulators 124 (output and queue).
+  (`EV_RELAYOUT`, posted, never in the middle of a paint). In a load
+  scenario the gates and the store are 124 px high, the simulators 124
+  (output and queue).
 
 ## gui_agent 1.0.2 (2026-10-24)
 
@@ -579,7 +611,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   that always read "-": its card has no input row now, and is 124 px high
   instead of 148 (`only_emitters()`; `layout_graph()` takes a height per
   card, `heights`, stacks a column with them and meets each card at its own
-  middle). The 8 simulators of `load-test` take ~190 px less. In a
+  middle). A column of simulators takes 24 px less per card. In a
   scenario with no links nobody is an emitter: the flow is not known.
 
 ## gui_agent 1.0.1 (2026-10-24)
@@ -615,7 +647,7 @@ unreadable. gui_treedb 1.0.0 is the code of 0.17.172 renumbered.
 
 - **Users has a Roles view**: `<tab>/roles` (a route; the *Users* / *Roles*
   buttons move it). Every role of the store with what it grants or denies
-  and for what -- its scope, `only scenario_id=load-test` -- who
+  and for what -- its scope, `only scenario_id=<id>` -- who
   holds it, its service, enabled or not, protected. Its **sheet** edits it:
   description, service, realm, the permission and *Deny*, the role's scope as
   text (`scenario_id=a,b`), more permissions each with its own scope, and
@@ -672,7 +704,7 @@ offered and asked as before, with one warning each in the console.
   `run-scenarios` on it, edit and delete `write-scenarios`, and "read once"
   and a card's gobj tree `command-agent`.
 - QA, on artgins.yunetacontrol.com against the control center of 7.27.13:
-  the route opens `load-test` in a fresh browser, `--check
+  the route opens a scenario in a fresh browser, `--check
   chartsheld` passes, and the console shows only the two expected
   fallback warnings (`my-permissions`, `watch-scenario` not available).
 
@@ -680,12 +712,12 @@ offered and asked as before, with one warning each in the console.
 
 - **A run that failed with no step done changes nothing.** 0.29.112 read any
   failed run as "state not known" and let the charts follow: the newest run
-  of `load-test` was a `start` refused at its first step (its
-  yunos were down), so the stopped scenario kept scrolling. Now such a run
+  of a scenario was a `start` refused at its first step (its yunos were
+  down), so the stopped scenario kept scrolling. Now such a run
   is skipped and the one before it decides; a run, or a control from here,
   that failed half way still leaves the state not known.
 - QA: `node scripts/qa.mjs --check chartsheld` opens a stopped scenario
-  (`QA_HELD_SCENARIO`, default `load-test`), waits for the held
+  (`QA_HELD_SCENARIO`), waits for the held
   note and checks the messages chart is not redrawn over 6 s; read only.
   Passed on artgins.yunetacontrol.com.
 
@@ -742,8 +774,8 @@ serves the new bundle, and its console shows only the 401 of
 ## gui_agent 0.29.108, gui_treedb 0.17.170 + gobj-ui ^7.27.33 (2026-10-22)
 
 - Deployed by the round (274 and 74 tests). QA on the deployed plane:
-  `--check gobjtree` opens the tree of `db_history^7301` (a key with a
-  `^`) and its canvas is drawn; 0 console messages of concern.
+  `--check gobjtree` opens the tree of a yuno whose key holds a `^`, and
+  its canvas is drawn; 0 console messages of concern.
 
 - **gobj-ui 7.27.33: the tree window finds its canvas again.** Since 0.29.106
   every tree window logged "no canvas mount" and its canvas never followed
@@ -817,18 +849,18 @@ serves the new bundle, and its console shows only the 401 of
   hangs off the body) kept the language it was drawn in. The button now calls
   `yui_update_watch_language_changed()` (gobj-ui 7.27.30).
 
-- **A gobj tree never sends to the yuno of another node.** The live view
-  kept a tree open across a change of scenario when only its `key` matched,
-  and sent the tree's lines to the node of whatever yuno the NEW scenario
-  held under that key. The key defaults to the yuno id, so two
-  control-center scenarios with the same id on two nodes collided: the
-  status line said `gate · 7601`, and a `set-gclass-trace` reached the
-  other node's yuno, where the trace is saved and survives a restart. Now a
-  tree is closed when its key names another yuno (node, id, service) or
-  the scenario moves to another agent or control center, and each request
-  goes to the node of the tree's OWN yuno; a request from a gobj that is not
-  that key's tree is refused with an error, and an answer asked by an older
-  tree of that key is dropped.
+- **A gobj tree never sends to the yuno of another node.** The live view kept
+  a tree open across a change of scenario when only its `key` matched, and
+  sent the tree's lines to the node of whatever yuno the NEW scenario held
+  under that key. The key defaults to the yuno id, so two control-center
+  scenarios with the same id on two nodes collided: the status line showed the
+  yuno's label and id, and a `set-gclass-trace` reached the other node's yuno,
+  where the trace is saved and survives a restart. Now a tree is closed when
+  its key names another yuno (node, id, service) or the scenario moves to
+  another agent or control center, and each request goes to the node of the
+  tree's OWN yuno; a request from a gobj that is not that key's tree is
+  refused with an error, and an answer asked by an older tree of that key is
+  dropped.
 - **Two cards of one yuno open two trees.** The window was the service
   `gobj-tree-win-<node>-<id>`, so a second card of the same yuno id (another
   `service`) failed with *"service ALREADY registered"*, and its button then
@@ -902,7 +934,7 @@ and .ovh, artgins.ytreedb.com), console clean.
   header of `C_AGENT_YUNO_TREE` says the same. Three new i18n keys in both
   locales of both yunos.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live on
-  db_history^7302: the C_TRANGER card (a service) and a C_TIMER card each
+  a database yuno: the C_TRANGER card (a service) and a C_TIMER card each
   carry their note; the C_TRANGER card reads `●` now that the backend (7.27.3)
   answers `play_methods`. Console clean but for G6's two usual warnings.
 
@@ -919,15 +951,16 @@ and .ovh, artgins.ytreedb.com), console clean.
   rows, the methods in the head, the lit state naming its instance.
 - New i18n keys of gobj-ui 7.27.27 in both locales of both yunos.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live:
-  the three scopes on db_history^7302 (read only), and set and put back in
-  each scope on gate_probe^7701 (`start_stop` for a C_TIMER and for its
+  the three scopes on a database yuno (read only), and set and put back in
+  each scope on a gate (`start_stop` for a C_TIMER and for its
   gclass, `authzs` for the yuno).
   Console clean but for G6's two usual warnings.
 
 ## gui_agent 0.29.100, gui_treedb 0.17.162 + gobj-ui ^7.27.26 (2026-10-19)
 
 - **The gobj tree has a minimap** (gobj-ui 7.27.26), from 20 cards on: the
-  tree of a yuno opens at actual size, and a db_history has 46 gobjs.
+  tree of a yuno opens at actual size, and a database yuno has dozens of
+  gobjs.
   gui_treedb's graph keeps its own minimap, now drawn by the same module.
 - **gui_agent asks `view-gobj-tree` for `play_methods`**, which the C SDK
   answers from the release after 7.27.1: whether the gobj's gclass has an
@@ -936,7 +969,7 @@ and .ovh, artgins.ytreedb.com), console clean.
   A yuno built before that SDK ignores the name, and its gobjs keep reading
   paused until it is rebuilt.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live
-  on artgins.yunetacontrol.com: the tree of db_history^7302 opens with its
+  on artgins.yunetacontrol.com: the tree of a database yuno opens with its
   minimap; console clean but for G6's two usual warnings, on both planes and
   on artgins.ytreedb.com.
 
@@ -3063,10 +3096,10 @@ gobj-ui 7.23.168 does the same for the treedb views of both yunos.
 A local copy of a yuno carries the production names in its config (that is how
 it reaches its production peers), so its endpoint is the production url too.
 The export keeps one connection per url, and it kept the FIRST row: the
-development machine sorts first by host, so `north.app.example:7301` went
-out as `dev-laptop^7301`. Now the row whose node the url names wins --
-the node sharing the most words with the url's host (`app-north` and
-`north.app.example` share two) -- and a tie still keeps the first.
+development machine sorts first by host, so the production url went out
+under the name of the development machine. Now the row whose node the url
+names wins -- the node sharing the most words with the url's host -- and a
+tie still keeps the first.
 
 #### gui_treedb's About does not list the connections (gui_treedb 0.17.32)
 
@@ -5033,9 +5066,9 @@ when it was written). `0.14.0` sits above both.
     upgrade the node, not to guess in the browser.
 
     Verified on the deployed plane against one node holding both cases:
-    `gate_b^7401`'s replica of `treedb_authzs` mounted with **0** new /
-    delete / edit buttons and **0** in-row trash icons, `db_history^7301`'s
-    own `treedb_system_schema` with all of them, no console errors.
+    a gate's replica of `treedb_authzs` mounted with **0** new / delete /
+    edit buttons and **0** in-row trash icons, a database yuno's own
+    `treedb_system_schema` with all of them, no console errors.
 
 - **The Schemas picker says whether a yuno can be EDITED: master, read only or
     mixed.** Only the master of a treedb's tranger can write — the yuno refuses
@@ -5059,8 +5092,8 @@ when it was written). `0.14.0` sits above both.
     — a node older than the command replies "command not available", and
     counting that as "not master" would label every pre-7.13.0 node read-only,
     which is a claim this app cannot make. Verified live against a node whose
-    yunos were in all three states at once: `db_history^7301` *Master*,
-    `gate_b^7401` *Read only* (7301 holds the shared store), and the two
+    yunos were in all three states at once: a database yuno *Master*, a gate
+    *Read only* (the database yuno holds the shared store), and the two
     yunos still on an older binary showing nothing.
 
 - **The Schemas picker lists only yunos that HAVE a treedb.** They used to be

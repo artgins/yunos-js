@@ -68,7 +68,7 @@ export const AUTH_ERROR_I18N_KEYS = [
     "method_not_allowed", "missing_body", "missing_params", "redirect_uri_not_allowed",
     "origin_not_allowed", "missing_refresh_token", "missing_access_token",
     "unknown_endpoint", "server_busy", "internal_error",
-    "network_error", "refresh_denied", "auth_bad_response"
+    "network_error", "auth_bad_response"
 ];
 
 const REFRESH_RETRY_MIN_MS = 5000;
@@ -313,31 +313,38 @@ function do_bff_login(gobj, username, password)
 /***************************************************************
  *  POST /auth/refresh (reads refresh_token cookie, rotates cookies).
  *
- *  A TRANSIENT failure (BFF unreachable, 5xx, request rejected) does NOT
- *  end the session: it becomes EV_REFRESH_FAILED, which backs off and
- *  retries with the shell, the link and the open views left as they are.
- *  Only the BFF answering "no" (4xx / success:false) is EV_LOGIN_DENIED.
- *  A non-JSON body is a gateway/proxy page, never a verdict on the user:
- *  4xx keeps its meaning (denied), 5xx and the rest are transport noise.
+ *  Only the BFF answering "no" with its error_code (a 4xx) ends the
+ *  session: EV_LOGIN_DENIED. Anything else keeps it: EV_REFRESH_FAILED
+ *  backs off and retries with the shell, the link and the open views
+ *  left as they are. The error_code is the one of a login
+ *  (bff_error_code): a failure of the transport (no answer, no answer
+ *  in time, 5xx) is a WARNING; an answer that is not the BFF's json (a
+ *  page of a proxy, a json with neither success nor error_code, whatever
+ *  its status) is "auth_bad_response", an ERROR, as at the login.
  ***************************************************************/
 function do_bff_refresh(gobj)
 {
-    post_bff(gobj, "refresh").then(({ok, status, data, transient}) => {
-        if(transient) {
-            let reason = data.error || `HTTP ${status}`;
-            log_warning(`${gobj_short_name(gobj)}: BFF refresh could not be made ` +
-                `(${reason}) — retrying`);
-            gobj_send_event(gobj, "EV_REFRESH_FAILED", {error: reason}, gobj);
-            return;
-        }
+    post_bff(gobj, "refresh").then((answer) => {
+        const {ok, status, data} = answer;
         if(ok && data.success) {
             gobj_send_event(gobj, "EV_LOGIN_REFRESHED", data, gobj);
             return;
         }
-        const error_code = data.error_code || "refresh_denied";
-        const error      = data.error || "Refresh denied";
-        log_info(`${gobj_short_name(gobj)}: BFF refresh denied: ${error_code} (${error})`);
-        gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error}, gobj);
+        const error_code = bff_error_code(answer);
+        const error      = data.error || `HTTP ${status}`;
+        if(data.error_code && status > 0 && status < 500) {
+            /*  The BFF's own denial: it logged the cause itself.  */
+            log_info(`${gobj_short_name(gobj)}: BFF refresh denied: ${error_code} (${error})`);
+            gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error}, gobj);
+            return;
+        }
+        const msg = `${gobj_short_name(gobj)}: BFF refresh failed: ${error_code} (${error}) — retrying`;
+        if(error_code === "auth_bad_response") {
+            log_error(msg);
+        } else {
+            log_warning(msg);
+        }
+        gobj_send_event(gobj, "EV_REFRESH_FAILED", {error_code, error}, gobj);
     });
 }
 

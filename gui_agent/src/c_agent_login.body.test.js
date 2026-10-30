@@ -18,13 +18,19 @@
  *      as every failure that is not the BFF's own answer is; a denial the
  *      BFF gives with its error_code is logged as INFO.
  *
- *      And a denial is said in the language of the app: a refresh denied
- *      with no error_code is "refresh_denied", and every error_code of the
- *      BFF's catalog is a key of AUTH_ERROR_I18N_KEYS and of every locale
- *      (a refresh with no cookie left is "missing_refresh_token"). The
- *      catalog is read from c_auth_bff.h when this repo is checked out
+ *      A refresh answered with something that is not the BFF's json (a
+ *      json with neither success nor error_code, a page in HTML, whatever
+ *      its status) is "auth_bad_response", an ERROR, and keeps the
+ *      session: EV_REFRESH_FAILED, retried with backoff. Only a denial the
+ *      BFF gives with its error_code ends it.
+ *
+ *      And a denial is said in the language of the app: every error_code
+ *      of the BFF's catalog is a key of AUTH_ERROR_I18N_KEYS and of every
+ *      locale (a refresh with no cookie left is "missing_refresh_token").
+ *      The catalog is read from c_auth_bff.h when this repo is checked out
  *      inside the SDK, and the copy below must be equal to it; checked out
- *      alone, the copy is used and the test says so.
+ *      alone, the copy is used and the test that compares them is skipped,
+ *      with the reason in the report.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -84,9 +90,10 @@ function read_bff_catalog(path)
 }
 
 const BFF_CATALOG = read_bff_catalog(BFF_HEADER);
+const BFF_CATALOG_MISSING = `c_auth_bff.h not found at ${BFF_HEADER}: ` +
+    "this repo is not checked out inside yunetas, so the copy of the catalog is not compared";
 if(!BFF_CATALOG) {
-    console.warn(`c_auth_bff.h not found at ${BFF_HEADER}: ` +
-        "the error_code catalog checked is the copy in this test");
+    console.warn(BFF_CATALOG_MISSING);
 }
 const BFF_ERROR_CODES = BFF_CATALOG || BFF_ERROR_CODES_COPY;
 
@@ -218,7 +225,7 @@ describe("C_AGENT_LOGIN: a BFF that sends the headers and then goes silent", () 
         expect(gobj_current_state(login)).toBe("ST_LOGOUT");
     });
 
-    test("a refresh of a live session: EV_REFRESH_FAILED, and the retry denied says refresh_denied", async () => {
+    test("a refresh of a live session: EV_REFRESH_FAILED, and a retry the BFF denies ends it", async () => {
         heard.length = 0;
         await log_in();
 
@@ -229,12 +236,13 @@ describe("C_AGENT_LOGIN: a BFF that sends the headers and then goes silent", () 
         expect(gobj_current_state(login)).toBe("ST_LOGIN");
 
         heard.length = 0;
-        answers.refresh = {status: 401, data: {success: false}};
+        answers.refresh = {status: 401, data: {
+            success: false, error_code: "session_expired", error: "Session expired"
+        }};
         await pass_time(5000 + 10);     /*  the retry of the backoff  */
         expect(asked).toEqual(["refresh", "refresh"]);
         expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
-        expect(heard[0].kw.error_code).toBe("refresh_denied");
-        expect(AUTH_ERROR_I18N_KEYS).toContain("refresh_denied");
+        expect(heard[0].kw.error_code).toBe("session_expired");
         expect(gobj_current_state(login)).toBe("ST_LOGOUT");
     });
 
@@ -329,8 +337,43 @@ describe("C_AGENT_LOGIN: a login answered with something that is not the BFF's j
     });
 });
 
+describe("C_AGENT_LOGIN: a refresh answered with something that is not the BFF's json", () => {
+    const not_json = new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON");
+
+    test.each([
+        ["a 200 json that is not the BFF's", {status: 200, data: {foo: 1}}],
+        ["a 200 page in HTML", {status: 200, reject: not_json}],
+        ["a 401 page in HTML", {status: 401, reject: not_json}],
+        ["a 401 json with no error_code", {status: 401, data: {success: false}}],
+    ])("%s: an ERROR naming auth_bad_response, the session kept and retried", async (label, answer) => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = answer;
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        expect(logged.filter((l) => l.level === "error" && l.msg.includes("auth_bad_response")).length)
+            .toBe(1);
+        expect(logged.filter((l) => l.level === "info")).toEqual([]);
+
+        heard.length = 0;
+        answers.refresh = {status: 401, data: {
+            success: false, error_code: "session_expired", error: "Session expired"
+        }};
+        await pass_time(5000 + 10);     /*  the retry of the backoff  */
+        expect(asked).toEqual(["refresh", "refresh"]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("session_expired");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+});
+
 describe("AUTH_ERROR_I18N_KEYS", () => {
-    test.skipIf(!BFF_CATALOG)("the copy in this test is the catalog of c_auth_bff.h", () => {
+    test("the copy in this test is the catalog of c_auth_bff.h", (ctx) => {
+        ctx.skip(!BFF_CATALOG, BFF_CATALOG_MISSING);
         expect(BFF_CATALOG.length).toBeGreaterThan(0);
         expect([...BFF_ERROR_CODES_COPY].sort()).toEqual([...BFF_CATALOG].sort());
     });

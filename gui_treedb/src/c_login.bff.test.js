@@ -26,7 +26,14 @@
  *      left ("missing_refresh_token") is said in the language of the app.
  *      The catalog is read from c_auth_bff.h when this repo is checked
  *      out inside the SDK, and the copy below must be equal to it;
- *      checked out alone, the copy is used and the test says so.
+ *      checked out alone, the copy is used and the test that compares
+ *      them is skipped, with the reason in the report.
+ *
+ *      A refresh answered with something that is not the BFF's json (a
+ *      json with neither success nor error_code, a page in HTML, whatever
+ *      its status) is "auth_bad_response", an ERROR, and keeps the
+ *      session: EV_REFRESH_FAILED, retried with backoff. Only a denial the
+ *      BFF gives with its error_code ends it.
  *
  *      The BFF is a fetch() that never answers: only its AbortSignal can
  *      end it, as a browser does.
@@ -89,9 +96,10 @@ function read_bff_catalog(path)
 }
 
 const BFF_CATALOG = read_bff_catalog(BFF_HEADER);
+const BFF_CATALOG_MISSING = `c_auth_bff.h not found at ${BFF_HEADER}: ` +
+    "this repo is not checked out inside yunetas, so the copy of the catalog is not compared";
 if(!BFF_CATALOG) {
-    console.warn(`c_auth_bff.h not found at ${BFF_HEADER}: ` +
-        "the error_code catalog checked is the copy in this test");
+    console.warn(BFF_CATALOG_MISSING);
 }
 const BFF_ERROR_CODES = BFF_CATALOG || BFF_ERROR_CODES_COPY;
 
@@ -332,8 +340,52 @@ describe("C_TREEDB_LOGIN: a login answered with something that is not the BFF's 
     });
 });
 
+describe("C_TREEDB_LOGIN: a refresh answered with something that is not the BFF's json", () => {
+    const not_json = new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON");
+
+    test.each([
+        ["a 200 json that is not the BFF's", answer_with(200, {foo: 1})],
+        ["a 200 page in HTML", {__status__: 200, __reject__: not_json, data: null}],
+        ["a 401 page in HTML", {__status__: 401, __reject__: not_json, data: null}],
+        ["a 401 json with no error_code", answer_with(401, {success: false})],
+    ])("%s: an ERROR naming auth_bad_response, the session kept and retried", async (label, answer) => {
+        heard.length = 0;
+        answers = {
+            login: {success: true, username: "u", expires_in: 300, refresh_expires_in: 1800},
+            token: {success: true, access_token: "x.y.z"},
+        };
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_ACCEPTED"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+
+        heard.length = 0;
+        asked.length = 0;
+        logged.length = 0;
+        answers.refresh = answer;
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        expect(logged.filter((l) => l.level === "error" && l.msg.includes("auth_bad_response")).length)
+            .toBe(1);
+        expect(logged.filter((l) => l.level === "info")).toEqual([]);
+
+        heard.length = 0;
+        answers.refresh = answer_with(401, {
+            success: false, error_code: "session_expired", error: "Session expired"
+        });
+        await pass_time(5000 + 10);     /*  the retry of the backoff  */
+        expect(asked.filter((x) => x === "refresh")).toEqual(["refresh", "refresh"]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("session_expired");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+});
+
 describe("AUTH_ERROR_I18N_KEYS", () => {
-    test.skipIf(!BFF_CATALOG)("the copy in this test is the catalog of c_auth_bff.h", () => {
+    test("the copy in this test is the catalog of c_auth_bff.h", (ctx) => {
+        ctx.skip(!BFF_CATALOG, BFF_CATALOG_MISSING);
         expect(BFF_CATALOG.length).toBeGreaterThan(0);
         expect([...BFF_ERROR_CODES_COPY].sort()).toEqual([...BFF_CATALOG].sort());
     });

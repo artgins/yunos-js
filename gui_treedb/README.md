@@ -141,8 +141,10 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 - **A session that survives the real world.** The access_token is refreshed
   before it expires, and a refresh that could not be MADE (network down, BFF
   502, request timed out) is not a denial: it retries with backoff and keeps the
-  session, the shell and every open card. Only the BFF *answering* "no" logs you
-  out. Because a background tab's timers are throttled — so the refresh of a
+  session, the shell and every open card. Only the BFF *answering* "no", with
+  its `error_code`, logs you out; an answer that is not the BFF's json (a page
+  of a proxy, a json with neither `success` nor `error_code`) is
+  `auth_bad_response`, an ERROR, and is retried the same way. Because a background tab's timers are throttled — so the refresh of a
   sleeping laptop fires after the token is already dead — `visibilitychange` /
   `online` enter the FSM as `EV_WAKEUP` and refresh on the spot if the deadline
   has passed. A backend that NAKs the identity even after a fresh token is
@@ -245,6 +247,18 @@ To test
 or
 
     npm run test:coverage
+
+`src/c_login.bff.test.js` compares its copy of the BFF's `error_code` catalog
+with `kernel/c/root-linux/src/c_auth_bff.h`. It finds the header only when this
+repo is the `yunos/js` submodule of yunetas, so run it there:
+
+    git clone --recurse-submodules https://github.com/artgins/yunetas
+    cd yunetas/yunos/js/gui_treedb
+    npm ci && npm test
+
+In a checkout of yunos-js alone that one test is skipped, and the report counts
+it as skipped; `npx vitest run --reporter=verbose` prints the reason. The other
+tests of the catalog then use the copy.
 
 The suite covers `src/tranger_helpers.js` — the PURE part of the tranger
 browser (record → table row, epoch ↔ local wall clock, the header-filter
