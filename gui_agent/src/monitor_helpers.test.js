@@ -327,7 +327,7 @@ describe("the old form", () => {
             name: "Stress test (central)",
             node: "c",
             yunos: [{id: "stress", rate: "tx"}, {id: "2120"}],
-            test: {yuno: "stress", service: "sim_controllers",
+            test: {yuno: "stress", service: "sim_fleet",
                    start: ["set-controllers controllers=10", "resume-generation"],
                    stop: ["set-controllers controllers=0"]}
         }));
@@ -335,8 +335,8 @@ describe("the old form", () => {
         expect(r.scenario.id).toBe("stress-test-central");
         expect(r.scenario.description).toBe("Stress test (central)");
         expect(r.scenario.actions.start).toEqual([
-            {yuno: "stress", service: "sim_controllers", command: "set-controllers controllers=10"},
-            {yuno: "stress", service: "sim_controllers", command: "resume-generation"}
+            {yuno: "stress", service: "sim_fleet", command: "set-controllers controllers=10"},
+            {yuno: "stress", service: "sim_fleet", command: "resume-generation"}
         ]);
         expect(scenario_controls(r.scenario)).toEqual(["start", "stop", "restart"]);
     });
@@ -431,20 +431,20 @@ describe("where the yunos are", () => {
         let r = parse_scenario(JSON.stringify({
             node: "central",
             yunos: [
-                {key: "sim", id: "stress", node: "controlador", rate: "tx"},
+                {key: "sim", id: "stress", node: "field", rate: "tx"},
                 {key: "gate", id: "2120"},
-                {key: "gate_co", id: "2120", node: "controlador"}
+                {key: "gate_co", id: "2120", node: "field"}
             ],
             links: [["sim", "gate"]],
-            test: {yuno: "sim", service: "sim_controllers", stop: ["set-controllers controllers=0"]}
+            test: {yuno: "sim", service: "sim_fleet", stop: ["set-controllers controllers=0"]}
         }));
         expect(r.ok).toBe(true);
         expect(r.scenario.place).toBe("control_center");
         expect(r.scenario.yunos.map((y) => `${y.key}@${y.node}`)).toEqual(
-            ["sim@controlador", "gate@central", "gate_co@controlador"]);
-        expect(scenario_nodes(r.scenario)).toEqual(["controlador", "central"]);
-        expect(action_steps(r.scenario, "stop")).toEqual([{key: "sim", node: "controlador",
-            line: "command-yuno id=stress service=sim_controllers command=set-controllers controllers=0"}]);
+            ["sim@field", "gate@central", "gate_co@field"]);
+        expect(scenario_nodes(r.scenario)).toEqual(["field", "central"]);
+        expect(action_steps(r.scenario, "stop")).toEqual([{key: "sim", node: "field",
+            line: "command-yuno id=stress service=sim_fleet command=set-controllers controllers=0"}]);
     });
 
     it("refuses a scenario that says both, or neither", () => {
@@ -495,9 +495,9 @@ describe("links from the configs", () => {
         global: {"__input_side__.__json_config_variables__": {"__input_url__": "tcp://127.0.0.1:5120"}},
         services: [{kw: {url: "ws://127.0.0.1:11100"}}]
     };
-    const sim_local = {global: {"sim_controllers.target_url": "tcps://127.0.0.1:2122"},
+    const sim_local = {global: {"sim_fleet.target_url": "tcps://127.0.0.1:2122"},
                        services: [{target_url: "tcps://127.0.0.1:2122"}]};
-    const sim_remote = {global: {"sim_controllers.target_url": "tcps://central.example.com:2122"}};
+    const sim_remote = {global: {"sim_fleet.target_url": "tcps://central.example.com:2122"}};
 
     it("reads what a yuno listens on and what it connects to", () => {
         let e = config_endpoints(gate);
@@ -675,7 +675,7 @@ describe("switch", () => {
         id: "sw",
         node: "node2",
         yunos: [
-            {key: "pp12", id: "pp12", service: "sim_controllers", rate: "tx", node: "node1",
+            {key: "pp12", id: "pp12", service: "sim_fleet", rate: "tx", node: "node1",
              switch: {
                  on: [{command: "set-controllers controllers=125"}, {command: "resume-generation"}],
                  off: [{command: "pause-generation"}, {command: "set-controllers controllers=0"}]
@@ -692,8 +692,8 @@ describe("switch", () => {
         expect(r.ok).toBe(true);
         expect(r.scenario.yunos[0].switch.on[0]).toEqual({yuno: "pp12", command: "set-controllers controllers=125"});
         expect(switch_steps(r.scenario, "pp12", "off").map((s) => s.line)).toEqual([
-            "command-yuno id=pp12 service=sim_controllers command=pause-generation",
-            "command-yuno id=pp12 service=sim_controllers command=set-controllers controllers=0"
+            "command-yuno id=pp12 service=sim_fleet command=pause-generation",
+            "command-yuno id=pp12 service=sim_fleet command=set-controllers controllers=0"
         ]);
         expect(switch_steps(r.scenario, "g", "on")).toEqual([]);
     });
@@ -732,8 +732,8 @@ describe("switch", () => {
     it("a series is named by label, id when the label lacks it, and short node", () => {
         let r = validate_scenario(base());
         expect(series_label(r.scenario, r.scenario.yunos[0])).toBe("pp12 (n1)");
-        expect(series_label(r.scenario, {label: "sim_controllers", id: "pp1", node: "node3"}))
-            .toBe("sim_controllers pp1 (node3)");
+        expect(series_label(r.scenario, {label: "sim_fleet", id: "pp1", node: "node3"}))
+            .toBe("sim_fleet pp1 (node3)");
         expect(series_label(r.scenario, {label: "gate_central 2120", id: "2120", node: "node2"}))
             .toBe("gate_central 2120 (n2)");
     });

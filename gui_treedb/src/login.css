@@ -3,7 +3,8 @@
  * A centered split card: a brand-tinted welcome panel on the left and the
  * sign-in form on the right; below 900px the welcome panel collapses and only
  * the form shows. Theme-aware via [data-theme="dark"] on <html>.
- * Same visual language as wattyzer's login, TreeDB (teal) palette.
+ * Same visual language as the reference v2 application's login, TreeDB
+ * (teal) palette.
  */
 
 .ytreedb-login {

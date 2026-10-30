@@ -1,8 +1,8 @@
 /***********************************************************************
  *          c_app.js
  *
- *      C_APP — application root (the default service), wattyzer's
- *      C_WZ_APP model:
+ *      C_APP — application root (the default service), the model of the
+ *      reference v2 application's root gclass:
  *        1. Owns the BFF login flow (C_AGENT_LOGIN) and the shared link
  *           to the control center (C_AGENT_LINK).
  *        2. Shows the pre-shell login screen when there is no session
@@ -340,7 +340,7 @@ function build_shell(gobj)
 
 /***************************************************************
  *  Reflect the current theme on the toolbar toggle icon
- *  (sun when light, moon when dark), like wattyzer.
+ *  (sun when light, moon when dark), like the reference v2 application.
  ***************************************************************/
 function update_theme_icon(gobj)
 {

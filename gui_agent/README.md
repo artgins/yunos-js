@@ -61,8 +61,8 @@ the `agent_config` service (`db_save/load_persistent_attrs`, wired in
 
 ## Library consumption (v2)
 
-Both kernel JS packages come from the **npm registry**, the same way wattyzer
-consumes them — not from the `kernel/js/*` submodule checkouts:
+Both kernel JS packages come from the **npm registry**, the same way every
+application consumes them — not from the `kernel/js/*` submodule checkouts:
 
 ```
 @yuneta/gobj-js ^7.13.2     (publishes only dist/ → resolved to its bundle)
@@ -70,8 +70,8 @@ consumes them — not from the `kernel/js/*` submodule checkouts:
                              @yuneta/gobj-ui/src/*.js via its exports map)
 ```
 
-This is the v2 (`main`) line — **not** the published npm v1 used by
-estadodelaire/hidraulia.
+This is the v2 (`main`) line — **not** the published npm v1 line, which no
+application uses any more.
 
 **A local edit under `yunetas/kernel/js/**` does not reach this app.** To pick
 up library work: commit + bump + `npm publish` there, bump the submodule
@@ -189,15 +189,15 @@ A scenario, as the control center keeps it and as the editor writes it:
 ```json
 {
     "id": "stress-demo",
-    "description": "sim_controllers -> gate_central -> db_tracks_ce, both nodes",
+    "description": "sim_fleet -> gate_central -> db_tracks, both nodes",
     "node": "node-a",
     "yunos": [
-        {"key": "sim",       "id": "stress", "service": "sim_controllers", "rate": "tx"},
+        {"key": "sim",       "id": "stress", "service": "sim_fleet", "rate": "tx"},
         {"key": "gate_co",   "id": "2120",   "label": "gate_central",
          "queue_service": "__output_side__"},
-        {"key": "tracks_co", "id": "5120",   "label": "db_tracks_ce"},
+        {"key": "tracks_co", "id": "5120",   "label": "db_tracks"},
         {"key": "gate_ce",   "id": "2120",   "label": "gate_central", "node": "node-b"},
-        {"key": "tracks_ce", "id": "5120",   "label": "db_tracks_ce", "node": "node-b"}
+        {"key": "tracks_ce", "id": "5120",   "label": "db_tracks", "node": "node-b"}
     ],
     "links": [["sim", "gate_co"], ["gate_co", "tracks_co"], ["gate_ce", "tracks_ce"]],
     "actions": {
@@ -235,7 +235,7 @@ steps as those of an action; a step that names no `yuno` goes to the switch's
 own:
 
 ```json
-{"key": "pp12", "id": "pp12", "service": "sim_controllers", "rate": "tx", "node": "artgins",
+{"key": "pp12", "id": "pp12", "service": "sim_fleet", "rate": "tx", "node": "artgins",
  "switch": {
      "on":  [{"command": "set-controllers controllers=125"}, {"command": "resume-generation"}],
      "off": [{"command": "pause-generation"}, {"command": "set-controllers controllers=0"}]

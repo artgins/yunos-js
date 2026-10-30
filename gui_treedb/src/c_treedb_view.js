@@ -2,7 +2,8 @@
  *          c_treedb_view.js
  *
  *      C_TREEDB_VIEW — a thin adapter the shell mounts in a workspace tab
- *      (wattyzer's C_WZ_TREEDB model, adapted for multi-connection).
+ *      (the reference v2 application's treedb view model, adapted for
+ *      multi-connection).
  *
  *      WHY IT EXISTS: the TreeDB editor gclasses (C_YUI_TREEDB_TOPICS /
  *      C_YUI_TREEDB_GRAPH) issue their backend requests with
@@ -18,7 +19,8 @@
  *      its `$container`. The live transport is NOT passed in kw (a live
  *      pointer does not survive the shell's kw path); instead the wrapper
  *      resolves it from C_TREEDB_LINKS by `conn_id` (a plain string), the
- *      same way wattyzer's C_WZ_TREEDB resolves `__remote_service__`.
+ *      same way the reference application's treedb view resolves
+ *      `__remote_service__`.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -108,7 +110,8 @@ function mt_create(gobj)
 
     /*
      *  Bridge the hosted view's selection <-> the URL subpath so a reload /
-     *  deep link restores it (ported from wattyzer's C_WZ_TREEDB):
+     *  deep link restores it (ported from the reference application's
+     *  treedb view):
      *    - the view publishes its TOPIC selection (CHILD model → delivered to
      *      us via EV_TOPIC_SELECTED); we navigate the shell to
      *      <base_route>/<seg>.
@@ -215,7 +218,8 @@ function mt_stop(gobj)
  *  The hosted view is a SERVICE created with this gobj as parent, so
  *  gobj_destroy cascades to it — do NOT destroy it again here
  *  ("gobj NULL or DESTROYED"). Cleanup already ran in mt_stop. Just drop
- *  our references (mirrors wattyzer's C_WZ_TREEDB.mt_destroy).
+ *  our references (mirrors the reference application's treedb view
+ *  mt_destroy).
  ***************************************************************/
 function mt_destroy(gobj)
 {
@@ -552,7 +556,7 @@ function ac_child_selected(gobj, event, kw, src)
      *  IS the shell (this view is mounted on a declared route), but the day
      *  it hangs off a C_YUI_NODE the parent is the node: no `use_hash`, no
      *  `item_index`, no EV_ROUTE_REQUESTED, and navigate_to() dies on the
-     *  first tab click. That is exactly how it broke in yunovatios, whose
+     *  first tab click. That is exactly how it broke in an application, whose
      *  treedb views moved under a node tree. */
     let shell = yui_shell_of(gobj);
     /*  An EMPTY topic means "back to the topic-cards grid" (TOPICS only): drop

@@ -677,7 +677,7 @@ function sync_connections(gobj)
      *  The C_IEVENT_CLI identity_card advertises `required_services`. The
      *  backend's C_AUTHZ only authorizes commands to the treedb services
      *  listed there — with an empty list it grants only the connected service
-     *  and silently DROPS a `descs` to treedb_wattyzer.
+     *  and silently DROPS a `descs` to any other treedb (`treedb_<app>`).
      *
      *  treedb_links sets it PER CONNECTION now (C_IEVENT_CLI's own attr, which
      *  falls back to the yuno's when empty). The yuno-wide attr is necessarily

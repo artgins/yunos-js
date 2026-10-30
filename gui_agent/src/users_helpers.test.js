@@ -128,14 +128,14 @@ describe("role_rows", () => {
             id: "op", permission: "run-scenarios", deny: false,
             permissions: [{permission: "read-scenarios"}, "junk", {permission: "x", deny: true, parameters: {k: "v"}}],
             parameters: {scenario_id: ["s1"]},
-            users: [{id: "esg@h.eu", topic_name: "users"}], roles: [],
+            users: [{id: "ops@example.com", topic_name: "users"}], roles: [],
             __md_treedb__: {immutable: true}
         }]);
         expect(r.permissions).toEqual([
             {permission: "read-scenarios", deny: false},
             {permission: "x", deny: true, parameters: {k: "v"}}
         ]);
-        expect(r.users).toEqual(["esg@h.eu"]);
+        expect(r.users).toEqual(["ops@example.com"]);
         expect(r.immutable).toBe(true);
         expect(r.parameters).toEqual({scenario_id: ["s1"]});
     });
@@ -254,7 +254,7 @@ describe("username_problem", () => {
         expect(username_problem("")).toBe("username required");
         expect(username_problem("   ")).toBe("username required");
         expect(username_problem(null)).toBe("username required");
-        expect(username_problem("rosa martinez")).toBe("username bad chars");
+        expect(username_problem("jane doe")).toBe("username bad chars");
         expect(username_problem("a^b")).toBe("username bad chars");
     });
 });

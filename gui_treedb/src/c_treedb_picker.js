@@ -335,7 +335,7 @@ function status_dot(connected)
  *  (treedb_config_conn_services). Connections hands them over whole;
  *  what to open is decided here, one tab at a time.
  *
- *  The discovered list is the contract — like wattyzer's static route
+ *  The discovered list is the contract — like an application's static route
  *  table. We do NOT fall back to enumerating every `services_roles`
  *  key: that offered NON-treedb services, and sending a treedb `descs`
  *  to a ranger fails with "command not available". When nothing has

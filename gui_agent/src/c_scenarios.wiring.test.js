@@ -129,7 +129,7 @@ let n_views = 0;
 
 const SAVED = {
     id: "stress", node: "ctrl", description: "sim -> gate",
-    yunos: [{key: "sim", id: "stress", service: "sim_controllers", rate: "tx"}, {key: "gate", id: "2120"}],
+    yunos: [{key: "sim", id: "stress", service: "sim_fleet", rate: "tx"}, {key: "gate", id: "2120"}],
     links: [["sim", "gate"]],
     actions: {
         start: [{yuno: "sim", command: "set-controllers controllers=10"}],
@@ -499,7 +499,7 @@ describe("the live view of a scenario the control center keeps", () => {
         }, link);
         const card = (k) => mon.priv.cards[k];
         /*  A yuno older than 7.28.4: its cpu, nothing else  */
-        push({yuno_id: "stress", kind: "cpu", service: "sim_controllers", result: 0,
+        push({yuno_id: "stress", kind: "cpu", service: "sim_fleet", result: 0,
               data: {cpu: 3, disk_free_percent: 73, disk_size_in_gigas: 1832}});
         expect(card("sim").$mem.textContent).toBe("–");
         expect(card("sim").$disk.textContent).toBe("–");
@@ -991,7 +991,7 @@ describe("a scenario that is not the control center's", () => {
         expect(find("run-scenario").length).toBe(0);
         let steps = find("command-agent").filter((r) => /set-controllers/.test(r.kw.cmd2agent));
         expect(steps.map((r) => [r.kw.agent_id, r.kw.cmd2agent])).toEqual([
-            ["ctrl", "command-yuno id=stress service=sim_controllers command=set-controllers controllers=10"]
+            ["ctrl", "command-yuno id=stress service=sim_fleet command=set-controllers controllers=10"]
         ]);
     });
 
@@ -1056,7 +1056,7 @@ describe("a scenario that is not the control center's", () => {
         gobj_send_event(mon, "EV_ON_OPEN", {}, mlink);
         const watches = () => sent.filter((r) => r.direct && /^watch-yuno-stats /.test(r.command))
             .map((r) => r.command);
-        expect(watches()).toEqual(["watch-yuno-stats ids=stress:sim_controllers,2120 period=2000"]);
+        expect(watches()).toEqual(["watch-yuno-stats ids=stress:sim_fleet,2120 period=2000"]);
 
         sent.length = 0;
         gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "sim"}, mon);
@@ -1082,7 +1082,7 @@ describe("a scenario that is not the control center's", () => {
 
         sent.length = 0;
         gobj_send_event(mon, "EV_TOGGLE_LIVE", {key: "sim"}, mon);
-        expect(watches()).toEqual(["watch-yuno-stats ids=stress:sim_controllers period=2000"]);
+        expect(watches()).toEqual(["watch-yuno-stats ids=stress:sim_fleet period=2000"]);
         expect(mon.priv.stats_cards.sim.$paused.classList.contains("is-hidden")).toBe(true);
         expect(errors()).toEqual([]);
         expect(logged.filter((l) => l.level === "warning")).toEqual([]);

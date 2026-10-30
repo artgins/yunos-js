@@ -43,7 +43,7 @@ import {
  *  barrel): the barrel transitively loads c_yui_uplot.js -> uplot, whose
  *  module-top-level Intl.NumberFormat(navigator.language) can throw on a
  *  browser reporting a non-standard navigator.language. Same pattern as
- *  gui_agent / wattyzer.
+ *  gui_agent and the applications.
  */
 import {register_c_yui_shell}  from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {register_c_yui_update_watch} from "@yuneta/gobj-ui/src/c_yui_update_watch.js";

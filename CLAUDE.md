@@ -43,7 +43,7 @@ switch language**. The full rule lives in ONE place, gobj-ui's README
 - The JS **yunos** (browser SPAs): `gui_agent`, `gui_treedb`. The most
   active-changing JS layer; it evolves on `main` with its own `CHANGELOG.md`.
 - Depends on `@yuneta/gobj-js` / `@yuneta/gobj-ui` (v2) from the **npm
-  registry**, like wattyzer — not on the `kernel/js/*` checkouts. So a local
+  registry**, like every application — not on the `kernel/js/*` checkouts. So a local
   edit to those libraries does NOT reach these SPAs: publish the library, then
   raise the range in the yuno's `package.json`.
 - To ship: commit on `main` here, **tag the release**, then **bump the

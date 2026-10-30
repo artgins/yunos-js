@@ -15,7 +15,7 @@
  *      to be: on a control center with old nodes on it neither key is
  *      unique.  A fleet cloned from one image shares a single uuid
  *      across every machine, and four raspberries all answer to the
- *      hostname `raspz-slave`.  So clicking the HOST cell opens the node
+ *      hostname `board-slave`.  So clicking the HOST cell opens the node
  *      as `agent_id=<hostname>` and clicking the UUID cell opens it as
  *      `agent_id=<uuid>` -- whichever of the two tells this node from
  *      its twins.  The checkbox keeps the default (hostname, else uuid).

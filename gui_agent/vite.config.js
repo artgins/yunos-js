@@ -5,7 +5,7 @@
  *
  *          @yuneta/gobj-js and @yuneta/gobj-ui come from the npm
  *          REGISTRY, not from the kernel/js checkouts — same model as
- *          wattyzer/gui. gobj-ui is still imported as source by package
+ *          the applications' gui/. gobj-ui is still imported as source by package
  *          specifier (@yuneta/gobj-ui/src/*.js, exports map "./src/*");
  *          gobj-js publishes only dist/, so it resolves to its bundle.
  *
@@ -36,7 +36,8 @@ export default defineConfig({
          *  column header rendered blank (Tabulator's `&nbsp;` placeholder);
          *  @antv/g6 split → "extension drag-canvas has been registered
          *  before" and a broken Graphs view.
-         *  Mirror wattyzer/gui/vite.config.js when adding a shared lib.
+         *  Mirror the project template's gui/vite.config.js when adding a
+         *  shared lib.
          */
         dedupe: [
             "@yuneta/gobj-js",

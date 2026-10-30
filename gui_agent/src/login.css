@@ -7,7 +7,8 @@
  * NO animations and NO transitions, like the rest of the app: the ambient orbs
  * and the spark are static gradients, the card does not fade in, and hover /
  * focus states appear instantly. Do not re-add them.
- * Adapted from wattyzer's login (same visual language, Agent Console palette).
+ * Adapted from the reference v2 application's login (same visual language,
+ * Agent Console palette).
  */
 
 .yagent-login {

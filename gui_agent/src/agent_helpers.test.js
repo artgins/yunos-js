@@ -88,14 +88,14 @@ describe("versions", () => {
 
 
 describe("parse_agent_line", () => {
-    const LINE = "UUID:8f3c-1 (yuneta_agent, 7.12.0),  HOSTNAME:'gines-nitroan51753'";
+    const LINE = "UUID:8f3c-1 (yuneta_agent, 7.12.0),  HOSTNAME:'dev-laptop-01'";
 
     test("pulls uuid, role, version and host out of the agent's free text", () => {
         expect(parse_agent_line(LINE)).toEqual({
             uuid:    "8f3c-1",
             role:    "yuneta_agent",
             version: "7.12.0",
-            host:    "gines-nitroan51753",
+            host:    "dev-laptop-01",
         });
     });
 

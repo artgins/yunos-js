@@ -240,12 +240,12 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 ## gui_agent 1.1.4 (2026-10-25)
 
 - **`view.node_labels` everywhere a node is named**, not only on the cards:
-  the status line (*"through the control center: wat, hid, art"*), the
+  the status line (*"through the control center: n1, n2, art"*), the
   memory tag of each node, the cards mode and the commands a confirmation
   lists; the full name in the title.
 - **The series of a chart name the yuno by label, id and node**
-  (`series_label()`: `sim_controllers pp1 (wat)`): yunos that share a label
-  -- the 14 fleets of renfe-20k-hidraulia are all `sim_controllers` -- were
+  (`series_label()`: `sim_fleet pp1 (n1)`): yunos that share a label
+  -- the 14 fleets of load-20k are all `sim_fleet` -- were
   14 lines of the same name.
 
 ## gui_agent 1.1.3 (2026-10-25)
@@ -257,8 +257,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   one generator turned on or off by hand while the others go on. `on` only
   while the scenario runs; a switch run changes neither the state of the
   scenario nor its `max_run`, and `run_state_of_runs()` skips it.
-- **`view.node_labels`**: the short name of a node on the cards (`"hid"` for
-  `hidrauliaconnect`), the full name in its title.
+- **`view.node_labels`**: the short name of a node on the cards (`"n2"` for
+  `node2.example.com`), the full name in its title.
 
 ## gui_agent 1.1.2, gui_treedb 1.0.2 + gobj-js ^7.28.0, gobj-ui ^7.28.0 (2026-10-25)
 
@@ -308,7 +308,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## gui_agent 1.0.9 (2026-10-25)
 
-- **Memory and disk in the live view.** The simulators of wattyzer filled a
+- **Memory and disk in the live view.** The simulators of app A filled a
   26 GB ramdisk (`/mnt/simram`) with their queues and died in a loop for a
   day, and nothing on screen said so. Every yuno of SDK 7.28.4 sends, with
   its cpu (the `__yuno__` stats, the `cpu` kind of `watch-yuno-stats`), its
@@ -358,7 +358,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   is still refused by it ("a run is in flight, one at a time"). A user who
   may not run a scenario still sees no buttons at all (`run-scenarios`, as
   before).
-- QA: `--check controlstate` reads the buttons of `renfe-20k-hidraulia` and
+- QA: `--check controlstate` reads the buttons of `load-20k` and
   checks them against its state, clicking none. Seen running: Start and
   Resume off, "No disponible: el escenario está en marcha".
 
@@ -384,7 +384,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   against the live plane (the plane's files answered from the local
   `dist/`), `--viewport WxH` sets the window, and `--check livelayout` says
   where the charts are and opens and folds a chart's series. Run at 1920,
-  1440 and 390 px on `renfe-20k-hidraulia`.
+  1440 and 390 px on `load-20k`.
 
 ## gui_agent 1.0.6 (2026-10-24)
 
@@ -404,7 +404,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   that service answers per output gate (`{"output-qiogate-0":
   {"msgs_in_queue": 0, ...}}`), and the view only read a `msgs_in_queue` at
   the top. `queue_in_stats()` takes the top one, or the sum of the
-  children's. Seen on the live view of `renfe-20k-hidraulia`.
+  children's. Seen on the live view of `load-20k`.
 
 ## gui_agent 1.0.4 (2026-10-24)
 
@@ -429,7 +429,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   its first reading: the cards start without the row, and a card that
   learns it has one makes the graph lay out again, once, on the next turn
   (`EV_RELAYOUT`, posted, never in the middle of a paint). In
-  `renfe-20k-hidraulia` the gates and the store are 124 px high, the
+  `load-20k` the gates and the store are 124 px high, the
   simulators 124 (output and queue).
 
 ## gui_agent 1.0.2 (2026-10-24)
@@ -439,7 +439,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   that always read "-": its card has no input row now, and is 124 px high
   instead of 148 (`only_emitters()`; `layout_graph()` takes a height per
   card, `heights`, stacks a column with them and meets each card at its own
-  middle). The 8 simulators of `renfe-20k-hidraulia` take ~190 px less. In a
+  middle). The 8 simulators of `load-20k` take ~190 px less. In a
   scenario with no links nobody is an emitter: the flow is not known.
 
 ## gui_agent 1.0.1 (2026-10-24)
@@ -475,7 +475,7 @@ unreadable. gui_treedb 1.0.0 is the code of 0.17.172 renumbered.
 
 - **Users has a Roles view**: `<tab>/roles` (a route; the *Users* / *Roles*
   buttons move it). Every role of the store with what it grants or denies
-  and for what -- its scope, `only scenario_id=renfe-20k-hidraulia` -- who
+  and for what -- its scope, `only scenario_id=load-20k` -- who
   holds it, its service, enabled or not, protected. Its **sheet** edits it:
   description, service, realm, the permission and *Deny*, the role's scope as
   text (`scenario_id=a,b`), more permissions each with its own scope, and
@@ -532,7 +532,7 @@ offered and asked as before, with one warning each in the console.
   `run-scenarios` on it, edit and delete `write-scenarios`, and "read once"
   and a card's gobj tree `command-agent`.
 - QA, on artgins.yunetacontrol.com against the control center of 7.27.13:
-  the route opens `renfe-20k-hidraulia` in a fresh browser, `--check
+  the route opens `load-20k` in a fresh browser, `--check
   chartsheld` passes, and the console shows only the two expected
   fallback warnings (`my-permissions`, `watch-scenario` not available).
 
@@ -540,12 +540,12 @@ offered and asked as before, with one warning each in the console.
 
 - **A run that failed with no step done changes nothing.** 0.29.112 read any
   failed run as "state not known" and let the charts follow: the newest run
-  of `renfe-20k-hidraulia` was a `start` refused at its first step (its
+  of `load-20k` was a `start` refused at its first step (its
   yunos were down), so the stopped scenario kept scrolling. Now such a run
   is skipped and the one before it decides; a run, or a control from here,
   that failed half way still leaves the state not known.
 - QA: `node scripts/qa.mjs --check chartsheld` opens a stopped scenario
-  (`QA_HELD_SCENARIO`, default `renfe-20k-hidraulia`), waits for the held
+  (`QA_HELD_SCENARIO`, default `load-20k`), waits for the held
   note and checks the messages chart is not redrawn over 6 s; read only.
   Passed on artgins.yunetacontrol.com.
 
@@ -602,7 +602,7 @@ serves the new bundle, and its console shows only the 401 of
 ## gui_agent 0.29.108, gui_treedb 0.17.170 + gobj-ui ^7.27.33 (2026-10-22)
 
 - Deployed by the round (274 and 74 tests). QA on the deployed plane:
-  `--check gobjtree` opens the tree of `db_history_ce^1620` (a key with a
+  `--check gobjtree` opens the tree of `db_history^1620` (a key with a
   `^`) and its canvas is drawn; 0 console messages of concern.
 
 - **gobj-ui 7.27.33: the tree window finds its canvas again.** Since 0.29.106
@@ -762,7 +762,7 @@ and .ovh, artgins.ytreedb.com), console clean.
   header of `C_AGENT_YUNO_TREE` says the same. Three new i18n keys in both
   locales of both yunos.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live on
-  db_history_co^1630: the C_TRANGER card (a service) and a C_TIMER card each
+  db_history_edge^1630: the C_TRANGER card (a service) and a C_TIMER card each
   carry their note; the C_TRANGER card reads `●` now that the backend (7.27.3)
   answers `play_methods`. Console clean but for G6's two usual warnings.
 
@@ -779,15 +779,15 @@ and .ovh, artgins.ytreedb.com), console clean.
   rows, the methods in the head, the lit state naming its instance.
 - New i18n keys of gobj-ui 7.27.27 in both locales of both yunos.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live:
-  the three scopes on db_history_co^1630 (yunovatios-controlador, read
-  only), and set and put back in each scope on gate_enchufe^2046 (wattyzer:
+  the three scopes on db_history_edge^1630 (app B's controller node, read
+  only), and set and put back in each scope on gate_plug^2046 (app A:
   `start_stop` for a C_TIMER and for its gclass, `authzs` for the yuno).
   Console clean but for G6's two usual warnings.
 
 ## gui_agent 0.29.100, gui_treedb 0.17.162 + gobj-ui ^7.27.26 (2026-10-19)
 
 - **The gobj tree has a minimap** (gobj-ui 7.27.26), from 20 cards on: the
-  tree of a yuno opens at actual size, and a db_history_co has 46 gobjs.
+  tree of a yuno opens at actual size, and a db_history_edge has 46 gobjs.
   gui_treedb's graph keeps its own minimap, now drawn by the same module.
 - **gui_agent asks `view-gobj-tree` for `play_methods`**, which the C SDK
   answers from the release after 7.27.1: whether the gobj's gclass has an
@@ -796,7 +796,7 @@ and .ovh, artgins.ytreedb.com), console clean.
   A yuno built before that SDK ignores the name, and its gobjs keep reading
   paused until it is rebuilt.
 - Deployed by the round (tests: gui_treedb 74, gui_agent 261). Checked live
-  on artgins.yunetacontrol.com: the tree of db_history_co^1630 opens with its
+  on artgins.yunetacontrol.com: the tree of db_history_edge^1630 opens with its
   minimap; console clean but for G6's two usual warnings, on both planes and
   on artgins.ytreedb.com.
 
@@ -954,7 +954,7 @@ Icon review of gui_treedb, icons only:
   same glyph (`yi-sign-out-alt` is its FontAwesome 5 name).
 - gui_treedb: "apply" in the options of the tranger view is the check, as in
   gui_agent (the checked box says selected); exporting the connections, a
-  JSON file, is the code file, as the yunovatios map exports JSON; a
+  JSON file, is the code file, as the app B map exports JSON; a
   timeranger tab is the history clock (the floppy says save).
 
 ## gui_agent 0.29.84, gui_treedb 0.17.150 + gobj-ui ^7.27.13 (2026-10-17)
@@ -1189,7 +1189,7 @@ the local gobj-js 7.26.22 / gobj-ui 7.26.43.
 ## gui_agent 0.29.53, gui_treedb 0.17.119 + gobj-js ^7.26.21 (2026-10-13)
 
 gobj-js 7.26.21, the masking of the twenty-fourth review and of the security
-review of its C commit (yunovatios `REV-CLOUD.md` V24.4.2, V24.4.3): after
+review of its C commit (`REV-CLOUD.md` V24.4.2, V24.4.3): after
 `Bearer` or `Basic` only a word that can be a credential is masked; a JWE, a
 JWT a cap cut and a `name: value` whose name is a secret's are masked; and each
 rule judges the text as it came, so no rule hides a value from the next. No
@@ -1199,7 +1199,7 @@ gui_treedb 70) and deployed by gobj-ui's deploy round.
 ## gui_agent 0.29.52, gui_treedb 0.17.118 + gobj-ui ^7.26.42 (2026-10-13)
 
 gobj-ui 7.26.42, the twenty-fourth review's library and validator round
-(yunovatios `REV-CLOUD.md` V24.5): every change of a badge is said, as text; the
+(`REV-CLOUD.md` V24.5): every change of a badge is said, as text; the
 canvas of a graph -- the monitor's, the gobj tree, the treedb and schema graphs,
 the JSON viewer -- is named and shows its focus, with four new keys in both
 locales (`json graph`, `gobj tree graph`, `treedb graph`, `fsm graph`); the
@@ -1259,12 +1259,12 @@ gobj-ui's deploy round, built and deployed by it.
 ## gui_agent 0.29.46, gui_treedb 0.17.112 + gobj-ui ^7.26.36 (2026-10-13)
 
 gobj-ui 7.26.36: the title of a dock chip whose window has a data half
-changes language (estadodelaire's QA found it). No change of the apps' own
+changes language (app C's QA found it). No change of the apps' own
 code; versions raised by gobj-ui's deploy round, built and deployed by it.
 
 ## gui_agent 0.29.45, gui_treedb 0.17.111 + gobj-ui ^7.26.35, gobj-js ^7.26.20 (2026-10-13)
 
-The twenty-third review (yunovatios `REV-CLOUD.md` V23.5), and the libraries
+The twenty-third review (`REV-CLOUD.md` V23.5), and the libraries
 of its round.
 
 - **gui_agent: every key the monitor BUILDS is published and pinned by a
@@ -1297,7 +1297,7 @@ of its round.
 
 ## gui_agent 0.29.44: gobj-ui ^7.26.32 (2026-10-13)
 
-The twenty-second review (yunovatios `REV-CLOUD.md` V22.6.5). The monitor
+The twenty-second review (`REV-CLOUD.md` V22.6.5). The monitor
 BUILDS keys from a control's name, `monitor ${control}` (the label of its
 confirmation) and `monitor confirm ${control}` (its question), and marked them
 as data, so no key of either was ever asked of the locales. It publishes both
@@ -1309,7 +1309,7 @@ range (no change of its code).
 
 ## gui_agent 0.29.43, gui_treedb 0.17.110: gobj-ui ^7.26.29 (2026-10-12)
 
-The twenty-first review (yunovatios `REV-CLOUD.md` V21.4). The
+The twenty-first review (`REV-CLOUD.md` V21.4). The
 `validate-locales` of gobj-ui 7.26.29 holds the app's own code to the per-call
 rule the library keeps, with the file and the line:
 
@@ -1327,7 +1327,7 @@ rule the library keeps, with the file and the line:
 
 ## gui_agent 0.29.42, gui_treedb 0.17.109: gobj-ui ^7.26.28 (2026-10-12)
 
-The twentieth review (yunovatios `REV-CLOUD.md` V20.5). The `validate-locales`
+The twentieth review (`REV-CLOUD.md` V20.5). The `validate-locales`
 of gobj-ui 7.26.28 reads a key where it is handed to a FUNCTION of the library
 (`yui_shell_show_error`, `icon_button`, the popover rows...), and the shell's
 fallback names are keys now. Keys both apps lacked, which reached the page raw:
@@ -1344,14 +1344,14 @@ fallback names are keys now. Keys both apps lacked, which reached the page raw:
 
 ## gui_agent 0.29.41, gui_treedb 0.17.108: gobj-ui ^7.26.27 (2026-10-12)
 
-The nineteenth review (yunovatios `REV-CLOUD.md` V19.4): the property popovers
+The nineteenth review (`REV-CLOUD.md` V19.4): the property popovers
 of the treedb's node graph (`C_G6_NODES_TREE`) name their controls and change language (gobj-ui 7.26.27);
 the published `validate-locales` reads the keys the library's modules publish
 as data. Both pass with no change of their catalogs.
 
 ## gui_agent 0.29.40, gui_treedb 0.17.107: gobj-ui ^7.26.26 (2026-10-12)
 
-The eighteenth review (yunovatios `REV-CLOUD.md` V18.4).
+The eighteenth review (`REV-CLOUD.md` V18.4).
 
 - Key `node id required` (both): the treedb node graph's create popover said
   `t('node id') + ' required'`, with "required" in English for ever.
@@ -1362,7 +1362,7 @@ The eighteenth review (yunovatios `REV-CLOUD.md` V18.4).
 
 ## gui_agent 0.29.39, gui_treedb 0.17.106: gobj-ui ^7.26.25 (2026-10-12)
 
-The seventeenth review (yunovatios `REV-CLOUD.md` V17.3.4-5).
+The seventeenth review (`REV-CLOUD.md` V17.3.4-5).
 
 - Both run the `validate-locales` gobj-ui publishes
   (`node node_modules/@yuneta/gobj-ui/scripts/validate-locales.mjs`) and keep
@@ -1654,7 +1654,7 @@ Deploy it before, or together with, a control center of SDK 7.25.21.
 - The comments that dated the agent's `__relays__` check to SDK 7.25.16 name
   7.25.21, the release that carries it.
 - The text on the Monitor's rates says which services compute their own
-  `<dir>Msgsec` on a timer (yunovatios' gates, the control center of SDK
+  `<dir>Msgsec` on a timer (app B's gates, the control center of SDK
   7.25.21) and which on the reading (a `C_IOGATE`/`C_CHANNEL` below a
   service). No code change.
 - Both SPAs take `tabulator-tables` `^6.6.1` (its only change: `rangeEdited`
@@ -1690,8 +1690,8 @@ Goes with SDK 7.25.21 (agent + control center), and works with older ones.
   fell back to the node. The scan asks the agent's secure gate `view-cert`
   instead (`command-agent service=agent_secure_port command=view-cert`): the
   CN of the certificate it has LOADED and the port of its url --
-  `wss://agent.artgins.com:1993`, `wss://agent.wattyzer.com:1993`,
-  `wss://agent.central.yunovatios.es:1993`... A CN that is not a hostname
+  `wss://agent.artgins.com:1993`, `wss://agent.example.com:1993`,
+  `wss://agent.central.app.example:1993`... A CN that is not a hostname
   (the package's self-signed `yuneta_agent.yuneta.io`) or an agent that does
   not answer falls back to `view-config` and the node's name, as before.
 
@@ -1709,7 +1709,7 @@ Goes with SDK 7.25.21 (agent + control center), and works with older ones.
 
 ## gui_agent 0.29.3 (2026-09-30)
 
-A review of the Scenarios workspace, after running the `yunovatios-stress`
+A review of the Scenarios workspace, after running the `fleet-stress`
 scenario end to end from it. Goes with SDK 7.25.15 (control center + agent),
 and works with older ones.
 
@@ -1837,7 +1837,7 @@ and works with older ones.
   `monitor_node` the watch was tagged with. A node that refuses the watch --
   an agent older than the command, or a control center that does not relay
   the event -- is polled, the others keep being pushed. The watch is renewed
-  every third of the `ttl` the agent answers. Verified with yunovatios' two
+  every third of the `ttl` the agent answers. Verified with app B's two
   nodes through the new control center: the controller pushed at ≈500 msg/s,
   the central (older agent) was polled.
 
@@ -1850,7 +1850,7 @@ and works with older ones.
   asks again, a change of interval or of scenario replaces it. An agent that
   does not know the command answers with an error and the view falls back to
   polling, with one warning. Through the control center it still polls.
-  Verified against yunovatios' controller running the new agent (≈500 msg/s,
+  Verified against app B's controller running the new agent (≈500 msg/s,
   start and stop of the stress test) and against an older agent (fallback).
 - `C_MONITOR_LINK` declares `EV_YUNO_STATS` public; a reading pushed or
   polled goes through one path (`apply_reading`). A history row takes a
@@ -1866,7 +1866,7 @@ and works with older ones.
   certificate a browser trusts. A yuno's `key` names it in `links` and `test`
   when two nodes carry the same id. The view subscribes to the shared link
   only while it connects or monitors, lets through only its tagged answers and
-  skips the dispatch acks. Verified with five yunos on yunovatios' two nodes,
+  skips the dispatch acks. Verified with five yunos on app B's two nodes,
   and a start/stop of the stress test through the control center at 500
   msg/s.
 - **Links proposed from the configs.** *Propose links* in the scenario editor
@@ -1896,7 +1896,7 @@ and works with older ones.
   send, stop and restart in red; the generator's last answer is shown beside
   the buttons. Only while monitoring: a dialog answered after a drop sends
   nothing and says so. Without `test` (production) there is no control.
-  Verified against yunovatios' controller at 500 msg/s: each control moved
+  Verified against app B's controller at 500 msg/s: each control moved
   the three yunos as expected.
 - New i18n keys (en, es): `monitor test`, the five control names, their
   confirmations (arrive as variables), `monitor commands that will run`,
@@ -2320,7 +2320,7 @@ every close control and dialog button carries a `title`.
   the schemas again: the previous ones stay"* and *"the treedb did not
   describe a write back: the writes after it were not sent"*.
 
-gui_treedb, wattyzer, yunomusica and the yunovatios GUIs mount no schema
+gui_treedb, app A, app E and the app B GUIs mount no schema
 editor; the only change that reaches them is the `title` on the close
 controls of `shell_modals.js`. Each was built against 7.25.9 (not deployed).
 
@@ -2339,7 +2339,7 @@ Save, and a repeated toast keeps its own handle and time.
   are in"* (en + es): what the editor answers when a dialog's Save or a
   confirmation arrives during a load. The dialog stays open.
 
-gui_treedb, wattyzer and the yunovatios GUIs mount no schema editor; the
+gui_treedb, app A and the app B GUIs mount no schema editor; the
 toast change reaches them on their next gobj-ui bump and keeps the `{close()}`
 contract.
 
@@ -2559,7 +2559,7 @@ Contents:
 - Keycloak login-form / BFF notes and `FUTURE-JS.md`.
 
 Each yuno consumes `@yuneta/gobj-js` / `@yuneta/gobj-ui` from the **npm
-registry**, the same way wattyzer does. A standalone clone of this repo builds
+registry**, the same way app A does. A standalone clone of this repo builds
 on its own, outside the yunetas superproject.
 
 ## gui_treedb 0.17.54 — 2026-09-21
@@ -2938,10 +2938,10 @@ gobj-ui 7.23.168 does the same for the treedb views of both yunos.
 A local copy of a yuno carries the production names in its config (that is how
 it reaches its production peers), so its endpoint is the production url too.
 The export keeps one connection per url, and it kept the FIRST row: the
-development machine sorts first by host, so `central.yunovatios.es:1620` went
+development machine sorts first by host, so `central.app.example:1620` went
 out as `dev-laptop^1620`. Now the row whose node the url names wins --
-the node sharing the most words with the url's host (`yunovatios-central` and
-`central.yunovatios.es` share two) -- and a tie still keeps the first.
+the node sharing the most words with the url's host (`app-central` and
+`central.app.example` share two) -- and a tie still keeps the first.
 
 #### gui_treedb's About does not list the connections (gui_treedb 0.17.32)
 
@@ -3082,7 +3082,7 @@ Three things asked for on the Nodes table, and one they share a cause with.
   opens it as `agent_id=<uuid>`. This is not a convenience: on a control center
   with old nodes on it **neither key is unique**. A fleet cloned from one image
   shares a single uuid across six machines, and four raspberries all answer to
-  the hostname `raspz-slave` — so whichever of the two tells THIS node from its
+  the hostname `board-slave` — so whichever of the two tells THIS node from its
   twins is a thing only the person reading the table knows. The tab is labelled
   with the key that opened it, for the same reason: labelling it with the other
   one would not name the node either. The checkbox keeps the default (hostname,
@@ -3101,7 +3101,7 @@ dot as offline for ever.
 
 Verified against the deployed plane with a probe that makes the gestures: the
 status line matches the rows (30 in Terminal, where the old nodes are not
-version-filtered), the duplicated uuid appears as six rows and `raspz-slave` as
+version-filtered), the duplicated uuid appears as six rows and `board-slave` as
 four, a Host click and a UUID click open two tabs onto the same node, both
 close, and the console stays clean.
 
@@ -3373,7 +3373,7 @@ its siblings.
   (`gobj-ui`, `yui_inputs.js`) says every editable text input gets a clear
   button, shown only while the field has content AND is focused — so a form
   arriving with a remembered username does not show a ✕ on every filled field
-  at once. Both logins simply never called it. yunovatios' login already did,
+  at once. Both logins simply never called it. app B's login already did,
   and is where the wiring was copied from.
 
   Two details that are the whole of the work. The username input had **no
@@ -3419,7 +3419,7 @@ its siblings.
   addressed to a name nobody answers to. Those frames were handed to every
   subscriber, including the application gobj, whose FSM does not declare them —
   *"Event NOT DEFINED in state"*, once per frame. It was measured on a
-  yunovatios node at **38 errors in a 26 ms burst** with 38 devices emitting;
+  app B node at **38 errors in a 26 ms burst** with 38 devices emitting;
   here it is the same mechanism against whatever the console is subscribed to.
 
   Nothing to change in either yuno: the fix is in the runtime, and the range
@@ -4008,7 +4008,7 @@ its siblings.
     MOUNT, not to where you were.** With `redirect: "back"` or `"none"` the
     shell restored `stages.main.active_route` — the route the view is DECLARED
     at — so under a node tree everything below it, which is subpath the node
-    owns, was thrown away. Reported on the yunovatios console, where switching
+    owns, was thrown away. Reported on the app B console, where switching
     the theme from a deep graph landed on the workspace root; here the same
     held for `/preferences`, `/sitemap` and the dev-tools routes. The agent
     console's own theme button never showed it because it is a plain event and
@@ -4154,8 +4154,8 @@ its siblings.
     actually serves.** The scan looked for the FQDN in one place only — the
     `__ssl_certificate__` config VARIABLE — and fell through to the realm id
     when it was absent. For a backend whose realm is named
-    `demo.hidrauliaconnect.es` and whose certificate says
-    `hidrauliaconnect.es`, the proposal was a host that resolves nowhere,
+    `demo.app.example` and whose certificate says
+    `app.example`, the proposal was a host that resolves nowhere,
     and the connection pasted into gui_treedb could not open.
 
     The evidence was in the same config all along, written the other way:
@@ -4498,7 +4498,7 @@ when it was written). `0.14.0` sits above both.
 - **chore: `@yuneta/gobj-ui` `^7.11.1` -> `^7.12.0`, app `0.9.3`.** The Schemas
     workspace's topic tables take the shared selection with it — and with it the
     fix that stops their header checkbox reaching past the header filters.
-    Verified on the deployed console against wattyzer's agent treedb: filter
+    Verified on the deployed console against app A's agent treedb: filter
     `yunos` by role to 2 of 17, tick the header, and the toolbar acts on 2.
 
 - **feat: the answer table can be narrowed to the rows you mean, app `0.9.2`.**
@@ -4545,7 +4545,7 @@ when it was written). `0.14.0` sits above both.
     (`variableHeight` grows the row), so a narrow screen shows two lines rather
     than half a sentence.
 
-- **fix: a yuno tab names its NODE too** (`yuneta_agent · wattyzer`). Every node
+- **fix: a yuno tab names its NODE too** (`yuneta_agent · node1`). Every node
     runs a `yuneta_agent`, so two tabs of two nodes read the same and there was
     no way to know which one you were typing into. The yuno stays first: it is
     what was picked and what the eye scans for, and a tab strip truncates at the
@@ -4751,7 +4751,7 @@ when it was written). `0.14.0` sits above both.
     The SDK re-keyed the `topics` and `cols` topics of
     `treedb_system_schema`: they carried a rowid, they now carry the qualified
     name — the id of the parent, a dot, and the record's own name
-    (`treedb_yunovatioscodb.yunos.yuno_role`). For the Schemas workspace that
+    (`treedb_appdb.yunos.yuno_role`). For the Schemas workspace that
     changes three things: a card is labelled by the leaf and not by the whole
     path, the create form stops asking for the id, and **editing a column is an
     update**. It used to be a create — a rowid pkey has no update — so every
@@ -4909,7 +4909,7 @@ when it was written). `0.14.0` sits above both.
 
     Verified on the deployed plane against one node holding both cases:
     `gate_central^2020`'s replica of `treedb_authzs` mounted with **0** new /
-    delete / edit buttons and **0** in-row trash icons, `db_history_ce^1620`'s
+    delete / edit buttons and **0** in-row trash icons, `db_history^1620`'s
     own `treedb_system_schema` with all of them, no console errors.
 
 - **The Schemas picker says whether a yuno can be EDITED: master, read only or
@@ -4934,7 +4934,7 @@ when it was written). `0.14.0` sits above both.
     — a node older than the command replies "command not available", and
     counting that as "not master" would label every pre-7.13.0 node read-only,
     which is a claim this app cannot make. Verified live against a node whose
-    yunos were in all three states at once: `db_history_ce^1620` *Master*,
+    yunos were in all three states at once: `db_history^1620` *Master*,
     `gate_central^2020` *Read only* (1620 holds the shared store), and the two
     yunos still on an older binary showing nothing.
 
@@ -5167,7 +5167,7 @@ when it was written). `0.14.0` sits above both.
     WORK of the console and every option on it now opens a workspace: Commands,
     Statistics, Terminal, Schemas. The settings page moved to `/preferences`,
     reached from the toolbar avatar — where a user looks for their own
-    settings, and where the yunovatios SPAs already put it. It stays a ROUTE
+    settings, and where the app B SPAs already put it. It stays a ROUTE
     and not a dialog, so it is linkable, survives an F5 and appears in the site
     map. `/settings` is gone: the page is the same one, at the new address.
 
@@ -5342,7 +5342,7 @@ when it was written). `0.14.0` sits above both.
     screenshot, every console message and every failed request to
     `/tmp/agent-qa-out/<host>-<stamp>/`.
 
-    It is not wattyzer's driver moved over: that one drives wattyzer's own login
+    It is not app A's driver moved over: that one drives app A's own login
     and BFF. This one speaks the Agent Console's login form (`src/login.js`) and
     waits on `.C_YUI_SHELL`, so a change to either breaks the driver LOUDLY —
     which is the point, because a silent pass against a screen that no longer
@@ -5350,7 +5350,7 @@ when it was written). `0.14.0` sits above both.
 
     Credentials never touch the repo: the user comes from `~/.yuneta/.qa-creds`
     or the environment, the password from the OS keyring (or `CLAUDIA_PASS` for
-    CI). Playwright is borrowed from wattyzer's `node_modules` rather than added
+    CI). Playwright is borrowed from app A's `node_modules` rather than added
     as a dependency, so the SPA ships nothing extra. It defaults to **firefox**,
     the engine this machine has downloaded — and firefox reports
     `navigator.language` as the literal string `"undefined"` under Playwright,
@@ -5472,7 +5472,7 @@ when it was written). `0.14.0` sits above both.
   tied a build of these SPAs to the yunetas superproject and to whatever was
   in those working trees. They are now ranges (`^7.9.6` / `^5.8.2`) resolved
   from the registry, so a build is reproducible from this repo alone and both
-  yunos consume exactly what wattyzer consumes.
+  yunos consume exactly what app A consumes.
 
   The `file:` deps were symlinks, which forced `resolve.preserveSymlinks` in
   `vite.config.js` — and that made Vite load duplicate module instances, which
@@ -5536,7 +5536,7 @@ when it was written). `0.14.0` sits above both.
   `use_hash` and no `item_index` and does not declare `EV_ROUTE_REQUESTED`, so
   the first topic-tab click logs three errors and dies in `navigate_to()` with
   `item_index is undefined`. gui_treedb mounts on declared routes today, so
-  this was latent here — it is what actually broke yunovatios, whose treedb
+  this was latent here — it is what actually broke app B, whose treedb
   views did move under a node tree. `yui_shell_of()` walks up to the
   `C_YUI_SHELL` and holds for both hosts. The EV_ROUTE_CHANGED subscription in
   `mt_start`/`mt_stop` keeps using the parent on purpose (a subscription goes
@@ -6620,14 +6620,14 @@ vitest + both builds + the Playwright QA drivers.
   (`ac_clear_session`, we are logged out on purpose). gui_agent also drops the
   dead `EV_DO_REFRESH` entry from ST_LOGOUT (its only sender, the NAK path,
   operates in ST_LOGIN); gui_treedb never had it. Mirrors the same fix in
-  wattyzer. gui_agent is the most exposed (single-link: it logs out on the 2nd
+  app A. gui_agent is the most exposed (single-link: it logs out on the 2nd
   NAK while the 1st refresh may still be in flight).
 
 - **fix(gui_treedb): clear the refresh timer on session end.**
   `ac_login_denied` / `ac_logout_done` now `clear_timeout(gobj_timer)` so the
   refresh timer armed at login does not survive into ST_LOGOUT and fire a
   stray `EV_TIMEOUT` there (*"Event NOT DEFINED in state"*). gui_agent already
-  did this; gui_treedb was the odd one out. Mirrors the wattyzer fix.
+  did this; gui_treedb was the odd one out. Mirrors the app A fix.
 
 - **feat(gui_treedb): Live records card in C_TRANGER_VIEW (realtime).** The
   keys picker's **Live** action (previously disabled) now opens a streaming
@@ -6998,9 +6998,9 @@ shell confirm/notification helpers, so both SPAs stop bundling the legacy
   mark, its name, and a spinner on the brand gradient (teal for TreeDB, blue for
   Agent Console), so the first paint already matches the login and the hand-off is
   seamless. Reduced-motion friendly; `main.js` still removes it on ready.
-- **Redesigned login screen for gui_agent and gui_treedb (like wattyzer).**
+- **Redesigned login screen for gui_agent and gui_treedb (like app A).**
   Both pre-shell logins were a plain centered Bulma box on a flat gradient. They
-  now use the same polished split-card design as wattyzer's login: a brand-tinted
+  now use the same polished split-card design as app A's login: a brand-tinted
   welcome panel (mark + wordmark + a one-line pitch + three feature bullets) beside
   the sign-in form, animated ambient background orbs, a gradient CTA, a password
   reveal, theme + language quick toggles, and a version footer — collapsing to
@@ -7193,7 +7193,7 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   (treedb selection), C_TREEDB_SETTINGS (editable Tabulator connection editor),
   C_TREEDB_VIEW (hosts C_YUI_TREEDB_TOPICS/GRAPH as a named service so command
   answers route back). CSP broadened to `wss:`/`https:` for runtime-configured
-  backends. Verified end-to-end against db_history_wz on app.wattyzer.com.
+  backends. Verified end-to-end against db_history on app A's node.
   KEY: the identity_card must advertise the treedbs in `required_services` or the
   backend authz gate silently drops the `descs`. See `gui_treedb/README`.
 - **F5 / reconnect restores the open treedb tab.** The per-workspace treedb tabs
@@ -7215,7 +7215,7 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   other shared third-party lib (bundle shrank ~120 KB once deduped), so
   `resolve.dedupe` now lists them all — `i18next`, `@antv/g6`, `maplibre-gl`,
   `tabulator-tables`, `tom-select`, `uplot`, `vanilla-jsoneditor` — mirroring
-  `wattyzer/gui/vite.config.js` as preventive hygiene against latent
+  `app A's gui/vite.config.js` as preventive hygiene against latent
   split-singleton bugs in the graph / map / editor views. (`@yuneta/gobj-js` /
   `@yuneta/gobj-ui` are already single instances here via the `src/` aliases;
   the app's own menus/toolbar were unaffected because the shell receives `t`
@@ -7224,13 +7224,13 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   in gobj-ui's `g6_drag_canvas_touch.js`, not a duplication symptom.) Diagnosed
   by driving the live app with Playwright: the backend `descs` answer was
   correct (proper `cols`/headers), the blank titles were purely client-side.
-- **Fixed reconnect regressions vs the gui_agent/wattyzer references (audit).**
+- **Fixed reconnect regressions vs the gui_agent/app A references (audit).**
   A cross-app comparison surfaced transport/reconnect wiring the V2 rebuild
   dropped:
   - **`gobj NULL or DESTROYED` on WS close.** `C_TREEDB_VIEW.mt_destroy` called
     `gobj_destroy` on its hosted view, a SERVICE child the framework already
     cascade-destroys — a double-destroy logging one error per pruned tab.
-    Mirrored wattyzer's `C_WZ_TREEDB.mt_destroy` (just drop the references).
+    Mirrored app A's treedb view `mt_destroy` (just drop the references).
   - **Unbounded refresh→reopen→NAK loop.** `ac_login_refreshed` cleared the
     recovery latch immediately and `ac_on_open` never re-armed it, so a backend
     that kept rejecting the forwarded token drove an endless `/auth/refresh` +
@@ -7257,7 +7257,7 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
     `treedbs`, which offered NON-treedb services (e.g. the raw `tranger_authz`
     C_TRANGER that backs `treedb_authzs`); browsing one sent a treedb `descs` to
     a ranger → "command not available". Now the curated `treedbs` list (Settings)
-    is the contract, like wattyzer's static route table; when empty the card
+    is the contract, like app A's static route table; when empty the card
     shows the "add them in Settings" hint. (The browsable authz treedb is
     `treedb_authzs`, not `tranger_authz`.)
 - **Surface a backend that can't be reached (audit C2).** A connection with a
@@ -7268,15 +7268,15 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   picker card shows "Cannot connect (…) — retrying…" in red instead. The
   transport keeps retrying, so a fixed/again-reachable backend recovers on its
   own (the error clears on `EV_ON_OPEN`). One unreachable backend never tears
-  down the shell or affects other backends (multi-backend, unlike wattyzer's
+  down the shell or affects other backends (multi-backend, unlike app A's
   single-link `ac_on_open_error` which logs out). `C_TREEDB_APP` declares the
   event as a no-op (it is a null-subscriber to every links event). Verified live
   with Playwright (a wrong-port connection shows the error; a good one connects
   alongside; no FSM "event not defined" crash).
 - **Deep-link the selected topic / operation mode (audit B4).** `C_TREEDB_VIEW`
   had the child selection ↔ URL bridge stubbed out as a no-op, so a reload always
-  reset to the first topic (topics) / `reading` (graph). Ported wattyzer's
-  `C_WZ_TREEDB` bridge, adapted to the multi-connection route scheme: the hosted
+  reset to the first topic (topics) / `reading` (graph). Ported app A's
+  treedb view bridge, adapted to the multi-connection route scheme: the hosted
   view's `EV_TOPIC_SELECTED` / `EV_OPERATION_MODE_CHANGED` navigates the shell to
   `<tab-route>/<seg>`, and the shell's `EV_ROUTE_CHANGED` applies the subpath back
   to the view (`EV_SHOW` / `EV_SET_OPERATION_MODE`). Each mounted view filters on
@@ -7285,7 +7285,7 @@ _(Full per-yuno detail lives in `gui_agent/README.md`.)_
   the full deep route so the topic/mode is restored along with the tab. The
   connection is already encoded in the tab route (via the sel id), so no extra
   routing was needed. Verified live with Playwright (select `users` →
-  `…/treedb_wattyzer/users`; F5 → the `users` topic is restored, not the first).
+  `…/treedb_app/users`; F5 → the `users` topic is restored, not the first).
 - **Avatar initials after a reload.** The logged-in user's initials vanished
   after F5: `/auth/login` returns the username but `/auth/refresh` (session
   restore) does not, so the username was empty on restore and `compute_initials`

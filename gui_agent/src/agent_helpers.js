@@ -108,7 +108,7 @@ function node_id(n)
  *
  *  Neither key is unique on a control center that has old nodes on it:
  *  a fleet upgraded from an image shares one uuid across every machine,
- *  and four raspberries answer to the hostname `raspz-slave`.  So a
+ *  and four raspberries answer to the hostname `board-slave`.  So a
  *  table indexed by either collapses rows that are different nodes --
  *  and a table cannot show what it has merged.  The three fields
  *  together do separate them, and that is all this is for: it is the

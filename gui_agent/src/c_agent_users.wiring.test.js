@@ -394,7 +394,7 @@ describe("writing users", () => {
 
     test("create: a bad or existing username sends nothing", () => {
         const v = ready_view();
-        gobj_send_event(v, "EV_CREATE_USER", {username: "rosa martinez", roles: [], disabled: false}, v);
+        gobj_send_event(v, "EV_CREATE_USER", {username: "jane doe", roles: [], disabled: false}, v);
         gobj_send_event(v, "EV_CREATE_USER", {username: "yuneta", roles: [], disabled: false}, v);
         expect(sent).toEqual([]);
         expect(gobj_current_state(v)).toBe("ST_READY");

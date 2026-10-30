@@ -158,7 +158,7 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   its `C_NODE` runs with `with_link_events`, the default since SDK 7.26.0. It
   is an either/or in the backend: with link events ON, a link/unlink does not
   publish the parent's `EV_TREEDB_NODE_UPDATED`, which is what a **v1** SPA
-  reads, so a backend that serves one (estadodelaire, hidraulia) turns it off.
+  reads, so a backend that serves one turns it off.
   Against such a backend an open Graph shows stale edges until reloaded.
 - **The runtime is auditable — every action crosses an FSM.** This is a
   contract of this SPA, not an accident: a DOM click, a modal `on_close`, a
@@ -179,7 +179,8 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   that is not an action stays a plain call (Tabulator's `ajaxRequestFunc` must
   RETURN a Promise — it is a data source, not an event).
 
-Reference implementation for the treedb-view adapter: wattyzer's `C_WZ_TREEDB`.
+Reference implementation for the treedb-view adapter: the treedb view of the
+reference v2 application.
 
 ## i18n
 

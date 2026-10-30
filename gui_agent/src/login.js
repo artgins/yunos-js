@@ -7,7 +7,8 @@
  *          collapsing to form-only below 900px. Theme + language quick
  *          toggles, password reveal, busy state, error banner. Mounted by
  *          C_APP when there is no session, unmounted on EV_LOGIN_ACCEPTED.
- *          Same visual language as wattyzer's login, Agent Console palette.
+ *          Same visual language as the reference v2 application's login,
+ *          Agent Console palette.
  *
  *          mount_login({on_submit}) -> { unmount, set_busy, set_error, clear_error }
  *
