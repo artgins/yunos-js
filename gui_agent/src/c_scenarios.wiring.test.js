@@ -511,7 +511,7 @@ describe("the live view of a scenario the control center keeps", () => {
         /*  7.28.4: a ramdisk at 4 % free is danger, 15 % is warning  */
         push({yuno_id: "7601", kind: "cpu", service: "", result: 0, data: {cpu: 20,
               mem_rss_kb: 5324, mem_node_total_mb: 31885, mem_node_available_percent: 15,
-              disk_min_free_percent: 4, disk_min_free_path: "/mnt/simram/queues", disk_min_free_size_gigas: 26}});
+              disk_min_free_percent: 4, disk_min_free_path: "/mnt/ramdisk/queues", disk_min_free_size_gigas: 26}});
         push({yuno_id: "7501", kind: "cpu", service: "", result: 0, data: {cpu: 20,
               mem_rss_kb: 204800, mem_node_total_mb: 31885, mem_node_available_percent: 15,
               disk_min_free_percent: 15, disk_min_free_path: "/yuneta/store", disk_min_free_size_gigas: 1832}});
@@ -519,7 +519,7 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(card("gate").$disk.textContent).toBe("4 %");
         expect(card("gate").$disk_free.classList.contains("is-hidden")).toBe(false);
         expect(card("gate").$disk_row.className).toContain("MONITOR_FREE--critical");
-        expect(card("gate").$disk_row.getAttribute("title")).toBe("/mnt/simram/queues · 26 GB");
+        expect(card("gate").$disk_row.getAttribute("title")).toBe("/mnt/ramdisk/queues · 26 GB");
         expect(card("events").$mem.textContent).toBe("200 MB");
         expect(card("events").$disk_row.className).toContain("MONITOR_FREE--low");
         /*  The node's memory: once, for the two yunos of node node-a, a warning  */

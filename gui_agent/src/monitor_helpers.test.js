@@ -567,9 +567,9 @@ describe("run state and charts", () => {
             disk_pct: null, disk_path: "", disk_gb: null
         });
         expect(resources_of({mem_rss_kb: 5324, mem_node_total_mb: 31885, mem_node_available_percent: 35,
-            disk_min_free_percent: 4, disk_min_free_path: "/mnt/simram/queues", disk_min_free_size_gigas: 26}))
+            disk_min_free_percent: 4, disk_min_free_path: "/mnt/ramdisk/queues", disk_min_free_size_gigas: 26}))
             .toEqual({mem_rss_kb: 5324, node_mem_pct: 35, node_mem_total_mb: 31885,
-                disk_pct: 4, disk_path: "/mnt/simram/queues", disk_gb: 26});
+                disk_pct: 4, disk_path: "/mnt/ramdisk/queues", disk_gb: 26});
         expect(resources_of(null).disk_pct).toBe(null);
         expect(resources_of({disk_min_free_percent: "4"}).disk_pct).toBe(null);
         expect([null, 0, 9, 10, 19, 20, 100].map(free_level))

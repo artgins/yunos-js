@@ -408,7 +408,7 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 ## gui_agent 1.0.9 (2026-10-25)
 
 - **Memory and disk in the live view.** The simulators of app A filled a
-  26 GB ramdisk (`/mnt/simram`) with their queues and died in a loop for a
+  26 GB ramdisk (`/mnt/ramdisk`) with their queues and died in a loop for a
   day, and nothing on screen said so. Every yuno of SDK 7.28.4 sends, with
   its cpu (the `__yuno__` stats, the `cpu` kind of `watch-yuno-stats`), its
   resident memory, the memory still available on its node, and the free

@@ -189,14 +189,14 @@ A scenario, as the control center keeps it and as the editor writes it:
 ```json
 {
     "id": "stress-demo",
-    "description": "sim_load -> gate_b -> db_events, both nodes",
+    "description": "sim_load -> gate -> db_events, both nodes",
     "node": "node-a",
     "yunos": [
         {"key": "sim",      "id": "gen1",   "service": "sim_load", "rate": "tx"},
-        {"key": "gate_a",   "id": "7601",   "label": "gate_b",
+        {"key": "gate_a",   "id": "7601",   "label": "gate",
          "queue_service": "__output_side__"},
         {"key": "events_a", "id": "7501",   "label": "db_events"},
-        {"key": "gate_b",   "id": "7601",   "label": "gate_b", "node": "node-b"},
+        {"key": "gate_b",   "id": "7601",   "label": "gate", "node": "node-b"},
         {"key": "events_b", "id": "7501",   "label": "db_events", "node": "node-b"}
     ],
     "links": [["sim", "gate_a"], ["gate_a", "events_a"], ["gate_b", "events_b"]],
