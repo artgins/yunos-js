@@ -8,6 +8,13 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.6, gui_treedb 1.2.2 (2026-10-31)
+
+- **BREAKING, both: the same rule reaches the rest of the views.** A node's agent
+  that does not answer `save-schema`, `diff-schema`, the discovery, `saved-schema` or
+  `apply-schema`, a read of the users not answered, and a `get-page`, `list-keys` or
+  `__snaps__` that failed were an ERROR, and are a WARNING: the peer did it.
+
 ## gui_agent 1.3.5, gui_treedb 1.2.1 (2026-10-31)
 
 - **BREAKING, both: every failure the peer caused is a WARNING, one rule in

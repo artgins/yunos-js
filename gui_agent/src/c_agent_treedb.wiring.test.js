@@ -505,7 +505,7 @@ describe("the deadline of a Save and of a saved-schema round", () => {
         expect(sentence[1].i18n).toBe("save unanswered");
         expect(owners[2]).toContain("owner_b");
         expect(owners[2]).not.toContain("owner_a");
-        expect(errors().some((e) => e.includes("owner_b"))).toBe(true);
+        expect(warnings().some((e) => e.includes("owner_b"))).toBe(true);
         /*  Whether it landed is not known: the node is read again.  */
         expect(take(is("services")).length).toBe(1);
     });
@@ -548,7 +548,7 @@ describe("the deadline of a Save and of a saved-schema round", () => {
         expect(owners[2]).not.toContain("owner_a");
         /*  The editor is told the drafts the round could gather.  */
         expect(editors[editors.length - 1].got).toEqual([{}]);
-        expect(errors().some((e) => e.includes("owner_b"))).toBe(true);
+        expect(warnings().some((e) => e.includes("owner_b"))).toBe(true);
     });
 
     test("a drop settles them: their deadlines do not fire after it", () => {
@@ -589,7 +589,7 @@ describe("the apply deadline", () => {
         expect(sentence[1].i18n).toBe("apply unanswered, nothing restarted");
         expect(step[2]).toContain("owner_b");
         expect(step[2]).not.toContain("owner_a");
-        expect(errors().some((e) => e.includes("owner_b"))).toBe(true);
+        expect(warnings().some((e) => e.includes("owner_b"))).toBe(true);
         expect(take(is("kill-yuno")).length).toBe(0);
         expect(take(is("services")).length).toBe(1);   /*  back to discovery  */
     });
@@ -617,7 +617,7 @@ describe("the apply deadline", () => {
         expect(sentence[1].i18n).toBe("apply unanswered, restarting");
         expect(owners[2]).toContain("owner_b");
         expect(owners[2]).not.toContain("owner_a");
-        expect(errors().some((e) => e.includes("owner_b"))).toBe(true);
+        expect(warnings().some((e) => e.includes("owner_b"))).toBe(true);
 
         /*  owner_b's late answer does not move the sequence.  */
         answer(tab, b, 0, [{treedb_name: "tb", result: 0, data: {applied: true}}]);
@@ -858,8 +858,8 @@ describe("the toolbar outside ST_READY, and the deadline of a discovery", () => 
         expect(tab.priv.$notice.classList.contains("is-hidden")).toBe(false);
         expect(tab.priv.$notice.getAttribute("i18n")).toBe("discovery unanswered");
         expect(tab.priv.$toolbar.classList.contains("is-hidden")).toBe(true);
-        expect(errors().length).toBe(1);
-        expect(errors()[0]).toContain("did not answer the discovery");
+        expect(warnings().length).toBe(1);
+        expect(warnings()[0]).toContain("did not answer the discovery");
     });
 
     test("the probes of a discovery are under the same deadline", () => {
@@ -870,7 +870,7 @@ describe("the toolbar outside ST_READY, and the deadline of a discovery", () => 
         expect(take(is("treedb-info")).length).toBe(1);
         vi.advanceTimersByTime(31 * 1000);
         expect(gobj_current_state(tab)).toBe("ST_EMPTY");
-        expect(errors()[0]).toContain("'treedb-info' of 1 treedb(s) owed");
+        expect(warnings()[0]).toContain("'treedb-info' of 1 treedb(s) owed");
     });
 
     test("a discovery answer after its deadline is said, and builds nothing", () => {
@@ -1208,10 +1208,10 @@ describe("the deadline of a comparison", () => {
         vi.advanceTimersByTime(2 * 1000);
         expect(tab.priv.diff_left).toBe(0);
         expect(tab.priv.$diff.disabled).toBe(false);
-        expect(errors().filter((e) => e.includes("diff-schema"))).toEqual([
+        expect(warnings().filter((e) => e.includes("diff-schema"))).toEqual([
             expect.stringContaining("owner_b")
         ]);
-        expect(errors().some((e) => e.includes("diff-schema") && e.includes("owner_a"))).toBe(false);
+        expect(warnings().some((e) => e.includes("diff-schema") && e.includes("owner_a"))).toBe(false);
 
         expect(modals.length).toBe(1);
         const $report = modals[0];

@@ -324,12 +324,12 @@ describe("reading a users store", () => {
         const v = new_view();
         const first = sent[0];
         gobj_send_event(v, "EV_TIMEOUT", {}, v);
-        expect(errors().length).toBe(1);
-        expect(errors()[0]).toMatch(/not answered by node 'node_1' in 30 s/);
+        expect(warnings().length).toBe(1);
+        expect(warnings()[0]).toMatch(/not answered by node 'node_1' in 30 s/);
         expect(gobj_current_state(v)).toBe("ST_NO_USERS");
 
         answer(v, first, {data: SERVICES});
-        expect(warnings()[0]).toMatch(/answer of a batch that is over/);
+        expect(warnings()[1]).toMatch(/answer of a batch that is over/);
         expect(gobj_current_state(v)).toBe("ST_NO_USERS");
     });
 

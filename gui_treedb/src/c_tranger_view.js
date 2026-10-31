@@ -3766,7 +3766,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
                       `unknown request '${req_id}' (already settled?)`);
         } else {
             if(result < 0) {
-                log_error(`${gobj_short_name(gobj)}: get-page failed: ` +
+                log_warning(`${gobj_short_name(gobj)}: get-page failed: ` +
                           `${comment || "(no comment)"}`);
                 pend.reject(new Error(comment || "get-page failed"));
                 /*  The backend no longer holds the iterator (it restarted,
@@ -3815,7 +3815,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
             return 0;
         }
         if(result < 0) {
-            log_error(`${gobj_short_name(gobj)}: list-keys failed: ` +
+            log_warning(`${gobj_short_name(gobj)}: list-keys failed: ` +
                       `${comment || "(no comment)"}`);
             pend.reject(new Error(comment || "list-keys failed"));
             return 0;
@@ -3858,7 +3858,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
      */
     if(command === "open-list" && kw_command && kw_command.purpose === "snaps") {
         if(result < 0) {
-            log_error(`${gobj_short_name(gobj)}: cannot read __snaps__: ` +
+            log_warning(`${gobj_short_name(gobj)}: cannot read __snaps__: ` +
                       `${comment || "(no comment)"}`);
             return 0;
         }

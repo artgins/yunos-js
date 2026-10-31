@@ -1404,7 +1404,7 @@ function ac_timeout(gobj, event, kw, src)
     if(!b) {
         return 0;
     }
-    log_error(`${gobj_short_name(gobj)}: ${b.kind} of the users of ` +
+    log_warning(`${gobj_short_name(gobj)}: ${b.kind} of the users of ` +
         `'${gobj_read_str_attr(gobj, "yuno_id")}' not answered by node ` +
         `'${gobj_read_str_attr(gobj, "node")}' in ${BATCH_TIMEOUT_MS / 1000} s`);
     for(let req of Object.keys(b.pending)) {

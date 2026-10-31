@@ -1956,7 +1956,7 @@ function ac_schema_round_timeout(gobj, event, kw, src)
             return 0;
         }
         priv.save_unanswered = Object.keys(priv.save_owed || {}).sort();
-        log_error(`${gobj_short_name(gobj)}: the node's agent did not answer 'save-schema' ` +
+        log_warning(`${gobj_short_name(gobj)}: the node's agent did not answer 'save-schema' ` +
             `of ${priv.save_unanswered.join(", ")}`);
         priv.save_left = 0;
         priv.save_round = ++__round_seq__;     /*  a late answer is not counted  */
@@ -1970,7 +1970,7 @@ function ac_schema_round_timeout(gobj, event, kw, src)
             return 0;
         }
         priv.diff_unanswered = Object.keys(priv.diff_owed || {}).sort();
-        log_error(`${gobj_short_name(gobj)}: the node's agent did not answer 'diff-schema' ` +
+        log_warning(`${gobj_short_name(gobj)}: the node's agent did not answer 'diff-schema' ` +
             `of ${priv.diff_unanswered.join(", ")}`);
         priv.diff_left = 0;
         priv.diff_round = ++__round_seq__;     /*  a late answer is not counted  */
@@ -1983,7 +1983,7 @@ function ac_schema_round_timeout(gobj, event, kw, src)
             log_warning(`${gobj_short_name(gobj)}: discovery deadline with no discovery in flight`);
             return 0;
         }
-        log_error(`${gobj_short_name(gobj)}: the node's agent did not answer the discovery ` +
+        log_warning(`${gobj_short_name(gobj)}: the node's agent did not answer the discovery ` +
             `of yuno '${gobj_read_str_attr(gobj, "yuno_id")}' on '${gobj_read_str_attr(gobj, "node")}'` +
             `${priv.master_left > 0 ? " ('treedb-info' of " + priv.master_left + " treedb(s) owed)" : ""}`);
         priv.notice = "";
@@ -1997,7 +1997,7 @@ function ac_schema_round_timeout(gobj, event, kw, src)
             return 0;
         }
         let silent = Object.keys(priv.saved_owed || {}).sort();
-        log_error(`${gobj_short_name(gobj)}: the node's agent did not answer 'saved-schema' ` +
+        log_warning(`${gobj_short_name(gobj)}: the node's agent did not answer 'saved-schema' ` +
             `of ${silent.join(", ")}`);
         priv.saved_left = 0;
         priv.saved_round = ++__round_seq__;
@@ -2916,7 +2916,7 @@ function ac_apply_timeout(gobj, event, kw, src)
     let owed = (step === "apply") ? Object.keys(priv.apply_owed || {}) : [];
     let what = owed.length ? `${step}: ${owed.join(", ")}` : step;
 
-    log_error(
+    log_warning(
         `${gobj_short_name(gobj)}: the node's agent did not answer '${what}' ` +
         `for '${yuno}'`
     );
