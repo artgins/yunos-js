@@ -8,6 +8,80 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.2, gui_treedb 1.1.8 (2026-10-31)
+
+- **Both: one refresh in flight at a time.** A refresh asked for
+  (`EV_DO_REFRESH`, which the app sends on an identity NAK), the refresh
+  timer, or in gui_treedb a wake-up with the refresh overdue, sent a second
+  `/auth/refresh` while the first was in flight. Both carried the same
+  refresh token, and an IdP that revokes a refresh token used twice ended
+  the session at the second with `session_expired`. Now a refresh asked for
+  while one of the session is in flight sends nothing, logs an INFO, and
+  that refresh answers it; the timer is disarmed while a refresh is out. In
+  7.29.3 (gui_agent 1.1.8, gui_treedb 1.0.6).
+- **Both: a 429 is a 429, whatever its body.** A 429 of a proxy, with no BFF
+  json, was `auth_bad_response`: an ERROR, counted as an answer that is not
+  the BFF's json, and waited out with its `Retry-After`, up to 5 minutes per
+  retry. Now any 429 without an `error_code` is `auth_rate_limited`, like
+  the BFF's own: a WARNING, retried after its `Retry-After`, and counted
+  with the other 429s (the fifth, or one whose `Retry-After` passes 5
+  minutes, ends the session). A login answered with a 429 is denied with
+  `auth_rate_limited`. In gui_agent 1.3.0+, gui_treedb 1.1.6+.
+- **Both: `Retry-After` is read as RFC 9110 says, by the rule of the SDK's
+  BFF.** It was read with `Date.parse`, which takes `-5`, `3.5`, ISO dates
+  and impossible dates, and reads an asctime date in the browser's zone.
+  Now it is delay-seconds of 1 to 10 digits, or an HTTP-date in its three
+  forms (IMF-fixdate, rfc850-date with a two-digit year within 50 years,
+  asctime-date), case-sensitive and in GMT; the date must exist, its time
+  run from 00:00:00 to 23:59:60, and its day name be that of the date.
+  Anything else is ignored, and the WARNING says *"(unreadable, ignored)"*.
+  In gui_agent 1.3.0+, gui_treedb 1.1.6+.
+- **Both: a logout asked for while the login is in flight waits for the
+  login.** `EV_DO_LOGOUT` was not declared in `ST_WAIT_TOKEN` (*"Event NOT
+  DEFINED"*), and a logout sent at once could be answered before the login,
+  whose `Set-Cookie` would then leave a session nobody ends. Now it is held
+  and goes out when the login (or the restore on load) settles, whatever
+  its answer; its `EV_LOGOUT_DONE` is the answer, and a login asked for
+  after it drops it. In gui_agent 1.3.1, gui_treedb 1.1.7 (7.29.3 declared
+  it).
+- **Both: a logout the server did not end says so.** A logout the BFF
+  refused (a 403 because `allowed_origin` does not name this origin, as
+  behind a dev proxy), failed (5xx) or never answered closed the session
+  here and showed the login form as if all was done, while the cookies
+  stayed and a reload restored the session. The local session still ends;
+  `EV_LOGOUT_DONE` carries `ended_on_server`, `error_code` and `error`, and
+  the login form says *"You are logged out of this page, but the server did
+  not end the session: reloading the page may open it again (<cause>)"*.
+  New key `logout not ended on the server` in en and es. In 7.29.3
+  (gui_agent 1.1.8, gui_treedb 1.0.6).
+- **Both: the messages of the login form change language.** *"Login
+  failed: <cause>"* and the logout message are composed again on the login
+  screen's language toggle; gui_treedb's login form takes composed messages
+  now, as gui_agent's did. A composed message stayed in the language it was
+  painted in. In 7.29.3 (gui_agent 1.1.8, gui_treedb 1.0.6).
+- **gui_agent: the Monitor link drops only the transport refused twice.**
+  The drop after a second identity refusal is posted, and a new link asked
+  for before it landed made it land in `ST_FETCHING` or `ST_LINKED`
+  (*"Event NOT DEFINED"*). Now `EV_DROP_LINK` names its transport, is
+  declared in every state, and closes only that transport if it is still
+  the link's. In 7.29.3 (gui_agent 1.1.8).
+- **gui_agent: the trace of the Monitor's token request shows its number.**
+  It travelled as `token_req`, a name the trace masks because it holds
+  "token"; it is `fetch_seq` now, and only `access_token` is masked. In
+  gui_agent 1.3.1.
+- **gui_treedb: a connection refused again during a logout is not
+  rejected.** The second-NAK reject ran before the "no session to refresh"
+  guard, so during a logout it rejected the connection with an ERROR that
+  blamed the backend; the guard comes first now. A missing `treedb_login`
+  service is an ERROR, and no longer leaves the refresh dedupe set for good
+  with no log. In gui_treedb 1.1.7.
+- **Tests: the catalog reader of `c_auth_bff.h` fails on any line it cannot
+  read.** It skipped, with no error, lines indented 5 or 8 blanks, lines
+  with no blank after the `*`, and CRLF lines. Now every line of the block
+  must be a blank line, a rule, a heading, a code line, or a continuation
+  that starts in the column of the meaning above it; anything else throws
+  and names the line. Tests only.
+
 ## gui_agent 1.3.1, gui_treedb 1.1.7 (2026-10-30)
 
 - **Both: a logout in flight is a state of its own, and only its own answer
