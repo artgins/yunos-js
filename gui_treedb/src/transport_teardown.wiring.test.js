@@ -23,6 +23,14 @@
  *      is alive when its publication returns, and the end comes one turn
  *      later.
  *
+ *      A connection refused again while a logout is in flight is not
+ *      rejected (and logged as a rejection): there is no session to
+ *      refresh, and the logout closes the links when it settles.
+ *
+ *      A logout the server did not end (EV_LOGOUT_DONE with
+ *      ended_on_server false) brings the login screen back saying so,
+ *      with the cause, re-translated on a language switch.
+ *
  *      Driven through the real gclasses (C_TREEDB_APP, C_TREEDB_LINKS,
  *      C_TREEDB_CONFIG, C_TIMER); the transport and the login are doubles
  *      that publish what the real ones publish.
@@ -31,6 +39,30 @@
  *          All Rights Reserved.
  ***********************************************************************/
 import {describe, test, expect, beforeAll, beforeEach, afterEach, vi} from "vitest";
+
+/*  The login screen is HTML no document double here parses: what is
+ *  looked at is what it is told to show.  */
+const login_screens = [];
+vi.mock("./login.js", () => ({
+    mount_login: () => {
+        const screen = {error: "", busy: null, mounted: true};
+        login_screens.push(screen);
+        return {
+            set_error(msg) {
+                screen.error = msg;
+            },
+            clear_error() {
+                screen.error = "";
+            },
+            set_busy(busy) {
+                screen.busy = busy;
+            },
+            unmount() {
+                screen.mounted = false;
+            }
+        };
+    }
+}));
 
 /*  The config persists in localStorage.  */
 const storage = new Map();
@@ -304,5 +336,83 @@ describe("a scan that times out", () => {
         }]);
         expect(errors().filter((m) => /Destroying a gobj/.test(m))).toEqual([]);
 
+    });
+});
+
+describe("a connection refused again while a logout is in flight", () => {
+
+    test("is not rejected: there is no session to refresh, the logout closes it", () => {
+        const app = gobj_create_service("treedb_app", "C_TREEDB_APP", {}, yuno);
+        built.push(app);
+        gobj_start(app);
+        gobj_change_state(app, "ST_SESSION");
+        const links = gobj_find_service("treedb_links", true);
+        gobj_send_event(links, "EV_SYNC_CONNECTIONS", {connections: [CONN]}, app);
+        const iev = treedb_links_get_iev(links, "c1");
+        gobj_change_state(iev, "ST_SESSION");
+        set_log_callback(log_sink);
+        logged.length = 0;
+
+        /*  Reopened once with a fresh token, and refused again while the
+         *  user is logging out.  */
+        app.priv.nak_recovered.c1 = true;
+        const login = gobj_find_service("treedb_login", true);
+        gobj_change_state(login, "ST_LOGGING_OUT");
+        gobj_send_event(iev, "EV_FAKE_NAK", {comment: "token expired"}, iev);
+        vi.advanceTimersToNextTimer();
+        gobj_change_state(login, "ST_LOGIN");
+
+        expect(gobj_is_destroying(iev)).toBe(false);
+        expect(treedb_links_get_iev(links, "c1")).toBe(iev);
+        expect(errors()).toEqual([]);
+        expect(logged.filter((l) => l.level === "info" && /no session to refresh/.test(l.msg)).length)
+            .toBe(1);
+    });
+});
+
+describe("a logout the server did not end", () => {
+
+    test("the login screen says it, with the cause, in the language of the app", async () => {
+        const {default: i18next} = await import("i18next");
+        const {en} = await import("./locales/en.js");
+        const {es} = await import("./locales/es.js");
+        await i18next.init({lng: "en", resources: {en, es}});
+
+        const app = gobj_create_service("treedb_app", "C_TREEDB_APP", {}, yuno);
+        built.push(app);
+        gobj_start(app);
+        gobj_change_state(app, "ST_SESSION");
+        set_log_callback(log_sink);
+        logged.length = 0;
+        const before = login_screens.length;
+
+        const login = gobj_find_service("treedb_login", true);
+        gobj_publish_event(login, "EV_LOGOUT_DONE", {
+            ended_on_server: false, error_code: "origin_not_allowed", error: "Origin not allowed"
+        });
+        expect(gobj_current_state(app)).toBe("ST_LOGGED_OUT");
+        expect(login_screens.length).toBe(before + 1);
+        const screen = login_screens[login_screens.length - 1];
+        expect(typeof screen.error).toBe("function");      /*  re-run on a language switch  */
+        expect(screen.error()).toBe(`${en.translation["logout not ended on the server"]} ` +
+            `(${en.translation["origin_not_allowed"]})`);
+        await i18next.changeLanguage("es");
+        expect(screen.error()).toBe(`${es.translation["logout not ended on the server"]} ` +
+            `(${es.translation["origin_not_allowed"]})`);
+        await i18next.changeLanguage("en");
+        expect(errors()).toEqual([]);
+    });
+
+    test("a logout that ended on the server says nothing more", () => {
+        const app = gobj_create_service("treedb_app", "C_TREEDB_APP", {}, yuno);
+        built.push(app);
+        gobj_start(app);
+        gobj_change_state(app, "ST_SESSION");
+        const before = login_screens.length;
+
+        const login = gobj_find_service("treedb_login", true);
+        gobj_publish_event(login, "EV_LOGOUT_DONE", {ended_on_server: true, error_code: "", error: ""});
+        expect(login_screens.length).toBe(before + 1);
+        expect(login_screens[login_screens.length - 1].error).toBe("");
     });
 });

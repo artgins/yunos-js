@@ -33,7 +33,10 @@
  *      retrying). EV_DISCONNECT returns to ST_IDLE from anywhere, and so
  *      does a failure (no token, identity refused twice). A new
  *      EV_CONNECT from ST_LINKED closes the session it had, and that
- *      close arrives in ST_FETCHING.
+ *      close arrives in ST_FETCHING. A link refused twice is dropped on
+ *      the next turn (EV_DROP_LINK, naming its transport), so the drop
+ *      can land in any state, after a new EV_CONNECT: it then drops
+ *      nothing, the new link keeps its own transport.
  *
  *      Input:  EV_CONNECT {url}, EV_DISCONNECT, EV_SEND_COMMAND {command,
  *              kw}, EV_SEND_STATS {stats, kw}.
@@ -76,6 +79,7 @@ import {
     gobj_command,
     gobj_stats,
     gobj_short_name,
+    gobj_name,
 } from "@yuneta/gobj-js";
 
 import {post_bff} from "./c_agent_login.js";
@@ -97,7 +101,7 @@ SDATA_END()
 
 let PRIVATE_DATA = {
     token:      "",     /*  last access_token from the BFF  */
-    token_req:  0,      /*  the token request whose answer is awaited  */
+    fetch_seq:  0,      /*  the number of the token request whose answer is awaited  */
     nak_retry:  false,  /*  a NAK already asked for a fresh token  */
     seq:        0,      /*  name of the next transport  */
     login_watched: false, /*  subscribed to the login's cookie refreshes  */
@@ -169,11 +173,12 @@ function mt_destroy(gobj)
  *  ends in EV_TOKEN_FETCHED with no token too. The answer is an OS
  *  notification, so it only becomes an event, with the number of its
  *  request; the token travels in it as `access_token`, a name the
- *  machine trace masks.
+ *  machine trace masks, and the number as `fetch_seq`, a name it shows
+ *  (a name holding "token" is masked as a secret).
  ***************************************************************/
 function fetch_token(gobj)
 {
-    const token_req = ++gobj.priv.token_req;
+    const fetch_seq = ++gobj.priv.fetch_seq;
     post_bff(gobj, "token").then(({ok, status, data, timed_out}) => {
         let token = (ok && data.success && data.access_token) ? data.access_token : "";
         gobj_send_event(gobj, "EV_TOKEN_FETCHED", {
@@ -182,7 +187,7 @@ function fetch_token(gobj)
             status:       status,
             timed_out:    timed_out,
             error:        data.error || "",
-            token_req:    token_req
+            fetch_seq:    fetch_seq
         }, gobj);
     });
 }
@@ -194,11 +199,11 @@ function fetch_token(gobj)
  ***************************************************************/
 function is_stale_token(gobj, kw)
 {
-    if(kw && kw.token_req === gobj.priv.token_req) {
+    if(kw && kw.fetch_seq === gobj.priv.fetch_seq) {
         return false;
     }
     log_info(`${gobj_short_name(gobj)}: access_token of an earlier request dropped ` +
-        `(request ${kw && kw.token_req}, now ${gobj.priv.token_req})`);
+        `(request ${kw && kw.fetch_seq}, now ${gobj.priv.fetch_seq})`);
     return true;
 }
 
@@ -321,12 +326,32 @@ function ac_connect(gobj, event, kw, src)
 function ac_disconnect(gobj, event, kw, src)
 {
     let had_link = !!gobj_read_attr(gobj, "iev");
-    gobj.priv.token_req++;      /*  no token asked for so far is awaited now  */
+    gobj.priv.fetch_seq++;      /*  no token asked for so far is awaited now  */
     gobj.priv.token = "";
     close_link(gobj);
     if(had_link) {
         watch_login(gobj, false);
     }
+    return 0;
+}
+
+/***************************************************************
+ *  {iev_name} -- the deferred half of a link refused twice
+ *  (ac_on_id_nak): drop that transport if it is still the link's. A
+ *  link asked for before the drop lands (EV_CONNECT) has already closed
+ *  it, and is in ST_FETCHING or ST_LINKED with a transport of its own,
+ *  which is left alone.
+ ***************************************************************/
+function ac_drop_link(gobj, event, kw, src)
+{
+    let iev = gobj_read_attr(gobj, "iev");
+    let iev_name = (kw && kw.iev_name) || "";
+    if(!iev || gobj_name(iev) !== iev_name) {
+        log_info(`${gobj_short_name(gobj)}: the link refused (${iev_name}) was already closed`);
+        return 0;
+    }
+    close_link(gobj);
+    watch_login(gobj, false);
     return 0;
 }
 
@@ -434,7 +459,8 @@ function ac_on_id_nak(gobj, event, kw, src)
         `${gobj_read_str_attr(gobj, "url")}: ${comment}`);
     /*  This runs inside the transport's own EV_ON_ID_NAK publish: its
      *  tree is torn down on the next cycle, not from under it.  */
-    gobj_post_event(gobj, "EV_DROP_LINK", {}, gobj);
+    let iev = gobj_read_attr(gobj, "iev");
+    gobj_post_event(gobj, "EV_DROP_LINK", {iev_name: iev ? gobj_name(iev) : ""}, gobj);
     gobj_change_state(gobj, "ST_IDLE");
     return bubble(gobj, "EV_LINK_FAILED", {
         error_code: "monitor identity refused",
@@ -503,18 +529,20 @@ function create_gclass(gclass_name)
             ["EV_CONNECT",              ac_connect,             "ST_FETCHING"],
             ["EV_DISCONNECT",           ac_disconnect,          null],
             ["EV_TOKEN_FETCHED",        ac_token_late,          null],
-            ["EV_DROP_LINK",            ac_disconnect,          null],
+            ["EV_DROP_LINK",            ac_drop_link,           null],
             ["EV_ON_CLOSE",             ac_on_close,            null]
         ]],
         ["ST_FETCHING", [
             ["EV_CONNECT",              ac_connect,             null],
             ["EV_DISCONNECT",           ac_disconnect,          "ST_IDLE"],
             ["EV_TOKEN_FETCHED",        ac_token_for_link,      null],
+            ["EV_DROP_LINK",            ac_drop_link,           null],
             ["EV_ON_CLOSE",             ac_on_close,            null]
         ]],
         ["ST_LINKED", [
             ["EV_CONNECT",              ac_connect,             "ST_FETCHING"],
             ["EV_DISCONNECT",           ac_disconnect,          "ST_IDLE"],
+            ["EV_DROP_LINK",            ac_drop_link,           null],
             ["EV_TOKEN_FETCHED",        ac_token_renewed,       null],
             ["EV_LOGIN_REFRESHED",      ac_login_refreshed,     null],
             ["EV_ON_OPEN",              ac_on_open,             null],

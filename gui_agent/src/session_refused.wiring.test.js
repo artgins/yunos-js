@@ -17,6 +17,10 @@
  *      What is checked holds with any gobj-js: the transport is alive
  *      when its publication returns, and the session ends one turn later.
  *
+ *      A logout the server did not end (EV_LOGOUT_DONE with
+ *      ended_on_server false) brings the login screen back saying so,
+ *      with the cause, re-translated on a language switch.
+ *
  *      Driven through the real C_APP, C_AGENT_LINK, C_AGENT_CONFIG and
  *      C_MONITOR_LINK; the transport, the login and the shell are doubles.
  *
@@ -248,5 +252,54 @@ describe("an identity refused again after a token refresh", () => {
         expect(gobj_is_destroying(iev)).toBe(true);
         expect(errors().filter((m) => /Destroying a gobj/.test(m))).toEqual([]);
         expect(errors().filter((m) => /NOT DEFINED/.test(m))).toEqual([]);
+    });
+});
+
+describe("a logout the server did not end", () => {
+
+    test("the login screen says it, with the cause, in the language of the app", async () => {
+        const {default: i18next} = await import("i18next");
+        const {en} = await import("./locales/en.js");
+        const {es} = await import("./locales/es.js");
+        await i18next.init({lng: "en", resources: {en, es}});
+        const {app} = app_in_session();
+        const login = gobj_find_service("agent_login", true);
+        if(app.priv.login_ui) {
+            app.priv.login_ui.unmount();    /*  what an earlier test left  */
+            app.priv.login_ui = null;
+        }
+        const before = login_screens.length;
+
+        gobj_publish_event(login, "EV_LOGOUT_DONE", {
+            ended_on_server: false, error_code: "origin_not_allowed", error: "Origin not allowed"
+        });
+        expect(login_screens.length).toBe(before + 1);
+        const screen = login_screens[login_screens.length - 1];
+        expect(typeof screen.error).toBe("function");      /*  re-run on a language switch  */
+        expect(screen.error()).toBe(`${en.translation["logout not ended on the server"]} ` +
+            `(${en.translation["origin_not_allowed"]})`);
+        await i18next.changeLanguage("es");
+        expect(screen.error()).toBe(`${es.translation["logout not ended on the server"]} ` +
+            `(${es.translation["origin_not_allowed"]})`);
+        await i18next.changeLanguage("en");
+        expect(errors().filter((m) => /NOT DEFINED/.test(m))).toEqual([]);
+        app.priv.login_ui.unmount();
+        app.priv.login_ui = null;
+    });
+
+    test("a logout that ended on the server says nothing more", () => {
+        const {app} = app_in_session();
+        const login = gobj_find_service("agent_login", true);
+        if(app.priv.login_ui) {
+            app.priv.login_ui.unmount();    /*  what an earlier test left  */
+            app.priv.login_ui = null;
+        }
+        const before = login_screens.length;
+
+        gobj_publish_event(login, "EV_LOGOUT_DONE", {ended_on_server: true, error_code: "", error: ""});
+        expect(login_screens.length).toBe(before + 1);
+        expect(login_screens[login_screens.length - 1].error).toBe("");
+        app.priv.login_ui.unmount();
+        app.priv.login_ui = null;
     });
 });

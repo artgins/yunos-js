@@ -634,6 +634,7 @@ const en = {
         "username and password are required": "Username and password are required",
         "auth config saved": "Authentication settings saved",
         "login failed":      "Login failed",
+        "logout not ended on the server": "You are logged out of this page, but the server did not end the session: reloading the page may open it again",
 
         /* auth_bff error codes: the error_code of a denial (c_auth_bff.h) */
         "invalid_credentials":       "Invalid username or password",

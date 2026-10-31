@@ -116,6 +116,20 @@ const REFRESH_BAD_ANSWERS_MAX = 5;
 const REFRESH_RATE_LIMITED_MAX = 5;
 const REFRESH_RETRY_AFTER_MAX_MS = 5 * 60 * 1000;
 
+/*  The names of an HTTP-date (http_date_ms()), case-sensitive, in the
+ *  order of Date.getUTCDay() and Date.getUTCMonth().  */
+const HTTP_DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HTTP_DAY_NAMES_LONG = [
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+];
+const HTTP_MONTHS = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
+
+/*  The longest delay-seconds of a Retry-After that is read: the BFF
+ *  passes on no longer one (BFF_RETRY_AFTER_DIGITS_MAX).  */
+const RETRY_AFTER_DIGITS_MAX = 10;
+
 
 /***************************************************************
  *              Data
@@ -139,7 +153,9 @@ let PRIVATE_DATA = {
     bad_answers:        0,      /*  answers not the BFF's json since the last refresh that landed  */
     rate_limited:       0,      /*  429 answers since the last refresh that landed  */
     generation:         0,      /*  the session the requests in flight belong to  */
+    refresh_in_flight:  -1,     /*  the generation of the refresh in flight, -1 when none  */
     held_login:         null,   /*  {username, password} asked for while the logout was in flight  */
+    held_logout:        false,  /*  a logout asked for while the login was in flight  */
     on_wake:            null,   /*  visibilitychange / online listener  */
 };
 
@@ -296,20 +312,75 @@ function post_bff(gobj, segment, body)
 }
 
 /***************************************************************
- *  The milliseconds a Retry-After header asks to wait: a count of
- *  seconds, or an HTTP-date (0 when it is already past). 0 for no
- *  header, and -1 for one that is neither.
+ *  The time an HTTP-date (RFC 9110 5.6.7) names, in epoch ms, or
+ *  NaN when `text` is none: an IMF-fixdate ("Sun, 06 Nov 1994
+ *  08:49:37 GMT"), or one of the two obsolete forms a recipient
+ *  must read, rfc850-date ("Sunday, 06-Nov-94 08:49:37 GMT", the
+ *  year taken within 50 years of `now_ms`) and asctime-date ("Sun
+ *  Nov  6 08:49:37 1994", in GMT too). Names are case-sensitive,
+ *  the day of the month, the hour, minute and second must exist
+ *  (second 60 is a leap second), and the day name must be the one
+ *  of that date: the rule the BFF passes a Retry-After of the IdP
+ *  on with.
+ ***************************************************************/
+function http_date_ms(text, now_ms)
+{
+    let day_name, day, month, year, clock;
+    let day_names = HTTP_DAY_NAMES;
+    let m = text.match(/^([A-Za-z]{3}), (\d{2}) ([A-Za-z]{3}) (\d{4}) (\d{2}:\d{2}:\d{2}) GMT$/);
+    if(m) {
+        [, day_name, day, month, year, clock] = m;
+        year = Number(year);
+    } else if((m = text.match(/^([A-Za-z]+), (\d{2})-([A-Za-z]{3})-(\d{2}) (\d{2}:\d{2}:\d{2}) GMT$/))) {
+        [, day_name, day, month, year, clock] = m;
+        day_names = HTTP_DAY_NAMES_LONG;
+        const now_year = new Date(now_ms).getUTCFullYear();
+        year = Math.floor(now_year / 100) * 100 + Number(year);
+        if(year > now_year + 50) {
+            year -= 100;
+        }
+    } else if((m = text.match(/^([A-Za-z]{3}) ([A-Za-z]{3}) ( \d|\d{2}) (\d{2}:\d{2}:\d{2}) (\d{4})$/))) {
+        [, day_name, month, day, clock, year] = m;
+        year = Number(year);
+    } else {
+        return NaN;
+    }
+    const month_index = HTTP_MONTHS.indexOf(month);
+    const [hour, minute, second] = clock.split(":").map(Number);
+    day = Number(day);
+    if(month_index < 0 || hour > 23 || minute > 59 || second > 60) {
+        return NaN;
+    }
+    let when = new Date(0);
+    when.setUTCFullYear(year, month_index + 1, 0);     /*  the last day of that month  */
+    if(day < 1 || day > when.getUTCDate()) {
+        return NaN;
+    }
+    when.setUTCFullYear(year, month_index, day);
+    if(day_names[when.getUTCDay()] !== day_name) {
+        return NaN;
+    }
+    when.setUTCHours(hour, minute, second, 0);
+    return when.getTime();
+}
+
+/***************************************************************
+ *  The milliseconds a Retry-After header asks to wait (RFC 9110
+ *  10.2.3): delay-seconds, 1*DIGIT (RETRY_AFTER_DIGITS_MAX at
+ *  most), or an HTTP-date (0 when it is already past). 0 for no
+ *  header, and -1 for any other text: a sign, a fraction, two
+ *  values, a date of another format, a date that is none.
  ***************************************************************/
 function retry_after_ms(retry_after, now_ms)
 {
-    const text = String(retry_after || "").trim();
+    const text = String(retry_after || "").replace(/^[ \t]+|[ \t]+$/g, "");
     if(!text) {
         return 0;
     }
     if(/^\d+$/.test(text)) {
-        return Number(text) * 1000;
+        return (text.length <= RETRY_AFTER_DIGITS_MAX) ? Number(text) * 1000 : -1;
     }
-    const when = Date.parse(text);
+    const when = http_date_ms(text, now_ms);
     if(Number.isNaN(when)) {
         return -1;
     }
@@ -319,7 +390,10 @@ function retry_after_ms(retry_after, now_ms)
 /***************************************************************
  *  The error_code of a call the BFF did not answer with one: no answer
  *  in BFF_TIMEOUT_MS is "auth_timeout", no answer at all
- *  "network_error", a 5xx with no error_code (a gateway, or a BFF down
+ *  "network_error", a 429 with no error_code (a proxy that rate limits)
+ *  "auth_rate_limited", as the BFF's own 429 (a 429 is a 429, whatever
+ *  its body: it is retried after its Retry-After and counted with the
+ *  other 429s), a 5xx with no error_code (a gateway, or a BFF down
  *  behind one) "auth_service_unavailable", and any other answer with no
  *  error_code "auth_bad_response": an empty body, a body cut halfway, a
  *  page in HTML, a json that is not the BFF's, whatever its status.
@@ -334,6 +408,9 @@ function bff_error_code({status, data, timed_out})
     }
     if(status === 0) {
         return "network_error";
+    }
+    if(status === 429) {
+        return "auth_rate_limited";
     }
     if(status >= 500) {
         return "auth_service_unavailable";
@@ -424,7 +501,10 @@ function do_bff_login(gobj, username, password)
 
 /***************************************************************
  *  Call the BFF /auth/logout endpoint. A logout the BFF never confirmed is
- *  still a logout HERE: the local session is dropped either way.
+ *  still a logout HERE: the local session is dropped either way, and
+ *  EV_LOGOUT_DONE says it was not one on the server (`ended_on_server`
+ *  false, with the `error_code` of bff_error_code()): the cookies are
+ *  still there, and a reload of the page would restore the session.
  *  EV_LOGOUT_DONE comes when the call has settled -- answered, or aborted
  *  by its deadline, after which the browser takes no Set-Cookie of it --
  *  so the cookies it clears are cleared before any login made after it.
@@ -432,12 +512,17 @@ function do_bff_login(gobj, username, password)
 function do_bff_logout(gobj)
 {
     const generation = gobj.priv.generation;
-    post_bff(gobj, "logout").then(({ok, data}) => {
-        if(!ok) {
-            log_warning(sprintf("%s: BFF logout failed (%s) — dropping the local session anyway",
-                gobj_short_name(gobj), data.error || "?"));
+    post_bff(gobj, "logout").then((answer) => {
+        const {ok, status, data} = answer;
+        const ended_on_server = !!(ok && data.success);
+        const error_code = ended_on_server ? "" : bff_error_code(answer);
+        if(!ended_on_server) {
+            log_warning(sprintf("%s: BFF logout failed: %s (%s) — dropping the local session anyway",
+                gobj_short_name(gobj), error_code, data.error || `HTTP ${status}`));
         }
-        gobj_send_event(gobj, "EV_LOGOUT_DONE", {generation}, gobj);
+        gobj_send_event(gobj, "EV_LOGOUT_DONE", {
+            generation, ended_on_server, error_code, error: data.error || ""
+        }, gobj);
     });
 }
 
@@ -588,6 +673,57 @@ function save_session_info(gobj, data)
 }
 
 /***************************************************************
+ *  End the session: every request of it still in flight is superseded
+ *  from now on, no refresh is armed, and the BFF is asked to end it
+ *  (EV_LOGOUT_DONE when it has settled). The state is ST_LOGGING_OUT.
+ ***************************************************************/
+function start_logout(gobj)
+{
+    gobj.priv.generation++;
+    clear_timeout(gobj.priv.gobj_timer);
+    do_bff_logout(gobj);
+}
+
+/***************************************************************
+ *  The login settled (`event`, any answer) with a logout asked for
+ *  while it was in flight (ac_hold_logout()): that logout goes out
+ *  now, so the cookies the login may have set are cleared, and its
+ *  EV_LOGOUT_DONE is the answer. True when it went out.
+ ***************************************************************/
+function take_held_logout(gobj, event)
+{
+    let priv = gobj.priv;
+    if(!priv.held_logout) {
+        return false;
+    }
+    priv.held_logout = false;
+    log_info(sprintf("%s: %s with a logout asked for: logging out", gobj_short_name(gobj), event));
+    gobj_change_state(gobj, "ST_LOGGING_OUT");
+    start_logout(gobj);
+    return true;
+}
+
+/***************************************************************
+ *  Send a refresh, `why` naming who asked for it, unless a refresh of
+ *  this session is in flight: that one answers every caller. Two at
+ *  once would both carry the same refresh token, the first rotates it,
+ *  and an IdP that revokes a refresh token used twice ends the session
+ *  at the second. The timer is disarmed: the answer arms it again.
+ ***************************************************************/
+function request_refresh(gobj, why)
+{
+    let priv = gobj.priv;
+    if(priv.refresh_in_flight === priv.generation) {
+        log_info(sprintf("%s: %s while a refresh is in flight: that one answers it",
+            gobj_short_name(gobj), why));
+        return;
+    }
+    priv.refresh_in_flight = priv.generation;
+    clear_timeout(priv.gobj_timer);
+    do_bff_refresh(gobj);
+}
+
+/***************************************************************
  *  Arm the refresh timer and REMEMBER when it is due. The deadline is what
  *  the wake-up path consults: a laptop that slept through the timer wakes
  *  with a browser-throttled timer that fires late (or after the token is
@@ -611,10 +747,16 @@ function arm_refresh(gobj, ms)
 
 
 /***************************************************************
- *  A new login: every request of the session before it is superseded.
+ *  A new login: every request of the session before it is superseded,
+ *  and a logout that waited for the login before it is dropped.
  ***************************************************************/
 function ac_do_login(gobj, event, kw, src)
 {
+    if(gobj.priv.held_logout) {
+        gobj.priv.held_logout = false;
+        log_info(sprintf("%s: a login asked for: the logout that waited for the login is dropped",
+            gobj_short_name(gobj)));
+    }
     gobj.priv.generation++;
     const username = (kw && kw.username) ? kw.username : "";
     const password = (kw && kw.password) ? kw.password : "";
@@ -629,9 +771,22 @@ function ac_do_login(gobj, event, kw, src)
  ***************************************************************/
 function ac_do_logout(gobj, event, kw, src)
 {
-    gobj.priv.generation++;
-    clear_timeout(gobj.priv.gobj_timer);
-    do_bff_logout(gobj);
+    start_logout(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  A logout asked for while the login (or the restore on load) is in
+ *  flight waits for it: a logout that went out now could be answered
+ *  before the login, whose answer would then set the cookies of a
+ *  session nobody ends. It goes out when the login settles, whatever
+ *  its answer (take_held_logout()). A login asked for after it drops
+ *  it.
+ ***************************************************************/
+function ac_hold_logout(gobj, event, kw, src)
+{
+    gobj.priv.held_logout = true;
+    log_info(sprintf("%s: a logout asked for while the login is in flight waits for it", gobj_short_name(gobj)));
     return 0;
 }
 
@@ -667,7 +822,7 @@ function ac_logout_in_flight(gobj, event, kw, src)
 
 function ac_do_refresh(gobj, event, kw, src)
 {
-    do_bff_refresh(gobj);
+    request_refresh(gobj, "a refresh asked for");
     return 0;
 }
 
@@ -682,6 +837,9 @@ function ac_do_refresh(gobj, event, kw, src)
 function ac_login_accepted(gobj, event, kw, src)
 {
     if(is_superseded(gobj, event, kw)) {
+        return 0;
+    }
+    if(take_held_logout(gobj, event)) {
         return 0;
     }
     gobj_change_state(gobj, "ST_LOGIN");
@@ -700,6 +858,7 @@ function ac_login_refreshed(gobj, event, kw, src)
     if(is_superseded(gobj, event, kw)) {
         return 0;
     }
+    gobj.priv.refresh_in_flight = -1;
     save_session_info(gobj, kw);
     fetch_and_publish(gobj, "EV_LOGIN_REFRESHED");
     return 0;
@@ -710,13 +869,17 @@ function ac_login_denied(gobj, event, kw, src)
     if(is_superseded(gobj, event, kw)) {
         return 0;
     }
+    if(take_held_logout(gobj, event)) {
+        return 0;
+    }
     end_session(gobj, kw.error_code, kw.error);
     return 0;
 }
 
 /***************************************************************
- *  The logout settled: ST_LOGOUT, EV_LOGOUT_DONE published, and then
- *  the login that waited for it, if any, goes out.
+ *  The logout settled: ST_LOGOUT, EV_LOGOUT_DONE published {
+ *  ended_on_server, error_code, error} (do_bff_logout()), and then the
+ *  login that waited for it, if any, goes out.
  ***************************************************************/
 function ac_logout_done(gobj, event, kw, src)
 {
@@ -732,7 +895,11 @@ function ac_logout_done(gobj, event, kw, src)
     gobj_write_attr(gobj, "username", "");
     gobj_write_attr(gobj, "access_token", "");
     gobj_change_state(gobj, "ST_LOGOUT");
-    gobj_publish_event(gobj, "EV_LOGOUT_DONE", {});
+    gobj_publish_event(gobj, "EV_LOGOUT_DONE", {
+        ended_on_server: !!kw.ended_on_server,
+        error_code:      kw.error_code || "",
+        error:           kw.error || ""
+    });
 
     if(held_login) {
         gobj_send_event(gobj, "EV_DO_LOGIN", held_login, gobj);
@@ -760,6 +927,9 @@ function ac_clear_session(gobj, event, kw, src)
 function ac_restore_failed(gobj, event, kw, src)
 {
     if(is_superseded(gobj, event, kw)) {
+        return 0;
+    }
+    if(take_held_logout(gobj, event)) {
         return 0;
     }
     gobj_change_state(gobj, "ST_LOGOUT");
@@ -809,7 +979,7 @@ function ac_token_fetched(gobj, event, kw, src)
 
 function ac_timeout(gobj, event, kw, src)
 {
-    do_bff_refresh(gobj);
+    request_refresh(gobj, "the refresh timer");
     return 0;
 }
 
@@ -837,6 +1007,7 @@ function ac_refresh_failed(gobj, event, kw, src)
     if(is_superseded(gobj, event, kw)) {
         return 0;
     }
+    priv.refresh_in_flight = -1;
 
     const retry_after = kw.retry_after_ms || 0;
 
@@ -879,7 +1050,9 @@ function ac_refresh_failed(gobj, event, kw, src)
  *  The tab came back to the foreground, or the network came back. A
  *  background tab's timers are throttled, so the refresh may be overdue by
  *  minutes: if its deadline has passed, refresh NOW instead of waiting for
- *  a timer the browser is holding back.
+ *  a timer the browser is holding back -- unless the refresh is already
+ *  in flight (the timer fired, late, before the wake-up): that one is the
+ *  refresh (request_refresh()).
  ***************************************************************/
 function ac_wakeup(gobj, event, kw, src)
 {
@@ -891,10 +1064,8 @@ function ac_wakeup(gobj, event, kw, src)
     if(!priv.refresh_at || Date.now() < priv.refresh_at) {
         return 0;       /*  the timer is still ahead of us: let it fire  */
     }
-    log_info(sprintf("%s: back from sleep with the refresh overdue — refreshing now",
-        gobj_short_name(gobj)));
-    clear_timeout(priv.gobj_timer);
-    do_bff_refresh(gobj);
+    log_info(sprintf("%s: back from sleep with the refresh overdue", gobj_short_name(gobj)));
+    request_refresh(gobj, "a wake-up");
     return 0;
 }
 
@@ -939,6 +1110,9 @@ function create_gclass(gclass_name)
      *  (EV_DO_REFRESH is not declared, a sender that asks for one then is
      *  told out loud), a login waits for the logout, and only the
      *  EV_LOGOUT_DONE of this logout ends it.
+     *
+     *  ST_WAIT_TOKEN is the login (or the restore on load) in flight: a
+     *  logout waits for it, and goes out when it settles.
      */
     const states = [
         ["ST_LOGOUT", [
@@ -956,6 +1130,7 @@ function create_gclass(gclass_name)
 
         ["ST_WAIT_TOKEN", [
             ["EV_DO_LOGIN",        ac_do_login,        null],
+            ["EV_DO_LOGOUT",       ac_hold_logout,     null],
             ["EV_WAKEUP",          ac_wakeup,          null],
             ["EV_LOGOUT_DONE",     ac_logout_done,     null],
             ["EV_LOGIN_ACCEPTED",  ac_login_accepted,  null],

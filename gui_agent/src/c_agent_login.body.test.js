@@ -47,9 +47,32 @@
  *      for is refused out loud), a login asked for meanwhile waits for the
  *      logout to settle, and only the end of that logout ends the session.
  *
+ *      A logout asked for while the login is in flight waits for the
+ *      login and goes out when it settles, whatever its answer, so the
+ *      cookies the login set are cleared; a login asked for after it drops
+ *      it. A logout the BFF did not answer with success ends the session
+ *      here all the same, and EV_LOGOUT_DONE says it did not end on the
+ *      server (ended_on_server false, with the error_code), because the
+ *      cookies are still there.
+ *
+ *      Any 429, with the BFF's json or without it (a proxy), is
+ *      "auth_rate_limited": retried after its Retry-After and counted
+ *      with the other 429s. The Retry-After read is the one of RFC 9110:
+ *      delay-seconds, or an HTTP-date in its three forms, a real date in
+ *      GMT; anything else is ignored, and the WARNING says so.
+ *
+ *      One refresh at a time: a refresh asked for (EV_DO_REFRESH) or the
+ *      refresh timer, while a refresh of the session is in flight, sends
+ *      nothing: that one answers it. Two at once carry the same refresh
+ *      token, and an IdP that revokes a refresh token used twice ends the
+ *      session at the second.
+ *
  *      The catalog of c_auth_bff.h is read line by line: a code with a
- *      digit or a tab is read, and a code line that cannot be read fails
- *      the reading instead of being skipped.
+ *      digit or a tab is read, and any line of the catalog the reading
+ *      cannot take -- a code line it cannot read, an indent of five or
+ *      eight blanks, no blank after the "*", a meaning that goes on in
+ *      another column, a CR -- fails the reading instead of being
+ *      skipped.
  *
  *      And a denial is said in the language of the app: every error_code
  *      of the BFF's catalog is a key of AUTH_ERROR_I18N_KEYS and of every
@@ -104,14 +127,36 @@ const BFF_ERROR_CODES_COPY = [
 const BFF_HEADER = fileURLToPath(
     new URL("../../../../kernel/c/root-linux/src/c_auth_bff.h", import.meta.url));
 
-/*  The codes of the catalog in `text`, a c_auth_bff.h: from its first
- *  "Codes emitted" to "New codes MUST", every line that starts within
- *  four blanks (spaces or tabs) of the " *" -- the meanings go on far
- *  deeper -- and is not a rule or a heading is a code line,
- *  " *  <code>  <http status>  <meaning>", whatever blanks separate them.
- *  A code line the reading cannot take (a code that is not snake_case, a
- *  status that is not three digits) throws: it is never skipped. A code
- *  can be listed once per status it is answered with.  */
+/*  The column `index` of `line` is shown at, a tab going to the next
+ *  multiple of 8.  */
+function shown_column(line, index)
+{
+    let column = 0;
+    for(let i = 0; i < index; i++) {
+        column = (line[i] === "\t") ? (Math.floor(column / 8) + 1) * 8 : column + 1;
+    }
+    return column;
+}
+
+/*  The codes of the catalog in `text`, a c_auth_bff.h, read from its
+ *  first "Codes emitted" to "New codes MUST". Every line of it is one of:
+ *
+ *    " *"                                    a blank line
+ *    " *  -----..."                          a rule
+ *    " *  Codes emitted ..."                 a heading
+ *    " *  <code>  <status>  <meaning>"       a code line: two spaces or a
+ *                                            tab before a snake_case code,
+ *                                            a three-digit status, blanks
+ *                                            between them
+ *    " *    ...    <more of the meaning>"    a line that goes on with the
+ *                                            meaning of the code line above
+ *                                            it, starting in the column its
+ *                                            meaning starts in
+ *
+ *  Any other line throws, whatever it holds: an indent of one, three, five
+ *  or eight blanks, no blank after the "*", a line that goes on in another
+ *  column or after a blank line, a CR (CRLF line endings). Nothing is
+ *  skipped. A code can be listed once per status it is answered with.  */
 function parse_bff_catalog(text)
 {
     const from = text.indexOf("Codes emitted");
@@ -119,17 +164,38 @@ function parse_bff_catalog(text)
     if(from < 0 || to < from) {
         throw new Error("c_auth_bff.h: no catalog from \"Codes emitted\" to \"New codes MUST\"");
     }
+    const lines = text.slice(from, to).split("\n");
+    const unreadable = (line, why) => new Error(
+        `c_auth_bff.h: a line of the catalog that cannot be read (${why}): ${JSON.stringify(line)}`);
+    if(lines[lines.length - 1] !== " *  ") {
+        throw unreadable(lines[lines.length - 1], "not \" *  \" before \"New codes MUST\"");
+    }
     let codes = [];
-    for(const line of text.slice(from, to).split("\n")) {
-        const head = line.match(/^ \*[ \t]{1,4}(\S.*)$/);
-        if(!head || /^-+$/.test(head[1]) || head[1].startsWith("Codes emitted")) {
+    let meaning_column = -1;    /*  of the code line that can go on, -1 when none  */
+    for(const line of lines.slice(1, -1)) {
+        if(line.includes("\r")) {
+            throw unreadable(line, "a CR: CRLF line endings");
+        }
+        if(line === " *" || /^ \*  -+$/.test(line) || /^ \*  Codes emitted \S/.test(line)) {
+            meaning_column = -1;
             continue;
         }
-        const code = head[1].match(/^([a-z][a-z0-9_]*)[ \t]+\d{3}(?:[ \t]|$)/);
-        if(!code) {
-            throw new Error(`c_auth_bff.h: a line of the catalog that is not "<code> <status> <meaning>": ${line}`);
+        const code = line.match(/^( \*(?:  |\t)([a-z][a-z0-9_]*)[ \t]+\d{3})(?:([ \t]+)\S.*)?$/);
+        if(code) {
+            codes.push(code[2]);
+            meaning_column = code[3] ? shown_column(line, code[1].length + code[3].length) : -1;
+            continue;
         }
-        codes.push(code[1]);
+        const more = line.match(/^ \*[ \t]+\S/);
+        if(!more) {
+            throw unreadable(line, "not a code line, a rule, a heading or a blank line");
+        }
+        const column = shown_column(line, more[0].length - 1);
+        if(meaning_column < 0 || column !== meaning_column) {
+            throw unreadable(line, meaning_column < 0 ?
+                `indented to column ${column}, and no code line above it to go on with` :
+                `indented to column ${column}, not to ${meaning_column}, where the meaning above starts`);
+        }
     }
     return [...new Set(codes)];
 }
@@ -869,6 +935,306 @@ describe("C_AGENT_LOGIN: a logout in flight", () => {
     });
 });
 
+describe("C_AGENT_LOGIN: one refresh at a time", () => {
+    /*  The refresh timer of a login of expires_in 300 is due at 270 s.  */
+    const REFRESH_DUE_MS = 270 * 1000;
+
+    test("a refresh asked for while one is in flight is answered by that one", async () => {
+        heard.length = 0;   /*  what an earlier test left  */
+        await log_in();
+
+        logged.length = 0;
+        const refresh = later_answer();
+        answers.refresh = refresh.answer;
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(asked).toEqual(["refresh"]);
+        expect(logged.filter((l) => l.level === "info" && l.msg.includes("in flight")).length).toBe(1);
+
+        refresh.give(200, {success: true, expires_in: 300});
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_REFRESHED"]);
+
+        /*  It landed: the next one leaves.  */
+        answers.refresh = {status: 200, data: {success: true, expires_in: 300}};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(asked).toEqual(["refresh", "refresh"]);
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+        await log_out();
+    });
+
+    test("the refresh timer that falls due while an asked refresh is in flight sends no second one", async () => {
+        await log_in();
+
+        const refresh = later_answer();
+        answers.refresh = refresh.answer;
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(REFRESH_DUE_MS + 10);
+        expect(asked).toEqual(["refresh"]);
+
+        refresh.give(200, {success: true, expires_in: 300});
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_REFRESHED"]);
+        await log_out();
+    });
+
+    test("a refresh in flight when the session ended does not hold back the refresh of the next one", async () => {
+        await log_in();
+
+        const refresh = later_answer();
+        answers.refresh = refresh.answer;
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        await log_out();
+        await log_in();
+
+        answers.refresh = {status: 200, data: {success: true, expires_in: 300}};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(asked).toEqual(["refresh"]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_REFRESHED"]);
+        await log_out();
+    });
+});
+
+describe("C_AGENT_LOGIN: the Retry-After it reads is the one of RFC 9110", () => {
+    const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const two = (n) => String(n).padStart(2, "0");
+    const clock = (d) => `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}:${two(d.getUTCSeconds())}`;
+    const in_a_minute = () => new Date(Math.ceil((Date.now() + 60000) / 1000) * 1000);
+    const imf = (d) => `${DAYS[d.getUTCDay()].slice(0, 3)}, ${two(d.getUTCDate())} ` +
+        `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()} ${clock(d)} GMT`;
+    const rfc850 = (d) => `${DAYS[d.getUTCDay()]}, ${two(d.getUTCDate())}-` +
+        `${MONTHS[d.getUTCMonth()]}-${two(d.getUTCFullYear() % 100)} ${clock(d)} GMT`;
+    const asctime = (d) => `${DAYS[d.getUTCDay()].slice(0, 3)} ${MONTHS[d.getUTCMonth()]} ` +
+        `${String(d.getUTCDate()).padStart(2, " ")} ${clock(d)} ${d.getUTCFullYear()}`;
+    const year = () => new Date(Date.now()).getUTCFullYear();
+
+    /*  [what, Retry-After, the wait it asks for (null: none, unreadable)]  */
+    test.for([
+        ["delay-seconds", () => "60", 60000],
+        ["delay-seconds with leading zeros", () => "0060", 60000],
+        ["delay-seconds of ten digits (a wait of 5 minutes at most)", () => "9999999999", 9999999999000],
+        ["delay-seconds of eleven digits", () => "99999999999", null],
+        ["an IMF-fixdate", () => imf(in_a_minute()), 60000],
+        ["an rfc850-date", () => rfc850(in_a_minute()), 60000],
+        ["an asctime-date, in GMT whatever the zone of the browser", () => asctime(in_a_minute()), 60000],
+        ["an IMF-fixdate already past", () => "Sun, 06 Nov 1994 08:49:37 GMT", 0],
+        ["a negative count", () => "-5", null],
+        ["a fraction", () => "3.5", null],
+        ["a count with a sign", () => "+60", null],
+        ["two values", () => "60, 70", null],
+        ["an ISO date", () => in_a_minute().toISOString(), null],
+        ["a day of the month that does not exist", () => `Fri, 31 Nov ${year() + 1} 10:00:00 GMT`, null],
+        ["a day of the month out of range", () => `Wed, 99 Oct ${year() + 1} 10:00:00 GMT`, null],
+        ["a time out of range", () => `Wed, 01 Oct ${year() + 1} 99:99:99 GMT`, null],
+        ["a day name that is no day", () => `Xyz, 01 Oct ${year() + 1} 10:00:00 GMT`, null],
+        ["a day name that is not the one of the date", () => imf(in_a_minute()).replace(
+            /^[A-Z][a-z]{2}/, (d) => (d === "Mon" ? "Tue" : "Mon")), null],
+        ["an rfc850-date whose day name is not the one of the date", () => rfc850(in_a_minute())
+            .replace(/^[A-Z][a-z]+day/, (d) => (d === "Monday" ? "Tuesday" : "Monday")), null],
+        ["a month that is no month", () => `Wed, 01 Xyz ${year() + 1} 10:00:00 GMT`, null],
+        ["names in lower case", () => imf(in_a_minute()).toLowerCase(), null],
+        ["another zone than GMT", () => imf(in_a_minute()).replace("GMT", "UTC"), null],
+        ["a date with no zone", () => imf(in_a_minute()).replace(" GMT", ""), null],
+    ])("%s", async ([label, retry_after, wait_ms]) => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        const text = retry_after();
+        answers.refresh = ((headers) => ({status: 503, headers: headers, data: {
+            success: false, error_code: "server_busy", error: "Pending queue full"
+        }}))({"Retry-After": text});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        const unreadable = logged.filter((l) => l.level === "warning" &&
+            l.msg.includes(`Retry-After: ${text} (unreadable, ignored)`));
+        if(wait_ms === null) {
+            expect(heard[0].kw.retry_ms).toBe(5000);
+            expect(unreadable.length).toBe(1);
+        } else {
+            const retry_ms = Math.max(5000, Math.min(wait_ms, 5 * 60 * 1000));
+            expect(heard[0].kw.retry_ms).toBeGreaterThanOrEqual(Math.max(5000, retry_ms - 1000));
+            expect(heard[0].kw.retry_ms).toBeLessThanOrEqual(retry_ms + 1000);
+            expect(unreadable.length).toBe(0);
+        }
+        await log_out();
+    });
+});
+
+describe("C_AGENT_LOGIN: a 429 that is not the BFF's json is a 429", () => {
+    test("a refresh: auth_rate_limited, a WARNING, and the retry waits for its Retry-After", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = ((headers) => ({status: 429, headers: headers,
+            reject: new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON")}))({"Retry-After": "30"});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(heard[0].kw.retry_ms).toBe(30000);
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("auth_rate_limited")).length)
+            .toBe(1);
+        await log_out();
+    });
+
+    test("a refresh: a Retry-After longer than 5 minutes ends the session at once", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = ((headers) => ({status: 429, headers: headers,
+            reject: new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON")}))({"Retry-After": "301"});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+
+    test("a refresh: the fifth since the last refresh that landed ends the session", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = ((headers) => ({status: 429, headers: headers,
+            reject: new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON")}))();
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        for(const backoff of [5000, 10000, 20000, 40000]) {
+            expect(gobj_current_state(login)).toBe("ST_LOGIN");
+            await pass_time(backoff + 10);
+        }
+        expect(heard.map((h) => h.event).slice(-1)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[heard.length - 1].kw.error_code).toBe("auth_rate_limited");
+        expect(asked.filter((x) => x === "refresh").length).toBe(5);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+
+    test("a login: denied with auth_rate_limited, a key of the locales", async () => {
+        heard.length = 0;
+        answers.login = ((headers) => ({status: 429, headers: headers,
+            reject: new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON")}))({"Retry-After": "30"});
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(AUTH_ERROR_I18N_KEYS).toContain("auth_rate_limited");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+});
+
+describe("C_AGENT_LOGIN: a logout asked for while the login is in flight", () => {
+    test("waits for the login, and then logs out: the cookies it set are cleared", async () => {
+        heard.length = 0;
+        if(gobj_current_state(login) === "ST_LOGIN") {
+            await log_out();
+        }
+        logged.length = 0;
+        asked.length = 0;
+        const pending_login = later_answer();
+        answers.login = pending_login.answer;
+        const logout = later_answer();
+        answers.logout = logout.answer;
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        expect(gobj_current_state(login)).toBe("ST_WAIT_TOKEN");
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        expect(asked).toEqual(["login"]);
+        expect(gobj_current_state(login)).toBe("ST_WAIT_TOKEN");
+
+        pending_login.give(200, OK_LOGIN.data);
+        await pass_time(10);
+        expect(asked).toEqual(["login", "logout"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGGING_OUT");
+        expect(heard).toEqual([]);
+
+        logout.give(200, {success: true});
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(heard[0].kw.ended_on_server).toBe(true);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+    });
+
+    test("a login denied meanwhile: the logout is sent all the same, and it is what is answered", async () => {
+        heard.length = 0;
+        asked.length = 0;
+        logged.length = 0;
+        const pending_login = later_answer();
+        answers.login = pending_login.answer;
+        answers.logout = {status: 200, data: {success: true}};
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        pending_login.give(401, {success: false, error_code: "invalid_credentials", error: "x"});
+        await pass_time(10);
+        expect(asked).toEqual(["login", "logout"]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+    });
+
+    test("a login asked for after it drops it: the user asked to enter after asking to leave", async () => {
+        heard.length = 0;
+        asked.length = 0;
+        logged.length = 0;
+        const pending_login = later_answer();
+        answers.login = pending_login.answer;
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        pending_login.give(200, OK_LOGIN.data);
+        await pass_time(10);
+        expect(asked.filter((x) => x === "logout")).toEqual([]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_ACCEPTED"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+        await log_out();
+    });
+});
+
+describe("C_AGENT_LOGIN: a logout the server did not end", () => {
+    test.for([
+        ["a 403 of the BFF (an Origin it does not allow)", 403,
+            {success: false, error_code: "origin_not_allowed", error: "Origin not allowed"}, "origin_not_allowed"],
+        ["a 503 of the BFF", 503,
+            {success: false, error_code: "server_busy", error: "Pending queue full"}, "server_busy"],
+        ["a 502 page of a gateway", 502, null, "auth_service_unavailable"],
+    ])("%s: the session ends here, and EV_LOGOUT_DONE says the server did not end it",
+    async ([label, status, data, error_code]) => {
+        heard.length = 0;
+        await log_in();
+
+        answers.logout = (data ? {status: status, data: data} :
+            {status: status, reject: new SyntaxError("Unexpected token '<'")});
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(heard[0].kw.ended_on_server).toBe(false);
+        expect(heard[0].kw.error_code).toBe(error_code);
+        expect(AUTH_ERROR_I18N_KEYS).toContain(error_code);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+
+    test("a logout the BFF answered with success: EV_LOGOUT_DONE says it ended there", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.logout = {status: 200, data: {success: true}};
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(heard[0].kw.ended_on_server).toBe(true);
+        expect(heard[0].kw.error_code).toBe("");
+    });
+});
+
 describe("the reading of the catalog of c_auth_bff.h", () => {
     const block = (lines) => [
         " *  ---------------------------------------------------------------------",
@@ -886,6 +1252,7 @@ describe("the reading of the catalog of c_auth_bff.h", () => {
             " *  oauth2_failed             401  A code with a digit",
             " *  tabbed_code\t400\tA tab after the status",
             " *\ttab_indented              400  A tab before the code",
+            " *                                     its meaning goes on, a tab being 8 columns",
         ]))).toEqual(["invalid_credentials", "oauth2_failed", "tabbed_code", "tab_indented"]);
     });
 
@@ -895,6 +1262,70 @@ describe("the reading of the catalog of c_auth_bff.h", () => {
         ["a status that is not three digits", " *  oauth2_failed             4xx  x"],
     ])("%s is not skipped: the reading fails", (label, line) => {
         expect(() => parse_bff_catalog(block([line]))).toThrow(/catalog/);
+    });
+
+    test.each([
+        ["an indent of one blank", " * oauth2_failed             401  x"],
+        ["an indent of three blanks", " *   oauth2_failed             401  x"],
+        ["an indent of five blanks", " *     oauth2_failed             401  x"],
+        ["an indent of eight blanks", " *        oauth2_failed             401  x"],
+        ["no blank after the \"*\"", " *oauth2_failed             401  x"],
+        ["a line with no \" *\"", "oauth2_failed               401  x"],
+        ["a blank line with a blank after the \"*\"", " * "],
+    ])("%s is not skipped: the reading fails", (label, line) => {
+        expect(() => parse_bff_catalog(block([line]))).toThrow(/catalog/);
+    });
+
+    test.each([
+        ["a code line", " *  oauth2_failed             401  x\r"],
+        ["a blank line", " *\r"],
+        ["a rule", " *  -----\r"],
+    ])("a CR at the end of %s fails the reading, and says it", (label, line) => {
+        expect(() => parse_bff_catalog(block([line]))).toThrow(/a CR/);
+    });
+
+    test("a code line glued to \"New codes MUST\" fails the reading", () => {
+        expect(() => parse_bff_catalog([
+            " *  Codes emitted by the login/token path (after talking to IdP)",
+            " *  invalid_credentials       401  Wrong username or password",
+            " *  oauth2_failed             401  x New codes MUST be added here first",
+        ].join("\n"))).toThrow(/catalog/);
+    });
+
+    test.each([
+        ["one column short", " *                                a meaning that goes on"],
+        ["one column too far", " *                                  a meaning that goes on"],
+        ["at five blanks", " *     a meaning that goes on"],
+    ])("a meaning that goes on %s is not skipped: the reading fails", (label, line) => {
+        expect(() => parse_bff_catalog(block([
+            " *  invalid_credentials       401  Wrong username or password",
+            line,
+        ]))).toThrow(/catalog/);
+    });
+
+    test("a meaning that goes on after a blank line, or after a rule, fails the reading", () => {
+        for(const before of [" *", " *  -----"]) {
+            expect(() => parse_bff_catalog(block([
+                " *  invalid_credentials       401  Wrong username or password",
+                before,
+                " *                                 a meaning that goes on",
+            ]))).toThrow(/catalog/);
+        }
+    });
+
+    test.for([
+        ["a code indented five blanks", (t) => t.replace(" *  server_busy ", " *     server_busy ")],
+        ["a code indented eight blanks", (t) => t.replace(" *  server_busy ", " *        server_busy ")],
+        ["a code with no blank after the \"*\"", (t) => t.replace(" *  server_busy ", " *server_busy ")],
+        ["a meaning that goes on one column short", (t) => t.replace(
+            "\n *                                 valid", "\n *                                valid")],
+        ["CRLF line endings", (t) => t.replaceAll("\n", "\r\n")],
+    ])("the real header with %s fails the reading", ([label, mutate], ctx) => {
+        ctx.skip(!BFF_CATALOG, BFF_CATALOG_MISSING);
+        const text = readFileSync(BFF_HEADER, "utf8");
+        const mutant = mutate(text);
+        expect(mutant).not.toBe(text);
+        expect(() => parse_bff_catalog(mutant)).toThrow(/catalog/);
     });
 
     test("a code added to the real header is seen, so the copy no longer matches it", (ctx) => {

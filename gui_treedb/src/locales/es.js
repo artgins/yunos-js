@@ -686,6 +686,7 @@ const es = {
         "select":               "Seleccionar",
         "select dates please": "Selecciona fechas por favor",
         "login failed": "Error de inicio de sesión",
+        "logout not ended on the server": "Ha salido de esta página, pero el servidor no cerró la sesión: recargar la página puede abrirla de nuevo",
 
         "yes": "Sí",
         "no": "No",

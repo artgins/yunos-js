@@ -642,6 +642,7 @@ const es = {
         "username and password are required": "Usuario y contraseña son obligatorios",
         "auth config saved": "Configuración de autenticación guardada",
         "login failed":      "Error de inicio de sesión",
+        "logout not ended on the server": "Ha salido de esta página, pero el servidor no cerró la sesión: recargar la página puede abrirla de nuevo",
 
         /* auth_bff error codes: the error_code of a denial (c_auth_bff.h) */
         "invalid_credentials":       "Usuario o contraseña incorrectos",

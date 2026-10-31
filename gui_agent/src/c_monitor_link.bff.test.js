@@ -12,7 +12,13 @@
  *      a link dropped before it came (the session ended, another link
  *      was asked for) does not open the next link, and a renewal answered
  *      after a newer one does not replace it. The token reaches the link
- *      through EV_TOKEN_FETCHED, whose trace masks it.
+ *      through EV_TOKEN_FETCHED, whose trace masks it and shows the
+ *      number of its request.
+ *
+ *      A link refused twice is dropped on the next turn: a new link asked
+ *      for before the drop lands (in ST_FETCHING, or already in
+ *      ST_LINKED) is not dropped with it, and the drop is defined in
+ *      every state.
  *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
@@ -34,6 +40,7 @@ const {
     gclass_create,
     gobj_start_up, gobj_create_yuno, gobj_create_service,
     gobj_start, gobj_send_event, gobj_current_state, gobj_read_attr,
+    gobj_set_gobj_trace, gobj_name,
     set_log_callback,
 } = await import("@yuneta/gobj-js");
 const {register_c_monitor_link} = await import("./c_monitor_link.js");
@@ -42,6 +49,8 @@ const BFF_TIMEOUT_MS = 15000;
 
 const heard = [];
 const asked = [];
+const traced = [];         /*  the json the trace dumps  */
+const logged = [];         /*  {level, msg} of every other log  */
 let stall_body = false;    /*  the headers come, the body never does  */
 const later = [];          /*  when not null: each request waits here for give(token)  */
 let answer_later = false;
@@ -95,7 +104,13 @@ beforeAll(() => {
     vi.stubGlobal("fetch", fake_fetch);
 
     gobj_start_up(null, null, null, null, null, null, null);
-    set_log_callback(() => {});
+    set_log_callback((level, msg) => {
+        if(level === "json") {
+            traced.push(msg);
+        } else {
+            logged.push({level: String(level), msg: String(msg)});
+        }
+    });
     register_c_monitor_link();
 
     /*  A transport that only holds its attrs: the jwt is what is looked at.  */
@@ -216,6 +231,109 @@ describe("C_MONITOR_LINK: only the answer of the last token asked for is taken",
         await pass_time(10);
         expect(gobj_current_state(link)).toBe("ST_LINKED");
         expect(gobj_read_attr(gobj_read_attr(link, "iev"), "jwt")).toBe("token-2");
+
+        gobj_send_event(link, "EV_DISCONNECT", {}, link);
+        answer_later = false;
+    });
+});
+
+describe("C_MONITOR_LINK: the trace of EV_TOKEN_FETCHED", () => {
+    test("masks the token and shows the number of its request", async () => {
+        heard.length = 0;
+        answer_later = true;
+        later.length = 0;
+        traced.length = 0;
+        gobj_set_gobj_trace(link, "machine", true);
+        gobj_set_gobj_trace(link, "ev_kw", true);
+
+        gobj_send_event(link, "EV_CONNECT", {url: "wss://node-a:1993"}, link);
+        later[0]("a.secret.token");
+        await pass_time(10);
+        gobj_set_gobj_trace(link, "machine", false);
+        gobj_set_gobj_trace(link, "ev_kw", false);
+
+        const fetched = traced.filter((jn) => jn && Object.hasOwn(jn, "access_token"));
+        expect(fetched.length).toBe(1);
+        expect(fetched[0].access_token).not.toBe("a.secret.token");
+        for(const [key, value] of Object.entries(fetched[0])) {
+            if(key !== "access_token") {
+                expect([key, value]).not.toEqual([key, "********"]);
+            }
+        }
+        expect(Object.values(fetched[0]).filter((v) => typeof v === "number" && v > 0).length)
+            .toBeGreaterThan(0);
+
+        gobj_send_event(link, "EV_DISCONNECT", {}, link);
+        answer_later = false;
+    });
+});
+
+describe("C_MONITOR_LINK: the drop of a link refused twice", () => {
+    test("lands in whatever state the next link is in, and drops only its own transport", async () => {
+        heard.length = 0;
+        logged.length = 0;
+        answer_later = true;
+        later.length = 0;
+
+        gobj_send_event(link, "EV_CONNECT", {url: "wss://node-a:1993"}, link);
+        later[0]("token-1");
+        await pass_time(10);
+        expect(gobj_current_state(link)).toBe("ST_LINKED");
+        const refused = gobj_read_attr(link, "iev");
+
+        /*  Refused, renewed, refused again: the drop is posted.  */
+        gobj_send_event(link, "EV_ON_ID_NAK", {comment: "expired"}, refused);
+        later[1]("token-2");
+        await pass_time(10);
+        gobj_send_event(link, "EV_ON_ID_NAK", {comment: "no authz"}, refused);
+        expect(gobj_current_state(link)).toBe("ST_IDLE");
+        expect(heard.map((h) => h.event)).toEqual(["EV_LINK_FAILED"]);
+
+        /*  A new link is asked for before the drop lands.  */
+        gobj_send_event(link, "EV_CONNECT", {url: "wss://node-b:1993"}, link);
+        expect(gobj_current_state(link)).toBe("ST_FETCHING");
+        await pass_time(10);
+        expect(gobj_current_state(link)).toBe("ST_FETCHING");
+        expect(logged.filter((l) => l.msg.includes("NOT DEFINED"))).toEqual([]);
+
+        /*  ...and the token of the new link opens it.  */
+        later[2]("token-3");
+        await pass_time(10);
+        expect(gobj_current_state(link)).toBe("ST_LINKED");
+        const next = gobj_read_attr(link, "iev");
+        expect(gobj_name(next)).not.toBe(gobj_name(refused));
+        expect(gobj_read_attr(next, "jwt")).toBe("token-3");
+
+        gobj_send_event(link, "EV_DISCONNECT", {}, link);
+        answer_later = false;
+    });
+
+    test("landing after the next link opened, it leaves that link alone", async () => {
+        heard.length = 0;
+        logged.length = 0;
+        answer_later = true;
+        later.length = 0;
+
+        gobj_send_event(link, "EV_CONNECT", {url: "wss://node-a:1993"}, link);
+        later[0]("token-1");
+        await pass_time(10);
+        const refused = gobj_read_attr(link, "iev");
+        gobj_send_event(link, "EV_ON_ID_NAK", {comment: "expired"}, refused);
+        later[1]("token-2");
+        await pass_time(10);
+
+        /*  The second refusal, the next link and its token before the
+         *  drop lands: the token is a promise, the drop the next turn.  */
+        gobj_send_event(link, "EV_ON_ID_NAK", {comment: "no authz"}, refused);
+        gobj_send_event(link, "EV_CONNECT", {url: "wss://node-b:1993"}, link);
+        later[2]("token-3");
+        await pass_time(10);
+        expect(gobj_current_state(link)).toBe("ST_LINKED");
+        const next = gobj_read_attr(link, "iev");
+        expect(next).toBeTruthy();
+        expect(gobj_name(next)).not.toBe(gobj_name(refused));
+        expect(gobj_read_attr(next, "jwt")).toBe("token-3");
+        expect(logged.filter((l) => l.msg.includes("NOT DEFINED"))).toEqual([]);
 
         gobj_send_event(link, "EV_DISCONNECT", {}, link);
         answer_later = false;

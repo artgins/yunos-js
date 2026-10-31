@@ -681,6 +681,7 @@ const en = {
         "select":               "Select",
         "select dates please": "Select dates please",
         "login failed": "Login failed",
+        "logout not ended on the server": "You are logged out of this page, but the server did not end the session: reloading the page may open it again",
 
         "yes": "Yes",
         "no": "No",

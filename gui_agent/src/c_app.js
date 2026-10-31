@@ -902,7 +902,6 @@ function ac_login_denied(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     priv.nak_recovering = false;
-    let msg = denial_message(kw);
 
     if(priv.shell) {
         destroy_shell(gobj);
@@ -913,8 +912,9 @@ function ac_login_denied(gobj, event, kw, src)
     }
     show_login_screen(gobj);
     if(priv.login_ui) {
+        const denial = {error_code: (kw && kw.error_code) || "", error: (kw && kw.error) || ""};
         priv.login_ui.set_busy(false);
-        priv.login_ui.set_error(`${t("login failed")}: ${msg}`);
+        priv.login_ui.set_error(() => `${t("login failed")}: ${denial_message(denial)}`);
     }
     return 0;
 }
@@ -1027,17 +1027,27 @@ function ac_logout(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Logout done — tear down shell + link, back to login.
+ *  Logout done — tear down shell + link, back to login. A logout the
+ *  server did not end (ended_on_server false: the BFF refused it,
+ *  failed, or never answered) leaves its cookies, and a reload of the
+ *  page would restore the session: the login screen says so, with the
+ *  cause, so the user does not take a shared browser for logged out.
  ***************************************************************/
 function ac_logout_done(gobj, event, kw, src)
 {
+    let priv = gobj.priv;
     gobj_write_str_attr(gobj, "username", "");
     destroy_shell(gobj);
-    if(gobj.priv.link && gobj_is_running(gobj.priv.link)) {
-        gobj_stop(gobj.priv.link);
+    if(priv.link && gobj_is_running(priv.link)) {
+        gobj_stop(priv.link);
     }
     stop_monitor_link(gobj);
     show_login_screen(gobj);
+    if(kw && kw.ended_on_server === false && priv.login_ui) {
+        const cause = {error_code: kw.error_code || "", error: kw.error || ""};
+        priv.login_ui.set_error(() =>
+            `${t("logout not ended on the server")} (${denial_message(cause)})`);
+    }
     return 0;
 }
 

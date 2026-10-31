@@ -1424,9 +1424,16 @@ summary.
   instead of dropping to the login screen. A **transient** BFF outage during a
   token refresh (unreachable / 5xx, e.g. while a node reboots) is likewise
   ridden out: the session, shell, link and open views are kept and the refresh
-  retries with backoff (5s→60s), and so does a `429 auth_rate_limited` of the
-  BFF. A retry waits for the `Retry-After` of the answer (seconds or an
-  HTTP-date) when it is longer than the backoff, up to 5 minutes; a 429 whose
+  retries with backoff (5s→60s), and so does a 429, the BFF's
+  `auth_rate_limited` or one of a proxy with no BFF json (it is
+  `auth_rate_limited` too: a 429 is a 429). A retry waits for the
+  `Retry-After` of the answer when it is longer than the backoff, up to 5
+  minutes. The `Retry-After` read is the one of RFC 9110, as the BFF reads
+  it: delay-seconds (1 to 10 digits, no sign, no fraction), or an HTTP-date in
+  its three forms (IMF-fixdate `Sun, 06 Nov 1994 08:49:37 GMT`, rfc850-date
+  `Sunday, 06-Nov-94 08:49:37 GMT`, asctime-date `Sun Nov  6 08:49:37 1994`,
+  all GMT) that is a real date with the day name of that date; anything else
+  is ignored, and the WARNING says so. A 429 whose
   `Retry-After` is longer, or the fifth 429 since the last refresh that
   landed, ends the session with `auth_rate_limited` on the login form. (A
   browser reads `Retry-After` from a BFF on another origin only when the BFF
@@ -1445,7 +1452,16 @@ summary.
   for meanwhile (the form shows as soon as a session is refused) waits for the
   logout to settle, so the cookies the logout clears are cleared before the
   new ones are written, and only the end of that logout ends the session.
-  Mirrors gui_treedb.
+  A logout asked for while the login is in flight (`ST_WAIT_TOKEN`) waits
+  for the login and goes out when it settles, so the cookies the login set
+  are cleared too. A logout the BFF did not answer with success (a 403 of an
+  `allowed_origin` that does not name this origin, a 5xx, no answer) still
+  ends the session here, but the cookies are still there and a reload would
+  restore it: the login form says *"the server did not end the session"*,
+  with the cause. One refresh is in flight at a time: a refresh asked for or
+  the refresh timer while one is in flight sends nothing more (two at once
+  would carry the same refresh token, and an IdP that revokes a refresh token
+  used twice ends the session). Mirrors gui_treedb.
 - **Developer monitor & window manager.** The avatar → **Developer** window was
   reworked (in gobj-ui) from a raw traffic dumper into a yuno-monitor console: a
   folding **bullet** traffic log, a persistent view selector (Detailed / Compact

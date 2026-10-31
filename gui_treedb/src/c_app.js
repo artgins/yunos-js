@@ -843,6 +843,22 @@ function ac_on_id_nak(gobj, event, kw, src)
     let priv = gobj.priv;
     let conn_id = (kw && kw.conn_id) || "";
 
+    /*  No session to refresh: a logout is in flight (it closes the links
+     *  when it settles), and the login takes no refresh then. Asked first:
+     *  a refusal then says nothing about the token, so it rejects no
+     *  connection either.  */
+    let login = gobj_find_service("treedb_login", false);
+    if(!login) {
+        log_error(`${gobj_short_name(gobj)}: no treedb_login service: ` +
+            `connection '${conn_id}' refused the identity and no refresh can be asked for`);
+        return -1;
+    }
+    if(gobj_current_state(login) !== "ST_LOGIN") {
+        log_info(`${gobj_short_name(gobj)}: connection '${conn_id}' refused the identity ` +
+            `with no session to refresh: ${(kw && kw.comment) || "?"}`);
+        return 0;
+    }
+
     /*  Second NAK after a refresh for THIS connection → real rejection, not a
      *  stale-token race. Stop retrying it (breaks the loop); leave the rest. */
     if(conn_id && priv.nak_recovered[conn_id]) {
@@ -861,24 +877,13 @@ function ac_on_id_nak(gobj, event, kw, src)
         return 0;
     }
 
-    /*  No session to refresh: a logout is in flight (it closes the links
-     *  when it settles), and the login takes no refresh then.  */
-    let login = gobj_find_service("treedb_login", false);
-    if(login && gobj_current_state(login) !== "ST_LOGIN") {
-        log_info(`${gobj_short_name(gobj)}: connection '${conn_id}' refused the identity ` +
-            `with no session to refresh: ${(kw && kw.comment) || "?"}`);
-        return 0;
-    }
-
     if(conn_id) {
         priv.nak_conns[conn_id] = true;
     }
     /*  `refreshing` dedupes concurrent NAKs into a single refresh request. */
     if(!priv.refreshing) {
         priv.refreshing = true;
-        if(login) {
-            gobj_send_event(login, "EV_DO_REFRESH", {}, gobj);
-        }
+        gobj_send_event(login, "EV_DO_REFRESH", {}, gobj);
     }
     return 0;
 }
@@ -962,11 +967,11 @@ function ac_login_denied(gobj, event, kw, src)
     let priv = gobj.priv;
     forget_nak_state(gobj);
 
-    let msg = denial_message(kw);
     show_login_screen(gobj);
     if(priv.login_ui) {
+        const denial = {error_code: (kw && kw.error_code) || "", error: (kw && kw.error) || ""};
         priv.login_ui.set_busy(false);
-        priv.login_ui.set_error(`${t("login failed")}: ${msg}`);
+        priv.login_ui.set_error(() => `${t("login failed")}: ${denial_message(denial)}`);
     }
     return 0;
 }
@@ -986,8 +991,6 @@ function ac_session_expired(gobj, event, kw, src)
     let priv = gobj.priv;
     forget_nak_state(gobj);
 
-    let msg = denial_message(kw);
-
     destroy_shell(gobj);
     let links = gobj_find_service("treedb_links", false);
     if(links) {
@@ -997,8 +1000,9 @@ function ac_session_expired(gobj, event, kw, src)
 
     show_login_screen(gobj);
     if(priv.login_ui) {
+        const denial = {error_code: (kw && kw.error_code) || "", error: (kw && kw.error) || ""};
         priv.login_ui.set_busy(false);
-        priv.login_ui.set_error(`${t("login failed")}: ${msg}`);
+        priv.login_ui.set_error(() => `${t("login failed")}: ${denial_message(denial)}`);
     }
     return 0;
 }
@@ -1040,7 +1044,11 @@ function ac_logout(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  Logout done — tear down shell + links, back to login.
+ *  Logout done — tear down shell + links, back to login. A logout the
+ *  server did not end (ended_on_server false: the BFF refused it,
+ *  failed, or never answered) leaves its cookies, and a reload of the
+ *  page would restore the session: the login screen says so, with the
+ *  cause, so the user does not take a shared browser for logged out.
  *
  *  Same order as ac_session_expired: the transports are closed while we
  *  are still in ST_SESSION (their EV_ON_CLOSE is only declared there), and
@@ -1048,6 +1056,7 @@ function ac_logout(gobj, event, kw, src)
  ***************************************************************/
 function ac_logout_done(gobj, event, kw, src)
 {
+    let priv = gobj.priv;
     forget_nak_state(gobj);
     gobj_write_str_attr(gobj, "username", "");
     destroy_shell(gobj);
@@ -1057,6 +1066,11 @@ function ac_logout_done(gobj, event, kw, src)
     }
     gobj_change_state(gobj, "ST_LOGGED_OUT");
     show_login_screen(gobj);
+    if(kw && kw.ended_on_server === false && priv.login_ui) {
+        const cause = {error_code: kw.error_code || "", error: kw.error || ""};
+        priv.login_ui.set_error(() =>
+            `${t("logout not ended on the server")} (${denial_message(cause)})`);
+    }
     return 0;
 }
 

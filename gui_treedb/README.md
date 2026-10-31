@@ -141,8 +141,9 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
 - **A session that survives the real world.** The access_token is refreshed
   before it expires, and a refresh that could not be MADE (network down, BFF
   502, request timed out) is not a denial: it retries with backoff and keeps the
-  session, the shell and every open card; so does a `429 auth_rate_limited`
-  of the BFF. The BFF *answering* "no" with its `error_code` (a 4xx) logs you
+  session, the shell and every open card; so does a 429, the BFF's
+  `auth_rate_limited` or one of a proxy with no BFF json (it is
+  `auth_rate_limited` too: a 429 is a 429). The BFF *answering* "no" with its `error_code` (a 4xx) logs you
   out, and so does an `error_code` a retry would give again
   (`token_too_large`, `auth_unexpected_error`, `auth_config_error`,
   `internal_error`), with its message on the login form. An answer that is
@@ -151,8 +152,13 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   way; the fifth such answer since the last refresh that landed ends the
   session and the login form says it (answers of another kind in between do
   not start the count over). A retry waits for the `Retry-After` of the
-  answer (seconds or an HTTP-date) when it is longer than the backoff, up to
-  5 minutes; a 429 whose `Retry-After` is longer, or the fifth 429 since the
+  answer when it is longer than the backoff, up to 5 minutes. The
+  `Retry-After` read is the one of RFC 9110, as the BFF reads it: delay-seconds
+  (1 to 10 digits, no sign, no fraction), or an HTTP-date in its three forms
+  (IMF-fixdate `Sun, 06 Nov 1994 08:49:37 GMT`, rfc850-date
+  `Sunday, 06-Nov-94 08:49:37 GMT`, asctime-date `Sun Nov  6 08:49:37 1994`,
+  all GMT) that is a real date with the day name of that date; anything else
+  is ignored, and the WARNING says so; a 429 whose `Retry-After` is longer, or the fifth 429 since the
   last refresh that landed, ends the session with `auth_rate_limited` (a
   browser reads `Retry-After` from a BFF on another origin only when the BFF
   sends `Access-Control-Expose-Headers: Retry-After`). The answer of a
@@ -161,11 +167,21 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   `C_TREEDB_LOGIN`) lets no refresh out, a wake-up and an identity NAK then
   ask for none, and a login asked for meanwhile waits for the logout to
   settle, so the cookies the logout clears are cleared before the new ones
-  are written. Because a background tab's timers are throttled — so the refresh of a
+  are written. A logout asked for while the login is in flight
+  (`ST_WAIT_TOKEN`) waits for the login and goes out when it settles, so the
+  cookies the login set are cleared too. A logout the BFF did not answer with
+  success (a 403 of an `allowed_origin` that does not name this origin, a
+  5xx, no answer) still ends the session here, but the cookies are still
+  there and a reload would restore it: the login form says *"the server did
+  not end the session"*, with the cause. One refresh is in flight at a time:
+  a refresh asked for, the refresh timer or a wake-up while one is in flight
+  sends nothing more (two at once would carry the same refresh token, and an
+  IdP that revokes a refresh token used twice ends the session). Because a background tab's timers are throttled — so the refresh of a
   sleeping laptop fires after the token is already dead — `visibilitychange` /
   `online` enter the FSM as `EV_WAKEUP` and refresh on the spot if the deadline
   has passed. A backend that NAKs the identity even after a fresh token is
-  **rejected**: its transport is closed, its connect intent cleared, and the
+  **rejected** (not while a logout is in flight: there is no session to
+  refresh then, and the logout closes the links): its transport is closed, its connect intent cleared, and the
   cause shown in the picker (retrying would only NAK again — it takes fixing the
   user's roles on that backend and reconnecting in Connections).
 - **View adapter:** `C_TREEDB_VIEW` hosts the gobj-ui `C_YUI_TREEDB_TOPICS` /
