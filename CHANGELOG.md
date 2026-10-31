@@ -8,6 +8,23 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.4, gui_treedb 1.2.0 (2026-10-31)
+
+- **Both: a logout that failed at the BFF no longer says a reload may open
+  the session.** C_AUTH_BFF clears both cookies in every answer to a logout
+  it serves, its 5xx too, so after one of them a reload restores nothing;
+  what can remain is the session at the identity server. The login form
+  said *"reloading the page may open it again"* for every failure. Now
+  `EV_LOGOUT_DONE` carries `cookies_cleared`, true for a 5xx with the
+  `error_code` of the BFF, and the form then says *"You are logged out of
+  this browser, but the session may still be open at the identity server
+  (<cause>)"* (new key `logout not ended at the identity server`, en and
+  es). A refusal (403, 400), a page of a gateway, any other answer or no
+  answer keep the text they had: the cookies are still there. The SPA cannot
+  read a `Set-Cookie`, so it goes by the shape of the answer; against a BFF
+  of SDK 7.29.3 or earlier, whose 5xx keep the cookies, the new text is
+  wrong: these versions go with the SDK release after 7.29.3.
+
 ## gui_agent 1.3.3, gui_treedb 1.1.9 (2026-10-31)
 
 - **Both: a 429 with a json of its own is a 429.** `{"error_code":

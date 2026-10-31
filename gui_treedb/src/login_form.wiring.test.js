@@ -186,6 +186,9 @@ describe("a logout that settles with the form up (ST_LOGGED_OUT)", () => {
     });
 
     test("says when the server did not end the session", async () => {
+        const {default: i18next} = await import("i18next");
+        const {en} = await import("./locales/en.js");
+        await i18next.init({lng: "en", resources: {en}});
         const {login, screen} = await form_up();
         const pending = later_answer();
         answers.login = pending.answer;
@@ -198,6 +201,8 @@ describe("a logout that settles with the form up (ST_LOGGED_OUT)", () => {
         expect(not_defined()).toEqual([]);
         expect(screen.busy).toBe(false);
         expect(typeof screen.error).toBe("function");
+        expect(screen.error()).toBe(`${en.translation["logout not ended at the identity server"]} ` +
+            `(${en.translation["server_busy"]})`);
     });
 
     test("stays busy when the login that waited for it goes out next", async () => {

@@ -688,6 +688,7 @@ const es = {
         "select dates please": "Selecciona fechas por favor",
         "login failed": "Error de inicio de sesión",
         "logout not ended on the server": "Ha salido de esta página, pero el servidor no cerró la sesión: recargar la página puede abrirla de nuevo",
+        "logout not ended at the identity server": "Ha salido en este navegador, pero la sesión puede seguir abierta en el servidor de identidad",
 
         "yes": "Sí",
         "no": "No",

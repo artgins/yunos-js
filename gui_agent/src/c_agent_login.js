@@ -583,17 +583,21 @@ function do_bff_refresh(gobj)
  *  BFF did not answer with success (refused, failed, never answered)
  *  is still a logout HERE, and EV_LOGOUT_DONE says it was not one on
  *  the server (`ended_on_server` false, with the `error_code` of
- *  bff_error_code()): the cookies are still there, and a reload of the
- *  page would restore the session. Whatever the failure it is a
- *  WARNING, by the rule of a decoder: the peer did it, no contract of
- *  ours is broken.
+ *  bff_error_code()). `cookies_cleared` says what is left: every answer
+ *  of the BFF to a logout it served clears them, its 5xx too (see
+ *  c_auth_bff.h), so the session may only be open at the identity
+ *  server. A refusal of the BFF (403, 400), a page of a gateway or no
+ *  answer leave them, and a reload of the page would restore the
+ *  session. Whatever the failure it is a WARNING, by the rule of a
+ *  decoder: the peer did it, no contract of ours is broken.
  ***************************************************************/
 function do_bff_logout(gobj)
 {
     const generation = gobj.priv.generation;
     post_bff(gobj, "logout").then((answer) => {
-        const {ok, data} = answer;
+        const {ok, status, data} = answer;
         const ended_on_server = !!(ok && data.success);
+        const cookies_cleared = ended_on_server || (status >= 500 && !!data.error_code);
         const error_code = ended_on_server ? "" : bff_error_code(answer);
         if(!ended_on_server) {
             /*  What the peer did, not a broken contract of ours: a WARNING.  */
@@ -601,7 +605,7 @@ function do_bff_logout(gobj)
                 `(${bff_error_text(answer)}) — dropping the local session anyway`);
         }
         gobj_send_event(gobj, "EV_LOGOUT_DONE", {
-            generation, ended_on_server, error_code, error: data.error || ""
+            generation, ended_on_server, cookies_cleared, error_code, error: data.error || ""
         }, gobj);
     });
 }
@@ -868,7 +872,8 @@ function ac_restore_failed(gobj, event, kw, src)
 
 /***************************************************************
  *  The logout settled: ST_LOGOUT, EV_LOGOUT_DONE published {
- *  ended_on_server, error_code, error, login_follows} (do_bff_logout()),
+ *  ended_on_server, cookies_cleared, error_code, error, login_follows}
+ *  (do_bff_logout()),
  *  and then the login that waited for it, if any, goes out: login_follows
  *  says so, and the form that handed it in stays busy.
  ***************************************************************/
@@ -887,6 +892,7 @@ function ac_logout_done(gobj, event, kw, src)
     gobj_change_state(gobj, "ST_LOGOUT");
     gobj_publish_event(gobj, "EV_LOGOUT_DONE", {
         ended_on_server: !!kw.ended_on_server,
+        cookies_cleared: !!kw.cookies_cleared,
         error_code:      kw.error_code || "",
         error:           kw.error || "",
         login_follows:   !!held_login

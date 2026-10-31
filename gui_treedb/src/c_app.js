@@ -1045,10 +1045,12 @@ function ac_logout(gobj, event, kw, src)
 
 /***************************************************************
  *  Logout done — tear down shell + links, back to login. A logout the
- *  server did not end (ended_on_server false: the BFF refused it,
- *  failed, or never answered) leaves its cookies, and a reload of the
- *  page would restore the session: the login screen says so, with the
- *  cause, so the user does not take a shared browser for logged out.
+ *  server did not end (ended_on_server false) says so on the login
+ *  screen, with the cause, so the user does not take a shared browser
+ *  for logged out. What it says depends on what is left: a failure of
+ *  the BFF cleared the cookies (cookies_cleared), and the session may
+ *  be open only at the identity server; a refusal or no answer left
+ *  them, and a reload of the page would restore the session.
  *
  *  Same order as ac_session_expired: the transports are closed while we
  *  are still in ST_SESSION (their EV_ON_CLOSE is only declared there), and
@@ -1077,8 +1079,13 @@ function ac_logout_done(gobj, event, kw, src)
     }
     if(kw && kw.ended_on_server === false && priv.login_ui) {
         const cause = {error_code: kw.error_code || "", error: kw.error || ""};
-        priv.login_ui.set_error(() =>
-            `${t("logout not ended on the server")} (${denial_message(cause)})`);
+        const cookies_cleared = !!kw.cookies_cleared;
+        priv.login_ui.set_error(() => {
+            const what_is_left = cookies_cleared ?
+                t("logout not ended at the identity server") :
+                t("logout not ended on the server");
+            return `${what_is_left} (${denial_message(cause)})`;
+        });
     }
     return 0;
 }

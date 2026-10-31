@@ -176,11 +176,15 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   are written. A logout asked for while the login is in flight
   (`ST_WAIT_TOKEN`) waits for the login and goes out when it settles, so the
   cookies the login set are cleared too. A logout the BFF did not answer with
-  success (a 403 of an `allowed_origin` that does not name this origin, a
-  5xx, no answer) still ends the session here, but the cookies are still
-  there and a reload would restore it: the login form says *"the server did
-  not end the session"*, with the cause, and the log has a WARNING (the peer
-  did it, no contract of the app is broken). A logout that settles with the
+  success still ends the session here, and the login form says what is left,
+  with the cause. A 5xx of the BFF clears the cookies like every answer to a
+  logout it serves, so the session may only be open at the identity server:
+  *"the session may still be open at the identity server"* (`cookies_cleared`
+  true in `EV_LOGOUT_DONE`). A refusal (a 403 of an `allowed_origin` that does
+  not name this origin, a 400), a page of a gateway or no answer leave the
+  cookies, and a reload would restore the session: *"the server did not end
+  the session"*. Either way the log has a WARNING (the peer did it, no
+  contract of the app is broken). A logout that settles with the
   form up gives the form back, unless the login that waited for it goes out
   next (`EV_LOGOUT_DONE` says so, `login_follows`). The refresh timer of a
   login starts when its token has come: until then the session is not

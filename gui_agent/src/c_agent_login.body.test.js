@@ -1214,12 +1214,25 @@ describe("C_AGENT_LOGIN: a logout asked for while the login is in flight", () =>
 describe("C_AGENT_LOGIN: a logout the server did not end", () => {
     test.for([
         ["a 403 of the BFF (an Origin it does not allow)", 403,
-            {success: false, error_code: "origin_not_allowed", error: "Origin not allowed"}, "origin_not_allowed"],
+            {success: false, error_code: "origin_not_allowed", error: "Origin not allowed"}, "origin_not_allowed", false],
+        ["a 400 of the BFF (a cookie it did not write)", 400,
+            {success: false, error_code: "token_too_large", error: "x"}, "token_too_large", false],
+        ["a 404 of the BFF", 404,
+            {success: false, error_code: "unknown_endpoint", error: "x"}, "unknown_endpoint", false],
+        ["a 429 of a rate limiter in front", 429,
+            {error_code: "rate_limit_exceeded"}, "auth_rate_limited", false],
+        ["a 500 of the BFF", 500,
+            {success: false, error_code: "auth_config_error", error: "x"}, "auth_config_error", true],
+        ["a 502 of the BFF", 502,
+            {success: false, error_code: "auth_service_unavailable", error: "x"}, "auth_service_unavailable", true],
         ["a 503 of the BFF", 503,
-            {success: false, error_code: "server_busy", error: "Pending queue full"}, "server_busy"],
-        ["a 502 page of a gateway", 502, null, "auth_service_unavailable"],
+            {success: false, error_code: "server_busy", error: "Pending queue full"}, "server_busy", true],
+        ["a 504 of the BFF", 504,
+            {success: false, error_code: "auth_timeout", error: "x"}, "auth_timeout", true],
+        ["a 503 json of a gateway, with no code", 503, {message: "down"}, "auth_service_unavailable", false],
+        ["a 502 page of a gateway", 502, null, "auth_service_unavailable", false],
     ])("%s: the session ends here, and EV_LOGOUT_DONE says the server did not end it",
-    async ([label, status, data, error_code]) => {
+    async ([label, status, data, error_code, cookies_cleared]) => {
         heard.length = 0;
         await log_in();
 
@@ -1230,6 +1243,7 @@ describe("C_AGENT_LOGIN: a logout the server did not end", () => {
         expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
         expect(heard[0].kw.ended_on_server).toBe(false);
         expect(heard[0].kw.error_code).toBe(error_code);
+        expect(heard[0].kw.cookies_cleared).toBe(cookies_cleared);
         expect(AUTH_ERROR_I18N_KEYS).toContain(error_code);
         expect(gobj_current_state(login)).toBe("ST_LOGOUT");
     });
@@ -1553,6 +1567,7 @@ describe("C_AGENT_LOGIN: what a logout that failed says", () => {
         await pass_time(10);
         expect(heard[0].kw.ended_on_server).toBe(false);
         expect(heard[0].kw.error_code).toBe("network_error");
+        expect(heard[0].kw.cookies_cleared).toBe(false);
         expect(logged.filter((l) => l.level === "error")).toEqual([]);
         expect(logged.filter((l) => l.level === "warning" && l.msg.includes("BFF logout failed")).length)
             .toBe(1);
@@ -1570,6 +1585,7 @@ describe("C_AGENT_LOGIN: what a logout that failed says", () => {
         await pass_time(BFF_TIMEOUT_MS + 10);
         expect(heard[0].kw.ended_on_server).toBe(false);
         expect(heard[0].kw.error_code).toBe("auth_timeout");
+        expect(heard[0].kw.cookies_cleared).toBe(false);
         expect(logged.filter((l) => l.level === "error")).toEqual([]);
         expect(logged.filter((l) => l.level === "warning" && l.msg.includes("BFF logout failed")).length)
             .toBe(1);

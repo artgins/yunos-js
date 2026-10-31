@@ -635,6 +635,7 @@ const en = {
         "auth config saved": "Authentication settings saved",
         "login failed":      "Login failed",
         "logout not ended on the server": "You are logged out of this page, but the server did not end the session: reloading the page may open it again",
+        "logout not ended at the identity server": "You are logged out of this browser, but the session may still be open at the identity server",
 
         /* auth_bff error codes: the error_code of a denial (c_auth_bff.h) */
         "invalid_credentials":       "Invalid username or password",

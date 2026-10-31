@@ -328,6 +328,36 @@ describe("a logout the server did not end", () => {
         app.priv.login_ui = null;
     });
 
+    test("the BFF cleared the cookies: only the identity server may keep the session", async () => {
+        const {default: i18next} = await import("i18next");
+        const {en} = await import("./locales/en.js");
+        const {es} = await import("./locales/es.js");
+        await i18next.init({lng: "en", resources: {en, es}});
+        const {app} = app_in_session();
+        const login = gobj_find_service("agent_login", true);
+        if(app.priv.login_ui) {
+            app.priv.login_ui.unmount();    /*  what an earlier test left  */
+            app.priv.login_ui = null;
+        }
+
+        gobj_publish_event(login, "EV_LOGOUT_DONE", {
+            ended_on_server: false, cookies_cleared: true,
+            error_code: "auth_service_unavailable", error: "x"
+        });
+        const screen = login_screens[login_screens.length - 1];
+        expect(screen.error()).toBe(`${en.translation["logout not ended at the identity server"]} ` +
+            `(${en.translation["auth_service_unavailable"]})`);
+        expect(en.translation["logout not ended at the identity server"]).not.toMatch(/reload/i);
+        await i18next.changeLanguage("es");
+        expect(screen.error()).toBe(`${es.translation["logout not ended at the identity server"]} ` +
+            `(${es.translation["auth_service_unavailable"]})`);
+        expect(es.translation["logout not ended at the identity server"]).not.toMatch(/recarga/i);
+        await i18next.changeLanguage("en");
+        expect(errors().filter((m) => /NOT DEFINED/.test(m))).toEqual([]);
+        app.priv.login_ui.unmount();
+        app.priv.login_ui = null;
+    });
+
     test("a logout that ended on the server says nothing more", () => {
         const {app} = app_in_session();
         const login = gobj_find_service("agent_login", true);

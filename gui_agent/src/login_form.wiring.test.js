@@ -411,7 +411,22 @@ describe("a logout that settles with the form up", () => {
         pending.give(200, {success: true, username: "u", expires_in: 300});
         await pass_time(10);
         expect(screen.busy).toBe(false);
-        expect(screen.error()).toBe(`${en.translation["logout not ended on the server"]} ` +
+        expect(screen.error()).toBe(`${en.translation["logout not ended at the identity server"]} ` +
             `(${en.translation["server_busy"]})`);
+    });
+
+    test("a refusal of the BFF left the cookies: a reload may open the session", async () => {
+        const {login} = await app_started(NO_SESSION);
+        const screen = login_screens[0];
+
+        const pending = later_answer();
+        answers.login = pending.answer;
+        answers.logout = {status: 403, data: {success: false, error_code: "origin_not_allowed", error: "x"}};
+        screen.submit({username: "u", password: "p"});
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        pending.give(200, {success: true, username: "u", expires_in: 300});
+        await pass_time(10);
+        expect(screen.error()).toBe(`${en.translation["logout not ended on the server"]} ` +
+            `(${en.translation["origin_not_allowed"]})`);
     });
 });
