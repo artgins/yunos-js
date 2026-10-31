@@ -8,6 +8,11 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.7, gui_treedb 1.2.3 (2026-10-31)
+
+- Both on `@yuneta/gobj-js` and `@yuneta/gobj-ui` 7.30.0, `i18next` 26.5.12, and
+  `fast-uri` 3.1.9 in the lockfile. No change of code.
+
 ## gui_agent 1.3.6, gui_treedb 1.2.2 (2026-10-31)
 
 - **BREAKING, both: the same rule reaches the rest of the views.** A node's agent

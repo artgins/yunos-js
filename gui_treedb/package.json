@@ -1,7 +1,7 @@
 {
   "name": "gui-treedb",
   "private": true,
-  "version": "1.2.2",
+  "version": "1.2.3",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -17,11 +17,11 @@
   },
   "dependencies": {
     "@antv/g6": "^5.1.1",
-    "@yuneta/gobj-js": "^7.29.4",
-    "@yuneta/gobj-ui": "^7.29.8",
+    "@yuneta/gobj-js": "^7.30.0",
+    "@yuneta/gobj-ui": "^7.30.0",
     "bulma": "^1.0.4",
     "bulma-switch-control": "^1.2.2",
-    "i18next": "^26.5.6",
+    "i18next": "^26.5.12",
     "luxon": "^3.7.2",
     "maplibre-gl": "^6.16.0",
     "tabulator-tables": "^6.7.1",
