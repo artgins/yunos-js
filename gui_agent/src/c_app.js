@@ -269,6 +269,14 @@ function stop_monitor_link(gobj)
     }
 }
 
+/***************************************************************
+ *  True while the login service holds a session: not during a logout.
+ ***************************************************************/
+function session_is_alive(gobj)
+{
+    return agent_login_is_logged_in(gobj_find_service("agent_login", false));
+}
+
 function hide_login_screen(gobj)
 {
     let priv = gobj.priv;
@@ -742,6 +750,12 @@ function ac_on_open(gobj, event, kw, src)
     if(kw && kw.username) {
         gobj_write_str_attr(gobj, "username", kw.username);
     }
+    /*  A failed first open brought the form back (ac_on_open_error), and
+     *  the shell is built under it: it goes now, unless a login handed in
+     *  there is replacing the session.  */
+    if(session_is_alive(gobj)) {
+        hide_login_screen(gobj);
+    }
     agent_link_command(priv.link, "my-permissions", {});
     if(priv.shell) {
         open_session(gobj);
@@ -854,7 +868,11 @@ function ac_on_close(gobj, event, kw, src)
  *  the pre-shell window (the first open after login has not landed
  *  yet, ac_login_accepted already hid the login form), bring the
  *  login screen back with a non-destructive "reconnecting" notice
- *  instead of a blank page; EV_ON_OPEN then builds the shell.
+ *  instead of a blank page; EV_ON_OPEN then takes the form away and
+ *  builds the shell. A login handed in there replaces the session
+ *  (ac_replace_session of C_AGENT_LOGIN): while its logout is in
+ *  flight the form belongs to it, busy, and the link goes when the
+ *  logout settles.
  ***************************************************************/
 function ac_on_open_error(gobj, event, kw, src)
 {
@@ -863,6 +881,9 @@ function ac_on_open_error(gobj, event, kw, src)
         priv.live_hosts = {};
         yui_shell_set_connection_state(priv.shell, false);    // control-center link down
         rebuild_all_workspaces(gobj);
+        return 0;
+    }
+    if(!session_is_alive(gobj)) {
         return 0;
     }
     show_login_screen(gobj);
@@ -895,21 +916,21 @@ function denial_message(kw)
 }
 
 /***************************************************************
- *  Login refused / refresh failed. If a shell is up, the session
- *  expired mid-use → tear down + back to login; else paint the error.
+ *  Login refused / refresh failed: what a session had goes, the shell
+ *  and the links -- the link is up with no shell when its first open
+ *  failed, and it would go on retrying with no session -- and the form
+ *  says why.
  ***************************************************************/
 function ac_login_denied(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     priv.nak_recovering = false;
 
-    if(priv.shell) {
-        destroy_shell(gobj);
-        if(priv.link && gobj_is_running(priv.link)) {
-            gobj_stop(priv.link);
-        }
-        stop_monitor_link(gobj);
+    destroy_shell(gobj);
+    if(priv.link && gobj_is_running(priv.link)) {
+        gobj_stop(priv.link);
     }
+    stop_monitor_link(gobj);
     show_login_screen(gobj);
     if(priv.login_ui) {
         const denial = {error_code: (kw && kw.error_code) || "", error: (kw && kw.error) || ""};
@@ -950,15 +971,21 @@ function ac_on_id_nak(gobj, event, kw, src)
     /*  Second NAK after a successful refresh (deeper auth problem): the
      *  session ends, on the next turn. This runs inside the transport's
      *  own EV_ON_ID_NAK publication, and ending the session stops the link,
-     *  which destroys that transport.  */
+     *  which destroys that transport. What the control center said is
+     *  in one language, the app's may be another: it goes to the log, and
+     *  the form shows a key of the locales.  */
     priv.nak_recovering = false;
-    gobj_post_event(gobj, "EV_SESSION_REFUSED",
-        {error: (kw && kw.comment) || t("authentication required")}, gobj);
+    log_warning(`${gobj_short_name(gobj)}: identity refused again after a token refresh: ` +
+        `${(kw && kw.comment) || "?"}`);
+    gobj_post_event(gobj, "EV_SESSION_REFUSED", {
+        error_code: "authentication required",
+        error:      (kw && kw.comment) || ""
+    }, gobj);
     return 0;
 }
 
 /***************************************************************
- *  {error} -- the deferred half of a refused identity
+ *  {error_code, error} -- the deferred half of a refused identity
  *  (ac_on_id_nak): reset the login FSM so the login form accepts a
  *  fresh submit, and behave like a denied login.
  ***************************************************************/
@@ -1032,6 +1059,9 @@ function ac_logout(gobj, event, kw, src)
  *  failed, or never answered) leaves its cookies, and a reload of the
  *  page would restore the session: the login screen says so, with the
  *  cause, so the user does not take a shared browser for logged out.
+ *  A form that was up is given back (a logout that waited for a login
+ *  leaves it busy), unless the login that waited for this logout goes
+ *  out next (login_follows): that one answers it.
  ***************************************************************/
 function ac_logout_done(gobj, event, kw, src)
 {
@@ -1043,6 +1073,9 @@ function ac_logout_done(gobj, event, kw, src)
     }
     stop_monitor_link(gobj);
     show_login_screen(gobj);
+    if(priv.login_ui && !(kw && kw.login_follows)) {
+        priv.login_ui.set_busy(false);
+    }
     if(kw && kw.ended_on_server === false && priv.login_ui) {
         const cause = {error_code: kw.error_code || "", error: kw.error || ""};
         priv.login_ui.set_error(() =>

@@ -660,6 +660,7 @@ const es = {
         "newest first": "Más recientes primero (indexar la key desde el final)",
         "the backend did not answer in time": "El backend no respondió a tiempo",
         "cannot connect - retrying": "No se puede conectar — reintentando…",
+        "code": "código",
         "access rejected by the backend - fix the roles and reconnect":
             "Este backend rechaza el acceso — corrige los roles del usuario allí y reconecta en Settings",
         "connecting": "Conectando…",

@@ -866,9 +866,9 @@ function ac_on_id_nak(gobj, event, kw, src)
         delete priv.nak_conns[conn_id];
         delete priv.ever_connected[conn_id];   /*  transport gone → drop its tab  */
 
-        let reason = (kw && kw.comment) || "identity rejected";
+        let reason = (kw && kw.comment) || "";
         log_error(`${gobj_short_name(gobj)}: connection '${conn_id}' rejected ` +
-                  `by the backend after a token refresh: ${reason}`);
+                  `by the backend after a token refresh: ${reason || "no comment"}`);
 
         /*  This runs inside the transport's own EV_ON_ID_NAK publication, and
          *  the reject destroys that transport: on the next turn.  */
@@ -1053,6 +1053,12 @@ function ac_logout(gobj, event, kw, src)
  *  Same order as ac_session_expired: the transports are closed while we
  *  are still in ST_SESSION (their EV_ON_CLOSE is only declared there), and
  *  the state changes after.
+ *
+ *  It lands in ST_LOGGED_OUT too: a logout asked for while the login was
+ *  in flight waits for it, with the form up and busy. There is nothing to
+ *  tear down then, and the form is given back, unless the login that
+ *  waited for this logout goes out next (login_follows): that one answers
+ *  it.
  ***************************************************************/
 function ac_logout_done(gobj, event, kw, src)
 {
@@ -1066,6 +1072,9 @@ function ac_logout_done(gobj, event, kw, src)
     }
     gobj_change_state(gobj, "ST_LOGGED_OUT");
     show_login_screen(gobj);
+    if(priv.login_ui && !(kw && kw.login_follows)) {
+        priv.login_ui.set_busy(false);
+    }
     if(kw && kw.ended_on_server === false && priv.login_ui) {
         const cause = {error_code: kw.error_code || "", error: kw.error || ""};
         priv.login_ui.set_error(() =>
@@ -1572,7 +1581,9 @@ function create_gclass(gclass_name)
         ["ST_LOGGED_OUT", [
             ["EV_LOGIN_ACCEPTED",   ac_login_accepted,  null],
             ["EV_LOGIN_DENIED",     ac_login_denied,    null],
-            ["EV_RESTORE_FAILED",   ac_restore_failed,  null]
+            ["EV_RESTORE_FAILED",   ac_restore_failed,  null],
+            /*  a logout that waited for the login in flight  */
+            ["EV_LOGOUT_DONE",      ac_logout_done,     null]
         ]],
         ["ST_SESSION", [
             ["EV_LOGIN_REFRESHED",  ac_login_refreshed, null],

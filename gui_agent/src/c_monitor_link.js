@@ -33,10 +33,11 @@
  *      retrying). EV_DISCONNECT returns to ST_IDLE from anywhere, and so
  *      does a failure (no token, identity refused twice). A new
  *      EV_CONNECT from ST_LINKED closes the session it had, and that
- *      close arrives in ST_FETCHING. A link refused twice is dropped on
- *      the next turn (EV_DROP_LINK, naming its transport), so the drop
- *      can land in any state, after a new EV_CONNECT: it then drops
- *      nothing, the new link keeps its own transport.
+ *      close arrives in ST_FETCHING. A link refused twice stops hearing
+ *      the login and the transport at once and is dropped on the next
+ *      turn (EV_DROP_LINK, naming its transport), so the drop can land in
+ *      any state, after a new EV_CONNECT: it then drops nothing, the new
+ *      link keeps its own transport.
  *
  *      Input:  EV_CONNECT {url}, EV_DISCONNECT, EV_SEND_COMMAND {command,
  *              kw}, EV_SEND_STATS {stats, kw}.
@@ -458,9 +459,17 @@ function ac_on_id_nak(gobj, event, kw, src)
     log_error(`${gobj_short_name(gobj)}: identity refused again by ` +
         `${gobj_read_str_attr(gobj, "url")}: ${comment}`);
     /*  This runs inside the transport's own EV_ON_ID_NAK publish: its
-     *  tree is torn down on the next cycle, not from under it.  */
+     *  tree is torn down on the next cycle, not from under it. What it
+     *  and the login still have to say stops now, because ST_IDLE has no
+     *  token to renew and no link to report on: the close of the socket
+     *  of a transport that never reached a session is an EV_ON_OPEN_ERROR,
+     *  and it can land before the drop.  */
     let iev = gobj_read_attr(gobj, "iev");
+    if(iev) {
+        gobj_unsubscribe_event(iev, null, {}, gobj);
+    }
     gobj_post_event(gobj, "EV_DROP_LINK", {iev_name: iev ? gobj_name(iev) : ""}, gobj);
+    watch_login(gobj, false);
     gobj_change_state(gobj, "ST_IDLE");
     return bubble(gobj, "EV_LINK_FAILED", {
         error_code: "monitor identity refused",

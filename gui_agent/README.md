@@ -280,7 +280,8 @@ has the deadline of every call to the BFF (15 s, headers and body): a BFF that
 does not answer in time is said as unreachable, and the link does not wait
 for it. The token is renewed whenever the login rotates the cookies, and once
 after an identity NAK (an expired token); a second NAK in a row is a refusal of the user by
-that agent, and the view says that too. Only the answer of the last token asked
+that agent, and the view says that too (the link stops hearing that transport
+and the login at once, and drops the transport on the next turn). Only the answer of the last token asked
 for is taken: a token of a link dropped before it came (the session ended,
 another agent was picked) never opens the next link, and a renewal answered
 late never replaces a newer one. Two conditions on the agent: the user
@@ -1095,13 +1096,17 @@ cd yunos/js/gui_agent
 npm ci             # exactly what package-lock.json holds
 npm run dev        # vite dev server
 npm run build      # production bundle into dist/
-npm test           # unit tests of src/agent_helpers.js (vitest)
+npm test           # the tests of the app (vitest)
 npm run qa         # drive the DEPLOYED plane in a real browser
 ```
 
 `npm test` covers the data-in/data-out half of the app — versions, the
 `list-agents` parser, the quote-aware command splitter, shortkey expansion, the
-command history. Everything that needs a yuno, a shell and a backend is
+command history -- and the wiring of the gclasses over doubles: the login
+service against a BFF double, `src/login.test.js` the real login form in jsdom,
+`src/login_form.wiring.test.js` that form's life with the real login service,
+and `src/real_transport.wiring.test.js` an identity refused through the real
+`C_IEVENT_CLI` over a socket double. What needs a shell and a real backend is
 `scripts/qa.mjs`'s job instead.
 
 `src/c_agent_login.body.test.js` compares its copy of the BFF's `error_code`
@@ -1425,15 +1430,20 @@ summary.
   token refresh (unreachable / 5xx, e.g. while a node reboots) is likewise
   ridden out: the session, shell, link and open views are kept and the refresh
   retries with backoff (5s→60s), and so does a 429, the BFF's
-  `auth_rate_limited` or one of a proxy with no BFF json (it is
-  `auth_rate_limited` too: a 429 is a 429). A retry waits for the
+  `auth_rate_limited` or one of a proxy, with no BFF json or with a json and
+  an `error_code` of its own (it is `auth_rate_limited` too: a 429 is a 429,
+  and a code of its own, which reads as a denial, does not end the session). A retry waits for the
   `Retry-After` of the answer when it is longer than the backoff, up to 5
-  minutes. The `Retry-After` read is the one of RFC 9110, as the BFF reads
-  it: delay-seconds (1 to 10 digits, no sign, no fraction), or an HTTP-date in
-  its three forms (IMF-fixdate `Sun, 06 Nov 1994 08:49:37 GMT`, rfc850-date
+  minutes. The `Retry-After` read is the one of RFC 9110: delay-seconds
+  (digits, no sign, no fraction, of any length: `000000000030` is 30 seconds,
+  and eleven nines are as long a wait as ten, though the BFF passes on ten at
+  most), or an HTTP-date in its three forms, as the BFF reads them
+  (IMF-fixdate `Sun, 06 Nov 1994 08:49:37 GMT`, rfc850-date
   `Sunday, 06-Nov-94 08:49:37 GMT`, asctime-date `Sun Nov  6 08:49:37 1994`,
-  all GMT) that is a real date with the day name of that date; anything else
-  is ignored, and the WARNING says so. A 429 whose
+  all GMT) that is a real date with the day name of that date. The two-digit
+  year of an rfc850-date is the latest one with those digits that is not more
+  than 50 years ahead, to the second: on 2026-10-31 `06-Nov-76` is 1976, and
+  in 2060 `05` is 2105. Anything else is ignored, and the WARNING says so. A 429 whose
   `Retry-After` is longer, or the fifth 429 since the last refresh that
   landed, ends the session with `auth_rate_limited` on the login form. (A
   browser reads `Retry-After` from a BFF on another origin only when the BFF
@@ -1458,7 +1468,18 @@ summary.
   `allowed_origin` that does not name this origin, a 5xx, no answer) still
   ends the session here, but the cookies are still there and a reload would
   restore it: the login form says *"the server did not end the session"*,
-  with the cause. One refresh is in flight at a time: a refresh asked for or
+  with the cause, and the log has a WARNING (the peer did it, no contract of
+  the app is broken). A logout that settles with the form up gives the form
+  back, unless the login that waited for it goes out next (`EV_LOGOUT_DONE`
+  says so, `login_follows`). **The login form with a session alive:** the
+  form comes back, *"cannot connect - reconnecting"*, when the first open of
+  the link fails after the login was accepted. A login handed in there
+  replaces the session: the logout goes first and the login when it settles,
+  with the form busy across the two. The link opening at last takes the form
+  away, and a session denied in that window stops the link. **An identity the
+  control center refuses again** after a refresh ends the session, and the
+  form says *"Login failed: Authentication required"* in the language of the
+  app; what the control center said is in the log, as a WARNING. One refresh is in flight at a time: a refresh asked for or
   the refresh timer while one is in flight sends nothing more (two at once
   would carry the same refresh token, and an IdP that revokes a refresh token
   used twice ends the session). Mirrors gui_treedb.

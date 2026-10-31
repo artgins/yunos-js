@@ -17,6 +17,10 @@
  *      What is checked holds with any gobj-js: the transport is alive
  *      when its publication returns, and the session ends one turn later.
  *
+ *      The login screen says it in one language: what the control center
+ *      said is in the log, and the screen shows a key of the locales, which
+ *      a language switch translates.
+ *
  *      A logout the server did not end (EV_LOGOUT_DONE with
  *      ended_on_server false) brings the login screen back saying so,
  *      with the cause, re-translated on a language switch.
@@ -252,6 +256,43 @@ describe("an identity refused again after a token refresh", () => {
         expect(gobj_is_destroying(iev)).toBe(true);
         expect(errors().filter((m) => /Destroying a gobj/.test(m))).toEqual([]);
         expect(errors().filter((m) => /NOT DEFINED/.test(m))).toEqual([]);
+    });
+});
+
+describe("an identity refused again, on the login screen", () => {
+
+    test("is said in the language of the app, with what the control center said in the log", async () => {
+        const {default: i18next} = await import("i18next");
+        const {en} = await import("./locales/en.js");
+        const {es} = await import("./locales/es.js");
+        await i18next.init({lng: "es", resources: {en, es}});
+        const {app, link} = app_in_session();
+        if(app.priv.login_ui) {
+            app.priv.login_ui.unmount();    /*  what an earlier test left  */
+            app.priv.login_ui = null;
+        }
+        if(!gobj_is_running(link)) {
+            gobj_start(link);               /*  ...and the link it stopped  */
+        }
+        const iev = gobj_read_attr(link, "iev");
+        gobj_change_state(iev, "ST_SESSION");
+        const before = login_screens.length;
+        app.priv.nak_recovering = true;
+
+        gobj_send_event(iev, "EV_FAKE_NAK", {comment: "Authentication required"}, iev);
+        vi.advanceTimersToNextTimer();
+        expect(login_screens.length).toBe(before + 1);
+        const screen = login_screens[login_screens.length - 1];
+        expect(screen.error()).toBe(`${es.translation["login failed"]}: ` +
+            `${es.translation["authentication required"]}`);
+        await i18next.changeLanguage("en");
+        expect(screen.error()).toBe(`${en.translation["login failed"]}: ` +
+            `${en.translation["authentication required"]}`);
+        expect(logged.filter((l) => l.level === "warning" &&
+            l.msg.includes("Authentication required")).length).toBe(1);
+        expect(errors().filter((m) => /NOT DEFINED/.test(m))).toEqual([]);
+        app.priv.login_ui.unmount();
+        app.priv.login_ui = null;
     });
 });
 

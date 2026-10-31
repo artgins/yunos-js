@@ -305,6 +305,26 @@ describe("a connection refused again after a token refresh", () => {
     });
 });
 
+describe("a connection refused again with no comment", () => {
+
+    test("adds nothing to the note: the note says it, in the language of the app", () => {
+        const app = gobj_create_service("treedb_app", "C_TREEDB_APP", {}, yuno);
+        built.push(app);
+        gobj_start(app);
+        gobj_change_state(app, "ST_SESSION");
+        const links = gobj_find_service("treedb_links", true);
+        gobj_send_event(links, "EV_SYNC_CONNECTIONS", {connections: [CONN]}, app);
+        const iev = treedb_links_get_iev(links, "c1");
+        gobj_change_state(iev, "ST_SESSION");
+        app.priv.nak_recovered.c1 = true;
+
+        gobj_send_event(iev, "EV_FAKE_NAK", {}, iev);
+        vi.advanceTimersToNextTimer();
+        expect(treedb_links_get_open_error(links, "c1")).toEqual(
+            expect.objectContaining({rejected: true, reason: ""}));
+    });
+});
+
 describe("a scan that times out", () => {
 
     test("ends on the next turn, not inside its watchdog's EV_TIMEOUT", () => {

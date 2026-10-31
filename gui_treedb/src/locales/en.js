@@ -655,6 +655,7 @@ const en = {
         "newest first": "Newest first (index the key from the end)",
         "the backend did not answer in time": "The backend did not answer in time",
         "cannot connect - retrying": "Cannot connect — retrying…",
+        "code": "code",
         "access rejected by the backend - fix the roles and reconnect":
             "Access rejected by this backend — fix the user's roles there, then reconnect in Settings",
         "connecting": "Connecting…",

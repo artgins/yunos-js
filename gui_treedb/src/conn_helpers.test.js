@@ -8,7 +8,9 @@
  *      paste that carries one new yuno carries every old one with it.
  ***********************************************************************/
 import { describe, test, expect } from "vitest";
-import { conn_identity, plan_conn_import, conn_is_marked, conns_browse_state } from "./conn_helpers.js";
+import {
+    conn_identity, plan_conn_import, conn_is_marked, conns_browse_state, open_error_detail
+} from "./conn_helpers.js";
 
 const A = {url: "wss://a.example.com:1996", remote_yuno_service: "treedb"};
 const B = {url: "wss://b.example.com:1996", remote_yuno_service: "treedb"};
@@ -139,5 +141,21 @@ describe("what the header box of the browse column says", () => {
     test("nothing at all is not a crash", () => {
         expect(conns_browse_state(null)).toBe("none");
         expect(conns_browse_state([null, {}])).toBe("none");
+    });
+});
+
+describe("what the note of a connection adds in brackets", () => {
+    const t = (key) => `<${key}>`;
+
+    test("what the peer said, as it said it", () => {
+        expect(open_error_detail({reason: "  no role ", code: 1006}, t)).toBe("no role");
+    });
+
+    test("the code of a close that said nothing, its word translated", () => {
+        expect(open_error_detail({reason: "", code: 1006}, t)).toBe("<code> 1006");
+    });
+
+    test("nothing, when there is nothing to add", () => {
+        expect(open_error_detail({reason: "", code: 0}, t)).toBe("");
     });
 });

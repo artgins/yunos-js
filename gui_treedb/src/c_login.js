@@ -126,10 +126,6 @@ const HTTP_MONTHS = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 ];
 
-/*  The longest delay-seconds of a Retry-After that is read: the BFF
- *  passes on no longer one (BFF_RETRY_AFTER_DIGITS_MAX).  */
-const RETRY_AFTER_DIGITS_MAX = 10;
-
 
 /***************************************************************
  *              Data
@@ -312,12 +308,32 @@ function post_bff(gobj, segment, body)
 }
 
 /***************************************************************
+ *  The year of an rfc850-date, whose text gives two digits of it
+ *  (RFC 9110 5.6.7): the latest year with those digits that does not
+ *  put the date more than 50 years after `now_ms`. So it holds in
+ *  both ways: "06-Nov-76" read on 2026-10-31 is 1976, because 2076 is
+ *  six days too far, and "05" read in 2060 is 2105, not 2005.
+ ***************************************************************/
+function rfc850_year(two_digits, month_index, day, clock, now_ms)
+{
+    const [hour, minute, second] = clock.split(":").map(Number);
+    let limit = new Date(now_ms);
+    limit.setUTCFullYear(limit.getUTCFullYear() + 50);
+
+    const year = Math.floor(limit.getUTCFullYear() / 100) * 100 + two_digits;
+    let when = new Date(0);
+    when.setUTCFullYear(year, month_index, day);
+    when.setUTCHours(hour, minute, second, 0);
+    return (when.getTime() > limit.getTime()) ? year - 100 : year;
+}
+
+/***************************************************************
  *  The time an HTTP-date (RFC 9110 5.6.7) names, in epoch ms, or
  *  NaN when `text` is none: an IMF-fixdate ("Sun, 06 Nov 1994
  *  08:49:37 GMT"), or one of the two obsolete forms a recipient
- *  must read, rfc850-date ("Sunday, 06-Nov-94 08:49:37 GMT", the
- *  year taken within 50 years of `now_ms`) and asctime-date ("Sun
- *  Nov  6 08:49:37 1994", in GMT too). Names are case-sensitive,
+ *  must read, rfc850-date ("Sunday, 06-Nov-94 08:49:37 GMT",
+ *  rfc850_year() gives its year) and asctime-date ("Sun Nov  6
+ *  08:49:37 1994", in GMT too). Names are case-sensitive,
  *  the day of the month, the hour, minute and second must exist
  *  (second 60 is a leap second), and the day name must be the one
  *  of that date: the rule the BFF passes a Retry-After of the IdP
@@ -327,6 +343,7 @@ function http_date_ms(text, now_ms)
 {
     let day_name, day, month, year, clock;
     let day_names = HTTP_DAY_NAMES;
+    let two_digit_year = false;
     let m = text.match(/^([A-Za-z]{3}), (\d{2}) ([A-Za-z]{3}) (\d{4}) (\d{2}:\d{2}:\d{2}) GMT$/);
     if(m) {
         [, day_name, day, month, year, clock] = m;
@@ -334,11 +351,7 @@ function http_date_ms(text, now_ms)
     } else if((m = text.match(/^([A-Za-z]+), (\d{2})-([A-Za-z]{3})-(\d{2}) (\d{2}:\d{2}:\d{2}) GMT$/))) {
         [, day_name, day, month, year, clock] = m;
         day_names = HTTP_DAY_NAMES_LONG;
-        const now_year = new Date(now_ms).getUTCFullYear();
-        year = Math.floor(now_year / 100) * 100 + Number(year);
-        if(year > now_year + 50) {
-            year -= 100;
-        }
+        two_digit_year = true;
     } else if((m = text.match(/^([A-Za-z]{3}) ([A-Za-z]{3}) ( \d|\d{2}) (\d{2}:\d{2}:\d{2}) (\d{4})$/))) {
         [, day_name, month, day, clock, year] = m;
         year = Number(year);
@@ -350,6 +363,9 @@ function http_date_ms(text, now_ms)
     day = Number(day);
     if(month_index < 0 || hour > 23 || minute > 59 || second > 60) {
         return NaN;
+    }
+    if(two_digit_year) {
+        year = rfc850_year(Number(year), month_index, day, clock, now_ms);
     }
     let when = new Date(0);
     when.setUTCFullYear(year, month_index + 1, 0);     /*  the last day of that month  */
@@ -366,10 +382,13 @@ function http_date_ms(text, now_ms)
 
 /***************************************************************
  *  The milliseconds a Retry-After header asks to wait (RFC 9110
- *  10.2.3): delay-seconds, 1*DIGIT (RETRY_AFTER_DIGITS_MAX at
- *  most), or an HTTP-date (0 when it is already past). 0 for no
- *  header, and -1 for any other text: a sign, a fraction, two
- *  values, a date of another format, a date that is none.
+ *  10.2.3): delay-seconds, 1*DIGIT, of any length (a delay no number
+ *  holds is the longest one that does: every delay past
+ *  REFRESH_RETRY_AFTER_MAX_MS is treated alike, so it is the digits'
+ *  value and not their count that decides), or an HTTP-date (0 when
+ *  it is already past). 0 for no header, and -1 for any other text:
+ *  a sign, a fraction, two values, a date of another format, a date
+ *  that is none.
  ***************************************************************/
 function retry_after_ms(retry_after, now_ms)
 {
@@ -378,7 +397,7 @@ function retry_after_ms(retry_after, now_ms)
         return 0;
     }
     if(/^\d+$/.test(text)) {
-        return (text.length <= RETRY_AFTER_DIGITS_MAX) ? Number(text) * 1000 : -1;
+        return Math.min(Number(text) * 1000, Number.MAX_SAFE_INTEGER);
     }
     const when = http_date_ms(text, now_ms);
     if(Number.isNaN(when)) {
@@ -390,16 +409,20 @@ function retry_after_ms(retry_after, now_ms)
 /***************************************************************
  *  The error_code of a call the BFF did not answer with one: no answer
  *  in BFF_TIMEOUT_MS is "auth_timeout", no answer at all
- *  "network_error", a 429 with no error_code (a proxy that rate limits)
- *  "auth_rate_limited", as the BFF's own 429 (a 429 is a 429, whatever
- *  its body: it is retried after its Retry-After and counted with the
- *  other 429s), a 5xx with no error_code (a gateway, or a BFF down
+ *  "network_error", a 5xx with no error_code (a gateway, or a BFF down
  *  behind one) "auth_service_unavailable", and any other answer with no
  *  error_code "auth_bad_response": an empty body, a body cut halfway, a
- *  page in HTML, a json that is not the BFF's, whatever its status.
+ *  page in HTML, a json that is not the BFF's, whatever its status. A
+ *  429 is "auth_rate_limited" whatever its body, the BFF's own or that
+ *  of a proxy that rate limits, even one that brings an error_code of
+ *  its own, which would otherwise read as a denial and end the session:
+ *  it is retried after its Retry-After and counted with the other 429s.
  ***************************************************************/
 function bff_error_code({status, data, timed_out})
 {
+    if(status === 429) {
+        return "auth_rate_limited";
+    }
     if(data && data.error_code) {
         return data.error_code;
     }
@@ -409,13 +432,20 @@ function bff_error_code({status, data, timed_out})
     if(status === 0) {
         return "network_error";
     }
-    if(status === 429) {
-        return "auth_rate_limited";
-    }
     if(status >= 500) {
         return "auth_service_unavailable";
     }
     return "auth_bad_response";
+}
+
+/***************************************************************
+ *  What an answer that failed said, for the log: its text, the code it
+ *  brought when it has none (a 429 is named by its status, whatever
+ *  code it carries), or its status.
+ ***************************************************************/
+function bff_error_text({status, data})
+{
+    return data.error || data.error_code || `HTTP ${status}`;
 }
 
 /***************************************************************
@@ -486,8 +516,8 @@ function do_bff_login(gobj, username, password)
             return;
         }
         const error_code = bff_error_code(answer);
-        const error      = data.error || `HTTP ${status}`;
-        if(data.error_code) {
+        const error      = bff_error_text(answer);
+        if(data.error_code === error_code) {
             /*  The BFF's own denial: it logged the cause itself.  */
             log_info(sprintf("%s: BFF login denied: %s (%s)",
                 gobj_short_name(gobj), error_code, error));
@@ -508,17 +538,20 @@ function do_bff_login(gobj, username, password)
  *  EV_LOGOUT_DONE comes when the call has settled -- answered, or aborted
  *  by its deadline, after which the browser takes no Set-Cookie of it --
  *  so the cookies it clears are cleared before any login made after it.
+ *  Whatever the failure it is a WARNING, by the rule of a decoder: the
+ *  peer did it, no contract of ours is broken.
  ***************************************************************/
 function do_bff_logout(gobj)
 {
     const generation = gobj.priv.generation;
     post_bff(gobj, "logout").then((answer) => {
-        const {ok, status, data} = answer;
+        const {ok, data} = answer;
         const ended_on_server = !!(ok && data.success);
         const error_code = ended_on_server ? "" : bff_error_code(answer);
         if(!ended_on_server) {
+            /*  What the peer did, not a broken contract of ours: a WARNING.  */
             log_warning(sprintf("%s: BFF logout failed: %s (%s) — dropping the local session anyway",
-                gobj_short_name(gobj), error_code, data.error || `HTTP ${status}`));
+                gobj_short_name(gobj), error_code, bff_error_text(answer)));
         }
         gobj_send_event(gobj, "EV_LOGOUT_DONE", {
             generation, ended_on_server, error_code, error: data.error || ""
@@ -551,7 +584,7 @@ function do_bff_refresh(gobj)
             return;
         }
         const error_code = bff_error_code(answer);
-        const error      = data.error || `HTTP ${status}`;
+        const error      = bff_error_text(answer);
         if(data.error_code && refresh_code_ends_session(error_code, status)) {
             /*  The BFF's own answer: it logged the cause itself.  */
             log_info(sprintf("%s: BFF refresh denied: %s (%s)",
@@ -651,8 +684,11 @@ function username_from_jwt(token)
 
 /***************************************************************
  *  Store session timing info (no tokens kept beyond the in-memory
- *  access_token). Arms the refresh timer before the access_token
- *  expires.
+ *  access_token): how long the refresh timer waits, so it runs before
+ *  the access_token expires. Who calls this arms it: a refresh at once,
+ *  a login when its token has come (ac_token_fetched()), because until
+ *  then the session is not published, the app is not in session, and a
+ *  refresh out in between would answer to nobody.
  ***************************************************************/
 function save_session_info(gobj, data)
 {
@@ -669,7 +705,7 @@ function save_session_info(gobj, data)
     priv.retry_ms = 0;      /*  a refresh landed: the backoff starts over  */
     priv.bad_answers = 0;
     priv.rate_limited = 0;
-    arm_refresh(gobj, priv.timeout_refresh * 1000);
+    priv.refresh_at = 0;
 }
 
 /***************************************************************
@@ -860,6 +896,7 @@ function ac_login_refreshed(gobj, event, kw, src)
     }
     gobj.priv.refresh_in_flight = -1;
     save_session_info(gobj, kw);
+    arm_refresh(gobj, gobj.priv.timeout_refresh * 1000);
     fetch_and_publish(gobj, "EV_LOGIN_REFRESHED");
     return 0;
 }
@@ -878,8 +915,9 @@ function ac_login_denied(gobj, event, kw, src)
 
 /***************************************************************
  *  The logout settled: ST_LOGOUT, EV_LOGOUT_DONE published {
- *  ended_on_server, error_code, error} (do_bff_logout()), and then the
- *  login that waited for it, if any, goes out.
+ *  ended_on_server, error_code, error, login_follows} (do_bff_logout()),
+ *  and then the login that waited for it, if any, goes out: login_follows
+ *  says so, and the form that handed it in stays busy.
  ***************************************************************/
 function ac_logout_done(gobj, event, kw, src)
 {
@@ -898,7 +936,8 @@ function ac_logout_done(gobj, event, kw, src)
     gobj_publish_event(gobj, "EV_LOGOUT_DONE", {
         ended_on_server: !!kw.ended_on_server,
         error_code:      kw.error_code || "",
-        error:           kw.error || ""
+        error:           kw.error || "",
+        login_follows:   !!held_login
     });
 
     if(held_login) {
@@ -960,6 +999,9 @@ function ac_token_fetched(gobj, event, kw, src)
         log_error(sprintf("%s: EV_TOKEN_FETCHED with a bad out_event: %s",
             gobj_short_name(gobj), out_event));
         return -1;
+    }
+    if(out_event === "EV_LOGIN_ACCEPTED") {
+        arm_refresh(gobj, gobj.priv.timeout_refresh * 1000);
     }
     const token = (kw && kw.access_token) || "";
     gobj_write_attr(gobj, "access_token", token);
@@ -1062,7 +1104,7 @@ function ac_wakeup(gobj, event, kw, src)
         return 0;       /*  no session to keep alive  */
     }
     if(!priv.refresh_at || Date.now() < priv.refresh_at) {
-        return 0;       /*  the timer is still ahead of us: let it fire  */
+        return 0;       /*  no timer yet, or it is still ahead of us: let it fire  */
     }
     log_info(sprintf("%s: back from sleep with the refresh overdue", gobj_short_name(gobj)));
     request_refresh(gobj, "a wake-up");

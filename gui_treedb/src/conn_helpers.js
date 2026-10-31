@@ -152,4 +152,22 @@ function conns_browse_state(conns)
 }
 
 
-export {conn_identity, plan_conn_import, conn_is_marked, conns_browse_state};
+/***************************************************************
+ *  open_error_detail(open_error, t)
+ *
+ *      -> what the note of a connection that failed adds in brackets:
+ *      what the peer said, as it said it, or the code of a close that
+ *      said nothing, or "". `t` is the translator: the word "code" is
+ *      ours, the note around it is in the language of the app.
+ ***************************************************************/
+function open_error_detail(open_error, t)
+{
+    let reason = String((open_error && open_error.reason) || "").trim();
+    if(reason) {
+        return reason;
+    }
+    let code = open_error && open_error.code;
+    return code ? `${t("code")} ${code}` : "";
+}
+
+export {conn_identity, plan_conn_import, conn_is_marked, conns_browse_state, open_error_detail};

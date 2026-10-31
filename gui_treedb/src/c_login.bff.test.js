@@ -66,11 +66,21 @@
  *      server (ended_on_server false, with the error_code), because the
  *      cookies are still there.
  *
- *      Any 429, with the BFF's json or without it (a proxy), is
- *      "auth_rate_limited": retried after its Retry-After and counted
- *      with the other 429s. The Retry-After read is the one of RFC 9110:
- *      delay-seconds, or an HTTP-date in its three forms, a real date in
- *      GMT; anything else is ignored, and the WARNING says so.
+ *      Any 429, with the BFF's json, without it (a proxy), or with a json
+ *      and an error_code of its own, is "auth_rate_limited": retried after
+ *      its Retry-After and counted with the other 429s. The Retry-After
+ *      read is the one of RFC 9110: delay-seconds of any length, or an
+ *      HTTP-date in its three forms, a real date in GMT, the two digits of
+ *      an rfc850-date being the latest year not more than 50 years ahead;
+ *      anything else is ignored, and the WARNING says so.
+ *
+ *      A logout that failed is a WARNING whatever the failure: the peer
+ *      did it. EV_LOGOUT_DONE says when a login comes after it
+ *      (login_follows).
+ *
+ *      The refresh timer of a login starts when its token has come: until
+ *      then the session is not published, and a refresh out in between
+ *      would answer to nobody.
  *
  *      One refresh at a time: a refresh asked for (EV_DO_REFRESH), the
  *      refresh timer or a wake-up with the refresh overdue, while a
@@ -110,7 +120,8 @@ const {
     SDATA_END,
     gclass_create,
     gobj_start_up, gobj_create_yuno, gobj_create_service,
-    gobj_start, gobj_send_event, gobj_current_state, gobj_read_attr,
+    gobj_set_gobj_trace,
+    gobj_start, gobj_stop, gobj_send_event, gobj_current_state, gobj_read_attr,
     register_c_timer,
     set_log_callback,
 } = await import("@yuneta/gobj-js");
@@ -244,6 +255,7 @@ function abort_error()
 const heard = [];
 const asked = [];
 const logged = [];     /*  {level, msg} of every log of the module  */
+const traced = [];     /*  the json the trace dumps  */
 let answers = {};      /*  segment -> json answer; a segment not here is never answered  */
 let login = null;
 
@@ -291,7 +303,11 @@ beforeAll(() => {
 
     gobj_start_up(null, null, null, null, null, null, null);
     set_log_callback((level, msg) => {
-        logged.push({level, msg: String(msg)});
+        if(level === "json") {
+            traced.push(msg);
+        } else {
+            logged.push({level, msg: String(msg)});
+        }
     });
     register_c_timer();
     register_c_login();
@@ -1056,7 +1072,7 @@ describe("C_TREEDB_LOGIN: the Retry-After it reads is the one of RFC 9110", () =
         ["delay-seconds", () => "60", 60000],
         ["delay-seconds with leading zeros", () => "0060", 60000],
         ["delay-seconds of ten digits (a wait of 5 minutes at most)", () => "9999999999", 9999999999000],
-        ["delay-seconds of eleven digits", () => "99999999999", null],
+        ["delay-seconds of eleven digits (a delay is a delay: 5 minutes at most)", () => "99999999999", 99999999999000],
         ["an IMF-fixdate", () => imf(in_a_minute()), 60000],
         ["an rfc850-date", () => rfc850(in_a_minute()), 60000],
         ["an asctime-date, in GMT whatever the zone of the browser", () => asctime(in_a_minute()), 60000],
@@ -1271,6 +1287,518 @@ describe("C_TREEDB_LOGIN: a logout the server did not end", () => {
         expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
         expect(heard[0].kw.ended_on_server).toBe(true);
         expect(heard[0].kw.error_code).toBe("");
+    });
+});
+
+describe("C_TREEDB_LOGIN: a 429 with a json of its own is a 429", () => {
+    const foreign = (headers) => answer_with(429, {error_code: "rate_limit_exceeded", error: "slow down"}, headers);
+
+    test("a refresh: auth_rate_limited, retried after its Retry-After, the session kept", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = foreign({"Retry-After": "30"});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(heard[0].kw.retry_ms).toBe(30000);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("auth_rate_limited")).length)
+            .toBe(1);
+        await log_out();
+    });
+
+    test("a refresh: the code of the answer stays in the log, when it brought no text", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = answer_with(429, {error_code: "rate_limit_exceeded"});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("rate_limit_exceeded")).length)
+            .toBe(1);
+        await log_out();
+    });
+
+    test("a refresh: a Retry-After longer than 5 minutes ends the session, as any 429", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = foreign({"Retry-After": "301"});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+
+    test("a refresh: the fifth since the last refresh that landed ends the session", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = foreign();
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        for(const backoff of [5000, 10000, 20000, 40000]) {
+            expect(gobj_current_state(login)).toBe("ST_LOGIN");
+            await pass_time(backoff + 10);
+        }
+        expect(asked.filter((x) => x === "refresh").length).toBe(5);
+        expect(heard[heard.length - 1].event).toBe("EV_LOGIN_DENIED");
+        expect(heard[heard.length - 1].kw.error_code).toBe("auth_rate_limited");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+
+    test("a login: denied with auth_rate_limited, and an ERROR: it is not a denial of the BFF", async () => {
+        heard.length = 0;
+        logged.length = 0;
+        answers.login = foreign({"Retry-After": "30"});
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(logged.filter((l) => l.level === "error" && l.msg.includes("auth_rate_limited")).length)
+            .toBe(1);
+        expect(logged.filter((l) => l.level === "info" && l.msg.includes("denied"))).toEqual([]);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+
+    test("the 429 of the BFF, with its own code, is still its own denial of a login", async () => {
+        heard.length = 0;
+        logged.length = 0;
+        answers.login = answer_with(429, {success: false, error_code: "auth_rate_limited", error: "Too many login attempts"});
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(10);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+        expect(logged.filter((l) => l.level === "info" && l.msg.includes("auth_rate_limited")).length)
+            .toBe(1);
+    });
+
+    test("a logout: EV_LOGOUT_DONE with auth_rate_limited", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.logout = foreign();
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        expect(heard[0].event).toBe("EV_LOGOUT_DONE");
+        expect(heard[0].kw.ended_on_server).toBe(false);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+    });
+});
+
+describe("C_TREEDB_LOGIN: a Retry-After is a delay whatever its number of digits", () => {
+    const rate_limited = (headers) => answer_with(429, {success: false, error_code: "auth_rate_limited", error: "Too many"}, headers);
+
+    test.each([
+        ["ten digits", "9999999999"],
+        ["eleven digits", "99999999999"],
+        ["twenty digits", "99999999999999999999"],
+        ["four hundred digits, past what a number holds", "9".repeat(400)],
+    ])("a 429 with %s ends the session at once", async (label, retry_after) => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = rate_limited({"Retry-After": retry_after});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("auth_rate_limited");
+        expect(logged.filter((l) => l.msg.includes("unreadable"))).toEqual([]);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+
+    test("twelve digits that are a short delay are that delay", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = rate_limited({"Retry-After": "000000000030"});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        expect(heard[0].kw.retry_ms).toBe(30000);
+        await log_out();
+    });
+});
+
+describe("C_TREEDB_LOGIN: the two-digit year of an rfc850-date, RFC 9110 5.6.7", () => {
+    const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const two = (n) => String(n).padStart(2, "0");
+
+    /*  The date in `iso` as an rfc850-date, with the day name of that date
+     *  and the last two digits of its year.  */
+    function rfc850(iso)
+    {
+        const d = new Date(iso);
+        return `${DAYS[d.getUTCDay()]}, ${two(d.getUTCDate())}-${MONTHS[d.getUTCMonth()]}-` +
+            `${two(d.getUTCFullYear() % 100)} ${two(d.getUTCHours())}:${two(d.getUTCMinutes())}:` +
+            `${two(d.getUTCSeconds())} GMT`;
+    }
+
+    const NOW_2026 = "2026-10-31T12:00:00Z";
+    const NOW_2060 = "2060-06-01T00:00:00Z";
+    const NOW_2099 = "2099-12-31T23:00:00Z";
+
+    /*  The date is read into the future, or the past, or it is not a date
+     *  once its year is the one the rule gives: its day name is that of
+     *  another year.  */
+    test.each([
+        ["50 years ahead to the second is ahead", NOW_2026, "2076-10-31T12:00:00Z", "ahead"],
+        ["a second more than 50 years ahead is in the past", NOW_2026, "1976-10-31T12:00:01Z", "past"],
+        ["so its day name is that of the past", NOW_2026, "2076-10-31T12:00:01Z", "unreadable"],
+        ["the same year, past the same day: in the past", NOW_2026, "1976-11-06T08:49:37Z", "past"],
+        ["the same year, past the same day: never ahead", NOW_2026, "2076-11-06T08:49:37Z", "unreadable"],
+        ["a year far ahead is the last one past", NOW_2026, "1999-01-01T00:00:00Z", "past"],
+        ["never 2099", NOW_2026, "2099-01-01T00:00:00Z", "unreadable"],
+        ["a year of this century, already past", NOW_2026, "2005-06-15T10:00:00Z", "past"],
+        ["in 2060, 05 is 2105: 45 years ahead", NOW_2060, "2105-03-04T10:00:00Z", "ahead"],
+        ["in 2060, 05 is not 2005", NOW_2060, "2005-03-04T10:00:00Z", "unreadable"],
+        ["in 2060, 50 is 2050: 2150 is 90 years ahead", NOW_2060, "2050-03-04T10:00:00Z", "past"],
+        ["in 2060, 2110 to the day is ahead", NOW_2060, "2110-06-01T00:00:00Z", "ahead"],
+        ["in 2060, a day more is 2010", NOW_2060, "2010-06-02T00:00:00Z", "past"],
+        ["at the end of 2099, 00 is the next year", NOW_2099, "2100-01-01T01:00:00Z", "ahead"],
+    ])("%s", async (label, now, date, outcome) => {
+        const before = Date.now();
+        vi.setSystemTime(new Date(now));
+        try {
+            heard.length = 0;
+            await log_in();
+            vi.setSystemTime(new Date(now));    /*  "to the second" is meant  */
+
+            logged.length = 0;
+            const text = rfc850(date);
+            answers.refresh = answer_with(503, {success: false, error_code: "server_busy", error: "Pending queue full"}, {"Retry-After": text});
+            gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+            await pass_time(10);
+            expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+            expect(heard[0].kw.retry_ms).toBe((outcome === "ahead") ? 5 * 60 * 1000 : 5000);
+            expect(logged.filter((l) => l.level === "warning" &&
+                l.msg.includes(`Retry-After: ${text} (unreadable, ignored)`)).length)
+                .toBe((outcome === "unreadable") ? 1 : 0);
+            await log_out();
+        } finally {
+            vi.setSystemTime(before);
+        }
+    });
+});
+
+describe("C_TREEDB_LOGIN: an HTTP-date has to be a date", () => {
+    const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const two = (n) => String(n).padStart(2, "0");
+
+    /*  An IMF-fixdate of a day that does not exist, with the day name of
+     *  the day it would roll over to: only the limit of the month refuses
+     *  it.  */
+    function rolled_over(year, month, day)
+    {
+        const name = DAY_NAMES[new Date(Date.UTC(year, month, day)).getUTCDay()];
+        return `${name}, ${two(day)} ${MONTHS[month]} ${year} 10:00:00 GMT`;
+    }
+
+    /*  An IMF-fixdate a little over a minute ahead whose second is `second`.  */
+    function at_second(second)
+    {
+        const d = new Date(Math.ceil((Date.now() + 60000) / 60000) * 60000);
+        return `${DAY_NAMES[d.getUTCDay()]}, ${two(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]} ` +
+            `${d.getUTCFullYear()} ${two(d.getUTCHours())}:${two(d.getUTCMinutes())}:${two(second)} GMT`;
+    }
+
+    async function retried_after(text)
+    {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = answer_with(503, {success: false, error_code: "server_busy", error: "Pending queue full"}, {"Retry-After": text});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
+        const retry_ms = heard[0].kw.retry_ms;
+        const unreadable = logged.filter((l) => l.msg.includes("(unreadable, ignored)")).length;
+        await log_out();
+        return {retry_ms, unreadable};
+    }
+
+    test.each([
+        ["31 of a month of 30", () => rolled_over(new Date(Date.now()).getUTCFullYear() + 1, 10, 31)],
+        ["29 of February of a year that is not leap", () => rolled_over(2031, 1, 29)],
+        ["30 of February of a leap year", () => rolled_over(2032, 1, 30)],
+        ["day 00", () => rolled_over(new Date(Date.now()).getUTCFullYear() + 1, 11, 0)],
+    ])("%s, with the day name of the day it rolls over to, is ignored", async (label, text) => {
+        const {retry_ms, unreadable} = await retried_after(text());
+        expect(retry_ms).toBe(5000);
+        expect(unreadable).toBe(1);
+    });
+
+    test("29 of February of a leap year is a date", async () => {
+        const {unreadable} = await retried_after("Sun, 29 Feb 2032 10:00:00 GMT");
+        expect(unreadable).toBe(0);
+    });
+
+    test("second 60 is a leap second: a date, and the minute after", async () => {
+        const minute = new Date(Math.ceil((Date.now() + 60000) / 60000) * 60000).getTime();
+        const {retry_ms, unreadable} = await retried_after(at_second(60));
+        expect(unreadable).toBe(0);
+        expect(Math.abs(retry_ms - (minute + 60000 - Date.now()))).toBeLessThan(2000);
+    });
+
+    test.each([
+        ["second 61", () => at_second(61)],
+        ["hour 24", () => at_second(0).replace(/ \d{2}:(\d{2}):00 GMT$/, " 24:$1:00 GMT")],
+        ["minute 60", () => at_second(0).replace(/:\d{2}:00 GMT$/, ":60:00 GMT")],
+    ])("%s is ignored", async (label, text) => {
+        const {retry_ms, unreadable} = await retried_after(text());
+        expect(retry_ms).toBe(5000);
+        expect(unreadable).toBe(1);
+    });
+});
+
+describe("C_TREEDB_LOGIN: what a logout that failed says", () => {
+    test.for([
+        ["a 200 that is not the BFF's json", answer_with(200, {}), "auth_bad_response"],
+        ["a 200 with success false", answer_with(200, {success: false}), "auth_bad_response"],
+        ["a 500 that says success", answer_with(500, {success: true}), "auth_service_unavailable"],
+        ["a 403 that says success", answer_with(403, {success: true}), "auth_bad_response"],
+        ["a 403 of the BFF", answer_with(403, {success: false, error_code: "origin_not_allowed", error: "x"}), "origin_not_allowed"],
+    ])("%s: not ended on the server, and a WARNING, never an ERROR", async ([label, answer, error_code]) => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.logout = answer;
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(heard[0].kw.ended_on_server).toBe(false);
+        expect(heard[0].kw.error_code).toBe(error_code);
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("BFF logout failed") &&
+            l.msg.includes(error_code)).length).toBe(1);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+
+    test("a logout that never leaves (no network): network_error, a WARNING", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.logout = () => Promise.reject(new TypeError("Failed to fetch"));
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        expect(heard[0].kw.ended_on_server).toBe(false);
+        expect(heard[0].kw.error_code).toBe("network_error");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("BFF logout failed")).length)
+            .toBe(1);
+    });
+
+    test("a logout that does not come in time: auth_timeout, a WARNING", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.logout = (request) => new Promise((resolve, reject) => {
+            request.signal.addEventListener("abort", () => reject(abort_error()));
+        });
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(BFF_TIMEOUT_MS + 10);
+        expect(heard[0].kw.ended_on_server).toBe(false);
+        expect(heard[0].kw.error_code).toBe("auth_timeout");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("BFF logout failed")).length)
+            .toBe(1);
+    });
+});
+
+describe("C_TREEDB_LOGIN: a kw is plain json", () => {
+    test("a delay no number holds travels as a number that json can say", async () => {
+        heard.length = 0;
+        await log_in();
+
+        traced.length = 0;
+        gobj_set_gobj_trace(login, "machine", true);
+        gobj_set_gobj_trace(login, "ev_kw", true);
+        answers.refresh = answer_with(503, {success: false, error_code: "server_busy", error: "x"},
+            {"Retry-After": "9".repeat(400)});
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        gobj_set_gobj_trace(login, "machine", false);
+        gobj_set_gobj_trace(login, "ev_kw", false);
+
+        const failed = traced.filter((jn) => jn && Object.hasOwn(jn, "retry_after_ms"));
+        expect(failed.length).toBe(1);
+        expect(Number.isFinite(failed[0].retry_after_ms)).toBe(true);
+        await log_out();
+    });
+});
+
+describe("C_TREEDB_LOGIN: a refresh in flight disarms the timer", () => {
+    test("the timer does not fall due while it is out", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        const refresh = later_answer();
+        answers.refresh = refresh.answer;
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(270 * 1000 + 10);
+        expect(asked).toEqual(["refresh"]);
+        expect(logged.filter((l) => l.msg.includes("the refresh timer"))).toEqual([]);
+
+        refresh.give(200, {success: true, expires_in: 300});
+        await pass_time(10);
+        await log_out();
+    });
+
+    test("a refresh that lands arms the next one", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.refresh = {success: true, expires_in: 300};
+        await pass_time(270 * 1000 + 10);
+        expect(asked.filter((x) => x === "refresh").length).toBe(1);
+        await pass_time(270 * 1000 + 10);
+        expect(asked.filter((x) => x === "refresh").length).toBe(2);
+        await log_out();
+    });
+});
+
+describe("C_TREEDB_LOGIN: the refresh waits for the session to be published", () => {
+    /*  The session is published when its token comes, and the app is not
+     *  in session until then: a refresh out in between answers to nobody.  */
+    test("the timer of a short session starts when the token of the login comes", async () => {
+        heard.length = 0;
+        if(gobj_current_state(login) === "ST_LOGIN") {
+            await log_out();
+        }
+        asked.length = 0;
+        const token = later_answer();
+        answers.login = {...OK_LOGIN, expires_in: 8};
+        answers.token = token.answer;
+        answers.refresh = {success: true, expires_in: 300};
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(12000);
+        expect(asked).toEqual(["login", "token"]);
+        expect(heard).toEqual([]);
+
+        token.give(200, OK_TOKEN);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_ACCEPTED"]);
+        answers.token = OK_TOKEN;
+
+        /*  max(8 * 0.75, 8 - 30) seconds after it.  */
+        await pass_time(5900);
+        expect(asked.filter((x) => x === "refresh")).toEqual([]);
+        await pass_time(200);
+        expect(asked.filter((x) => x === "refresh")).toEqual(["refresh"]);
+        await log_out();
+    });
+
+    test("a wake-up while the token of the login is out refreshes nothing", async () => {
+        await log_in();
+        await log_out();
+        await pass_time(280 * 1000);        /*  the deadline of that session, past  */
+
+        const token = later_answer();
+        answers.login = OK_LOGIN;
+        answers.token = token.answer;
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        await pass_time(10);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        gobj_send_event(login, "EV_WAKEUP", {}, login);
+        await pass_time(10);
+        expect(asked).toEqual(["login", "token"]);
+
+        token.give(200, OK_TOKEN);
+        await pass_time(10);
+        await log_out();
+    });
+});
+
+describe("C_TREEDB_LOGIN: a logout asked for while the restore on load is in flight", () => {
+    async function restart()
+    {
+        if(gobj_current_state(login) === "ST_LOGIN") {
+            await log_out();
+        }
+        heard.length = 0;
+        asked.length = 0;
+        logged.length = 0;
+        gobj_stop(login);
+        const restore = later_answer();
+        answers.refresh = restore.answer;
+        gobj_start(login);
+        expect(gobj_current_state(login)).toBe("ST_WAIT_TOKEN");
+        return restore;
+    }
+
+    test("no session to restore: the logout goes out all the same, and it is what is answered", async () => {
+        const restore = await restart();
+        answers.logout = {success: true};
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        expect(asked).toEqual(["refresh"]);
+
+        restore.give(401, {success: false, error_code: "missing_refresh_token", error: "x"});
+        await pass_time(10);
+        expect(asked).toEqual(["refresh", "logout"]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+    });
+
+    test("a session restored: it is logged out, and never published", async () => {
+        const restore = await restart();
+        answers.logout = {success: true};
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+
+        restore.give(200, {success: true, username: "u", expires_in: 300});
+        await pass_time(10);
+        expect(asked).toEqual(["refresh", "logout"]);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+});
+
+describe("C_TREEDB_LOGIN: EV_LOGOUT_DONE says when a login comes after it", () => {
+    test("a login that waited for the logout: login_follows", async () => {
+        heard.length = 0;
+        await log_in();
+
+        const logout = later_answer();
+        answers.logout = logout.answer;
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
+        const held = later_answer();
+        answers.login = held.answer;
+        logout.give(200, {success: true});
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(heard[0].kw.login_follows).toBe(true);
+        expect(gobj_current_state(login)).toBe("ST_WAIT_TOKEN");
+        held.give(401, {success: false, error_code: "invalid_credentials", error: "x"});
+        await pass_time(10);
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+    });
+
+    test("no login waiting: it does not", async () => {
+        heard.length = 0;
+        await log_in();
+
+        answers.logout = {success: true};
+        gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGOUT_DONE"]);
+        expect(heard[0].kw.login_follows).toBe(false);
     });
 });
 

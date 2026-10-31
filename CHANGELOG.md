@@ -8,6 +8,85 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.3, gui_treedb 1.1.9 (2026-10-31)
+
+- **Both: a 429 with a json of its own is a 429.** `{"error_code":
+  "rate_limit_exceeded"}` with `Retry-After: 30`, the shape of many rate
+  limiters, read as a denial of the BFF and ended the session at the first
+  429. Now any 429 is `auth_rate_limited`, whatever its body: retried after
+  its `Retry-After` and counted with the other 429s. The code it brought stays
+  in the log when it brought no text, and a login denied that way is an ERROR,
+  not a denial of the BFF. In 7.29.3 (gui_agent 1.1.8, gui_treedb 1.0.6), where
+  any 429 with a json ended the session; 1.3.2 left this case out.
+- **BREAKING, both: a `Retry-After` is a delay whatever its number of
+  digits.** Ten digits on a 429 ended the session while eleven were ignored
+  and retried at 5 s, and twelve digits that said 30 seconds were ignored too.
+  Now the value decides, not the count: `000000000030` is 30 seconds, and any
+  delay past 5 minutes ends the session on a 429 and waits 5 minutes on any
+  other failure. A delay no number holds is the longest one that does, so a kw
+  stays plain json. In gui_agent 1.3.2, gui_treedb 1.1.8.
+- **Both: the two-digit year of an rfc850-date follows RFC 9110 in both
+  ways.** It is the latest year with those digits that is not more than 50
+  years ahead, to the second, the rule the BFF reads it with: on 2026-10-31
+  `06-Nov-76` is 1976 (2076 is six days too far), and in 2060 `05` is 2105,
+  not 2005. In gui_agent 1.3.2, gui_treedb 1.1.8.
+- **BREAKING, gui_agent: an identity the control center refuses again is
+  said in one language.** The form said *"Error de inicio de sesión:
+  Authentication required"*: the comment of the control center, or a text
+  translated once, inside a translated sentence, in the language of that
+  moment. Now the form shows the key `authentication required`, which a
+  language switch translates, and the comment goes to the log as a WARNING. In
+  7.29.3 (gui_agent 1.1.8).
+- **gui_agent: a failed logout is a WARNING, as in gui_treedb.** It was an
+  ERROR. The peer did it and no contract of the app is broken, the rule of a
+  protocol decoder, whatever the failure: refused, a 5xx, a body that is not
+  json, no answer. In 7.29.3 (gui_agent 1.1.8).
+- **Both: a logout that settles with the form up gives the form back.** A
+  logout that waited for a login left the form busy for ever in gui_agent;
+  in gui_treedb its `EV_LOGOUT_DONE` landed in `ST_LOGGED_OUT`, which did not
+  declare it (*"Event NOT DEFINED"*). The app handles it there with the action
+  of `ST_SESSION`, which also says when the server did not end the session.
+  `EV_LOGOUT_DONE` carries `login_follows`: with a login that waited for the
+  logout going out next, the form stays busy, and that login answers it. In
+  gui_agent 1.3.1, gui_treedb 1.1.7.
+- **BREAKING, gui_agent: the form the failed open of the link brings back
+  takes a login.** `C_APP` brings the form back with *"cannot connect -
+  reconnecting"* when the first open of the link fails after the login was
+  accepted, and a submit there was *"Event NOT DEFINED in state: ST_LOGIN,
+  EV_DO_LOGIN"*, with the form busy for ever. Now it replaces the session: the
+  logout goes first, so none is left open on the server, the login when it
+  settles, with the form busy across the two. In 7.29.3 (gui_agent 1.1.8).
+- **gui_agent: the link opening at last takes that form away.** Nobody did:
+  the shell was built under it, and the form stayed on top until a reload. It
+  stays only while a login handed in there is replacing the session, and a
+  second failed open does not repaint it then. In 7.29.3 (gui_agent 1.1.8).
+- **gui_agent: a session denied before the link ever opened stops the
+  link.** Only one with the shell up did, so the link went on retrying with no
+  session. In 7.29.3 (gui_agent 1.1.8).
+- **gui_agent: a link of the Monitor refused twice stops hearing at once.**
+  It went to `ST_IDLE` still subscribed, and the drop comes a turn later: a
+  cookie refresh in between, or the close of the socket of a transport that
+  never reached a session (an `EV_ON_OPEN_ERROR`, seen through the real
+  `C_IEVENT_CLI`), was *"Event NOT DEFINED"*. In 7.29.3 (gui_agent 1.1.8).
+- **gui_treedb: the refresh timer of a login starts when its token has come.**
+  Until then the session is not published and the app is not in it, so with a
+  short token (`expires_in` of 20 s or less) and a slow `/auth/token`, a
+  refresh out in between answered to nobody (*"Event NOT DEFINED"*). In 7.29.3
+  (gui_treedb 1.0.6).
+- **Both: what the form says of an empty field changes language.** It was a
+  text, not a composer, so the toggle of the card left it in the old language.
+  In 7.29.3 (gui_agent 1.1.8, gui_treedb 1.0.6).
+- **gui_treedb: the note of a connection adds no English of ours.** A refusal
+  with no comment said *"(identity rejected)"* after a translated sentence that
+  says it, and a close with no reason said *"(code 1006)"*: the first is gone,
+  and the word `code` is a key in en and es. In 7.29.3 (gui_treedb 1.0.6).
+- **Tests.** Each case above has one, red before its fix, and each mutant
+  tried by hand on this code goes red: gui_agent 479 -> 547 tests, gui_treedb
+  209 -> 272. The login form runs for real in jsdom (`login.test.js`; gui_agent gains `jsdom`
+  as a dev dependency), the form with the real login service in
+  `login_form.wiring.test.js`, and an identity refused through the real
+  `C_IEVENT_CLI` over a socket double in `real_transport.wiring.test.js`.
+
 ## gui_agent 1.3.2, gui_treedb 1.1.8 (2026-10-31)
 
 - **Both: one refresh in flight at a time.** A refresh asked for

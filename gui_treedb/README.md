@@ -142,8 +142,9 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   before it expires, and a refresh that could not be MADE (network down, BFF
   502, request timed out) is not a denial: it retries with backoff and keeps the
   session, the shell and every open card; so does a 429, the BFF's
-  `auth_rate_limited` or one of a proxy with no BFF json (it is
-  `auth_rate_limited` too: a 429 is a 429). The BFF *answering* "no" with its `error_code` (a 4xx) logs you
+  `auth_rate_limited` or one of a proxy, with no BFF json or with a json and
+  an `error_code` of its own (it is `auth_rate_limited` too: a 429 is a 429,
+  and a code of its own, which reads as a denial, does not end the session). The BFF *answering* "no" with its `error_code` (a 4xx) logs you
   out, and so does an `error_code` a retry would give again
   (`token_too_large`, `auth_unexpected_error`, `auth_config_error`,
   `internal_error`), with its message on the login form. An answer that is
@@ -153,12 +154,17 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   session and the login form says it (answers of another kind in between do
   not start the count over). A retry waits for the `Retry-After` of the
   answer when it is longer than the backoff, up to 5 minutes. The
-  `Retry-After` read is the one of RFC 9110, as the BFF reads it: delay-seconds
-  (1 to 10 digits, no sign, no fraction), or an HTTP-date in its three forms
-  (IMF-fixdate `Sun, 06 Nov 1994 08:49:37 GMT`, rfc850-date
+  `Retry-After` read is the one of RFC 9110: delay-seconds (digits, no sign,
+  no fraction, of any length: `000000000030` is 30 seconds, and eleven nines
+  are as long a wait as ten, though the BFF passes on ten at most), or an
+  HTTP-date in its three forms, as the BFF reads them (IMF-fixdate
+  `Sun, 06 Nov 1994 08:49:37 GMT`, rfc850-date
   `Sunday, 06-Nov-94 08:49:37 GMT`, asctime-date `Sun Nov  6 08:49:37 1994`,
-  all GMT) that is a real date with the day name of that date; anything else
-  is ignored, and the WARNING says so; a 429 whose `Retry-After` is longer, or the fifth 429 since the
+  all GMT) that is a real date with the day name of that date. The two-digit
+  year of an rfc850-date is the latest one with those digits that is not more
+  than 50 years ahead, to the second: on 2026-10-31 `06-Nov-76` is 1976, and
+  in 2060 `05` is 2105. Anything else is ignored, and the WARNING says so; a
+  429 whose `Retry-After` is longer, or the fifth 429 since the
   last refresh that landed, ends the session with `auth_rate_limited` (a
   browser reads `Retry-After` from a BFF on another origin only when the BFF
   sends `Access-Control-Expose-Headers: Retry-After`). The answer of a
@@ -173,7 +179,12 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   success (a 403 of an `allowed_origin` that does not name this origin, a
   5xx, no answer) still ends the session here, but the cookies are still
   there and a reload would restore it: the login form says *"the server did
-  not end the session"*, with the cause. One refresh is in flight at a time:
+  not end the session"*, with the cause, and the log has a WARNING (the peer
+  did it, no contract of the app is broken). A logout that settles with the
+  form up gives the form back, unless the login that waited for it goes out
+  next (`EV_LOGOUT_DONE` says so, `login_follows`). The refresh timer of a
+  login starts when its token has come: until then the session is not
+  published and the app is not in it. One refresh is in flight at a time:
   a refresh asked for, the refresh timer or a wake-up while one is in flight
   sends nothing more (two at once would carry the same refresh token, and an
   IdP that revokes a refresh token used twice ends the session). Because a background tab's timers are throttled — so the refresh of a
@@ -280,6 +291,12 @@ To test
 or
 
     npm run test:coverage
+
+The login service runs against a BFF double in `src/c_login.bff.test.js`,
+the real login form in jsdom in `src/login.test.js`, that form's life with the
+real login service in `src/login_form.wiring.test.js`, and a connection refused
+through the real `C_IEVENT_CLI` over a socket double in
+`src/real_transport.wiring.test.js`.
 
 `src/c_login.bff.test.js` compares its copy of the BFF's `error_code` catalog
 with `kernel/c/root-linux/src/c_auth_bff.h`. It finds the header only when this

@@ -58,7 +58,7 @@ import {
     treedb_links_get_open_error,
 } from "./c_treedb_links.js";
 
-import {conn_is_marked} from "./conn_helpers.js";
+import {conn_is_marked, open_error_detail} from "./conn_helpers.js";
 
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
@@ -372,8 +372,7 @@ function connection_note(gobj, conn, connected, services)
          *    nobody is retrying — the transport was closed and the connection
          *    disabled, because looping would only NAK again. It takes fixing
          *    the user's roles on that backend and reconnecting in Settings.  */
-        let detail = (open_error.reason ||
-            (open_error.code ? "code " + open_error.code : "")).toString().trim();
+        let detail = open_error_detail(open_error, t);
         let msg = open_error.rejected
             ? t("access rejected by the backend - fix the roles and reconnect")
             : t("cannot connect - retrying");

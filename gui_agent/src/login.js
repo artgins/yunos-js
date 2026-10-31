@@ -240,7 +240,7 @@ function wire_form(root, on_submit)
         let username = String(user.value || "").trim();
         let password = String(pwd.value || "");
         if(!username || !password) {
-            set_error(t("username and password are required",
+            set_error(() => t("username and password are required",
                 {defaultValue: "Username and password are required"}));
             return;
         }
