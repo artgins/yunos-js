@@ -14,13 +14,15 @@
  *
  *      A login answered with something that is not the BFF's json (an
  *      empty 200, a 200 in HTML, a body cut halfway, a 4xx page of a
- *      proxy) is "auth_bad_response", translated, and logged as an ERROR,
- *      as every failure that is not the BFF's own answer is; a denial the
- *      BFF gives with its error_code is logged as INFO.
+ *      proxy) is "auth_bad_response", translated, and logged as a WARNING,
+ *      as every failure that is not the BFF's own answer is (the peer did
+ *      it, no contract of ours is broken); a denial the BFF gives with its
+ *      error_code is logged as INFO, with its text: a code no locale knows
+ *      is not shown, so the log is where that text stays.
  *
  *      A refresh answered with something that is not the BFF's json (a
  *      json with neither success nor error_code, a page in HTML, whatever
- *      its status) is "auth_bad_response", an ERROR, and keeps the
+ *      its status) is "auth_bad_response", a WARNING, and keeps the
  *      session: EV_REFRESH_FAILED, retried with backoff. The fifth such
  *      answer since the last refresh that landed ends the session with
  *      "auth_bad_response" (the login page of a proxy never changes).
@@ -460,9 +462,9 @@ describe("C_AGENT_LOGIN: a login answered with something that is not the BFF's j
         return heard[0].kw;
     }
 
-    function errors_naming(code)
+    function warnings_naming(code)
     {
-        return logged.filter((l) => l.level === "error" && l.msg.includes(code));
+        return logged.filter((l) => l.level === "warning" && l.msg.includes(code));
     }
 
     test.each([
@@ -471,27 +473,37 @@ describe("C_AGENT_LOGIN: a login answered with something that is not the BFF's j
         ["a body cut halfway", {status: 200, reject: cut}],
         ["a 200 json that is not the BFF's", {status: 200, data: {}}],
         ["a 404 page of a proxy", {status: 404, reject: not_json}],
-    ])("%s: auth_bad_response, translated, and an ERROR", async (label, answer) => {
+    ])("%s: auth_bad_response, translated, and a WARNING", async (label, answer) => {
         const kw = await login_answered(answer);
         expect(kw.error_code).toBe("auth_bad_response");
         expect(AUTH_ERROR_I18N_KEYS).toContain("auth_bad_response");
-        expect(errors_naming("auth_bad_response").length).toBe(1);
+        expect(warnings_naming("auth_bad_response").length).toBe(1);
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
     });
 
-    test("a 5xx with no error_code is auth_service_unavailable, an ERROR", async () => {
+    test("a 5xx with no error_code is auth_service_unavailable, a WARNING", async () => {
         const kw = await login_answered({status: 502, reject: not_json});
         expect(kw.error_code).toBe("auth_service_unavailable");
-        expect(errors_naming("auth_service_unavailable").length).toBe(1);
+        expect(warnings_naming("auth_service_unavailable").length).toBe(1);
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
     });
 
-    test("a body that does not come in time is auth_timeout, an ERROR", async () => {
+    test("a body that does not come in time is auth_timeout, a WARNING", async () => {
         heard.length = 0;
         logged.length = 0;
         answers = {login: STALL};
         gobj_send_event(login, "EV_DO_LOGIN", {username: "u", password: "p"}, login);
         await pass_time(BFF_TIMEOUT_MS + 10);
         expect(heard[0].kw.error_code).toBe("auth_timeout");
-        expect(errors_naming("auth_timeout").length).toBe(1);
+        expect(warnings_naming("auth_timeout").length).toBe(1);
+    });
+
+    test("a code no locale knows: its text stays in the log", async () => {
+        const kw = await login_answered({status: 400, data: {
+            success: false, error_code: "code_of_a_newer_bff", error: "what the newer BFF says"
+        }});
+        expect(kw.error_code).toBe("code_of_a_newer_bff");
+        expect(logged.filter((l) => l.msg.includes("what the newer BFF says")).length).toBe(1);
     });
 
     test("a denial the BFF gives with its error_code is INFO, not an ERROR", async () => {
@@ -513,7 +525,7 @@ describe("C_AGENT_LOGIN: a refresh answered with something that is not the BFF's
         ["a 200 page in HTML", {status: 200, reject: not_json}],
         ["a 401 page in HTML", {status: 401, reject: not_json}],
         ["a 401 json with no error_code", {status: 401, data: {success: false}}],
-    ])("%s: an ERROR naming auth_bad_response, the session kept and retried", async (label, answer) => {
+    ])("%s: a WARNING naming auth_bad_response, the session kept and retried", async (label, answer) => {
         heard.length = 0;
         await log_in();
 
@@ -523,8 +535,9 @@ describe("C_AGENT_LOGIN: a refresh answered with something that is not the BFF's
         await pass_time(10);
         expect(heard.map((h) => h.event)).toEqual(["EV_REFRESH_FAILED"]);
         expect(gobj_current_state(login)).toBe("ST_LOGIN");
-        expect(logged.filter((l) => l.level === "error" && l.msg.includes("auth_bad_response")).length)
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("auth_bad_response")).length)
             .toBe(1);
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
         expect(logged.filter((l) => l.level === "info")).toEqual([]);
 
         heard.length = 0;
@@ -585,6 +598,7 @@ describe("C_AGENT_LOGIN: a refresh answered for ever with something that is not 
             "EV_LOGIN_DENIED"
         ]);
         expect(heard[4].kw.error_code).toBe("auth_bad_response");
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
         expect(AUTH_ERROR_I18N_KEYS).toContain("auth_bad_response");
         expect(gobj_current_state(login)).toBe("ST_LOGOUT");
 
@@ -1215,10 +1229,10 @@ describe("C_AGENT_LOGIN: a logout the server did not end", () => {
     test.for([
         ["a 403 of the BFF (an Origin it does not allow)", 403,
             {success: false, error_code: "origin_not_allowed", error: "Origin not allowed"}, "origin_not_allowed", false],
-        ["a 400 of the BFF (a cookie it did not write)", 400,
-            {success: false, error_code: "token_too_large", error: "x"}, "token_too_large", false],
+        ["a 400 of the BFF (a cookie longer than it writes)", 400,
+            {success: false, error_code: "token_too_large", error: "x"}, "token_too_large", true],
         ["a 404 of the BFF", 404,
-            {success: false, error_code: "unknown_endpoint", error: "x"}, "unknown_endpoint", false],
+            {success: false, error_code: "unknown_endpoint", error: "x"}, "unknown_endpoint", true],
         ["a 429 of a rate limiter in front", 429,
             {error_code: "rate_limit_exceeded"}, "auth_rate_limited", false],
         ["a 500 of the BFF", 500,
@@ -1325,7 +1339,7 @@ describe("C_AGENT_LOGIN: a 429 with a json of its own is a 429", () => {
         expect(gobj_current_state(login)).toBe("ST_LOGOUT");
     });
 
-    test("a login: denied with auth_rate_limited, and an ERROR: it is not a denial of the BFF", async () => {
+    test("a login: denied with auth_rate_limited, and a WARNING: it is not a denial of the BFF", async () => {
         heard.length = 0;
         logged.length = 0;
         answers.login = foreign({"Retry-After": "30"});
@@ -1333,8 +1347,9 @@ describe("C_AGENT_LOGIN: a 429 with a json of its own is a 429", () => {
         await pass_time(10);
         expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
         expect(heard[0].kw.error_code).toBe("auth_rate_limited");
-        expect(logged.filter((l) => l.level === "error" && l.msg.includes("auth_rate_limited")).length)
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("auth_rate_limited")).length)
             .toBe(1);
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
         expect(logged.filter((l) => l.level === "info" && l.msg.includes("denied"))).toEqual([]);
         expect(gobj_current_state(login)).toBe("ST_LOGOUT");
     });

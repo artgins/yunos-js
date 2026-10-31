@@ -299,6 +299,8 @@ describe("a connection refused again after a token refresh", () => {
         expect(treedb_links_get_iev(links, "c1")).toBe(null);
         expect(treedb_links_get_open_error(links, "c1")).toEqual(
             expect.objectContaining({rejected: true, reason: "no role"}));
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("no role")).length).toBe(1);
+        expect(errors().filter((m) => m.includes("no role"))).toEqual([]);
         expect(errors().filter((m) => /Destroying a gobj/.test(m))).toEqual([]);
         expect(errors().filter((m) => /NOT DEFINED/.test(m))).toEqual([]);
 
@@ -449,6 +451,36 @@ describe("a logout the server did not end", () => {
         expect(screen.error()).toBe(`${es.translation["logout not ended at the identity server"]} ` +
             `(${es.translation["auth_service_unavailable"]})`);
         expect(es.translation["logout not ended at the identity server"]).not.toMatch(/recarga/i);
+        await i18next.changeLanguage("en");
+        expect(errors()).toEqual([]);
+    });
+
+    test("a code no locale knows: the generic text of the language of the app", async () => {
+        const {default: i18next} = await import("i18next");
+        const {en} = await import("./locales/en.js");
+        const {es} = await import("./locales/es.js");
+        await i18next.init({lng: "en", resources: {en, es}});
+
+        const app = gobj_create_service("treedb_app", "C_TREEDB_APP", {}, yuno);
+        built.push(app);
+        gobj_start(app);
+        gobj_change_state(app, "ST_SESSION");
+        set_log_callback(log_sink);
+        logged.length = 0;
+        const denial = {error_code: "code_of_a_newer_bff", error: "what the newer BFF says"};
+
+        const login = gobj_find_service("treedb_login", true);
+        gobj_publish_event(login, "EV_LOGOUT_DONE", {ended_on_server: false, ...denial});
+        const screen = login_screens[login_screens.length - 1];
+        expect(screen.error()).toBe(`${en.translation["logout not ended on the server"]} ` +
+            `(${en.translation["auth_unknown_error"]})`);
+        await i18next.changeLanguage("es");
+        expect(screen.error()).toBe(`${es.translation["logout not ended on the server"]} ` +
+            `(${es.translation["auth_unknown_error"]})`);
+
+        gobj_publish_event(login, "EV_LOGIN_DENIED", denial);
+        expect(login_screens[login_screens.length - 1].error()).toBe(
+            `${es.translation["login failed"]}: ${es.translation["auth_unknown_error"]}`);
         await i18next.changeLanguage("en");
         expect(errors()).toEqual([]);
     });

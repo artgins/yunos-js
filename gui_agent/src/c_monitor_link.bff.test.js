@@ -305,6 +305,8 @@ describe("C_MONITOR_LINK: the drop of a link refused twice", () => {
         gobj_send_event(link, "EV_ON_ID_NAK", {comment: "no authz"}, refused);
         expect(gobj_current_state(link)).toBe("ST_IDLE");
         expect(heard.map((h) => h.event)).toEqual(["EV_LINK_FAILED"]);
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("no authz")).length).toBe(1);
+        expect(logged.filter((l) => l.level === "error")).toEqual([]);
 
         /*  A new link is asked for before the drop lands.  */
         gobj_send_event(link, "EV_CONNECT", {url: "wss://node-b:1993"}, link);

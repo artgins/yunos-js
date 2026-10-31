@@ -456,7 +456,7 @@ function ac_on_id_nak(gobj, event, kw, src)
         fetch_token(gobj);
         return 0;
     }
-    log_error(`${gobj_short_name(gobj)}: identity refused again by ` +
+    log_warning(`${gobj_short_name(gobj)}: identity refused again by ` +
         `${gobj_read_str_attr(gobj, "url")}: ${comment}`);
     /*  This runs inside the transport's own EV_ON_ID_NAK publish: its
      *  tree is torn down on the next cycle, not from under it. What it

@@ -68,9 +68,9 @@ const BFF_TIMEOUT_MS = 15000;
  *  keys of the locales: the whole catalog of the BFF (c_auth_bff.h) and
  *  the codes this module gives a failure the BFF did not answer with an
  *  error_code. The app shows t(error_code) when it is one of these, so
- *  the message changes with the language; the BFF's `error` text is a
- *  developer fallback, English only, and is shown only for a code that
- *  is not here.  */
+ *  the message changes with the language. Any other code (a newer BFF)
+ *  shows the generic "auth_unknown_error": the BFF's `error` text is for
+ *  a developer, English only, and stays in the log.  */
 export const AUTH_ERROR_I18N_KEYS = [
     "invalid_credentials", "session_expired", "account_disabled", "auth_rate_limited",
     "auth_service_unavailable", "auth_config_error", "auth_unexpected_error",
@@ -522,7 +522,8 @@ function do_bff_login(gobj, username, password)
             log_info(sprintf("%s: BFF login denied: %s (%s)",
                 gobj_short_name(gobj), error_code, error));
         } else {
-            log_error(sprintf("%s: BFF login failed: %s (%s)",
+            /*  What the peer did, not a broken contract of ours: a WARNING.  */
+            log_warning(sprintf("%s: BFF login failed: %s (%s)",
                 gobj_short_name(gobj), error_code, error));
         }
         gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error, generation}, gobj);
@@ -534,11 +535,12 @@ function do_bff_login(gobj, username, password)
  *  still a logout HERE: the local session is dropped either way, and
  *  EV_LOGOUT_DONE says it was not one on the server (`ended_on_server`
  *  false, with the `error_code` of bff_error_code()). `cookies_cleared`
- *  says what is left: every answer of the BFF to a logout it served
- *  clears them, its 5xx too (see c_auth_bff.h), so the session may only
- *  be open at the identity server. A refusal of the BFF (403, 400), a
- *  page of a gateway or no answer leave them, and a reload of the page
- *  would restore the session.
+ *  says what is left: every answer of the BFF to a logout clears them,
+ *  its errors too (see c_auth_bff.h), so the session may only be open at
+ *  the identity server. Only the Origin it refuses (403
+ *  origin_not_allowed) changes nothing. That, an answer that is not the
+ *  BFF's (no error_code, or a 429 with a code of its own) or no answer
+ *  leave them, and a reload of the page may restore the session.
  *  EV_LOGOUT_DONE comes when the call has settled -- answered, or aborted
  *  by its deadline, after which the browser takes no Set-Cookie of it --
  *  so the cookies it clears are cleared before any login made after it.
@@ -549,10 +551,11 @@ function do_bff_logout(gobj)
 {
     const generation = gobj.priv.generation;
     post_bff(gobj, "logout").then((answer) => {
-        const {ok, status, data} = answer;
+        const {ok, data} = answer;
         const ended_on_server = !!(ok && data.success);
-        const cookies_cleared = ended_on_server || (status >= 500 && !!data.error_code);
         const error_code = ended_on_server ? "" : bff_error_code(answer);
+        const cookies_cleared = ended_on_server ||
+            (data.error_code === error_code && error_code !== "origin_not_allowed");
         if(!ended_on_server) {
             /*  What the peer did, not a broken contract of ours: a WARNING.  */
             log_warning(sprintf("%s: BFF logout failed: %s (%s) — dropping the local session anyway",
@@ -574,10 +577,10 @@ function do_bff_logout(gobj)
  *  and ac_refresh_failed() ends the session after REFRESH_BAD_ANSWERS_MAX
  *  answers that are not the BFF's json. The error_code is the one of a
  *  login (bff_error_code): a failure of the transport (no answer, no
- *  answer in time, 5xx) or a 429 is a WARNING; an answer that is not the
- *  BFF's json (a page of a proxy, a json with neither success nor
- *  error_code, whatever its status) is "auth_bad_response", an ERROR, as
- *  at the login.
+ *  answer in time, 5xx), a 429, or an answer that is not the BFF's json
+ *  (a page of a proxy, a json with neither success nor error_code,
+ *  whatever its status: "auth_bad_response"). All are a WARNING, as at
+ *  the login: the peer did it, no contract of ours is broken.
  ***************************************************************/
 function do_bff_refresh(gobj)
 {
@@ -602,11 +605,7 @@ function do_bff_refresh(gobj)
             gobj_short_name(gobj), error_code, error,
             answer.retry_after ? `, Retry-After: ${answer.retry_after}` +
                 (wait_ms < 0 ? " (unreadable, ignored)" : "") : "");
-        if(error_code === "auth_bad_response") {
-            log_error(msg);
-        } else {
-            log_warning(msg);
-        }
+        log_warning(msg);
         gobj_send_event(gobj, "EV_REFRESH_FAILED", {
             error_code, error, generation, retry_after_ms: Math.max(0, wait_ms)
         }, gobj);
@@ -1063,7 +1062,7 @@ function ac_refresh_failed(gobj, event, kw, src)
     if(kw.error_code === "auth_bad_response") {
         priv.bad_answers++;
         if(priv.bad_answers >= REFRESH_BAD_ANSWERS_MAX) {
-            log_error(sprintf("%s: %d answers to the refresh that are not the BFF's json: "
+            log_warning(sprintf("%s: %d answers to the refresh that are not the BFF's json: "
                 + "the session ends", gobj_short_name(gobj), priv.bad_answers));
             end_session(gobj, "auth_bad_response",
                 `${priv.bad_answers} answers that are not the BFF's json (${kw.error || ""})`);

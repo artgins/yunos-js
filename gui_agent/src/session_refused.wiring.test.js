@@ -358,6 +358,36 @@ describe("a logout the server did not end", () => {
         app.priv.login_ui = null;
     });
 
+    test("a code no locale knows: the generic text of the language of the app", async () => {
+        const {default: i18next} = await import("i18next");
+        const {en} = await import("./locales/en.js");
+        const {es} = await import("./locales/es.js");
+        await i18next.init({lng: "en", resources: {en, es}});
+        const {app} = app_in_session();
+        const login = gobj_find_service("agent_login", true);
+        if(app.priv.login_ui) {
+            app.priv.login_ui.unmount();    /*  what an earlier test left  */
+            app.priv.login_ui = null;
+        }
+        const denial = {error_code: "code_of_a_newer_bff", error: "what the newer BFF says"};
+
+        gobj_publish_event(login, "EV_LOGOUT_DONE", {ended_on_server: false, ...denial});
+        const screen = login_screens[login_screens.length - 1];
+        expect(screen.error()).toBe(`${en.translation["logout not ended on the server"]} ` +
+            `(${en.translation["auth_unknown_error"]})`);
+        await i18next.changeLanguage("es");
+        expect(screen.error()).toBe(`${es.translation["logout not ended on the server"]} ` +
+            `(${es.translation["auth_unknown_error"]})`);
+
+        gobj_publish_event(login, "EV_LOGIN_DENIED", denial);
+        expect(login_screens[login_screens.length - 1].error()).toBe(
+            `${es.translation["login failed"]}: ${es.translation["auth_unknown_error"]}`);
+        await i18next.changeLanguage("en");
+        expect(errors().filter((m) => /NOT DEFINED/.test(m))).toEqual([]);
+        app.priv.login_ui.unmount();
+        app.priv.login_ui = null;
+    });
+
     test("a logout that ended on the server says nothing more", () => {
         const {app} = app_in_session();
         const login = gobj_find_service("agent_login", true);

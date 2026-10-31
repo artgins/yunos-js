@@ -668,6 +668,7 @@ const es = {
         "unknown_endpoint":          "No se pudo iniciar sesión. Póngase en contacto con el administrador.",
         "internal_error":            "No se pudo iniciar sesión. Inténtelo más tarde.",
         "auth_bad_response":         "El servicio de autenticación dio una respuesta que no se pudo leer. Inténtelo más tarde.",
+        "auth_unknown_error":         "El servicio de autenticación informó de un error. Inténtelo de nuevo más tarde.",
 
         /* preferencias */
         "select language":   "Seleccionar idioma",

@@ -8,6 +8,34 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.5, gui_treedb 1.2.1 (2026-10-31)
+
+- **BREAKING, both: every failure the peer caused is a WARNING, one rule in
+  both apps.** A login the BFF did not answer with a code (no answer, no answer
+  in time, a 5xx, a page of a proxy, a json that is not the BFF's), a 429 of a
+  proxy at the login, a refresh `auth_bad_response` and the session it ends at
+  the fifth, the second refused identity of a gui_treedb connection and of
+  gui_agent's Monitor link were an ERROR. The peer did it and no contract of
+  the app is broken, the rule the logout already followed. What watches the
+  log for an ERROR no longer sees them. Our own broken contract stays an
+  ERROR. The login failures and the two refused identities are in 7.29.3
+  (gui_agent 1.1.8, gui_treedb 1.0.6); the refresh ones are newer than it.
+- **Both: a code no locale knows is said in the language of the app.** The
+  form showed the English `error` of the BFF inside a translated sentence.
+  Now it shows the new key `auth_unknown_error` (en and es), and the text stays
+  in the log, where the login module writes it with its code. gui_treedb's
+  note keeps the comment of the server in brackets. In 7.29.3.
+- **Both: `cookies_cleared` follows the answers of the BFF, a 400 included.**
+  It was true only for a 5xx with the `error_code` of the BFF, and the READMEs
+  said that after a 400 a reload would restore the session: it does not, the
+  refresh reads the same cookie and gets the same 400. Now any answer of the
+  BFF with its `error_code` says the cookies are cleared, except the Origin it
+  refuses (403 `origin_not_allowed`), whose answer changes nothing, and a 429
+  with a code of its own, which is not the BFF's. It goes by the shape of the
+  answer: a BFF of SDK 7.29.3 answers some of these errors with no `Set-Cookie`,
+  and against it the form says less than is left. In gui_agent 1.3.4, gui_treedb
+  1.2.0.
+
 ## gui_agent 1.3.4, gui_treedb 1.2.0 (2026-10-31)
 
 - **Both: a logout that failed at the BFF no longer says a reload may open

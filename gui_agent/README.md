@@ -1452,7 +1452,7 @@ summary.
   would give again (`token_too_large`, `auth_unexpected_error`,
   `auth_config_error`, `internal_error`), with its message on the login form.
   An answer that is not the BFF's json (a page of a proxy, a json with neither
-  `success` nor `error_code`) is `auth_bad_response`, logged as an ERROR, and
+  `success` nor `error_code`) is `auth_bad_response`, logged as a WARNING, and
   retried the same way; the fifth such answer since the last refresh that
   landed ends the session and the login form says it (answers of another kind
   in between do not start the count over). The answer of a request made for an
@@ -1465,15 +1465,15 @@ summary.
   A logout asked for while the login is in flight (`ST_WAIT_TOKEN`) waits
   for the login and goes out when it settles, so the cookies the login set
   are cleared too. A logout the BFF did not answer with success still ends
-  the session here, and the login form says what is left, with the cause. A
-  5xx of the BFF clears the cookies like every answer to a logout it serves,
-  so the session may only be open at the identity server: *"the session may
-  still be open at the identity server"* (`cookies_cleared` true in
-  `EV_LOGOUT_DONE`). A refusal (a 403 of an `allowed_origin` that does not
-  name this origin, a 400), a page of a gateway or no answer leave the
-  cookies, and a reload would restore the session: *"the server did not end
-  the session"*. Either way the log has a WARNING (the peer did it, no
-  contract of the app is broken). A logout that settles with the form up gives the form
+  the session here, and the login form says what is left, with the cause. An
+  error of the BFF clears the cookies like every answer to a logout, a 400 or
+  a 5xx alike, so the session may only be open at the identity server: *"the
+  session may still be open at the identity server"* (`cookies_cleared` true
+  in `EV_LOGOUT_DONE`). The Origin it refuses (a 403 of an `allowed_origin`
+  that does not name this origin), a page of a gateway or no answer leave the
+  cookies, and a reload may restore the session: *"the server did not end the
+  session"*. Either way the log has a WARNING (the peer did it, no contract
+  of the app is broken). A logout that settles with the form up gives the form
   back, unless the login that waited for it goes out next (`EV_LOGOUT_DONE`
   says so, `login_follows`). **The login form with a session alive:** the
   form comes back, *"cannot connect - reconnecting"*, when the first open of

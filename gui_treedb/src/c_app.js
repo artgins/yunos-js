@@ -867,8 +867,8 @@ function ac_on_id_nak(gobj, event, kw, src)
         delete priv.ever_connected[conn_id];   /*  transport gone → drop its tab  */
 
         let reason = (kw && kw.comment) || "";
-        log_error(`${gobj_short_name(gobj)}: connection '${conn_id}' rejected ` +
-                  `by the backend after a token refresh: ${reason || "no comment"}`);
+        log_warning(`${gobj_short_name(gobj)}: connection '${conn_id}' rejected ` +
+                    `by the backend after a token refresh: ${reason || "no comment"}`);
 
         /*  This runs inside the transport's own EV_ON_ID_NAK publication, and
          *  the reject destroys that transport: on the next turn.  */
@@ -944,8 +944,9 @@ function forget_nak_state(gobj)
 
 /***************************************************************
  *  What a denial says, in the language of the app: t(error_code) when the
- *  code is a key of the locales (AUTH_ERROR_I18N_KEYS), else the BFF's
- *  English `error` (a code no locale knows: a newer BFF), else the code.
+ *  code is a key of the locales (AUTH_ERROR_I18N_KEYS), else a generic text
+ *  (a code no locale knows: a newer BFF). The BFF's `error` is in English
+ *  and goes to the log, where the login module wrote it with its code.
  ***************************************************************/
 function denial_message(kw)
 {
@@ -953,7 +954,7 @@ function denial_message(kw)
     if(AUTH_ERROR_I18N_KEYS.includes(code)) {
         return t(/* i18n: AUTH_ERROR_I18N_KEYS */ code);
     }
-    return (kw && (kw.error || kw.error_code)) || t("login failed");
+    return t("auth_unknown_error");
 }
 
 /***************************************************************
@@ -1047,10 +1048,11 @@ function ac_logout(gobj, event, kw, src)
  *  Logout done — tear down shell + links, back to login. A logout the
  *  server did not end (ended_on_server false) says so on the login
  *  screen, with the cause, so the user does not take a shared browser
- *  for logged out. What it says depends on what is left: a failure of
+ *  for logged out. What it says depends on what is left: an answer of
  *  the BFF cleared the cookies (cookies_cleared), and the session may
- *  be open only at the identity server; a refusal or no answer left
- *  them, and a reload of the page would restore the session.
+ *  be open only at the identity server; a refused Origin, an answer
+ *  that is not the BFF's or no answer left them, and a reload of the
+ *  page may restore the session.
  *
  *  Same order as ac_session_expired: the transports are closed while we
  *  are still in ST_SESSION (their EV_ON_CLOSE is only declared there), and
