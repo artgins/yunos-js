@@ -3761,8 +3761,9 @@ function ac_mt_command_answer(gobj, event, kw, src)
         let pend = take_pending(gobj, req_id);
         if(!pend) {
             /*  Its Promise is already settled (timed out, card closed, session
-             *  reopened): nothing to resolve, but never silently.  */
-            log_error(`${gobj_short_name(gobj)}: get-page answer for an ` +
+             *  reopened): nothing to resolve, but never silently.  A slow
+             *  backend's doing, not a broken contract of ours: a WARNING.  */
+            log_warning(`${gobj_short_name(gobj)}: get-page answer for an ` +
                       `unknown request '${req_id}' (already settled?)`);
         } else {
             if(result < 0) {
@@ -3810,7 +3811,8 @@ function ac_mt_command_answer(gobj, event, kw, src)
         let req_id = kw_command.req_id || null;
         let pend = take_pending(gobj, req_id);
         if(!pend) {
-            log_error(`${gobj_short_name(gobj)}: list-keys answer for an ` +
+            /*  Late, as a get-page can be: a WARNING  */
+            log_warning(`${gobj_short_name(gobj)}: list-keys answer for an ` +
                       `unknown request '${req_id}' (already settled?)`);
             return 0;
         }

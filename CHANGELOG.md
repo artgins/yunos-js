@@ -8,6 +8,19 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.2.7 (2026-11-08)
+
+- **BREAKING: the late answer of a slow backend is a WARNING.** A page of a
+  Rows card (`get-page`) or of the Keys picker (`list-keys`) that comes back
+  after its request was settled (it timed out, its card closed, the session
+  reopened) has nobody waiting for it. It was an ERROR in 7.30.14 (gui_treedb
+  1.2.6 and before): *"get-page answer for an unknown request '<id>' (already
+  settled?)"*, and the same for `list-keys`. The peer was slow; no contract of
+  the view is broken. What watches the log for an ERROR no longer sees it.
+- **Tests:** `tranger_view_late_answer` calls the command answer of
+  `C_TRANGER_VIEW` with an answer nobody waits for, and asks for one WARNING
+  and no ERROR.
+
 ## gui_treedb 1.2.6 (2026-11-08)
 
 - **Tests:** `tranger_view_i18n_keys` fails, with its line, on a call of
