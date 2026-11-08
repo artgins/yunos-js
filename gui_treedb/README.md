@@ -385,7 +385,8 @@ key as `validate-locales` does: a literal, a const followed to its literals
 (a key reached through a table), and a read marked with a list as every key of
 that list. A call it cannot see fails it, with its line: `show_error` or
 `gobj_command` used other than called by its name (an alias, a table of
-functions, `.call()`, a callback):
+functions, `.call()`, a callback), and so does a call without the argument
+that carries the key (`show_error(gobj)`):
 
 ```js
 show_error(gobj, ERRORS.no_topics);                          // read: a const table

@@ -149,15 +149,20 @@ function hides_no_call(n, parent)
 /***************************************************************
  *  The strings handed at argument `index` of every call of `callee`.
  *  The calls are found by the name: any other use of the name is a
- *  call that would not be seen, and goes into `unread`.
+ *  call that would not be seen, and goes into `unread`, as does a call
+ *  without that argument.
  ***************************************************************/
 function handed(mod, callee, index, data = [])
 {
     let out = {strings: new Set(), unread: []};
     walk(mod.ast, (n, ancestors) => {
-        if(n.type === "CallExpression" && n.callee.type === "Identifier" && n.callee.name === callee
-                && n.arguments[index]) {
-            read_strings(mod, n.arguments[index], [...ancestors, n], out, data);
+        if(n.type === "CallExpression" && n.callee.type === "Identifier" && n.callee.name === callee) {
+            if(n.arguments[index]) {
+                read_strings(mod, n.arguments[index], [...ancestors, n], out, data);
+            } else {
+                out.unread.push(`${mod.name}:${line_of(mod.ast, n.start)}: ${callee}() ` +
+                                `without its argument ${index + 1}`);
+            }
         } else if(n.type === "Identifier" && n.name === callee &&
                 !hides_no_call(n, ancestors[ancestors.length - 1])) {
             out.unread.push(`${mod.name}:${line_of(mod.ast, n.start)}: ${callee} used but not called by its ` +
@@ -242,6 +247,7 @@ describe("what the reader of this test sees, on a module written for it", () => 
         '        picked = "from a let, too";',
         '    }',
         '    show_error(gobj, picked);',
+        '    show_error(gobj);',
         '    return [handlers, names.show_error];',
         '}'
     ].join("\n"), new URL("file:///fixture.js"));
@@ -258,7 +264,8 @@ describe("what the reader of this test sees, on a module written for it", () => 
             "fixture.js:17: show_error used but not called by its name, so its calls are not seen",
             "fixture.js:18: show_error used but not called by its name, so its calls are not seen",
             "fixture.js:19: show_error used but not called by its name, so its calls are not seen",
-            "fixture.js:20: show_error used but not called by its name, so its calls are not seen"
+            "fixture.js:20: show_error used but not called by its name, so its calls are not seen",
+            "fixture.js:27: show_error() without its argument 2"
         ]);
     });
 });

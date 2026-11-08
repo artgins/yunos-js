@@ -8,6 +8,13 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.2.6 (2026-11-08)
+
+- **Tests:** `tranger_view_i18n_keys` fails, with its line, on a call of
+  `show_error()` or `gobj_command()` without the argument that carries the key
+  or the command. It skipped such a call without a word, as gui_agent's
+  `wrapper_keys` no longer does since 1.3.8. No change of code.
+
 ## gui_agent 1.3.8, gui_treedb 1.2.5 (2026-11-08)
 
 - **BREAKING, both: three more failures the peer caused are a WARNING.** A
