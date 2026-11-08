@@ -17,8 +17,9 @@
  *      proxy) is "auth_bad_response", translated, and logged as a WARNING,
  *      as every failure that is not the BFF's own answer is (the peer did
  *      it, no contract of ours is broken); a denial the BFF gives with its
- *      error_code is logged as INFO, with its text: a code no locale knows
- *      is not shown, so the log is where that text stays.
+ *      error_code is logged as INFO, with its text, and as a WARNING when
+ *      no locale knows the code: the form then shows a generic text, so
+ *      the log is the only place that says what was refused.
  *
  *      A refresh answered with something that is not the BFF's json (a
  *      json with neither success nor error_code, a page in HTML, whatever
@@ -504,6 +505,11 @@ describe("C_AGENT_LOGIN: a login answered with something that is not the BFF's j
         }});
         expect(kw.error_code).toBe("code_of_a_newer_bff");
         expect(logged.filter((l) => l.msg.includes("what the newer BFF says")).length).toBe(1);
+        /*  The form shows a generic text: the log is the only place that
+         *  says what was refused, and an INFO is not looked at.  */
+        expect(warnings_naming("code_of_a_newer_bff")).toHaveLength(1);
+        expect(logged.filter((l) => l.level !== "warning" && l.msg.includes("code_of_a_newer_bff")))
+            .toEqual([]);
     });
 
     test("a denial the BFF gives with its error_code is INFO, not an ERROR", async () => {
@@ -681,6 +687,41 @@ describe("C_AGENT_LOGIN: a refresh the BFF answers with an error_code", () => {
         expect(gobj_current_state(login)).toBe("ST_LOGOUT");
         await pass_time(120000);
         expect(asked.filter((x) => x === "refresh").length).toBe(1);
+    });
+
+    test("a 4xx with a code no locale knows ends the session, and its text is a WARNING", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = {status: 400, data: {
+            success: false, error_code: "code_of_a_newer_bff", error: "what the newer BFF says"
+        }};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(heard[0].kw.error_code).toBe("code_of_a_newer_bff");
+        expect(gobj_current_state(login)).toBe("ST_LOGOUT");
+        expect(logged.filter((l) => l.level === "warning" && l.msg.includes("what the newer BFF says")))
+            .toHaveLength(1);
+        expect(logged.filter((l) => l.level !== "warning" && l.msg.includes("code_of_a_newer_bff")))
+            .toEqual([]);
+    });
+
+    test("a 4xx with a code the app translates ends the session at INFO: the BFF logged it", async () => {
+        heard.length = 0;
+        await log_in();
+
+        logged.length = 0;
+        answers.refresh = {status: 401, data: {
+            success: false, error_code: "session_expired", error: "Session expired"
+        }};
+        gobj_send_event(login, "EV_DO_REFRESH", {}, login);
+        await pass_time(10);
+        expect(heard.map((h) => h.event)).toEqual(["EV_LOGIN_DENIED"]);
+        expect(logged.filter((l) => l.level === "info" && l.msg.includes("session_expired")))
+            .toHaveLength(1);
+        expect(logged.filter((l) => l.level === "warning" || l.level === "error")).toEqual([]);
     });
 
     test.each([

@@ -232,6 +232,11 @@ function errors()
     return logged.filter((l) => l.level === "error").map((l) => l.msg);
 }
 
+function warnings()
+{
+    return logged.filter((l) => l.level === "warning").map((l) => l.msg);
+}
+
 const CONN = {id: "c1", url: "wss://backend.example:1800", enabled: true,
     remote_yuno_role: "db", remote_yuno_service: "treedb_db"};
 
@@ -357,7 +362,42 @@ describe("a scan that times out", () => {
             kw: {conn_id: "c1", services: [], errors: [{yuno: "", error: "scan timeout"}]}
         }]);
         expect(errors().filter((m) => /Destroying a gobj/.test(m))).toEqual([]);
+        /*  A backend that does not answer is the peer, not a contract of ours  */
+        expect(errors()).toEqual([]);
+        expect(warnings().filter((m) => m.includes("discovery of 'c1' failed: scan timeout")))
+            .toHaveLength(1);
+    });
+});
 
+describe("a scan the backend answers with no list", () => {
+
+    test("fails the scan, and says it with a WARNING: the peer did it", () => {
+        const host = gobj_create_service("links_host_2", "C_TEST_LINKS_HOST", {}, yuno);
+        const links = gobj_create_service("scan_links_2", "C_TREEDB_LINKS",
+            {subscriber: host}, yuno);
+        built.push(links, host);
+        gobj_start(links);
+        gobj_send_event(links, "EV_SYNC_CONNECTIONS", {connections: [CONN]}, host);
+        const iev = treedb_links_get_iev(links, "c1");
+        gobj_change_state(iev, "ST_SESSION");
+        gobj_send_event(links, "EV_SCAN_CONN", {conn_id: "c1"}, host);
+        logged.length = 0;
+
+        gobj_send_event(links, "EV_MT_COMMAND_ANSWER", {
+            result: 0, comment: "", data: {not: "a list"},
+            __md_iev__: {command_stack: [{command: "services", kw: {service: "__yuno__"}}]}
+        }, iev);
+
+        expect(treedb_links_is_scanning(links, "c1")).toBe(false);
+        expect(heard).toEqual([{
+            event: "EV_TREEDB_SCAN_DONE",
+            kw: {conn_id: "c1", services: [], errors: [{yuno: "db", error: "bad services answer"}]}
+        }]);
+        expect(errors()).toEqual([]);
+        expect(warnings().filter((m) => m.includes("'services' answered a object, expected a list")))
+            .toHaveLength(1);
+        expect(warnings().filter((m) => m.includes("discovery of 'c1' failed: bad services answer")))
+            .toHaveLength(1);
     });
 });
 
@@ -421,6 +461,9 @@ describe("a logout the server did not end", () => {
         await i18next.changeLanguage("es");
         expect(screen.error()).toBe(`${es.translation["logout not ended on the server"]} ` +
             `(${es.translation["origin_not_allowed"]})`);
+        /*  a locale holding the English text would pass the line above  */
+        expect(es.translation["logout not ended on the server"])
+            .not.toBe(en.translation["logout not ended on the server"]);
         await i18next.changeLanguage("en");
         expect(errors()).toEqual([]);
     });
@@ -450,6 +493,9 @@ describe("a logout the server did not end", () => {
         await i18next.changeLanguage("es");
         expect(screen.error()).toBe(`${es.translation["logout not ended at the identity server"]} ` +
             `(${es.translation["auth_service_unavailable"]})`);
+        /*  a locale holding the English text would pass the line above  */
+        expect(es.translation["logout not ended at the identity server"])
+            .not.toBe(en.translation["logout not ended at the identity server"]);
         expect(es.translation["logout not ended at the identity server"]).not.toMatch(/recarga/i);
         await i18next.changeLanguage("en");
         expect(errors()).toEqual([]);

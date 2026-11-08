@@ -19,6 +19,14 @@
  *      escaped). A command or a key the reader cannot follow fails, with
  *      its line, unless it is one of the few that are data on purpose.
  *
+ *      A key reached through a table is read as validate-locales reads it:
+ *      a const followed to its literals, and a read marked
+ *      `/* i18n: <NAME>_I18N_KEYS *\/` as every key of the list the module
+ *      publishes under that name (`/* i18n: data *\/`: no key). The calls
+ *      are found by the NAME of the function, so any other use of that name
+ *      (an alias, a table of functions, `.call()`, a callback) would hide
+ *      its calls: it fails, with its line.
+ *
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
@@ -30,12 +38,21 @@ import {pathToFileURL} from "node:url";
 /*  The published reader (validate-locales.mjs is no export of the package:
  *  it is found next to one)  */
 const GOBJ_UI = pathToFileURL(createRequire(import.meta.url).resolve("@yuneta/gobj-ui/src/c_yui_shell.js"));
-const {parse_source, walk, leaves_of, var_leaves, line_of, published_lists} =
+const {parse_source, walk, leaves_of, var_leaves, line_of, published_lists, markers_of, marker_of} =
     await import(new URL("../scripts/validate-locales.mjs", GOBJ_UI).href);
+
+/***************************************************************
+ *  A module parsed, never run: {name, ast, markers}
+ ***************************************************************/
+function module_of(name, code, url)
+{
+    let ast = parse_source(code, url);
+    return {name: name, ast: ast, markers: markers_of(ast)};
+}
 
 const FILE = new URL("./c_tranger_view.js", import.meta.url);
 const SOURCE = readFileSync(FILE, "utf8");
-const AST = parse_source(SOURCE, FILE);
+const VIEW = module_of("c_tranger_view.js", SOURCE, FILE);
 
 /*  The commands answered BEFORE the generic error path: get-page rejects
  *  its own Promise, print-tranger hands its own key, and open-list is only
@@ -52,22 +69,39 @@ const SHOW_ERROR_DATA = ["comment", "`${command} failed`", "priv.error_key"];
  *  The strings a value can be, as validate-locales reads a key: a
  *  literal, every branch of ?: / || / ??, a const (or an import of
  *  one) to its value, a call of a function whose every return is one,
- *  a `let` into everything it is given. Into `out.strings`; anything
- *  else -- data, a call it does not follow -- into `out.unread`, with
- *  its line, unless its text is one of `data`.
+ *  a `let` into everything it is given, a read marked with a list into
+ *  the keys of that list. Into `out.strings`; anything else -- data, a
+ *  call it does not follow -- into `out.unread`, with its line, unless
+ *  its text is one of `data` or it is marked as data.
  ***************************************************************/
-function read_strings(node, scope, out, data = [])
+function read_strings(mod, node, scope, out, data = [])
 {
-    let unread = (leaf) => {
-        let program = (leaf.scope && leaf.scope[0] && typeof leaf.scope[0].code === "string")? leaf.scope[0] : AST;
+    let program_of = (leaf) => {
+        return (leaf.scope && leaf.scope[0] && typeof leaf.scope[0].code === "string")? leaf.scope[0] : mod.ast;
+    };
+    let unread = (leaf, why = "") => {
+        let program = program_of(leaf);
         let text = program.code.slice(leaf.node.start, leaf.node.end);
-        if(program === AST && data.includes(text)) {
+        if(program === mod.ast && data.includes(text)) {
             return;
         }
-        out.unread.push(`${program === AST? "c_tranger_view.js" : "a module it imports"}:` +
-                        `${line_of(program, leaf.node.start)}: ${text}`);
+        out.unread.push(`${program === mod.ast? mod.name : "a module it imports"}:` +
+                        `${line_of(program, leaf.node.start)}: ${text}${why}`);
     };
     for(let leaf of leaves_of(node, scope)) {
+        let marker = (program_of(leaf) === mod.ast)? marker_of(leaf, mod.markers) : null;
+        if(marker) {
+            /*  `i18n: data` names no list: no key  */
+            for(let name of marker.lists) {
+                let keys = published(mod, name);
+                if(keys) {
+                    keys.forEach((k) => out.strings.add(k));
+                } else {
+                    unread(leaf, ` (marked with ${name}, which this module does not publish)`);
+                }
+            }
+            continue;
+        }
         if(leaf.kind === "key") {
             out.strings.add(leaf.value);
         } else if(leaf.kind === "unknown" && leaf.var_root) {
@@ -83,36 +117,73 @@ function read_strings(node, scope, out, data = [])
     }
 }
 
-/*  The strings handed at argument `index` of every call of `callee` (by its name)  */
-function handed(callee, index, data = [])
+/***************************************************************
+ *  Is this occurrence of a function's name one that hides no call:
+ *  a call by the name, the name declared or imported, or a property
+ *  name that is no reference to it
+ ***************************************************************/
+function hides_no_call(n, parent)
+{
+    if(!parent) {
+        return false;
+    }
+    switch(parent.type) {
+        case "CallExpression":
+            return parent.callee === n;
+        case "FunctionDeclaration":
+        case "FunctionExpression":
+        case "VariableDeclarator":
+            return parent.id === n;
+        case "ImportSpecifier":
+        case "ImportDefaultSpecifier":
+            return true;
+        case "Property":
+            return parent.key === n && !parent.computed;   /*  `{f}`: its value is the use  */
+        case "MemberExpression":
+            return parent.property === n && !parent.computed;
+        default:
+            return false;
+    }
+}
+
+/***************************************************************
+ *  The strings handed at argument `index` of every call of `callee`.
+ *  The calls are found by the name: any other use of the name is a
+ *  call that would not be seen, and goes into `unread`.
+ ***************************************************************/
+function handed(mod, callee, index, data = [])
 {
     let out = {strings: new Set(), unread: []};
-    walk(AST, (n, ancestors) => {
+    walk(mod.ast, (n, ancestors) => {
         if(n.type === "CallExpression" && n.callee.type === "Identifier" && n.callee.name === callee
                 && n.arguments[index]) {
-            read_strings(n.arguments[index], [...ancestors, n], out, data);
+            read_strings(mod, n.arguments[index], [...ancestors, n], out, data);
+        } else if(n.type === "Identifier" && n.name === callee &&
+                !hides_no_call(n, ancestors[ancestors.length - 1])) {
+            out.unread.push(`${mod.name}:${line_of(mod.ast, n.start)}: ${callee} used but not called by its ` +
+                            `name, so its calls are not seen`);
         }
     });
     return {strings: [...out.strings], unread: out.unread};
 }
 
 /*  A list as the module publishes it (an `export const` array of literals)  */
-function published(name)
+function published(mod, name)
 {
-    let list = published_lists(AST).lists.find((l) => l.name === name);
+    let list = published_lists(mod.ast).lists.find((l) => l.name === name);
     return list? list.keys : null;
 }
 
 /*  Every command the view sends: gobj_command(<remote>, <command>, ...)  */
 function commands_sent()
 {
-    return handed("gobj_command", 1);
+    return handed(VIEW, "gobj_command", 1);
 }
 
 /*  Every key handed to show_error(gobj, <key>)  */
 function keys_handed()
 {
-    return handed("show_error", 1, SHOW_ERROR_DATA);
+    return handed(VIEW, "show_error", 1, SHOW_ERROR_DATA);
 }
 
 describe("what the error banner of C_TRANGER_VIEW says", () => {
@@ -139,6 +210,55 @@ describe("what the error banner of C_TRANGER_VIEW says", () => {
                 expected.add(`${c} failed`);
             }
         }
-        expect([...published("C_TRANGER_VIEW_ERROR_I18N_KEYS")].sort()).toEqual([...expected].sort());
+        expect([...published(VIEW, "C_TRANGER_VIEW_ERROR_I18N_KEYS")].sort()).toEqual([...expected].sort());
+    });
+});
+
+describe("what the reader of this test sees, on a module written for it", () => {
+    const FIXTURE = module_of("fixture.js", [
+        'export const FIXTURE_I18N_KEYS = ["marked one", "marked two"];',
+        'const TABLE = {busy: "from a table"};',
+        'const LIST = ["from a list"];',
+        'function show_error(gobj, msg) {}',
+        'function f(gobj, kw, k) {',
+        '    show_error(gobj, "a literal");',
+        '    show_error(gobj, TABLE.busy);',
+        '    for(const key of LIST) {',
+        '        show_error(gobj, key);',
+        '    }',
+        '    show_error(gobj, /* i18n: FIXTURE_I18N_KEYS */ k);',
+        '    show_error(gobj, /* i18n: data */ kw.comment);',
+        '    show_error(gobj, /* i18n: OTHER_I18N_KEYS */ k);',
+        '    show_error(gobj, kw.key);',
+        '    const say = show_error;',
+        '    say(gobj, "hidden by an alias");',
+        '    [show_error].forEach((fn) => fn(gobj, "hidden in a table"));',
+        '    show_error.call(null, gobj, "hidden by call");',
+        '    LIST.forEach(show_error);',
+        '    const handlers = {show_error};',
+        '    const names = {show_error: "a property, no use of the function"};',
+        '    let picked = "from a let";',
+        '    if(kw.other) {',
+        '        picked = "from a let, too";',
+        '    }',
+        '    show_error(gobj, picked);',
+        '    return [handlers, names.show_error];',
+        '}'
+    ].join("\n"), new URL("file:///fixture.js"));
+
+    test("a key through a table, a list or a marked read is read; a call it cannot see is said", () => {
+        let {strings, unread} = handed(FIXTURE, "show_error", 1);
+        expect(strings.sort()).toEqual(
+            ["a literal", "from a let", "from a let, too", "from a list", "from a table",
+             "marked one", "marked two"].sort());
+        expect(unread).toEqual([
+            "fixture.js:13: k (marked with OTHER_I18N_KEYS, which this module does not publish)",
+            "fixture.js:14: kw.key",
+            "fixture.js:15: show_error used but not called by its name, so its calls are not seen",
+            "fixture.js:17: show_error used but not called by its name, so its calls are not seen",
+            "fixture.js:18: show_error used but not called by its name, so its calls are not seen",
+            "fixture.js:19: show_error used but not called by its name, so its calls are not seen",
+            "fixture.js:20: show_error used but not called by its name, so its calls are not seen"
+        ]);
     });
 });

@@ -1177,7 +1177,17 @@ or a value at run time that is not in the list its marker names.
 `src/wrapper_keys.test.js` ties the three lists of this app
 (`PREF_SEGMENT_I18N_KEYS`, `HISTORY_SORT_I18N_KEYS`,
 `USERS_ROLE_FIELD_I18N_KEYS`) to the calls of the helpers that hand them to
-`t()`.
+`t()`. It reads a key as `validate-locales` does: a literal, a const followed
+to its literals (a key reached through a table), and a read marked with a list
+as every key of that list. A call it cannot see fails it, with its line: a
+helper used other than called by its name (an alias, a table of functions,
+`.call()`, a callback):
+
+```js
+role_input("USERS_ROLE_REALM", FIELD_KEYS.realm);           // read: a const table
+role_input("USERS_ROLE_REALM", /* i18n: USERS_ROLE_FIELD_I18N_KEYS */ key);  // read: the list
+const field = role_input;                                    // fails: its calls are not seen
+```
 
 ## Roadmap
 
@@ -1451,6 +1461,11 @@ summary.
   with its `error_code` (a 4xx) logs out, and so does an `error_code` a retry
   would give again (`token_too_large`, `auth_unexpected_error`,
   `auth_config_error`, `internal_error`), with its message on the login form.
+  A code no locale knows (a newer BFF), at a login or a refresh, shows a
+  generic text on the form, and the BFF's own text goes to the log as a
+  WARNING, the only place that says what was refused:
+  `BFF login denied: code_of_a_newer_bff (what the newer BFF says)`. A code
+  the app translates stays an INFO (the BFF logged the cause itself).
   An answer that is not the BFF's json (a page of a proxy, a json with neither
   `success` nor `error_code`) is `auth_bad_response`, logged as a WARNING, and
   retried the same way; the fifth such answer since the last refresh that

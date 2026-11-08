@@ -322,6 +322,9 @@ describe("a logout the server did not end", () => {
         await i18next.changeLanguage("es");
         expect(screen.error()).toBe(`${es.translation["logout not ended on the server"]} ` +
             `(${es.translation["origin_not_allowed"]})`);
+        /*  a locale holding the English text would pass the line above  */
+        expect(es.translation["logout not ended on the server"])
+            .not.toBe(en.translation["logout not ended on the server"]);
         await i18next.changeLanguage("en");
         expect(errors().filter((m) => /NOT DEFINED/.test(m))).toEqual([]);
         app.priv.login_ui.unmount();
@@ -351,6 +354,9 @@ describe("a logout the server did not end", () => {
         await i18next.changeLanguage("es");
         expect(screen.error()).toBe(`${es.translation["logout not ended at the identity server"]} ` +
             `(${es.translation["auth_service_unavailable"]})`);
+        /*  a locale holding the English text would pass the line above  */
+        expect(es.translation["logout not ended at the identity server"])
+            .not.toBe(en.translation["logout not ended at the identity server"]);
         expect(es.translation["logout not ended at the identity server"]).not.toMatch(/recarga/i);
         await i18next.changeLanguage("en");
         expect(errors().filter((m) => /NOT DEFINED/.test(m))).toEqual([]);

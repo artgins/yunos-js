@@ -946,7 +946,8 @@ function forget_nak_state(gobj)
  *  What a denial says, in the language of the app: t(error_code) when the
  *  code is a key of the locales (AUTH_ERROR_I18N_KEYS), else a generic text
  *  (a code no locale knows: a newer BFF). The BFF's `error` is in English
- *  and goes to the log, where the login module wrote it with its code.
+ *  and goes to the log, where the login module wrote it with its code: a
+ *  WARNING for a code no locale knows, as nothing else says what it was.
  ***************************************************************/
 function denial_message(kw)
 {

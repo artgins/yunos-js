@@ -517,9 +517,14 @@ function do_bff_login(gobj, username, password)
         }
         const error_code = bff_error_code(answer);
         const error      = bff_error_text(answer);
-        if(data.error_code === error_code) {
+        if(data.error_code === error_code && AUTH_ERROR_I18N_KEYS.includes(error_code)) {
             /*  The BFF's own denial: it logged the cause itself.  */
             log_info(sprintf("%s: BFF login denied: %s (%s)",
+                gobj_short_name(gobj), error_code, error));
+        } else if(data.error_code === error_code) {
+            /*  A code no locale knows (a newer BFF): the form shows a
+             *  generic text, so this line is all that says what was refused.  */
+            log_warning(sprintf("%s: BFF login denied: %s (%s)",
                 gobj_short_name(gobj), error_code, error));
         } else {
             /*  What the peer did, not a broken contract of ours: a WARNING.  */
@@ -594,9 +599,15 @@ function do_bff_refresh(gobj)
         const error_code = bff_error_code(answer);
         const error      = bff_error_text(answer);
         if(data.error_code && refresh_code_ends_session(error_code, status)) {
-            /*  The BFF's own answer: it logged the cause itself.  */
-            log_info(sprintf("%s: BFF refresh denied: %s (%s)",
-                gobj_short_name(gobj), error_code, error));
+            if(AUTH_ERROR_I18N_KEYS.includes(error_code)) {
+                /*  The BFF's own answer: it logged the cause itself.  */
+                log_info(sprintf("%s: BFF refresh denied: %s (%s)",
+                    gobj_short_name(gobj), error_code, error));
+            } else {
+                /*  A code no locale knows: see do_bff_login()  */
+                log_warning(sprintf("%s: BFF refresh denied: %s (%s)",
+                    gobj_short_name(gobj), error_code, error));
+            }
             gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error, generation}, gobj);
             return;
         }
@@ -1161,6 +1172,14 @@ function create_gclass(gclass_name)
      *
      *  ST_WAIT_TOKEN is the login (or the restore on load) in flight: a
      *  logout waits for it, and goes out when it settles.
+     *
+     *  ST_LOGIN takes no EV_DO_LOGIN, on purpose. The form is up in
+     *  ST_LOGIN only while the token of an accepted login is fetched, and
+     *  it is busy then, so nobody can hand one in: one that comes is a
+     *  sender in the wrong situation, and "Event NOT DEFINED" names it. If
+     *  the form ever comes back with a session alive (gui_agent's does,
+     *  when the first open of its link fails), the action is gui_agent's,
+     *  a login that replaces the session (the logout first), not an ignore.
      */
     const states = [
         ["ST_LOGOUT", [

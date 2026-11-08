@@ -147,7 +147,10 @@ describe("every request is answered", () => {
         const frame = msg_iev_get_stack(view, answers[0], "command_stack", true);
         expect(frame.command).toBe("update-node");
         expect(frame.kw.form_write).toBe(1);
-        expect(logged.filter((l) => l.level === "error").length).toBe(1);
+        /*  A node that does not answer is the peer, not a contract of ours  */
+        expect(errors()).toEqual([]);
+        expect(warnings().filter((w) => /'update-node' of 'users' not answered by node 'node_1' in 60 s/.test(w)))
+            .toHaveLength(1);
     });
 
     test("an answer in time disarms it: nothing more arrives", () => {
@@ -161,7 +164,8 @@ describe("every request is answered", () => {
 
         vi.advanceTimersByTime(120 * 1000);
         expect(answers.length).toBe(1);
-        expect(logged.filter((l) => l.level === "error")).toEqual([]);
+        expect(errors()).toEqual([]);
+        expect(warnings().filter((w) => w.includes("not answered"))).toEqual([]);
     });
 
     test("a request that cannot be routed is refused in the return", () => {

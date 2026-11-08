@@ -45,7 +45,7 @@
  ***********************************************************************/
 import {
     SDATA, SDATA_END, data_type_t, event_flag_t,
-    gclass_create, log_error,
+    gclass_create, log_error, log_warning,
     gobj_read_pointer_attr,
     gobj_subscribe_event,
     gobj_publish_event,
@@ -455,8 +455,8 @@ function finish_scan(gobj, conn_id, error)
      *  picker used to vanish without a trace — the picker just said "no
      *  services selected". The log is the one place that always sees it.  */
     for(let err of scan.errors) {
-        log_error(`${gobj_short_name(gobj)}: discovery of '${conn_id}' failed: ` +
-                  `${err.error}`);
+        log_warning(`${gobj_short_name(gobj)}: discovery of '${conn_id}' failed: ` +
+                    `${err.error}`);
     }
 
     if(scan.services === null) {
@@ -721,8 +721,8 @@ function ac_mt_command_answer(gobj, event, kw, src)
          *  branch and REPLACED the connection's stored services with nothing —
          *  the very thing that branch exists to prevent. Leave scan.services
          *  null (= no successful answer) and report.  */
-        log_error(`${gobj_short_name(gobj)}: 'services' answered a ` +
-                  `${typeof data}, expected a list (yuno '${yuno}')`);
+        log_warning(`${gobj_short_name(gobj)}: 'services' answered a ` +
+                    `${typeof data}, expected a list (yuno '${yuno}')`);
         scan.errors.push({
             yuno:  yuno,
             error: "bad services answer"

@@ -699,7 +699,7 @@ function ac_timeout(gobj, event, kw, src)
             continue;
         }
         delete priv.pending[seq];
-        log_error(
+        log_warning(
             `${gobj_short_name(gobj)}: '${pend.command}' of '${pend.topic_name || pend.treedb_name}' ` +
             `not answered by node '${gobj_read_str_attr(gobj, "node")}' in ${Math.round(pend.timeout / 1000)} s`
         );

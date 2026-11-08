@@ -9,6 +9,11 @@
  *      submit, is given back, and it says when the server did not end the
  *      session, unless the login that waited for the logout goes out next.
  *
+ *      The only moment C_TREEDB_LOGIN is in ST_LOGIN with the form up is
+ *      the fetch of the token of an accepted login, with the form busy: so
+ *      ST_LOGIN declares no EV_DO_LOGIN, and one sent there is refused out
+ *      loud (no action swallows it).
+ *
  *      Driven through the real C_TREEDB_APP, C_TREEDB_LOGIN, C_TREEDB_LINKS
  *      and C_TREEDB_CONFIG, in jsdom; the BFF and the form are doubles.
  *
@@ -101,6 +106,21 @@ function later_answer()
 const NO_SESSION = {status: 401, data: {success: false, error_code: "missing_refresh_token", error: "x"}};
 const LOGIN_OK = {success: true, username: "u", expires_in: 300};
 
+/*  An answer that is no json: a page of a gateway.  */
+function page_of_a_gateway(status)
+{
+    return Promise.resolve({
+        ok:      false,
+        status:  status,
+        headers: new Headers(),
+        json:    () => Promise.reject(new SyntaxError("Unexpected token '<'")),
+    });
+}
+
+/*  What a logout the server did not end leaves, as the form says it  */
+const AT_THE_IDP = "logout not ended at the identity server";
+const ON_THE_SERVER = "logout not ended on the server";
+
 beforeAll(() => {
     vi.stubGlobal("fetch", fake_fetch);
     gobj_start_up(null, null, null, null, null, null, null);
@@ -185,14 +205,40 @@ describe("a logout that settles with the form up (ST_LOGGED_OUT)", () => {
         expect(login_screens.length).toBe(1);
     });
 
-    test("says when the server did not end the session", async () => {
+    /*
+     *  What the form says, for every answer a logout can get: what each row
+     *  checks is the text the user reads, not a field of the event. Only
+     *  the answers that clear the cookies say the identity server.
+     */
+    test.for([
+        ["a 403 of the BFF (an Origin it does not allow)", 403,
+            {success: false, error_code: "origin_not_allowed", error: "x"}, "origin_not_allowed", ON_THE_SERVER],
+        ["a 400 of the BFF", 400,
+            {success: false, error_code: "token_too_large", error: "x"}, "token_too_large", AT_THE_IDP],
+        ["a 404 of the BFF", 404,
+            {success: false, error_code: "unknown_endpoint", error: "x"}, "unknown_endpoint", AT_THE_IDP],
+        ["a 429 of a rate limiter in front", 429,
+            {error_code: "rate_limit_exceeded"}, "auth_rate_limited", ON_THE_SERVER],
+        ["a 500 of the BFF", 500,
+            {success: false, error_code: "auth_config_error", error: "x"}, "auth_config_error", AT_THE_IDP],
+        ["a 502 of the BFF", 502,
+            {success: false, error_code: "auth_service_unavailable", error: "x"}, "auth_service_unavailable",
+            AT_THE_IDP],
+        ["a 503 of the BFF", 503,
+            {success: false, error_code: "server_busy", error: "x"}, "server_busy", AT_THE_IDP],
+        ["a 504 of the BFF", 504,
+            {success: false, error_code: "auth_timeout", error: "x"}, "auth_timeout", AT_THE_IDP],
+        ["a 503 json of a gateway, with no code", 503, {message: "down"}, "auth_service_unavailable",
+            ON_THE_SERVER],
+        ["a 502 page of a gateway", 502, null, "auth_service_unavailable", ON_THE_SERVER],
+    ])("%s: the form says what is left, and why", async ([label, status, data, error_code, what_is_left]) => {
         const {default: i18next} = await import("i18next");
         const {en} = await import("./locales/en.js");
         await i18next.init({lng: "en", resources: {en}});
         const {login, screen} = await form_up();
         const pending = later_answer();
         answers.login = pending.answer;
-        answers.logout = {status: 503, data: {success: false, error_code: "server_busy", error: "x"}};
+        answers.logout = data ? {status: status, data: data} : () => page_of_a_gateway(status);
 
         screen.submit({username: "u", password: "p"});
         gobj_send_event(login, "EV_DO_LOGOUT", {}, login);
@@ -201,8 +247,7 @@ describe("a logout that settles with the form up (ST_LOGGED_OUT)", () => {
         expect(not_defined()).toEqual([]);
         expect(screen.busy).toBe(false);
         expect(typeof screen.error).toBe("function");
-        expect(screen.error()).toBe(`${en.translation["logout not ended at the identity server"]} ` +
-            `(${en.translation["server_busy"]})`);
+        expect(screen.error()).toBe(`${en.translation[what_is_left]} (${en.translation[error_code]})`);
     });
 
     test("stays busy when the login that waited for it goes out next", async () => {
@@ -231,5 +276,44 @@ describe("a logout that settles with the form up (ST_LOGGED_OUT)", () => {
         await pass_time(10);
         expect(screen.busy).toBe(false);
         expect(not_defined()).toEqual([]);
+    });
+});
+
+describe("the one moment C_TREEDB_LOGIN is in ST_LOGIN with the form up", () => {
+
+    /*  The token never comes here: the session it would open builds the
+     *  shell, which this double of a page cannot hold.  */
+    test("is the fetch of the token of an accepted login, and the form is busy all along",
+    async () => {
+        const {app, login, screen} = await form_up();
+        const token = later_answer();
+        answers.login = {status: 200, data: LOGIN_OK};
+        answers.token = token.answer;
+
+        screen.submit({username: "u", password: "p"});
+        await pass_time(10);
+        expect(asked).toEqual(["refresh", "login", "token"]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
+        expect(gobj_current_state(app)).toBe("ST_LOGGED_OUT");
+        expect(screen.mounted).toBe(true);
+        expect(screen.busy).toBe(true);
+        expect(not_defined()).toEqual([]);
+    });
+
+    test("a login handed in there has no sender: it is refused out loud, and changes nothing",
+    async () => {
+        const {login, screen} = await form_up();
+        const token = later_answer();
+        answers.login = {status: 200, data: LOGIN_OK};
+        answers.token = token.answer;
+        screen.submit({username: "u", password: "p"});
+        await pass_time(10);
+        asked.length = 0;
+
+        gobj_send_event(login, "EV_DO_LOGIN", {username: "v", password: "p"}, login);
+        await pass_time(10);
+        expect(not_defined().filter((m) => m.includes("EV_DO_LOGIN"))).toHaveLength(1);
+        expect(asked).toEqual([]);
+        expect(gobj_current_state(login)).toBe("ST_LOGIN");
     });
 });

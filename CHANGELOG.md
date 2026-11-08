@@ -8,6 +8,39 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.8, gui_treedb 1.2.5 (2026-11-08)
+
+- **BREAKING, both: three more failures the peer caused are a WARNING.** A
+  command the node's agent did not answer in time (gui_agent's
+  `C_AGENT_TREEDB_LINK`: `'update-node' of 'users' not answered by node
+  'node_1' in 60 s`), a discovery of a gui_treedb connection that failed (no
+  answer in time, the connection closed, a `services` or `treedb-info` that
+  failed), and a `services` that answered something that is not a list were
+  an ERROR in 7.30.14 (gui_agent 1.3.7, gui_treedb 1.2.4). The peer did it,
+  and no contract of the app is broken. What watches the log for an ERROR no longer sees them.
+- **BREAKING, both: a denial of the BFF with a code no locale knows is a
+  WARNING.** The form shows a generic text for such a code (a newer BFF), so
+  the log is the only place that says what was refused, and it said it at
+  INFO: `BFF login denied: code_of_a_newer_bff (what the newer BFF says)`, and
+  the same for a refresh that ends the session. A code the app translates
+  stays an INFO (the BFF logged the cause itself).
+- **gui_treedb: `ST_LOGIN` of `C_TREEDB_LOGIN` still takes no `EV_DO_LOGIN`,
+  now on record.** The form is up in `ST_LOGIN` only while the token of an
+  accepted login is fetched, and it is busy then: nobody can hand a login in.
+  One that comes is a sender in the wrong situation and is refused out loud.
+  A test holds both facts; no code changed.
+- **Tests, both:** the tests that tie a published `<NAME>_I18N_KEYS` list to
+  the calls of the helper that hands its keys (gui_agent's `wrapper_keys`,
+  gui_treedb's `tranger_view_i18n_keys`) read a key as `validate-locales`
+  does: a const followed to its literals (a key reached through a table), and
+  a read marked `/* i18n: <NAME>_I18N_KEYS */` as every key of that list. A
+  use of the helper other than a call by its name (an alias, a table of
+  functions, `.call()`, a callback) fails them with its line: its calls were
+  not seen. A logout the server did not end is checked by the text the form
+  shows for each of its ten answers, and the two texts of such a logout must
+  differ from the English one in Spanish (a locale that held the English text
+  passed every test and `validate-locales`).
+
 ## gui_treedb 1.2.4 (2026-11-08)
 
 - `maplibre-gl` `^6.17.0`. No change of code; the bundle carries no map.

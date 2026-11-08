@@ -147,8 +147,13 @@ the **gobj-ui V2 declarative shell** (`C_YUI_SHELL`/`C_YUI_NAV`).
   and a code of its own, which reads as a denial, does not end the session). The BFF *answering* "no" with its `error_code` (a 4xx) logs you
   out, and so does an `error_code` a retry would give again
   (`token_too_large`, `auth_unexpected_error`, `auth_config_error`,
-  `internal_error`), with its message on the login form. An answer that is
-  not the BFF's json (a page of a proxy, a json with neither `success` nor
+  `internal_error`), with its message on the login form. A code no locale
+  knows (a newer BFF), at a login or a refresh, shows a generic text on the
+  form, and the BFF's own text goes to the log as a WARNING, the only place
+  that says what was refused:
+  `BFF login denied: code_of_a_newer_bff (what the newer BFF says)`. A code
+  the app translates stays an INFO (the BFF logged the cause itself). An
+  answer that is not the BFF's json (a page of a proxy, a json with neither `success` nor
   `error_code`) is `auth_bad_response`, a WARNING, and is retried the same
   way; the fifth such answer since the last refresh that landed ends the
   session and the login form says it (answers of another kind in between do
@@ -373,6 +378,20 @@ reads it (`t(/* i18n: <NAME>_I18N_KEYS */ key)`), so the locales are asked for
 every key of the list; `/* i18n: data */` says it is no key -- never add it to
 either list. What stays invisible: a new value reaching a read of that list,
 or a value at run time that is not in the list its marker names.
+
+`src/tranger_view_i18n_keys.test.js` ties `C_TRANGER_VIEW_ERROR_I18N_KEYS` to
+what `show_error()` is handed and to the commands the view sends. It reads a
+key as `validate-locales` does: a literal, a const followed to its literals
+(a key reached through a table), and a read marked with a list as every key of
+that list. A call it cannot see fails it, with its line: `show_error` or
+`gobj_command` used other than called by its name (an alias, a table of
+functions, `.call()`, a callback):
+
+```js
+show_error(gobj, ERRORS.no_topics);                          // read: a const table
+show_error(gobj, /* i18n: C_TRANGER_VIEW_ERROR_I18N_KEYS */ key);  // read: the list
+const say = show_error;                                      // fails: its calls are not seen
+```
 
 `src/tabulator_filter_names.test.js` runs a real Tabulator under jsdom: a header
 filter box keeps its name after every build of its columns -- the Keys picker's

@@ -519,9 +519,13 @@ function do_bff_login(gobj, username, password)
         }
         const error_code = bff_error_code(answer);
         const error      = bff_error_text(answer);
-        if(data.error_code === error_code) {
+        if(data.error_code === error_code && AUTH_ERROR_I18N_KEYS.includes(error_code)) {
             /*  The BFF's own denial: it logged the cause itself.  */
             log_info(`${gobj_short_name(gobj)}: BFF login denied: ${error_code} (${error})`);
+        } else if(data.error_code === error_code) {
+            /*  A code no locale knows (a newer BFF): the form shows a
+             *  generic text, so this line is all that says what was refused.  */
+            log_warning(`${gobj_short_name(gobj)}: BFF login denied: ${error_code} (${error})`);
         } else {
             /*  What the peer did, not a broken contract of ours: a WARNING.  */
             log_warning(`${gobj_short_name(gobj)}: BFF login failed: ${error_code} (${error})`);
@@ -557,8 +561,13 @@ function do_bff_refresh(gobj)
         const error_code = bff_error_code(answer);
         const error      = bff_error_text(answer);
         if(data.error_code && refresh_code_ends_session(error_code, status)) {
-            /*  The BFF's own answer: it logged the cause itself.  */
-            log_info(`${gobj_short_name(gobj)}: BFF refresh denied: ${error_code} (${error})`);
+            if(AUTH_ERROR_I18N_KEYS.includes(error_code)) {
+                /*  The BFF's own answer: it logged the cause itself.  */
+                log_info(`${gobj_short_name(gobj)}: BFF refresh denied: ${error_code} (${error})`);
+            } else {
+                /*  A code no locale knows: see do_bff_login()  */
+                log_warning(`${gobj_short_name(gobj)}: BFF refresh denied: ${error_code} (${error})`);
+            }
             gobj_send_event(gobj, "EV_LOGIN_DENIED", {error_code, error, generation}, gobj);
             return;
         }
