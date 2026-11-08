@@ -1,7 +1,7 @@
 {
   "name": "gui-treedb",
   "private": true,
-  "version": "1.2.3",
+  "version": "1.2.4",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -23,7 +23,7 @@
     "bulma-switch-control": "^1.2.2",
     "i18next": "^26.5.12",
     "luxon": "^3.7.2",
-    "maplibre-gl": "^6.16.0",
+    "maplibre-gl": "^6.17.0",
     "tabulator-tables": "^6.7.1",
     "tom-select": "^2.6.2",
     "uplot": "^1.6.32",

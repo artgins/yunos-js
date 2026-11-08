@@ -8,6 +8,10 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.2.4 (2026-11-08)
+
+- `maplibre-gl` `^6.17.0`. No change of code; the bundle carries no map.
+
 ## gui_agent 1.3.7, gui_treedb 1.2.3 (2026-10-31)
 
 - Both on `@yuneta/gobj-js` and `@yuneta/gobj-ui` 7.30.0, `i18next` 26.5.12, and
