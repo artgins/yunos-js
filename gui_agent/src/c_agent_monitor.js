@@ -204,7 +204,10 @@
  *      EV_SCENARIO_RUN_ENDED, and the state is read again (no polling).
  *      A scenario with a `max_run` is stopped by the control center itself
  *      that many seconds after its start; while it runs the status line
- *      says when (`stop_at` of `scenarios`).
+ *      says when (`stop_at` of `scenarios`). A stop that the control
+ *      center gave up (`stop_given_up`, after its tries did nothing) is
+ *      said there too: the scenario goes on running, and nobody will
+ *      stop it but a user (or a save, which tries the stop again).
  *
  *      CONTROLS FIT THE STATE. A control button is enabled only when it
  *      can do something (control_refused_by() of monitor_helpers.js):
@@ -501,6 +504,7 @@ let PRIVATE_DATA = {
     has_queue:      {},     /*  yuno key -> its service reports a queue: its card has the row  */
     relayout_posted: false, /*  EV_RELAYOUT is on its way  */
     stop_at:        0,      /*  epoch second the control center stops the scenario (its max_run), 0 = none  */
+    stop_given_up:  false,  /*  the control center gave up the max_run stop: it is not tried again  */
     run_in_flight:  null,   /*  {id, action, username, started_at}: a run of it in the control center, not ours  */
     series_ui:      {},     /*  chart (rate | queue | cpu) -> its block, series toggle, count, chevron  */
     series_open:    {},     /*  chart -> its series (the uPlot legend) are shown  */
@@ -815,13 +819,17 @@ function build_dom(gobj)
         ["span", {class: "mr-1", i18n: "monitor stops at"}, t("monitor stops at")],
         ["span", {class: "MONITOR_STOP_AT_TIME is-family-monospace"}, ""]
     ]]);
+    /*  ... or that it gave that stop up: the scenario runs on  */
+    priv.$stop_given_up = createElement2(["span", {class: "MONITOR_STOP_GIVEN_UP tag is-danger is-light is-hidden"}, [
+        ["span", {i18n: "monitor stop given up"}, t("monitor stop given up")]
+    ]]);
     /*  The memory still available on each node: one per node, not
      *  once per card (every yuno of a node reports the same figure)  */
     priv.$node_mems = createElement2(["span", {class: "MONITOR_NODE_MEMS"}, []]);
     priv.node_mem_items = {};
     let $status = createElement2(
         ["div", {class: "MONITOR_STATUS is-size-7"},
-            [priv.$url, priv.$updated, priv.$stop_at, priv.$node_mems, priv.$error]]
+            [priv.$url, priv.$updated, priv.$stop_at, priv.$stop_given_up, priv.$node_mems, priv.$error]]
     );
 
     /*  Test controls: filled from the scenario's test block.  */
@@ -1653,6 +1661,8 @@ function render_status(gobj)
                 ? date_time_format(i18next.language, CLOCK_OPTIONS).format(when)
                 : fmt_date_time(when, i18next.language);
     }
+    show(priv.$stop_given_up,
+        has && priv.stop_given_up && (priv.run_state === "running" || priv.run_state === "paused"));
 
     let $et = priv.$error.querySelector(".MONITOR_ERROR_TEXT");
     let $ed = priv.$error.querySelector(".MONITOR_ERROR_DETAIL");
@@ -2575,6 +2585,7 @@ function adopt_scenario(gobj)
     priv.run_state_asked = false;
     priv.charts_held = false;
     priv.stop_at = 0;
+    priv.stop_given_up = false;
     priv.run_in_flight = null;
     priv.has_queue = {};
     /*  A yuno that names its queue's service has one: its card is born
@@ -2771,6 +2782,7 @@ function cc_answer(gobj, a, kw)
         }
         let doc = (!failed && Array.isArray(kw.data) && kw.data[0]) ? kw.data[0] : null;
         priv.stop_at = (doc && typeof doc.stop_at === "number") ? doc.stop_at : 0;
+        priv.stop_given_up = !!(doc && doc.stop_given_up === true);
         let rif = doc ? doc.run_in_flight : null;
         priv.run_in_flight = (rif && typeof rif === "object" && !(priv.control && priv.control.running)) ?
             {id: String(rif.id || ""), action: String(rif.action || ""),

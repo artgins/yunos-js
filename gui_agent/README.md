@@ -415,7 +415,13 @@ title says why. A run in flight of another console, or the stop of a
 `scenarios`, read when the view opens and after every run that ends). A run
 that starts while the view is open is seen only when it ends, so a control
 sent meanwhile is still refused by the control center (*a run is in flight,
-one at a time*). Each step is
+one at a time*). While a scenario with a `max_run` runs or is paused, the
+status line says when the control center stops it (*stops at 14:32*, from
+`stop_at` of `scenarios`). When the control center gave that stop up after
+ten tries that did nothing (`stop_given_up: true` and no `stop_at`, SDK
+7.30.19+), a red tag says *max_run stop given up* instead (1.3.9): the
+scenario runs on until a user stops it, or a save of it tries the stop again.
+Each step is
 `command-yuno id=<yuno> [service=<service>] command=<command>`; nothing about
 any particular generator is written in the view. Every control is confirmed
 in a dialog that lists the commands it will send (stop and restart in red),

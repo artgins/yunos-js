@@ -657,6 +657,48 @@ describe("the live view of a scenario the control center keeps", () => {
         expect(errors()).toEqual([]);
     });
 
+    test("a max_run stop the control center gave up: the line says so, until it is tried again or stopped", () => {
+        const mon = new_monitor();
+        watch_saved(SAVED);
+        sent.length = 0;
+        gobj_publish_event(link, "EV_SCENARIO_RUN_ENDED", {});
+        answer(mon, find("scenario-runs").pop(), {data: [{action: "start", result: 0, steps: [{result: 0}]}]});
+        answer(mon, find("scenarios").pop(), {data: [Object.assign({}, SAVED, {stop_given_up: true})]});
+        expect(mon.priv.run_state).toBe("running");
+        expect(mon.priv.stop_given_up).toBe(true);
+        expect(mon.priv.$stop_at.classList.contains("is-hidden")).toBe(true);
+        let $given_up = mon.priv.$stop_given_up;
+        expect($given_up.classList.contains("is-hidden")).toBe(false);
+        expect($given_up.classList.contains("MONITOR_STOP_GIVEN_UP")).toBe(true);
+        expect($given_up.querySelector("[data-i18n]").getAttribute("data-i18n")).toBe("monitor stop given up");
+
+        /*  A save tried it again: a stop_at, no stop_given_up  */
+        sent.length = 0;
+        gobj_publish_event(link, "EV_SCENARIO_RUN_ENDED", {});
+        answer(mon, find("scenario-runs").pop(), {data: [{action: "start", result: 0, steps: [{result: 0}]}]});
+        const at = Math.floor(Date.now() / 1000) - 5;
+        answer(mon, find("scenarios").pop(), {data: [Object.assign({}, SAVED, {stop_at: at})]});
+        expect(mon.priv.stop_given_up).toBe(false);
+        expect($given_up.classList.contains("is-hidden")).toBe(true);
+        expect(mon.priv.$stop_at.classList.contains("is-hidden")).toBe(false);
+
+        /*  Given up again, then stopped by a user: the line goes  */
+        sent.length = 0;
+        gobj_publish_event(link, "EV_SCENARIO_RUN_ENDED", {});
+        answer(mon, find("scenario-runs").pop(), {data: [{action: "start", result: 0, steps: [{result: 0}]}]});
+        answer(mon, find("scenarios").pop(), {data: [Object.assign({}, SAVED, {stop_given_up: true})]});
+        expect($given_up.classList.contains("is-hidden")).toBe(false);
+        sent.length = 0;
+        gobj_publish_event(link, "EV_SCENARIO_RUN_ENDED", {});
+        answer(mon, find("scenario-runs").pop(), {data: [{action: "stop", result: 0, steps: [{result: 0}]}]});
+        /*  the two readings are two requests: one read before the stop
+         *  landed still says given up, and the line follows the state  */
+        answer(mon, find("scenarios").pop(), {data: [Object.assign({}, SAVED, {stop_given_up: true})]});
+        expect(mon.priv.run_state).toBe("stopped");
+        expect($given_up.classList.contains("is-hidden")).toBe(true);
+        expect(errors()).toEqual([]);
+    });
+
     test("a user who may only read the scenario: no controls, no edit, no command to the agents", () => {
         agent_config_set_permissions(config, {
             "read-scenarios": ["stress"], "run-scenarios": false, "write-scenarios": false,

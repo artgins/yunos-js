@@ -8,6 +8,23 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.9 (2026-11-09)
+
+- **The monitor says when the control center gave up a scenario's `max_run`
+  stop.** After ten tries in a row that did nothing, the control center
+  (SDK 7.30.19) stops trying, and `scenarios` answers `stop_given_up: true`
+  and no `stop_at`. The scenario goes on running, and only a user's stop (or
+  a save, which tries the stop again) ends it. The monitor read only
+  `stop_at`, so such a scenario showed as running with no stop time, as if
+  it had no `max_run`. Its status line now carries a red tag, *"max_run stop
+  given up"* (key `monitor stop given up`, in both locales), while the
+  scenario runs or is paused. In gui_agent 1.3.8 and before it was shown
+  nowhere.
+- **Tests:** `c_scenarios.wiring` answers `scenarios` with `stop_given_up`
+  and asks for the tag; then with a `stop_at` (a save tried it again), and
+  the tag goes; then a stopped scenario whose `scenarios` answer still says
+  given up, and the tag does not show.
+
 ## gui_treedb 1.2.7 (2026-11-08)
 
 - **BREAKING: the late answer of a slow backend is a WARNING.** A page of a
