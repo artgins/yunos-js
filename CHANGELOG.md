@@ -8,6 +8,10 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.2.8 (2026-11-11)
+
+- `maplibre-gl` `^6.18.0`. No change of code; the bundle carries no map.
+
 ## gui_agent 1.3.9 (2026-11-09)
 
 - **The monitor says when the control center gave up a scenario's `max_run`
