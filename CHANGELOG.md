@@ -8,6 +8,14 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.3.10, gui_treedb 1.2.9 (2026-11-13)
+
+- Both on `@yuneta/gobj-ui` 7.31.0 and `@yuneta/gobj-js` 7.30.0, `i18next` 27.1.1 (its
+  changed defaults are not relied on: gui_agent sets `fallbackLng: "en"`, gui_treedb had
+  no `dev` catalog), `vanilla-jsoneditor` 3.13.1, `tom-select` 2.7.0, and the tooling
+  (vite 8.3.8, vitest 5.1, playwright 1.65, jsdom 31). `fast-uri` 3.1.9 in the lockfile.
+  No change of code. 571 and 299 tests; QA of gui_agent on both planes, clean console.
+
 ## gui_treedb 1.2.8 (2026-11-11)
 
 - `maplibre-gl` `^6.18.0`. No change of code; the bundle carries no map.
