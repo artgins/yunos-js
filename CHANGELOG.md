@@ -8,6 +8,11 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.4.2, gui_treedb 1.3.2 + gobj-ui ^7.31.4 (2026-11-16)
+
+- `@yuneta/gobj-ui` 7.31.4: the treedb graph draws its edges at their width before
+  7.31.3 and keeps only the wider click area. No change of code here.
+
 ## gui_agent 1.4.1, gui_treedb 1.3.1 + gobj-ui ^7.31.3 (2026-11-16)
 
 - `@yuneta/gobj-ui` 7.31.3: in the treedb graph and the schema graph the edges are drawn
