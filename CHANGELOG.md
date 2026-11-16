@@ -8,6 +8,15 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.4.0, gui_treedb 1.3.0 + gobj-ui ^7.31.2 (2026-11-16)
+
+- `@yuneta/gobj-ui` 7.31.2: in the treedb graph and the schema graph a click on an edge
+  lights it and its two ends (the schema graph also washes the hook and fkey rows it
+  joins); the schema graph always has a minimap, and the treedb graph shows one from 10
+  nodes. No change of code here. gui_agent goes to 1.4.0 and gui_treedb to 1.3.0, one
+  digit per segment: the round had raised them to 1.3.11 and 1.2.10 (and 1.3.10, the
+  previous gui_agent, already broke the rule).
+
 ## gui_agent 1.3.10, gui_treedb 1.2.9 (2026-11-13)
 
 - Both on `@yuneta/gobj-ui` 7.31.0 and `@yuneta/gobj-js` 7.30.0, `i18next` 27.1.1 (its
