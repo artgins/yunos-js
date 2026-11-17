@@ -18,10 +18,26 @@
  *          Copyright (c) 2026, ArtGins.
  *          All Rights Reserved.
  ***********************************************************************/
-import {describe, test, expect, beforeAll, beforeEach} from "vitest";
+import {describe, test, expect, beforeAll, beforeEach, vi} from "vitest";
 import {install_dom_double} from "../test/dom_double.js";
 
 install_dom_double();
+
+/*  Tabulator does not run on the DOM double: a table answer is read from
+ *  the options it was built with.  */
+vi.mock("tabulator-tables", () => ({
+    TabulatorFull: class {
+        constructor(el, options) {
+            this.options = options;
+        }
+        on() {}
+        getSelectedRows() {
+            return [];
+        }
+        redraw() {}
+        destroy() {}
+    }
+}));
 
 if(typeof globalThis.ResizeObserver === "undefined") {
     globalThis.ResizeObserver = class {
@@ -223,5 +239,41 @@ describe("an answer the console did not ask for", () => {
             }
         }, link);
         expect(con.priv.json_view).toBeTruthy();
+    });
+});
+
+/*  A moment in seconds is painted as a date: a column of type `time` (the
+ *  table schema of the control center's list-nodes) or one flagged `time`
+ *  (the cols of a treedb topic, type integer). Until gui_agent 1.4.6 both
+ *  were painted as the number.  */
+describe("a table answer with a time column", () => {
+    test("its cells are dates, and 0 is no date", () => {
+        const con = gobj_create("con6", "C_AGENT_CONSOLE", {node: NODE}, host);
+        gobj_start(con);
+        gobj_send_event(con, "EV_MT_COMMAND_ANSWER", {
+            result: 0,
+            comment: "",
+            schema: [
+                {id: "id",         header: "Node",      type: "string",  fillspace: 38},
+                {id: "last_seen",  header: "Last Seen", type: "time",    fillspace: 24},
+                {id: "decided_at", header: "Decided",   type: "integer", fillspace: 10, flag: ["time", "persistent"]},
+                {id: "knocks",     header: "Knocks",    type: "integer", fillspace: 8}
+            ],
+            data: [{id: "n1", last_seen: 1794952462, decided_at: 0, knocks: 3}],
+            __md_iev__: {
+                console_node: NODE,
+                console_seq: String(con.priv.req_seq),
+                command_stack: [{command: "list-nodes", kw: {}}]
+            }
+        }, link);
+        const cols = con.priv.tabulator.options.columns;
+        const fmt = (field, v) => cols.find((c) => c.field === field).formatter({getValue: () => v});
+
+        expect(fmt("last_seen", 1794952462)).toMatch(/CONSOLE_TIME.*2026/);
+        expect(fmt("last_seen", 1794952462)).not.toMatch(/1794952462/);
+        expect(fmt("decided_at", 1794952462)).toMatch(/2026/);
+        expect(fmt("decided_at", 0)).toBe("");
+        expect(fmt("knocks", 3)).toBe("3");
+        expect(errors()).toEqual([]);
     });
 });

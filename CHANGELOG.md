@@ -8,6 +8,16 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.4.6 (2026-11-17)
+
+- **gui_agent: the console paints a time column as a date.** A table answer
+  painted a moment in seconds as the number (`Last Seen 1794952462` in the
+  control center's `list-nodes`). A column of type `time` (a command's own
+  schema) or flagged `time` (the cols of a treedb topic, type integer) is now
+  a date in the language of the app (gobj-ui's `fmt_date_time()`), written
+  again when the language changes; 0 is no date. New test in
+  `c_agent_console.wiring.test.js`.
+
 ## gui_agent 1.4.5, gui_treedb 1.3.5 + gobj-js ^7.31.0 (2026-11-17)
 
 - **gui_agent, gui_treedb: a session whose IdP is down ends once its access

@@ -51,9 +51,10 @@ import {
     kw_set_local_storage_value,
 } from "@yuneta/gobj-js";
 
-import {t} from "i18next";
+import i18next, {t} from "i18next";
 
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {fmt_date_time} from "@yuneta/gobj-ui/src/yui_date_text.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
@@ -1772,7 +1773,9 @@ function destroy_json_view(gobj)
 
 /***************************************************************
  *  Map a ycommand schema (cols with id/header/fillspace/type) to
- *  Tabulator column definitions.
+ *  Tabulator column definitions. A moment in seconds is a column of
+ *  type `time` (a command's own schema) or one flagged `time` (the
+ *  cols of a treedb topic: type integer).
  ***************************************************************/
 function make_columns_from_schema(schema)
 {
@@ -1788,6 +1791,12 @@ function make_columns_from_schema(schema)
             title: col.header || col.id,
             field: col.id
         };
+        if(is_time_column(col)) {
+            colDef.sorter = "number";
+            colDef.formatter = cell_time;
+            columns.push(colDef);
+            continue;
+        }
         switch(col.type) {
             case "boolean":
                 colDef.hozAlign = "center";
@@ -1807,6 +1816,32 @@ function make_columns_from_schema(schema)
         columns.push(colDef);
     }
     return columns;
+}
+
+function is_time_column(col)
+{
+    if(col.type === "time") {
+        return true;
+    }
+    return [].concat(col.flag || []).includes("time");
+}
+
+/***************************************************************
+ *  Tabulator cell formatter: a moment in seconds as a date, in the
+ *  language of the app (gobj-ui's fmt_date_time()); 0 or nothing is
+ *  no moment. Anything else is painted as it came.
+ ***************************************************************/
+function cell_time(cell)
+{
+    let v = cell.getValue();
+    if(!v) {
+        return "";
+    }
+    if(typeof v !== "number") {
+        return cell_scalar_or_json(cell);
+    }
+    let text = fmt_date_time(new Date(v * 1000), i18next.language);
+    return `<span class="CONSOLE_TIME">${esc_html(text)}</span>`;
 }
 
 /***************************************************************
@@ -2206,6 +2241,9 @@ function ac_language_changed(gobj, event, kw, src)
 {
     let priv = gobj.priv;
     yui_tabulator_relocalize(priv.tabulator, t);
+    if(priv.tabulator) {
+        priv.tabulator.redraw(true);    /*  the dates are written in the language  */
+    }
     if(priv.selection) {
         priv.selection.refresh();   /*  a count composed at render time  */
     }
