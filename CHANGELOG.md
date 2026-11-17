@@ -8,6 +8,12 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.4.4, gui_treedb 1.3.4 + gobj-ui ^7.31.6 (2026-11-17)
+
+- `@yuneta/gobj-ui` 7.31.6: the treedb views show each topic by its own name,
+  untranslated (tab, card, info title, linked-topic dialog, parent-filter chip).
+  No change of code here.
+
 ## gui_agent 1.4.3, gui_treedb 1.3.3 + gobj-ui ^7.31.5 (2026-11-16)
 
 - `@yuneta/gobj-ui` 7.31.5: the JSON graph lights an edge on a click, has a minimap from
