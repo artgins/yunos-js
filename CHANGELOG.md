@@ -8,6 +8,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.4.5, gui_treedb 1.3.5 + gobj-js ^7.31.0 (2026-11-17)
+
 - **gui_agent, gui_treedb: a session whose IdP is down ends once its access
   token is dead.** With a BFF of several IdPs (`issuers`, SDK `C_AUTH_BFF`),
   a session belongs to the IdP that opened it, and no other IdP can refresh it.
@@ -16,6 +18,8 @@ the JS yunos — the most active-changing layer — evolve on their own line.
   `auth_timeout` (the BFF's own code, not a proxy page or no answer), with
   that code, so the login form opens a session at an IdP that answers. New
   tests: `c_agent_login.idp_down.test.js`, `c_login.idp_down.test.js`.
+- Dependencies: `@yuneta/gobj-js` `^7.31.0`, i18next `^27.1.4`, playwright `^1.65.1`;
+  gui_treedb also maplibre-gl `^6.19.0`.
 
 ## gui_agent 1.4.4, gui_treedb 1.3.4 + gobj-ui ^7.31.6 (2026-11-17)
 
