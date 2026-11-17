@@ -114,6 +114,20 @@ const REFRESH_BAD_ANSWERS_MAX = 5;
  *  A retried failure waits for its Retry-After (seconds or an HTTP-date)
  *  when it is longer than the backoff, up to REFRESH_RETRY_AFTER_MAX_MS.  */
 const REFRESH_RATE_LIMITED_MAX = 5;
+
+/*
+ *  The BFF says the IdP of the session does not answer
+ *  (auth_service_unavailable, auth_timeout): the session cannot be
+ *  refreshed anywhere else, its refresh_token belongs to that IdP. It is
+ *  retried while the access token lives, so a short outage costs nothing.
+ *  Once it is dead -- the cookie the WebSocket carries is no good -- the
+ *  REFRESH_IDP_DOWN_MAX-th such answer ends the session with that code:
+ *  the login form, whose login the BFF sends to an IdP that answers
+ *  (`issuers`). Only the BFF's own code counts: when the BFF itself does
+ *  not answer, a new login would not either. Mirrors gui_agent.
+ */
+const REFRESH_IDP_DOWN_CODES = ["auth_service_unavailable", "auth_timeout"];
+const REFRESH_IDP_DOWN_MAX = 3;
 const REFRESH_RETRY_AFTER_MAX_MS = 5 * 60 * 1000;
 
 /*  The names of an HTTP-date (http_date_ms()), case-sensitive, in the
@@ -148,6 +162,8 @@ let PRIVATE_DATA = {
     retry_ms:           0,      /*  current transient-failure backoff (0 = none)  */
     bad_answers:        0,      /*  answers not the BFF's json since the last refresh that landed  */
     rate_limited:       0,      /*  429 answers since the last refresh that landed  */
+    idp_down:           0,      /*  answers of the BFF that the IdP is down, since the last refresh that landed  */
+    access_expires_at:  0,      /*  Date.now() when the access token dies  */
     generation:         0,      /*  the session the requests in flight belong to  */
     refresh_in_flight:  -1,     /*  the generation of the refresh in flight, -1 when none  */
     held_login:         null,   /*  {username, password} asked for while the logout was in flight  */
@@ -618,7 +634,8 @@ function do_bff_refresh(gobj)
                 (wait_ms < 0 ? " (unreadable, ignored)" : "") : "");
         log_warning(msg);
         gobj_send_event(gobj, "EV_REFRESH_FAILED", {
-            error_code, error, generation, retry_after_ms: Math.max(0, wait_ms)
+            error_code, error, generation, retry_after_ms: Math.max(0, wait_ms),
+            bff_said: !!data.error_code
         }, gobj);
     });
 }
@@ -720,6 +737,8 @@ function save_session_info(gobj, data)
     priv.retry_ms = 0;      /*  a refresh landed: the backoff starts over  */
     priv.bad_answers = 0;
     priv.rate_limited = 0;
+    priv.idp_down = 0;
+    priv.access_expires_at = Date.now() + access_expires * 1000;
     priv.refresh_at = 0;
 }
 
@@ -1057,7 +1076,10 @@ function ac_timeout(gobj, event, kw, src)
  *  that is not the BFF's json since the last refresh that landed
  *  ("auth_bad_response": the login page of a proxy), and the
  *  REFRESH_RATE_LIMITED_MAX-th 429, or one whose Retry-After is longer
- *  than REFRESH_RETRY_AFTER_MAX_MS ("auth_rate_limited").
+ *  than REFRESH_RETRY_AFTER_MAX_MS ("auth_rate_limited"), and the
+ *  REFRESH_IDP_DOWN_MAX-th answer of the BFF that the IdP of the session
+ *  does not answer once the access token is dead (its code: the login
+ *  goes to another IdP).
  ***************************************************************/
 function ac_refresh_failed(gobj, event, kw, src)
 {
@@ -1077,6 +1099,16 @@ function ac_refresh_failed(gobj, event, kw, src)
                 + "the session ends", gobj_short_name(gobj), priv.bad_answers));
             end_session(gobj, "auth_bad_response",
                 `${priv.bad_answers} answers that are not the BFF's json (${kw.error || ""})`);
+            return 0;
+        }
+    }
+
+    if(kw.bff_said && REFRESH_IDP_DOWN_CODES.includes(kw.error_code)) {
+        priv.idp_down++;
+        if(priv.idp_down >= REFRESH_IDP_DOWN_MAX && Date.now() >= priv.access_expires_at) {
+            log_warning(`${gobj_short_name(gobj)}: the IdP of the session did not answer ` +
+                `${priv.idp_down} times and the access token is dead: the session ends`);
+            end_session(gobj, kw.error_code, kw.error || "");
             return 0;
         }
     }
