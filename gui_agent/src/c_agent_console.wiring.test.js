@@ -277,3 +277,48 @@ describe("a table answer with a time column", () => {
         expect(errors()).toEqual([]);
     });
 });
+
+/*  Every column of a table answer has a filter box in its header (gui_agent
+ *  1.4.7): a boolean a three-state tick, anything else a text the cell must
+ *  contain as it is SHOWN, case ignored -- a date as written, an object as
+ *  its json.  */
+describe("a table answer has a filter per column", () => {
+    test("text, date and boolean columns filter on what they show", () => {
+        const con = gobj_create("con7", "C_AGENT_CONSOLE", {node: NODE}, host);
+        gobj_start(con);
+        gobj_send_event(con, "EV_MT_COMMAND_ANSWER", {
+            result: 0,
+            comment: "",
+            schema: [
+                {id: "id",         header: "Node",      type: "string",  fillspace: 38},
+                {id: "hostname",   header: "Hostname",  type: "string",  fillspace: 24},
+                {id: "connected",  header: "Connected", type: "boolean", fillspace: 9},
+                {id: "last_seen",  header: "Last Seen", type: "time",    fillspace: 24},
+                {id: "extra",      header: "Extra",     type: "json",    fillspace: 10}
+            ],
+            data: [{id: "n1", hostname: "Orangepi-BFM2", connected: true,
+                    last_seen: 1794952462, extra: {os: "Ubuntu"}}],
+            __md_iev__: {
+                console_node: NODE,
+                console_seq: String(con.priv.req_seq),
+                command_stack: [{command: "list-nodes", kw: {}}]
+            }
+        }, link);
+        const cols = con.priv.tabulator.options.columns;
+        const col = (field) => cols.find((c) => c.field === field);
+        const match = (field, term, v) => col(field).headerFilterFunc(
+            term, v, {}, col(field).headerFilterFuncParams || {}
+        );
+
+        expect(col("hostname").headerFilter).toBe("input");
+        expect(match("hostname", "bfm2", "Orangepi-BFM2")).toBe(true);
+        expect(match("hostname", "em235", "Orangepi-BFM2")).toBe(false);
+        expect(match("hostname", "", "Orangepi-BFM2")).toBe(true);
+        expect(match("last_seen", "2026", 1794952462)).toBe(true);
+        expect(match("last_seen", "17949", 1794952462)).toBe(false);
+        expect(match("extra", "ubuntu", {os: "Ubuntu"})).toBe(true);
+        expect(col("connected").headerFilter).toBe("tickCross");
+        expect(col("connected").headerFilterParams).toEqual({tristate: true});
+        expect(errors()).toEqual([]);
+    });
+});

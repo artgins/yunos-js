@@ -8,6 +8,18 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.4.7 (2026-11-19)
+
+- **gui_agent: every column of a table answer of the console can be searched.**
+  Each column has a filter box in its header: a boolean a three-state tick,
+  anything else a text the cell must contain, case ignored, matched against
+  what the cell SHOWS (a date as written, an object as its json), so
+  `list-nodes` is filtered by hostname, state or "nov 2026" in place. The
+  boxes are named for a reader (`Filter by <column>`, gobj-ui's
+  `yui_tabulator_name_filters()`) and carry the ✕ of
+  `yui_table_filter_clear()`, again after a language change. New test in
+  `c_agent_console.wiring.test.js`.
+
 ## gui_agent 1.4.6 (2026-11-17)
 
 - **gui_agent: the console paints a time column as a date.** A table answer

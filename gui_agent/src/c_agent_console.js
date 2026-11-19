@@ -55,7 +55,12 @@ import i18next, {t} from "i18next";
 
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {fmt_date_time} from "@yuneta/gobj-ui/src/yui_date_text.js";
-import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {
+    yui_tabulator_lang,
+    yui_tabulator_relocalize,
+    yui_tabulator_name_filters
+} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {yui_table_filter_clear} from "@yuneta/gobj-ui/src/yui_table_filter_clear.js";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 import {yui_copy_text, yui_copy_table_json} from "@yuneta/gobj-ui/src/yui_clipboard.js";
@@ -1674,6 +1679,15 @@ function render_table(gobj, schema, data)
         maxHeight:      "100%",
         placeholder:    "—"
     });
+    /*  The filter box of each column, drawn by Tabulator with no name:
+     *  named after the build (and again on a language change, by
+     *  yui_tabulator_relocalize()), and given its ✕ — a filter is
+     *  removed by erasing what was typed, and with several columns
+     *  filtered nobody remembers which.  */
+    priv.tabulator.on("tableBuilt", function() {
+        yui_tabulator_name_filters(priv.tabulator, t);
+        yui_table_filter_clear(priv.tabulator);
+    });
     /*  A tick is an OS notification like any other: it becomes an event. */
     yui_wire_selection(priv.tabulator, function(count) {
         if(gobj_is_destroying(gobj)) {
@@ -1776,6 +1790,12 @@ function destroy_json_view(gobj)
  *  Tabulator column definitions. A moment in seconds is a column of
  *  type `time` (a command's own schema) or one flagged `time` (the
  *  cols of a treedb topic: type integer).
+ *
+ *  Every column has a filter box in its header: a boolean a
+ *  three-state tick, anything else a text that the cell must
+ *  CONTAIN, case ignored, matched against what the cell SHOWS (a
+ *  date as written, an object as its json) -- not against the raw
+ *  value: a filter on "nov 2026" has to find the row that says it.
  ***************************************************************/
 function make_columns_from_schema(schema)
 {
@@ -1789,11 +1809,15 @@ function make_columns_from_schema(schema)
         }
         let colDef = {
             title: col.header || col.id,
-            field: col.id
+            field: col.id,
+            headerFilter: "input",
+            headerFilterFunc: shown_text_contains,
+            minWidth: 150   /*  room for the filter's placeholder in the longest locale  */
         };
         if(is_time_column(col)) {
             colDef.sorter = "number";
             colDef.formatter = cell_time;
+            colDef.headerFilterFuncParams = {time: true};
             columns.push(colDef);
             continue;
         }
@@ -1802,6 +1826,10 @@ function make_columns_from_schema(schema)
                 colDef.hozAlign = "center";
                 colDef.sorter = "boolean";
                 colDef.formatter = "tickCross";
+                colDef.headerFilter = "tickCross";
+                colDef.headerFilterParams = {tristate: true};
+                delete colDef.headerFilterFunc;
+                delete colDef.minWidth;
                 break;
             case "integer":
             case "real":
@@ -1816,6 +1844,29 @@ function make_columns_from_schema(schema)
         columns.push(colDef);
     }
     return columns;
+}
+
+/***************************************************************
+ *  Header filter: does the cell, as it is SHOWN, contain the term
+ *  (case ignored)? A time column compares the date as written.
+ ***************************************************************/
+function shown_text_contains(term, value, rowData, filterParams)
+{
+    if(term === "" || term === null || term === undefined) {
+        return true;
+    }
+    if(value === null || value === undefined) {
+        return false;
+    }
+    let text;
+    if(filterParams && filterParams.time && typeof value === "number") {
+        text = value? fmt_date_time(new Date(value * 1000), i18next.language) : "";
+    } else if(typeof value === "object") {
+        text = JSON.stringify(value);
+    } else {
+        text = String(value);
+    }
+    return text.toLowerCase().includes(String(term).toLowerCase());
 }
 
 function is_time_column(col)
@@ -2243,6 +2294,7 @@ function ac_language_changed(gobj, event, kw, src)
     yui_tabulator_relocalize(priv.tabulator, t);
     if(priv.tabulator) {
         priv.tabulator.redraw(true);    /*  the dates are written in the language  */
+        yui_table_filter_clear(priv.tabulator);     /*  the header was rebuilt  */
     }
     if(priv.selection) {
         priv.selection.refresh();   /*  a count composed at render time  */
