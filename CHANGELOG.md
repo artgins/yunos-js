@@ -8,6 +8,10 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.4.8, gui_treedb 1.3.6 + gobj-ui ^7.31.7 (2026-11-20)
+
+- `@yuneta/gobj-ui` 7.31.7: new icon `yi-qrcode`. No change of code here.
+
 ## gui_agent 1.4.7 (2026-11-19)
 
 - **gui_agent: every column of a table answer of the console can be searched.**
