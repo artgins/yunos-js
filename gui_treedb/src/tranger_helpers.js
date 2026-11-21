@@ -409,6 +409,25 @@ function parse_keys_answer(data)
 }
 
 /***************************************************************
+ *  The `list-keys` question of the saved-view check: which of these keys
+ *  the topic still has. EXACT keys (`key`, a list; SDK 7.32.0), never a
+ *  regex: an alternation of the saved keys grew past the backend's limit
+ *  on a compiled regex with some ten uuids, and the views stopped
+ *  reopening. The backend answers the keys it has, in the order asked.
+ *  A key wanted by two views (its Rows and its Live) is asked once.
+ *  `limit` is left out, so the answer is the plain list of the keys found.
+ ***************************************************************/
+function saved_keys_kw(service, topic_name, keys)
+{
+    return {
+        service:    service,
+        topic_name: topic_name,
+        key:        [...new Set((keys || []).map((k) => String(k)))],
+        __md_command__: {topic_name: topic_name, purpose: "restore"}
+    };
+}
+
+/***************************************************************
  *  The time span of every key a `list-keys` answer names, as a map keyed
  *  by the STRINGIFIED key: a topic with numeric keys answers with numbers
  *  while every caller (a Tabulator cell, a persisted view, a shared link)
@@ -471,6 +490,7 @@ export {
     encode_seg,
     decode_seg,
     parse_keys_answer,
+    saved_keys_kw,
     spans_from_rows,
     parse_records_page,
 };

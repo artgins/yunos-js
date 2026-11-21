@@ -142,6 +142,7 @@ import {
     decode_seg,
     parse_keys_answer,
     parse_records_page,
+    saved_keys_kw,
     spans_from_rows,
 } from "./tranger_helpers.js";
 
@@ -1057,9 +1058,13 @@ function request_keys_count(gobj, topic_name)
 
 /***************************************************************
  *  Command to remote service: do these saved key-views still point at keys
- *  that EXIST? One bounded query (`rkey` = the alternation of the saved
- *  keys) instead of the full key list the presence check used to be read
- *  from.
+ *  that EXIST? One bounded query with the saved keys as EXACT keys
+ *  (`list-keys key=[...]`, saved_keys_kw) instead of the full key list
+ *  the presence check used to be read from. Not a regex: GUIs ask with
+ *  exact keys (rkey is for the utilities). An alternation of the keys
+ *  passed the 1 KB limit on a compiled regex that SDK 7.32.0 had during
+ *  its review with some ten uuids, and every visit failed to reopen the
+ *  views. `key` needs SDK 7.32.0.
  ***************************************************************/
 function request_saved_keys(gobj, topic_name, keys)
 {
@@ -1069,14 +1074,8 @@ function request_saved_keys(gobj, topic_name, keys)
                   `'${topic_name}'`);
         return;
     }
-    let rkey = "^(" + keys.map(rx_escape).join("|") + ")$";
     gobj_command(remote, "list-keys",
-        {
-            service:    gobj_read_str_attr(gobj, "treedb_name"),
-            topic_name: topic_name,
-            rkey:       rkey,
-            __md_command__: {topic_name: topic_name, purpose: "restore"}
-        }, gobj);
+        saved_keys_kw(gobj_read_str_attr(gobj, "treedb_name"), topic_name, keys), gobj);
 }
 
 /***************************************************************
@@ -3968,7 +3967,7 @@ function ac_mt_command_answer(gobj, event, kw, src)
                 /*  The rows of the saved-view check carry the span of every key
                  *  a restored card is about to open on: this is what gives that
                  *  card's Rows options their bounds without the picker.  */
-                let rows = Array.isArray(data) ? data : [];
+                let rows = parse_keys_answer(data).rows;
                 remember_key_spans(gobj, rows);
                 restore_saved_views(gobj, rows);
                 break;

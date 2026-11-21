@@ -8,6 +8,24 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.3.7 (2026-11-21)
+
+- **gui_treedb: the saved views of a topic are checked with exact keys, not a
+  regex.** To reopen the saved views, gui_treedb asks the backend which of
+  their keys the topic still has. It asked with an `rkey` regex, the
+  alternation `^(k1|...|kn)$` of the saved keys. During the review of SDK
+  7.32.0 the backend had a limit of 1 KB on a compiled regex, and some ten
+  saved uuids passed it: each visit to the topic showed *"Bad rkey regex"*,
+  and no view reopened. Now it asks `list-keys` with `key`, the list of the
+  saved keys (a key wanted by two views is asked once), and the answer is read
+  as a list or as a page. GUIs ask with exact keys. `rkey` is for the
+  utilities (`tr2list --rkey`).
+- **`key` needs SDK 7.32.0 in the backend. Do not deploy this version until
+  every backend that gui_treedb talks to runs SDK 7.32.0.** gui_treedb does
+  not talk to the old agents (6.4.0).
+- New tests: `tranger_helpers.test.js` (the request) and
+  `tranger_view_restore.test.js` (its answer).
+
 ## gui_agent 1.4.8, gui_treedb 1.3.6 + gobj-ui ^7.31.7 (2026-11-20)
 
 - `@yuneta/gobj-ui` 7.31.7: new icon `yi-qrcode`. No change of code here.

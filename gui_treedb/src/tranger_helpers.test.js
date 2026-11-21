@@ -28,6 +28,7 @@ import {
     encode_seg,
     decode_seg,
     parse_keys_answer,
+    saved_keys_kw,
     spans_from_rows,
     parse_records_page,
 } from "./tranger_helpers.js";
@@ -399,5 +400,29 @@ describe("a bound of the range, filled and read back", () => {
             expect($box.value).toBe("2026-10-25T02:30");
             expect(read_bound($box, false)).toBe(second_pass - 3600);
         });
+    });
+});
+
+describe("the saved-view check asks for EXACT keys", () => {
+    it("sends the keys as a list under `key`, never a regex", () => {
+        const kw = saved_keys_kw("tranger_x", "topic_a", ["k1", "a.b", "x|y"]);
+        expect(kw).toEqual({
+            service:    "tranger_x",
+            topic_name: "topic_a",
+            key:        ["k1", "a.b", "x|y"],
+            __md_command__: {topic_name: "topic_a", purpose: "restore"}
+        });
+        expect(kw.rkey).toBeUndefined();
+        expect(kw.limit).toBeUndefined();     /*  the plain list of the keys found  */
+    });
+
+    it("asks a key wanted by two views once, and a number as its text", () => {
+        expect(saved_keys_kw("s", "t", ["k1", "k1", 7, "7"]).key).toEqual(["k1", "7"]);
+    });
+
+    it("a thousand uuids are a thousand keys, with no length limit of a regex", () => {
+        const uuids = Array.from({length: 1000}, (_, i) =>
+            `0a1b2c3d-0000-4000-8000-${String(i).padStart(12, "0")}`);
+        expect(saved_keys_kw("s", "t", uuids).key).toEqual(uuids);
     });
 });
