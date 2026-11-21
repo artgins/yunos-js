@@ -296,7 +296,7 @@ describe("a table answer has a filter per column", () => {
                 {id: "last_seen",  header: "Last Seen", type: "time",    fillspace: 24},
                 {id: "extra",      header: "Extra",     type: "json",    fillspace: 10}
             ],
-            data: [{id: "n1", hostname: "Orangepi-BFM2", connected: true,
+            data: [{id: "n1", hostname: "Box-B2", connected: true,
                     last_seen: 1794952462, extra: {os: "Ubuntu"}}],
             __md_iev__: {
                 console_node: NODE,
@@ -311,9 +311,9 @@ describe("a table answer has a filter per column", () => {
         );
 
         expect(col("hostname").headerFilter).toBe("input");
-        expect(match("hostname", "bfm2", "Orangepi-BFM2")).toBe(true);
-        expect(match("hostname", "em235", "Orangepi-BFM2")).toBe(false);
-        expect(match("hostname", "", "Orangepi-BFM2")).toBe(true);
+        expect(match("hostname", "b2", "Box-B2")).toBe(true);
+        expect(match("hostname", "a1", "Box-B2")).toBe(false);
+        expect(match("hostname", "", "Box-B2")).toBe(true);
         expect(match("last_seen", "2026", 1794952462)).toBe(true);
         expect(match("last_seen", "17949", 1794952462)).toBe(false);
         expect(match("extra", "ubuntu", {os: "Ubuntu"})).toBe(true);
