@@ -8,6 +8,20 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.3.8 (2026-11-21)
+
+- **gui_treedb: a failed `list-keys` of a topic the user has left shows no
+  error.** The answers to the key count and to the saved-view check of a topic
+  can arrive after the user moved to another topic. A successful answer of the old
+  topic was dropped, but a FAILED one showed its error first, over the topic
+  shown now. Up to 1.3.7 the error came before the check of the topic. Now an
+  answer of a topic the view has left is dropped first, failed or not. A
+  failed saved-view check of the topic shown still shows its error, and now
+  also drops the views it was asked for (they were kept, waiting for an
+  answer that had already come). New tests in `tranger_view_restore.test.js`.
+- **Deploy it only after every backend that gui_treedb talks to runs SDK
+  7.32.0**, as 1.3.7: the saved-view check asks `list-keys` with `key`.
+
 ## gui_treedb 1.3.7 (2026-11-21)
 
 - **gui_treedb: the saved views of a topic are checked with exact keys, not a

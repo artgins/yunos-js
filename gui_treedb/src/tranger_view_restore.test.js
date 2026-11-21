@@ -6,7 +6,11 @@
  *      purpose "restore"): the views whose key the topic still has are
  *      reopened, through the FSM (EV_OPEN_CARD), with the span of their
  *      key remembered; a stale saved view is skipped quietly, and a
- *      shared link to a missing key is said. The command answer of
+ *      shared link to a missing key is said. A FAILED check of a topic
+ *      the view has left is dropped with no error shown; one of the topic
+ *      shown says its error and drops the views it was asked for (up to
+ *      gui_treedb 1.3.7 the error came first, whatever the topic, and the
+ *      wanted views were kept). The command answer of
  *      C_TRANGER_VIEW is taken from the gclass and called with a gobj
  *      made here.
  *
@@ -59,13 +63,15 @@ function view(wanted)
     return {priv: {pending: {}, cur_topic: "t", key_spans: {}, wanted_views: wanted}};
 }
 
-function restore_answer(gobj, data, topic)
+function restore_answer(gobj, data, topic, failed, purpose)
 {
     answer_action()(gobj, "EV_MT_COMMAND_ANSWER", {
-        result: 0, comment: "", data: data,
+        result: failed ? -1 : 0,
+        comment: failed ? "Bad rkey regex" : "",
+        data: data,
         __command__: {
             command: "list-keys",
-            kw: {topic_name: topic || "t", purpose: "restore"}
+            kw: {topic_name: topic || "t", purpose: purpose || "restore"}
         },
     }, gobj);
 }
@@ -119,5 +125,32 @@ describe("the answer of the saved-view check", () => {
         restore_answer(gobj, [{key: "k1", records: 3}], "other");
         expect(sent).toEqual([]);
         expect(gobj.priv.wanted_views.length).toBe(1);
+    });
+
+    test("a failed check of a topic the view has left shows no error", () => {
+        const wanted = [{key: "k1", mode: "rows", match_cond: {}, restoring: true}];
+        const gobj = view(wanted);
+        gobj.priv.error_key = "";
+        restore_answer(gobj, null, "other", true);
+        expect(gobj.priv.error_key).toBe("");
+        /*  the wanted views are the CURRENT topic's: not touched  */
+        expect(gobj.priv.wanted_views).toBe(wanted);
+        expect(sent).toEqual([]);
+    });
+
+    test("a failed key count of a topic the view has left shows no error", () => {
+        const gobj = view(null);
+        gobj.priv.error_key = "";
+        restore_answer(gobj, null, "other", true, "count");
+        expect(gobj.priv.error_key).toBe("");
+    });
+
+    test("a failed check of the topic shown says it and drops its wanted views", () => {
+        const gobj = view([{key: "k1", mode: "rows", match_cond: {}, restoring: true}]);
+        gobj.priv.error_key = "";
+        restore_answer(gobj, null, "t", true);
+        expect(gobj.priv.error_key).toBe("Bad rkey regex");
+        expect(gobj.priv.wanted_views).toBe(null);
+        expect(sent).toEqual([]);
     });
 });

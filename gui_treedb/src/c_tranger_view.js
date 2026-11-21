@@ -3902,6 +3902,23 @@ function ac_mt_command_answer(gobj, event, kw, src)
         return 0;
     }
 
+    /*
+     *  The key count and the saved-view check: an answer of a topic the
+     *  user has left is dropped FIRST, failed or not -- its error is about
+     *  a topic no longer shown, and the views it was asked for belong to
+     *  that topic too. A failed check of the topic shown leaves nothing to
+     *  restore: its wanted views are dropped with the error.
+     */
+    if(command === "list-keys") {
+        let topic = kw_get_str(gobj, kw_command, "topic_name", "", 0);
+        if(topic !== priv.cur_topic) {
+            return 0;   /*  stale answer of a previous topic  */
+        }
+        if(result < 0 && kw_get_str(gobj, kw_command, "purpose", "", 0) === "restore") {
+            priv.wanted_views = null;
+        }
+    }
+
     if(result < 0) {
         /*  The fallback is a key of C_TRANGER_VIEW_ERROR_I18N_KEYS  */
         show_error(gobj, comment || `${command} failed`);
@@ -3948,10 +3965,6 @@ function ac_mt_command_answer(gobj, event, kw, src)
              *  the topic's key COUNT, or which saved views still point at a key
              *  that exists.  */
             let purpose = kw_get_str(gobj, kw_command, "purpose", "", 0);
-            let topic = kw_get_str(gobj, kw_command, "topic_name", "", 0);
-            if(topic !== priv.cur_topic) {
-                break;      /*  stale answer of a previous topic  */
-            }
 
             if(purpose === "count") {
                 /*  `limit=1` was asked, so the answer is the paged envelope —
