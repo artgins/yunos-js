@@ -8,6 +8,14 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_agent 1.4.9 + gobj-ui ^7.31.8 (2026-11-22)
+
+- `@yuneta/gobj-ui` 7.31.8. `fmt_date_time()` keeps one formatter for each language and zone. One key
+  typed in the filter of a table of 10 000 rows took 350 ms, and now takes 16 ms. A click on
+  an edge of the JSON graph draws only that edge and its two cards. Also i18next `^27.2.3`, and vitest and `@vitest/coverage-v8` `^5.1.1`. No change of
+  code here. Tests green (575), deployed to
+  the two control centers.
+
 ## gui_treedb 1.3.8 (2026-11-21)
 
 - **gui_treedb: a failed `list-keys` of a topic the user has left shows no
