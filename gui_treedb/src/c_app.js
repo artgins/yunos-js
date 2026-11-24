@@ -458,7 +458,9 @@ function rebuild_workspace_tabs(gobj, ws)
             /*  This tab's route, so the view can deep-link its
              *  selected topic / operation mode as <base_route>/<seg>. */
             base_route:  tab_route,
-            system:      false
+            /*  The topics view shows every topic, the system ones too:
+             *  this is the tool of whoever knows the treedb.  */
+            system:      (ws === "topics")
         };
         /*  Topic-card hash actions (topics workspace, treedb topics view only):
          *  each is a real hash link the shell routes. `{topic}` is filled per

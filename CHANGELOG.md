@@ -8,6 +8,21 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.3.10 + gobj-ui ^7.32.0 (2026-11-24)
+
+- The Topics workspace shows every topic of a treedb, the system topics (`__*__`) too
+  (`system: true`). It hid them, except `__icons__`. gui_treedb is the tool of whoever knows
+  the treedb. The Graphs workspace is not changed.
+- `@yuneta/gobj-ui` 7.32.0. The topic cards, the tabs and the site map are in alphabetical
+  order, and the system topics come first. They followed the order of the `descs` answer,
+  which changes from one load to the next. Tests green (311), deployed.
+
+## gui_agent 1.4.10 + gobj-ui ^7.32.0 (2026-11-24)
+
+- `@yuneta/gobj-ui` 7.32.0. The treedb topic cards, the tabs and the site map are in
+  alphabetical order, and the system topics come first. gui_agent already showed every
+  topic. No change of code here. Tests green, deployed.
+
 ## gui_treedb 1.3.9 + gobj-ui ^7.31.8 (2026-11-22)
 
 - `@yuneta/gobj-ui` 7.31.8. `fmt_date_time()` keeps one formatter for each language and zone. One key
