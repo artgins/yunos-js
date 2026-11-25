@@ -61,6 +61,7 @@ import {
     yui_tabulator_name_filters
 } from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 import {yui_table_filter_clear} from "@yuneta/gobj-ui/src/yui_table_filter_clear.js";
+import {yui_table_paging} from "@yuneta/gobj-ui/src/yui_table_standard.js";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 import {yui_copy_text, yui_copy_table_json} from "@yuneta/gobj-ui/src/yui_clipboard.js";
@@ -1672,6 +1673,11 @@ function render_table(gobj, schema, data)
     priv.tabulator = new Tabulator(host, {
         ...yui_tabulator_lang(t),   /*  Tabulator's OWN chrome, in our language  */
         ...yui_selection_settings(),
+        /*  The paginator always, every row of the answer loaded (gobj-ui
+         *  README, "Conventions" -> "A table: a filter on every column, the
+         *  paginator always, the toolbar in one row"). Copy takes the rows
+         *  the filters leave, on every page.  */
+        ...yui_table_paging(),
         data:           data,
         layout:         "fitDataFill",
         columns:        [yui_selection_column()].concat(make_columns_from_schema(schema)),

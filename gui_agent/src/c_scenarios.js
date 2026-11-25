@@ -54,6 +54,13 @@ import i18next, {t} from "i18next";
 import {fmt_date_time} from "@yuneta/gobj-ui/src/yui_date_text.js";
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {
+    yui_table_paging,
+    yui_table_filters,
+    yui_text_filter,
+    yui_table_wire,
+} from "@yuneta/gobj-ui/src/yui_table_standard.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
@@ -259,7 +266,7 @@ function build_dom(gobj)
     priv.$input = $input;
     let $search = createElement2(
         ["div", {class: "SCENARIOS_SEARCH_CONTROL control has-icons-left",
-                 style: "flex:1 1 12rem; max-width:22rem; min-width:0;"}, [
+                 style: "flex:0 1 22rem; min-width:8rem;"}, [
             $input,
             ["span", {class: "icon is-left"}, [["span", {class: "yi-magnifying-glass"}, ""]]]
         ]]
@@ -276,13 +283,14 @@ function build_dom(gobj)
     );
     priv.$refresh.addEventListener("click", () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj));
 
-    $c.appendChild(createElement2(
-        ["div", {class: "SCENARIOS_TOOLBAR is-flex is-align-items-center is-flex-wrap-wrap mb-2",
-                 style: "gap:0.5rem;"}, [
-            $search,
-            ["div", {class: "SCENARIOS_ACTIONS", style: "margin-left:auto;"}, [priv.$refresh]]
-        ]]
-    ));
+    /*  ONE row that scrolls sideways when it does not fit (gobj-ui README,
+     *  "Conventions" -> "A table: a filter on every column, the paginator
+     *  always, the toolbar in one row").  */
+    $c.appendChild(yui_toolbar({class: "SCENARIOS_TOOLBAR mb-2"}, [
+        $search,
+        ["div", {class: "SCENARIOS_ACTIONS yui-horizontal-toolbar-section",
+                 style: "margin-left:auto; padding-left:0.5rem;"}, [priv.$refresh]]
+    ]));
 
     priv.$help = createElement2(
         ["p", {class: "SCENARIOS_HELP is-size-7 has-text-grey mb-2", i18n: "scenarios list help"},
@@ -333,17 +341,19 @@ function make_columns(gobj)
             (r.updated_by ? ` <span class="has-text-grey">${esc(r.updated_by)}</span>` : "") + `</span>`;
     }
     return [
-        {title: t("scenario"), field: "id", widthGrow: 2, minWidth: 130, responsive: 0,
+        {title: t("scenario"), field: "id", widthGrow: 2, minWidth: 150, responsive: 0,
             sorter: "alphanum", variableHeight: true, cssClass: "SCENARIOS_CELL_WRAP",
             formatter: id_formatter},
-        {title: t("description"), field: "description", widthGrow: 3, minWidth: 140, responsive: 2,
+        {title: t("description"), field: "description", widthGrow: 3, minWidth: 150, responsive: 2,
             variableHeight: true, cssClass: "SCENARIOS_CELL_WRAP",
             formatter: (cell) => esc(cell.getValue() || "")},
-        {title: t("group"), field: "group", widthGrow: 1, minWidth: 90, responsive: 3,
+        {title: t("group"), field: "group", widthGrow: 1, minWidth: 150, responsive: 3,
             formatter: (cell) => esc(cell.getValue() || "")},
-        {title: t("yunos"), field: "yunos", width: 90, hozAlign: "right", responsive: 1},
-        {title: t("runs"), field: "runs", width: 90, hozAlign: "right", responsive: 4},
+        {title: t("yunos"), field: "yunos", width: 150, hozAlign: "right", responsive: 1},
+        {title: t("runs"), field: "runs", width: 150, hozAlign: "right", responsive: 4},
+        /*  Filtered by what it SHOWS: the date and who made the change.  */
         {title: t("updated"), field: "updated_at", widthGrow: 2, minWidth: 150, responsive: 5,
+            headerFilterFunc: yui_text_filter((r) => `${fmt_time(r.updated_at)} ${r.updated_by || ""}`),
             formatter: time_formatter}
     ];
 }
@@ -359,9 +369,13 @@ function create_table(gobj)
         maxHeight:        "100%",
         placeholder:      t("no scenarios"),
         columnDefaults:   {headerHozAlign: "left", resizable: true},
-        columns:          make_columns(gobj),
+        /*  The standard table: a filter on every column of data, the
+         *  paginator always, every scenario loaded.  */
+        ...yui_table_paging(),
+        columns:          yui_table_filters(make_columns(gobj)),
         initialSort:      [{column: "id", dir: "asc"}]
     });
+    yui_table_wire(table, t);
     table._ready = false;
     table.on("tableBuilt", function() {
         table._ready = true;
@@ -630,7 +644,7 @@ function ac_language_changed(gobj, event, kw, src)
         yui_tabulator_relocalize(table, t);
         try {
             table.options.placeholder = t("no scenarios");
-            table.setColumns(make_columns(gobj));
+            table.setColumns(yui_table_filters(make_columns(gobj)));
         } catch(e) {
             log_error(`${gobj_short_name(gobj)}: cannot re-render the table: ${e}`);
         }

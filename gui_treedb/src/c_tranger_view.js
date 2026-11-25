@@ -115,6 +115,7 @@ import {
 } from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
 import {epoch_to_ms, infer_period} from "@yuneta/gobj-ui/src/yui_time.js";
 
 import {keep_header_filters_named} from "./tabulator_filter_names.js";
@@ -296,31 +297,34 @@ const STYLE_CSS = `
     border-bottom: 1px solid var(--bulma-border, #dbdbdb);
     border-top-left-radius: var(--bulma-box-radius);
     border-top-right-radius: var(--bulma-box-radius);
-    /*  A phone cannot fit the title AND six icon buttons on one line: the head
-        WRAPS instead of running off the card. row-gap keeps the two lines apart
-        when it does; on a desktop there is only ever one line and nothing here
-        changes.  */
-    flex-wrap: wrap;
-    row-gap: 0.4rem;
+    /*  ONE row: the title, then the actions in a toolbar that scrolls
+        sideways when they do not fit.  */
+    flex-wrap: nowrap;
 }
-/*  The actions travel as ONE block (so they wrap together, not one button at a
-    time) and stay right-aligned — margin-left:auto does what the old flex:1
-    spacer did, and keeps doing it when the block is alone on the second line.  */
+/*  The toolbar of the actions takes what the title leaves of the row, and
+    may shrink below its content (min-width:0): what does not fit scrolls.
+    The yui_toolbar default width:100% would take the title's room.  */
+.C_TRANGER_VIEW .TRANGER_CARD_TOOLBAR {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+}
+/*  Right-aligned while the row fits: an auto margin takes the free space,
+    and when there is none it is 0 and the row scrolls from the left.  */
 .C_TRANGER_VIEW .TRANGER_CARD_ACTIONS {
     margin-left: auto;
-    flex-wrap: wrap;
-    justify-content: flex-end;
 }
-/*  The title is what gives: it ellipsizes instead of pushing the actions out
-    (min-width:0 is what lets a flex item shrink below its content).  */
+/*  The title gives too: it ellipsizes (min-width:0 is what lets a flex item
+    shrink below its content), and it never takes more than 60% of the row,
+    or a long key would leave no room for a single action.  */
 .C_TRANGER_VIEW .TRANGER_CARD_TITLE {
     min-width: 0;
+    max-width: 60%;
 }
-/*  On a phone the actions land on their own line, and there they must fit in
-    ONE: with the desktop gutters the sixth button (the ✕) fell to a third line
-    on its own. Tighter horizontal padding and gaps — the button KEEPS its
-    height, so the touch target stays ~40px, which is the point of the icon-only
-    mobile buttons in the first place.  */
+/*  On a phone, tighter horizontal padding and gaps, so more of the actions
+    are in view before the row scrolls. The button KEEPS its height, so the
+    touch target stays ~40px, which is the point of the icon-only mobile
+    buttons in the first place.  */
 @media (max-width: 768px) {
     .C_TRANGER_VIEW .TRANGER_CARD_ACTIONS > span {
         margin-left: 0.25rem !important;
@@ -787,8 +791,14 @@ function build_ui(gobj)
                  style: "height:100%; display:flex; flex-direction:column;"},
             [
                 ["div", {class: "tabs is-boxed mb-2 TRANGER_TOPICS"}, [$tabs]],
-                ["div", {class: "is-flex is-align-items-center mb-2 TRANGER_TOOLBAR"},
-                    [$keys_btn, $live_btn, $rows_btn, $json_btn, $meta]],
+                /*  ONE row that scrolls sideways when it does not fit
+                 *  (gobj-ui README, "Conventions" -> "A table: a filter on
+                 *  every column, the paginator always, the toolbar in one
+                 *  row").  */
+                yui_toolbar({class: "mb-2 TRANGER_TOOLBAR"}, [
+                    ["div", {class: "yui-horizontal-toolbar-section"},
+                        [$keys_btn, $live_btn, $rows_btn, $json_btn, $meta]]
+                ]),
                 $error,
                 $dashboard
             ]
@@ -3037,15 +3047,16 @@ function add_card(gobj, key, mode, match_cond, restoring)
                   "data-i18n-title": "column filters apply to the loaded rows only",
                   "data-i18n-aria-label": "column filters apply to the loaded rows only"},
             [["i", {class: "yi-circle-info"}]]]);
-    /*  The actions are ONE block, not six loose children of the head.
-     *
-     *  Loose, they could not wrap as a group: a Rows card carries six buttons
-     *  (options, columns, export, share, refresh, close), each is-flex-shrink-0,
-     *  and on a phone they simply ran off the right edge of the card — measured
-     *  at 390px: card 332px wide, head content 400px, the close button ending 60px
-     *  OUTSIDE the box. As a block they wrap to a second line of the head when
-     *  they do not fit (see the CSS), still right-aligned (margin-left:auto —
-     *  which also replaces the old flex:1 spacer).  */
+    /*  The actions are ONE block, not six loose children of the head: a
+     *  `yui_toolbar()` that takes what the title leaves of the row and
+     *  scrolls sideways when the buttons do not fit. A Rows card carries six
+     *  buttons (options, columns, export, share, refresh, close), and on a
+     *  phone (card 332px wide, head content 400px) they ran off the card.
+     *  Up to gui_treedb 1.3.10 the block wrapped to a second line of the
+     *  head; the rule is now one row (gobj-ui README, "Conventions" -> "A
+     *  table: a filter on every column, the paginator always, the toolbar
+     *  in one row"). Right-aligned while it fits (margin-left:auto, see the
+     *  CSS).  */
     /*
      *  The ORDER is the one every table toolbar of the ecosystem keeps
      *  (gobj-ui's treedb topic toolbar too): what is particular to the card
@@ -3074,8 +3085,10 @@ function add_card(gobj, key, mode, match_cond, restoring)
     push_action($export);
     push_action($close);
     head_children.push(
-        ["div", {class: "TRANGER_CARD_ACTIONS is-flex is-align-items-center"},
-            action_children]);
+        yui_toolbar({class: "TRANGER_CARD_TOOLBAR"}, [
+            ["div", {class: "TRANGER_CARD_ACTIONS yui-horizontal-toolbar-section"},
+                action_children]
+        ]));
 
     let $head = createElement2(
         ["div", {class: "TRANGER_CARD_HEAD is-flex is-align-items-center p-2"},

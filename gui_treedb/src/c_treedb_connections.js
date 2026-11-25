@@ -74,6 +74,12 @@ import {
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {
+    yui_table_paging,
+    yui_table_filters,
+    yui_table_wire,
+} from "@yuneta/gobj-ui/src/yui_table_standard.js";
 
 import {
     treedb_config_get_connections,
@@ -422,7 +428,7 @@ function build_ui(gobj)
 
     let $search_control = createElement2(
         ["div", {class: "CONNECTIONS_SEARCH_CONTROL control has-icons-left",
-                 style: "flex:1 1 12rem; max-width:22rem; min-width:0;"}, [
+                 style: "width:14rem;"}, [
             $search,
             ["span", {class: "icon is-left"}, [["span", {class: "yi-magnifying-glass"}, ""]]]
         ]]
@@ -475,30 +481,28 @@ function build_ui(gobj)
     let $container = createElement2(
         ["div", {class: "C_TREEDB_CONNECTIONS ytreedb-connections p-4"},
             [
-                /*  NOT Bulma's `.level`: below 769px it turns itself AND its
-                 *  two halves into `flex-direction: column`, so the three
-                 *  action buttons stacked one per line and ate the screen the
-                 *  table needed (`.level.is-mobile` does not fix it either —
-                 *  it only restores `display: flex`, leaving the halves in
-                 *  column). A plain flex row that wraps only if it must.  */
-                /*  NOT `space-between`: it pushed the search away from the
-                 *  title. The actions take the right with `margin-left`, the
-                 *  same way the two pickers do it.  */
-                ["div", {class: "CONNECTIONS_HEADER is-flex is-align-items-center "
-                              + "is-flex-wrap-wrap mb-3", style: "gap:.5rem;"}, [
-                    ["div", {class: "CONNECTIONS_TITLE is-flex is-align-items-center"}, [
+                /*  ONE row that scrolls sideways when it does not fit, never
+                 *  two (gobj-ui README, "Conventions" -> "A table: a filter
+                 *  on every column, the paginator always, the toolbar in one
+                 *  row"). Up to gui_treedb 1.3.10 it wrapped, and on a phone
+                 *  the title, the search and the actions took three rows of
+                 *  the screen the table needed. Each group is a section of
+                 *  the toolbar: it does not shrink and does not wrap. The
+                 *  actions take the right with `margin-left:auto` while the
+                 *  row fits.  */
+                yui_toolbar({class: "CONNECTIONS_HEADER mb-3"}, [
+                    ["div", {class: "CONNECTIONS_TITLE yui-horizontal-toolbar-section mr-2"}, [
                         ["h2", {class: "title is-5 mb-0", i18n: "connections"}, "Connections"],
                         $help_btn
                     ]],
-                    ["div", {class: "CONNECTIONS_FINDER is-flex is-align-items-center",
-                             style: "gap:.5rem; flex:1 1 14rem; max-width:24rem; min-width:0;"},
+                    ["div", {class: "CONNECTIONS_FINDER yui-horizontal-toolbar-section mr-2"},
                         [$search_control]],
-                    priv.$count,
-                    ["div", {class: "CONNECTIONS_ACTIONS is-flex is-align-items-center",
+                    ["div", {class: "yui-horizontal-toolbar-section mr-2"}, [priv.$count]],
+                    ["div", {class: "CONNECTIONS_ACTIONS yui-horizontal-toolbar-section",
                              style: "gap:.5rem; margin-left:auto;"},
                         [$add, $connect_many, $delete_many, $export, $import,
                          $paste, $file]]
-                ]],
+                ]),
                 $help,
                 $scan_errors,
                 $import_notice,
@@ -888,6 +892,7 @@ function make_columns(gobj)
      */
     return [
         {title: "", field: "_browse", width: 44, minWidth: 44, headerSort: false,
+            headerFilter: false,
             hozAlign: "center", headerHozAlign: "center", resizable: false,
             formatter: browse_formatter, cellClick: browse_click,
             titleFormatter: browse_title_formatter, headerClick: browse_header_click},
@@ -899,9 +904,12 @@ function make_columns(gobj)
             minWidth: 120, widthGrow: 1},
         {title: t("service"), field: "remote_yuno_service", editor: "input",
             minWidth: 120, widthGrow: 1},
+        /*  No filter: the status is not in the row, the formatter asks
+         *  the links for it.  */
         {title: t("status"), field: "_status", minWidth: 110, widthGrow: 1,
-            headerSort: false, formatter: status_formatter},
+            headerSort: false, headerFilter: false, formatter: status_formatter},
         {title: "", field: "_actions", width: 152, minWidth: 152, headerSort: false,
+            headerFilter: false,
             hozAlign: "right", formatter: action_formatter, cellClick: action_click}
     ];
 }
@@ -1001,10 +1009,22 @@ function create_table(gobj)
          *  what a deploy centre with hundreds of backends needs.  */
         placeholder:    t("no connections - click add connection"),
         columnDefaults: {headerHozAlign: "left", resizable: true},
-        columns:        make_columns(gobj)
+        /*  The standard table: a filter on every column of data, the
+         *  paginator always, every connection loaded.  */
+        ...yui_table_paging(),
+        columns:        yui_table_filters(make_columns(gobj))
     };
 
     let table = new Tabulator($div, settings);
+    yui_table_wire(table, t);
+    /*  The header box covers the rows the filters leave, and a header
+     *  filter changes them with no event of ours. `renderComplete` and not
+     *  `dataFiltered`: the latter runs inside the filter, before the table
+     *  holds the rows it kept, so `getData("active")` still answers the old
+     *  set there.  */
+    table.on("renderComplete", function() {
+        paint_browse_header(gobj);
+    });
     table.on("tableBuilt", function() {
         /*  The header is drawn BEFORE this, with no rows to cover, so the
          *  box it carries is born dead. Repaint it once the rows are in, or
@@ -1156,7 +1176,7 @@ function ac_language_changed(gobj, event, kw, src)
         table.options.placeholder = t("no connections - click add connection");
 
         /*  setColumns re-renders every row in the new language.  */
-        table.setColumns(make_columns(gobj));
+        table.setColumns(yui_table_filters(make_columns(gobj)));
     } catch(e) {
         log_warning(`${GCLASS_NAME}: table gone: ${e}`);
     }

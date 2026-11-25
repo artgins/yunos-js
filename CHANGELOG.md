@@ -8,6 +8,39 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.3.11 + gobj-ui ^7.32.3 (2026-11-25)
+
+- The tables follow the table rule of gobj-ui (its README, "Conventions": *A table: a filter
+  on every column, the paginator always, the toolbar in one row*). Connections and the
+  TreeDBs picker have a header filter on each column of data, the paginator at the bottom
+  at all times, and their toolbar in one row that scrolls sideways on a phone. They wrapped
+  into three rows there. The filter of the picker is a tree filter (`yui_tree_filter`): a
+  connection stays when one of its treedbs matches. The picker also puts Tabulator's own
+  text (the paginator, the filter boxes) in the new language when the language changes.
+- The tranger browser keeps its pages from the backend: it is the exception of the rule (a
+  topic can hold millions of records). Its toolbar and the head of each card are one row
+  that scrolls sideways. The head of a card wrapped its actions to a second line on a phone.
+- `@yuneta/gobj-ui` 7.32.3: the treedb topic table shows its paginator at all times, and its
+  toolbar is one row. Tests green (311), deployed and checked on the page at 390 and
+  1280 px (one toolbar row, the paginator drawn, a named filter on each column of data, no
+  console error).
+
+## gui_agent 1.4.11 + gobj-ui ^7.32.3 (2026-11-25)
+
+- The tables follow the table rule of gobj-ui (its README, "Conventions"): Nodes, the trees of
+  nodes and yunos (Schemas, Users), the users and the roles of a store, Scenarios and the
+  table of a console answer. Each column of data has a header filter, the footer shows the
+  paginator at all times, and each toolbar is one row that scrolls sideways on a phone. The
+  toolbars of Schemas, Users and Scenarios wrapped into two rows there.
+- A column that shows something else than its value filters by what it shows
+  (`yui_text_filter`): the status of a user ("enabled"), its roles, the creation time, the
+  grants of a role. The trees filter with `yui_tree_filter`: a node stays when one of its
+  yunos matches, and only those yunos are shown.
+- Two wiring tests had no `ResizeObserver` (the toolbar watches its width) and a mock of
+  `yui_tabulator_i18n.js` without `yui_tabulator_name_filters`. Both are given.
+- `@yuneta/gobj-ui` 7.32.3. Tests green (575), deployed on both control centers and checked
+  on the page at 390 and 1280 px, no console error.
+
 ## gui_treedb 1.3.10 + gobj-ui ^7.32.0 (2026-11-24)
 
 - The Topics workspace shows every topic of a treedb, the system topics (`__*__`) too

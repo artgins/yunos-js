@@ -55,6 +55,12 @@ import {t} from "i18next";
 
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {
+    yui_table_paging,
+    yui_table_filters,
+    yui_table_wire,
+} from "@yuneta/gobj-ui/src/yui_table_standard.js";
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
@@ -333,7 +339,7 @@ function build_dom(gobj)
 
     let $search_control = createElement2(
         ["div", {class: "NODES_SEARCH_CONTROL control has-icons-left",
-                 style: "flex:0 1 22rem; min-width:0;"}, [
+                 style: "flex:0 1 22rem; min-width:8rem;"}, [
             $input,
             ["span", {class: "icon is-left"}, [
                 ["span", {class: "yi-magnifying-glass"}, ""]
@@ -349,7 +355,6 @@ function build_dom(gobj)
         ["button", {
             class:        "NODES_COPY button",
             type:         "button",
-            style:        "margin-left:auto;",
             title:        t("copy the rows shown as json"),
             "aria-label": t("copy the rows shown as json"),
             "data-i18n-title": "copy the rows shown as json",
@@ -364,16 +369,21 @@ function build_dom(gobj)
 
     priv.$copy = $copy;
 
-    priv.$toolbar = createElement2(
-        ["div", {class: "NODES_TOOLBAR is-flex is-align-items-center mb-2", style: "gap:0.5rem;"}, [
-            $search_control,
+    /*  ONE row that scrolls sideways when it does not fit (gobj-ui README,
+     *  "Conventions" -> "A table: a filter on every column, the paginator
+     *  always, the toolbar in one row"). The search gives way down to 8rem
+     *  first; the buttons are a section, which does not shrink.  */
+    priv.$toolbar = yui_toolbar({class: "NODES_TOOLBAR mb-2"}, [
+        $search_control,
+        ["div", {class: "NODES_ACTIONS yui-horizontal-toolbar-section",
+                 style: "gap:0.5rem; margin-left:auto; padding-left:0.5rem;"}, [
             $copy,
             ["button", {class: "NODES_REFRESH button", type: "button", i18n: "refresh",
                         title: t("refresh"), "data-i18n-title": "refresh",
                         "aria-label": t("refresh"), "data-i18n-aria-label": "refresh"},
                 "Refresh", {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
         ]]
-    );
+    ]);
     $c.appendChild(priv.$toolbar);
 
     /*  Tabulator host  */
@@ -527,6 +537,7 @@ function make_columns(gobj)
      *  right; the node detail columns follow.  */
     return [
         {title: "", field: "_sel", width: 44, headerSort: false, hozAlign: "center",
+            headerFilter: false,
             formatter: sel_formatter, cellClick: sel_click,
             titleFormatter: selall_formatter, headerClick: selall_click},
         {title: t("host"),    field: "host",    formatter: host_formatter,
@@ -569,7 +580,10 @@ function create_table(gobj)
          *  column want very different room, and which of the two is
          *  being read changes with the fleet in front of them.  */
         columnDefaults: {headerHozAlign: "left", resizable: true},
-        columns:     make_columns(gobj),
+        /*  The standard table: a filter on every column of data, the
+         *  paginator always, every node loaded.  */
+        ...yui_table_paging(),
+        columns:     yui_table_filters(make_columns(gobj)),
         /*  Default order: by host, alphabetically -- a list of nodes is
          *  looked through by NAME. The version still sorts from its
          *  header, numerically (version_cmp).  */
@@ -578,6 +592,7 @@ function create_table(gobj)
     };
 
     let table = new Tabulator(`#${priv.table_id}`, settings);
+    yui_table_wire(table, t);
     table._ready = false;
     table.on("tableBuilt", function() {
         table._ready = true;
@@ -588,6 +603,9 @@ function create_table(gobj)
         update_count(gobj);
     });
     table.on("dataProcessed", () => update_count(gobj));
+    /*  A header filter changes the rows on screen with no event of ours;
+     *  `renderComplete` comes after the table holds the rows it kept.  */
+    table.on("renderComplete", () => update_count(gobj));
     gobj_write_attr(gobj, "tabulator", table);
 }
 
@@ -822,7 +840,7 @@ function ac_language_changed(gobj, event, kw, src)
     yui_tabulator_relocalize(table, t);
     try {
         table.options.placeholder = t("no nodes");
-        table.setColumns(make_columns(gobj));
+        table.setColumns(yui_table_filters(make_columns(gobj)));
     } catch(e) {
         log_error(`${gobj_short_name(gobj)}: cannot re-render the table: ${e}`);
         return -1;

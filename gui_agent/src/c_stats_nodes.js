@@ -50,6 +50,13 @@ import {t} from "i18next";
 
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {
+    yui_table_paging,
+    yui_table_filters,
+    yui_tree_filter,
+    yui_table_wire,
+} from "@yuneta/gobj-ui/src/yui_table_standard.js";
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
@@ -426,7 +433,7 @@ function build_dom(gobj)
 
     let $search_control = createElement2(
         ["div", {class: "STATNODES_SEARCH_CONTROL control has-icons-left",
-                 style: "flex:1 1 12rem; max-width:22rem; min-width:0;"}, [
+                 style: "flex:1 1 auto; min-width:0;"}, [
             $input,
             ["span", {class: "icon is-left"}, [
                 ["span", {class: "yi-magnifying-glass"}, ""]
@@ -494,13 +501,12 @@ function build_dom(gobj)
     }
     priv.$copy_conns = $copy_conns;
 
-    /*  The buttons travel TOGETHER. On one line they sit at the right of the
-     *  search box; on a phone the whole group drops to a second line instead
-     *  of each button pushing the search box a bit narrower until it reads
-     *  "Buscar h" and the last button falls off the screen.  */
+    /*  The buttons travel TOGETHER, as a section of the toolbar: it does
+     *  not shrink, so the search gives way first (down to its floor) and
+     *  then the row scrolls sideways.  */
     let $actions = createElement2(
-        ["div", {class: "STATNODES_ACTIONS is-flex is-align-items-center",
-                 style: "gap:0.5rem; margin-left:auto;"}, [
+        ["div", {class: "STATNODES_ACTIONS yui-horizontal-toolbar-section",
+                 style: "gap:0.5rem; margin-left:auto; padding-left:0.5rem;"}, [
             $copy,
             $copy_conns,
             ["button", {class: "STATNODES_REFRESH button", type: "button", i18n: "refresh",
@@ -510,20 +516,20 @@ function build_dom(gobj)
         ]]
     );
 
-    priv.$toolbar = createElement2(
-        ["div", {class: "STATNODES_TOOLBAR is-flex is-align-items-center is-flex-wrap-wrap mb-2",
-                 style: "gap:0.5rem;"}, [
-            /*  The fold and the search are ONE wrapping unit: the fold sits
-             *  immediately to the left of the box and a phone takes them to
-             *  the next line together. Same place in the three tables of
-             *  these apps — same thing, same spot. The actions keep the
-             *  right.  */
-            ["div", {class: "STATNODES_FINDER is-flex is-align-items-center",
-                     style: "gap:0.5rem; flex:1 1 14rem; max-width:24rem; min-width:0;"},
-                [$fold, $search_control]],
-            $actions
-        ]]
-    );
+    /*  ONE row that scrolls sideways when it does not fit, never two
+     *  (gobj-ui README, "Conventions" -> "A table: a filter on every
+     *  column, the paginator always, the toolbar in one row"). Up to
+     *  gui_agent 1.4.10 the actions dropped to a second line on a phone.  */
+    priv.$toolbar = yui_toolbar({class: "STATNODES_TOOLBAR mb-2"}, [
+        /*  The fold sits immediately to the left of the search box. Same
+         *  place in the three tables of these apps — same thing, same
+         *  spot. The unit gives way down to 11rem; the actions keep the
+         *  right.  */
+        ["div", {class: "STATNODES_FINDER is-flex is-align-items-center",
+                 style: "gap:0.5rem; flex:0 1 24rem; min-width:11rem;"},
+            [$fold, $search_control]],
+        $actions
+    ]);
     $c.appendChild(priv.$toolbar);
 
     priv.$tablewrap = createElement2(
@@ -777,8 +783,52 @@ function make_columns(gobj)
         gobj_send_event(gobj, "EV_TOGGLE_ALL_SELECTION", {}, gobj);
     }
 
+    /*  What the two columns SHOW, as text, for their header filters: the
+     *  name the formatter paints, and the words of the status. A tree
+     *  filter, because a node stays when one of its yunos matches.  */
+    function name_text(r)
+    {
+        if(r._type === "yuno") {
+            return r.label || "";
+        }
+        if(r._type === "empty") {
+            return "";
+        }
+        return `${r.host || ""} ${r.role || ""} ${r.version || ""}`;
+    }
+
+    function status_text(r)
+    {
+        if(r._type === "yuno") {
+            if(has_nothing_to_open(gobj, r)) {
+                return t(probe_kind(gobj) === "authz" ?
+                    "no users in this yuno" : "no treedb in this yuno");
+            }
+            let words = [t(r.running ? "running" : "stopped")];
+            switch(master_state(gobj, r)) {
+                case "master":
+                    words.push(t("master"));
+                    break;
+                case "readonly":
+                    words.push(t("read only"));
+                    break;
+                case "mixed":
+                    words.push(t("master mixed"));
+                    break;
+                default:
+                    break;
+            }
+            return words.join(" ");
+        }
+        if(r._type === "empty") {
+            return "";
+        }
+        return `${r.version ? "v" + r.version : ""} ${r.role || ""}`;
+    }
+
     return [
         {title: "", field: "_sel", width: 44, headerSort: false, hozAlign: "center",
+            headerFilter: false,
             formatter: sel_formatter, cellClick: sel_click,
             titleFormatter: selall_formatter, headerClick: selall_click},
         /*  The column of the row's KEY: a record is `id` + value, and a
@@ -786,9 +836,11 @@ function make_columns(gobj)
          *  of a node, `label` of a yuno); the sort is the id's, natural.  */
         {title: t("name"), field: "id", formatter: name_formatter, widthGrow: 2,
             sorter: "alphanum",
+            headerFilterFunc: yui_tree_filter(name_text, "_children"),
             variableHeight: true, cssClass: "STATNODES_CELL_WRAP"},
         {title: t("status"), field: "info", formatter: info_formatter, widthGrow: 1,
-            minWidth: 96, variableHeight: true, cssClass: "STATNODES_CELL_WRAP"}
+            headerFilterFunc: yui_tree_filter(status_text, "_children"),
+            minWidth: 150, variableHeight: true, cssClass: "STATNODES_CELL_WRAP"}
     ];
 }
 
@@ -809,7 +861,10 @@ function create_table(gobj)
          *  of its yunos want very different room on a phone and on a
          *  screen, and only the person reading knows which.  */
         columnDefaults:        {headerHozAlign: "left", resizable: true},
-        columns:               make_columns(gobj),
+        /*  The standard table: a filter on every column of data, the
+         *  paginator always, every node loaded.  */
+        ...yui_table_paging(),
+        columns:               yui_table_filters(make_columns(gobj)),
         dataTree:              true,
         dataTreeStartExpanded: false,
         dataTreeElementColumn: "id",
@@ -820,6 +875,13 @@ function create_table(gobj)
     };
 
     let table = new Tabulator(`#${priv.table_id}`, settings);
+    yui_table_wire(table, t);
+    /*  The header box is about what is SHOWN, and a header filter changes
+     *  that with no event of ours. `renderComplete` comes after the table
+     *  holds the rows it kept.  */
+    table.on("renderComplete", function() {
+        render_header_check(gobj);
+    });
     /*  Expanding a node is the moment its yunos become worth asking
      *  about: the Schemas picker probes them for a treedb here, and
      *  nowhere else, so a tree that is never opened costs nothing.  */
@@ -2244,7 +2306,7 @@ function ac_language_changed(gobj, event, kw, src)
     yui_tabulator_relocalize(table, t);
     try {
         table.options.placeholder = t("no nodes");
-        table.setColumns(make_columns(gobj));
+        table.setColumns(yui_table_filters(make_columns(gobj)));
     } catch(e) {
         log_error(`${gobj_short_name(gobj)}: cannot re-render the table: ${e}`);
         return -1;

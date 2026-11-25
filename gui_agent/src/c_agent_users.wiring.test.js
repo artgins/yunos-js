@@ -15,6 +15,20 @@ import {install_dom_double} from "../test/dom_double.js";
 
 install_dom_double();
 
+/*  The toolbar of the view is a yui_toolbar() (one row that scrolls
+ *  sideways), which watches its width with a ResizeObserver: the
+ *  document double has none.  */
+if(typeof globalThis.ResizeObserver === "undefined") {
+    globalThis.ResizeObserver = class {
+        observe() {
+        }
+        unobserve() {
+        }
+        disconnect() {
+        }
+    };
+}
+
 /*  What the confirm dialogs answer, and what they were asked.  */
 const confirm = {answer: true, asked: []};
 const modals = [];
@@ -48,6 +62,8 @@ vi.mock("@yuneta/gobj-ui/src/c_yui_shell.js", () => ({
 vi.mock("@yuneta/gobj-ui/src/yui_tabulator_i18n.js", () => ({
     yui_tabulator_lang: () => ({}),
     yui_tabulator_relocalize: () => {},
+    /*  read by yui_table_standard.js, the standard table  */
+    yui_tabulator_name_filters: () => {},
 }));
 
 vi.mock("@yuneta/gobj-ui/src/yui_inputs.js", () => ({

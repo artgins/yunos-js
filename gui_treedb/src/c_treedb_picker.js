@@ -61,7 +61,14 @@ import {
 import {conn_is_marked, open_error_detail} from "./conn_helpers.js";
 
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
-import {yui_tabulator_lang} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {
+    yui_table_paging,
+    yui_table_filters,
+    yui_tree_filter,
+    yui_table_wire,
+} from "@yuneta/gobj-ui/src/yui_table_standard.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
 
 import {TabulatorFull as Tabulator} from "tabulator-tables";
@@ -233,7 +240,7 @@ function build_ui(gobj)
 
     let $search_control = createElement2(
         ["div", {class: "PICKER_SEARCH_CONTROL control has-icons-left",
-                 style: "flex:1 1 12rem; max-width:22rem; min-width:0;"}, [
+                 style: "width:14rem;"}, [
             $search,
             ["span", {class: "icon is-left"}, [["span", {class: "yi-magnifying-glass"}, ""]]]
         ]]
@@ -279,24 +286,26 @@ function build_ui(gobj)
         ["div", {class: "ytreedb-picker p-4 C_TREEDB_PICKER",
                  style: "display:flex; flex-direction:column; height:100%;"},
             [
-                ["div", {class: "PICKER_HEADER is-flex is-align-items-center mb-3",
-                         style: "gap:.5rem; flex-wrap:wrap;"}, [
-                    /*  The fold belongs with what you are LOOKING at, not
-                     *  with what you do to it — and it hugs the LEFT EDGE, so
-                     *  a phone that wraps this row keeps it where the eye
-                     *  starts instead of leaving it floating at the end of a
-                     *  line. Same place in the three tables of these apps.  */
-                    ["h2", {class: "title is-5 mb-0", i18n: "treedbs"}, "TreeDBs"],
-                    /*  The fold and the search are ONE wrapping unit: they
-                     *  never end up on different lines.  */
-                    ["div", {class: "PICKER_FINDER is-flex is-align-items-center",
-                             style: "gap:.5rem; flex:1 1 14rem; max-width:24rem; min-width:0;"},
+                /*  ONE row that scrolls sideways when it does not fit, never
+                 *  two (gobj-ui README, "Conventions" -> "A table: a filter
+                 *  on every column, the paginator always, the toolbar in one
+                 *  row"). Each group is a section of the toolbar: it does not
+                 *  shrink and does not wrap.  */
+                yui_toolbar({class: "PICKER_HEADER mb-3", style: "flex:none;"}, [
+                    ["div", {class: "yui-horizontal-toolbar-section mr-2"}, [
+                        ["h2", {class: "title is-5 mb-0", i18n: "treedbs"}, "TreeDBs"]
+                    ]],
+                    /*  The fold belongs with what you are LOOKING at: next to
+                     *  the search, the same place in the three tables of
+                     *  these apps.  */
+                    ["div", {class: "PICKER_FINDER yui-horizontal-toolbar-section mr-2",
+                             style: "gap:.5rem;"},
                         [$fold, $search_control]],
-                    priv.$count,
-                    ["div", {class: "PICKER_ACTIONS is-flex is-align-items-center",
+                    ["div", {class: "yui-horizontal-toolbar-section mr-2"}, [priv.$count]],
+                    ["div", {class: "PICKER_ACTIONS yui-horizontal-toolbar-section",
                              style: "gap:.5rem; margin-left:auto;"},
                         [$manage]]
-                ]],
+                ]),
                 ["div", {class: "PICKER_TABLEWRAP", style: "flex:1; min-height:0;"},
                     [$body]]
             ]
@@ -542,14 +551,21 @@ function make_columns(gobj)
         return bits.join("");
     }
 
+    /*  The filter of the name reads what the search box reads (`_search`:
+     *  the label and the url of the connection, and the service of a
+     *  treedb row). A tree filter: a connection stays when one of its
+     *  treedbs matches.  */
+    let name_filter = yui_tree_filter((d) => d._search, "_children");
+
     return [
         {title: "", field: "_check", width: 44, minWidth: 44, hozAlign: "center",
-            headerSort: false, resizable: false,
+            headerSort: false, resizable: false, headerFilter: false,
             formatter: check_formatter, cellClick: check_click},
         {title: t("treedb"), field: "name", minWidth: 220, widthGrow: 2,
+            headerFilterFunc: name_filter,
             formatter: name_formatter},
         {title: "", field: "_info", minWidth: 260, widthGrow: 3,
-            headerSort: false, formatter: info_formatter}
+            headerSort: false, headerFilter: false, formatter: info_formatter}
     ];
 }
 
@@ -571,12 +587,16 @@ function create_table(gobj)
         maxHeight:             "100%",
         placeholder:           priv.$placeholder,
         columnDefaults:        {headerHozAlign: "left", resizable: false},
-        columns:               make_columns(gobj),
+        /*  The standard table: the filter of each column of data, the
+         *  paginator always, every connection loaded.  */
+        ...yui_table_paging(),
+        columns:               yui_table_filters(make_columns(gobj)),
         dataTree:              true,
         dataTreeStartExpanded: false,
         dataTreeElementColumn: "name",
         dataTreeChildField:    "_children"
     });
+    yui_table_wire(table, t);
     table._ready = false;
     table.on("tableBuilt", function() {
         table._ready = true;
@@ -741,6 +761,21 @@ function render(gobj)
 
 function ac_refresh(gobj, event, kw, src)
 {
+    render(gobj);
+    return 0;
+}
+
+/***************************************************************
+ *  A language switch: the rows are built with t() and are drawn
+ *  again, and Tabulator's own chrome (the paginator, the filter
+ *  boxes) takes the new language.
+ ***************************************************************/
+function ac_language_changed(gobj, event, kw, src)
+{
+    let priv = gobj.priv;
+    if(priv.table && priv.table._ready) {
+        yui_tabulator_relocalize(priv.table, t);
+    }
     render(gobj);
     return 0;
 }
@@ -957,7 +992,7 @@ function create_gclass(gclass_name)
             ["EV_ON_CLOSE",                 ac_refresh, null],
             ["EV_ON_OPEN_ERROR",            ac_refresh, null],
             /*  a language switch is a re-render: this view is built with t()  */
-            ["EV_LANGUAGE_CHANGED",         ac_refresh, null],
+            ["EV_LANGUAGE_CHANGED",         ac_language_changed, null],
             ["EV_MANAGE_CONNECTIONS",       ac_manage_connections, null],
             ["EV_TOGGLE_SERVICE",           ac_toggle_service, null],
             ["EV_TOGGLE_CONNECTION",        ac_toggle_connection, null],

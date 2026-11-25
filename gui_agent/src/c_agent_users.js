@@ -105,6 +105,13 @@ import {
     yui_shell_confirm_danger,
 } from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
+import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {
+    yui_table_paging,
+    yui_table_filters,
+    yui_text_filter,
+    yui_table_wire,
+} from "@yuneta/gobj-ui/src/yui_table_standard.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
 import {TabulatorFull as Tabulator} from "tabulator-tables";
 
@@ -373,7 +380,7 @@ function build_dom(gobj)
 
     let $search = createElement2(
         ["div", {class: "USERS_SEARCH_CONTROL control has-icons-left",
-                 style: "flex:1 1 12rem; max-width:22rem; min-width:0;"}, [
+                 style: "flex:0 1 22rem; min-width:8rem;"}, [
             $input,
             ["span", {class: "icon is-left"}, [["span", {class: "yi-magnifying-glass"}, ""]]]
         ]]
@@ -391,7 +398,8 @@ function build_dom(gobj)
     priv.$show_roles = createElement2(button_spec("USERS_VIEW_ROLES", "yi-user-shield", "roles", true));
     priv.$show_roles.addEventListener("click", () =>
         gobj_send_event(gobj, "EV_SHOW_VIEW", {view: "roles"}, gobj));
-    let $views = createElement2(["div", {class: "USERS_VIEWS buttons has-addons mb-0"},
+    let $views = createElement2(["div", {class: "USERS_VIEWS buttons has-addons mb-0 mr-2 " +
+                                               "yui-horizontal-toolbar-section"},
         [priv.$show_users, priv.$show_roles]]);
 
     priv.$refresh = createElement2(button_spec("USERS_REFRESH", "yi-arrows-rotate", "refresh", false));
@@ -403,17 +411,20 @@ function build_dom(gobj)
     );
     priv.$badge = createElement2(["span", {class: "USERS_MASTER_BADGE"}, ""]);
 
-    priv.$toolbar = createElement2(
-        ["div", {class: "USERS_TOOLBAR is-flex is-align-items-center is-flex-wrap-wrap mb-2",
-                 style: "gap:0.5rem;"}, [
-            ["div", {class: "USERS_TITLE is-flex is-align-items-center",
-                     style: "gap:0.5rem; min-width:0;"}, [priv.$heading, priv.$badge]],
-            $views,
-            $search,
-            ["div", {class: "USERS_ACTIONS is-flex is-align-items-center",
-                     style: "gap:0.5rem; margin-left:auto;"}, [priv.$new, priv.$refresh]]
-        ]]
-    );
+    /*  ONE row that scrolls sideways when it does not fit, never two
+     *  (gobj-ui README, "Conventions" -> "A table: a filter on every
+     *  column, the paginator always, the toolbar in one row"). The groups
+     *  are sections of the toolbar, which do not shrink: the search gives
+     *  way first, down to 8rem.  */
+    priv.$toolbar = yui_toolbar({class: "USERS_TOOLBAR mb-2"}, [
+        ["div", {class: "USERS_TITLE yui-horizontal-toolbar-section mr-2",
+                 style: "gap:0.5rem;"}, [priv.$heading, priv.$badge]],
+        $views,
+        $search,
+        ["div", {class: "USERS_ACTIONS yui-horizontal-toolbar-section",
+                 style: "gap:0.5rem; margin-left:auto; padding-left:0.5rem;"},
+            [priv.$new, priv.$refresh]]
+    ]);
     $c.appendChild(priv.$toolbar);
 
     priv.$replica = createElement2(
@@ -514,18 +525,33 @@ function make_columns(gobj)
         return `<span class="USERS_TIME">${esc(fmt_time(v))}</span>`;
     }
 
+    /*  The status, the roles and the time are filtered by what they SHOW:
+     *  a filter compares the value otherwise, and "enabled" finds nothing
+     *  in a column of `false`.  */
+    function status_text(r)
+    {
+        let words = [t(r.disabled ? "disabled" : "enabled")];
+        if(r.immutable) {
+            words.push(t("protected"));
+        }
+        return words.join(" ");
+    }
+
     return [
-        {title: t("user"), field: "id", widthGrow: 3, minWidth: 120, responsive: 0,
+        {title: t("user"), field: "id", widthGrow: 3, minWidth: 150, responsive: 0,
             sorter: "alphanum", variableHeight: true, cssClass: "USERS_CELL_WRAP",
             formatter: (cell) =>
                 `<span class="USERS_NAME has-text-weight-semibold">${esc(cell.getValue())}</span>`},
-        {title: t("status"), field: "disabled", widthGrow: 1, minWidth: 116, responsive: 1,
+        {title: t("status"), field: "disabled", widthGrow: 1, minWidth: 150, responsive: 1,
+            headerFilterFunc: yui_text_filter(status_text),
             variableHeight: true, cssClass: "USERS_CELL_WRAP", formatter: status_formatter},
-        {title: t("roles"), field: "roles", widthGrow: 2, minWidth: 110, responsive: 2,
+        {title: t("roles"), field: "roles", widthGrow: 2, minWidth: 150, responsive: 2,
+            headerFilterFunc: yui_text_filter((r) => (r.roles || []).join(", ")),
             headerSort: false, variableHeight: true, cssClass: "USERS_CELL_WRAP",
             formatter: roles_formatter},
-        {title: t("sessions"), field: "sessions", width: 120, hozAlign: "right", responsive: 3},
+        {title: t("sessions"), field: "sessions", width: 150, hozAlign: "right", responsive: 3},
         {title: t("created"), field: "time", widthGrow: 1, minWidth: 150, responsive: 4,
+            headerFilterFunc: yui_text_filter((r) => r.time ? fmt_time(r.time) : ""),
             formatter: time_formatter}
     ];
 }
@@ -544,9 +570,13 @@ function create_table(gobj)
         maxHeight:        "100%",
         placeholder:      t("no users"),
         columnDefaults:   {headerHozAlign: "left", resizable: true},
-        columns:          make_columns(gobj),
+        /*  The standard table: a filter on every column of data, the
+         *  paginator always, every user loaded.  */
+        ...yui_table_paging(),
+        columns:          yui_table_filters(make_columns(gobj)),
         initialSort:      [{column: "id", dir: "asc"}]
     });
+    yui_table_wire(table, t);
     table._ready = false;
     table.on("tableBuilt", function() {
         table._ready = true;
@@ -654,21 +684,40 @@ function make_role_columns(gobj)
         return s;
     }
 
+    function role_status_text(r)
+    {
+        let words = [t(r.disabled ? "disabled" : "enabled")];
+        if(r.immutable) {
+            words.push(t("protected"));
+        }
+        return words.join(" ");
+    }
+
+    function grants_text(r)
+    {
+        return role_grants(r).map((g) => {
+            return `${g.deny ? t("deny") + " " : ""}${g.permission} ${format_scope(g.scope) || ""}`;
+        }).join(" ");
+    }
+
     return [
-        {title: t("role"), field: "id", widthGrow: 2, minWidth: 120, responsive: 0,
+        {title: t("role"), field: "id", widthGrow: 2, minWidth: 150, responsive: 0,
             sorter: "alphanum", variableHeight: true, cssClass: "USERS_CELL_WRAP",
             formatter: (cell) =>
                 `<span class="USERS_ROLE_NAME has-text-weight-semibold">${esc(cell.getValue())}</span>`},
         {title: t("grants"), field: "permission", widthGrow: 4, minWidth: 180, responsive: 0,
+            headerFilterFunc: yui_text_filter(grants_text),
             headerSort: false, variableHeight: true, cssClass: "USERS_CELL_WRAP",
             formatter: grants_formatter},
-        {title: t("users"), field: "users", widthGrow: 2, minWidth: 110, responsive: 1,
+        {title: t("users"), field: "users", widthGrow: 2, minWidth: 150, responsive: 1,
+            headerFilterFunc: yui_text_filter((r) => (r.users || []).join(", ")),
             headerSort: false, variableHeight: true, cssClass: "USERS_CELL_WRAP",
             formatter: users_formatter},
-        {title: t("description"), field: "description", widthGrow: 3, minWidth: 140, responsive: 2,
+        {title: t("description"), field: "description", widthGrow: 3, minWidth: 150, responsive: 2,
             variableHeight: true, cssClass: "USERS_CELL_WRAP"},
-        {title: t("service"), field: "service", widthGrow: 1, minWidth: 100, responsive: 3},
-        {title: t("status"), field: "disabled", widthGrow: 1, minWidth: 130, responsive: 4,
+        {title: t("service"), field: "service", widthGrow: 1, minWidth: 150, responsive: 3},
+        {title: t("status"), field: "disabled", widthGrow: 1, minWidth: 150, responsive: 4,
+            headerFilterFunc: yui_text_filter(role_status_text),
             variableHeight: true, cssClass: "USERS_CELL_WRAP", formatter: status_formatter}
     ];
 }
@@ -684,9 +733,12 @@ function create_roles_table(gobj)
         maxHeight:        "100%",
         placeholder:      t("no roles in this store"),
         columnDefaults:   {headerHozAlign: "left", resizable: true},
-        columns:          make_role_columns(gobj),
+        /*  The standard table, as the users one.  */
+        ...yui_table_paging(),
+        columns:          yui_table_filters(make_role_columns(gobj)),
         initialSort:      [{column: "id", dir: "asc"}]
     });
+    yui_table_wire(table, t);
     table._ready = false;
     table.on("tableBuilt", function() {
         table._ready = true;
@@ -2071,7 +2123,7 @@ function ac_language_changed(gobj, event, kw, src)
         yui_tabulator_relocalize(table, t);
         try {
             table.options.placeholder = t("no users");
-            table.setColumns(make_columns(gobj));
+            table.setColumns(yui_table_filters(make_columns(gobj)));
         } catch(e) {
             log_error(`${gobj_short_name(gobj)}: cannot re-render the table: ${e}`);
         }
@@ -2081,7 +2133,7 @@ function ac_language_changed(gobj, event, kw, src)
         yui_tabulator_relocalize(roles_table, t);
         try {
             roles_table.options.placeholder = t("no roles in this store");
-            roles_table.setColumns(make_role_columns(gobj));
+            roles_table.setColumns(yui_table_filters(make_role_columns(gobj)));
         } catch(e) {
             log_error(`${gobj_short_name(gobj)}: cannot re-render the roles table: ${e}`);
         }
