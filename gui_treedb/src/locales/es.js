@@ -533,6 +533,7 @@ const es = {
         "copy json": "Copiar JSON",
         "click to load": "Clic para cargar",
         "rows": "Filas",
+        "rows_one": "Fila",
         "live": "En vivo",
         "actions": "Acciones",
         "delete this key and every record it holds": "¿Borrar esta clave y todos los registros que contiene?",

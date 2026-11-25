@@ -579,6 +579,7 @@ const en = {
         "type":              "Type",
         "key":               "key",
         "rows":              "Rows",
+        "rows_one":          "Row",
         "raw json":          "Raw JSON",
         "schema json":          "Schema JSON",
         "schema editor": "Editor",

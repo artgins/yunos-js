@@ -8,6 +8,12 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.3.13, gui_agent 1.4.13 + gobj-ui ^7.32.5 (2026-11-25)
+
+- The row count of the tables takes the plural of its number: "1 Fila", "13 Filas". New key
+  `rows_one` in both locales of both yunos (es "Fila", en "Row"). Up to 1.3.12 / 1.4.12 one
+  row read "1 Filas". Tests green (311, 575), deployed, "1 Fila" read on the page.
+
 ## gui_treedb 1.3.12 + gobj-ui ^7.32.4 (2026-11-25)
 
 - The head of Connections counts only the connections marked to browse, and the head of the

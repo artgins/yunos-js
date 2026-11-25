@@ -587,6 +587,7 @@ const es = {
         "type":              "Tipo",
         "key":               "Clave",
         "rows":              "Filas",
+        "rows_one":          "Fila",
         "raw json":          "JSON crudo",
         "schema json":          "JSON del esquema",
         "schema editor": "Editor",

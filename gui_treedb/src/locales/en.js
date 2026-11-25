@@ -529,6 +529,7 @@ const en = {
         "copy json": "Copy JSON",
         "click to load": "Click to load",
         "rows": "Rows",
+        "rows_one": "Row",
         "live": "Live",
         "actions": "Actions",
         "delete this key and every record it holds": "Delete this key and every record it holds?",
