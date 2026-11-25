@@ -50,7 +50,7 @@ import {t} from "i18next";
 
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
-import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {yui_toolbar, yui_toolbar_icon} from "@yuneta/gobj-ui/src/yui_toolbar.js";
 import {
     yui_table_paging,
     yui_table_filters,
@@ -447,13 +447,15 @@ function build_dom(gobj)
      *  "Actualizar" do not both fit at 360px in Spanish.  */
     /*  One control for the whole tree: with a screen of nodes, opening or
      *  closing them one expander at a time is the work the button exists to
-     *  save. Its icon says what the CLICK will do — chevron-down while
-     *  something is still folded, chevron-right once everything is open.  */
+     *  save. Its icon says what the CLICK will do — the double chevron of
+     *  "all of it" (gobj-ui's icon rule): angles-down while something is
+     *  still folded, angles-up once everything is open. Up to gui_agent
+     *  1.4.13 it was the chevron of ONE row's handle.  */
     let $fold = createElement2(
         ["button", {class: "STATNODES_FOLD button", type: "button",
                     title: t("expand all"), "aria-label": t("expand all"),
                     "data-i18n-title": "expand all", "data-i18n-aria-label": "expand all"},
-            [["span", {class: "icon"}, [["span", {class: "yi-chevron-down"}, ""]]]],
+            [["span", {class: "icon"}, [yui_toolbar_icon("yi-angles-down")]]],
             {click: () => gobj_send_event(gobj, "EV_TOGGLE_FOLD", {}, gobj)}
         ]);
     priv.$fold = $fold;
@@ -467,7 +469,7 @@ function build_dom(gobj)
             "data-i18n-title": "copy the rows shown as json",
             "data-i18n-aria-label": "copy the rows shown as json"
         }, [
-            ["span", {class: "icon"}, [["span", {class: "yi-copy"}, ""]]],
+            ["span", {class: "icon"}, [yui_toolbar_icon("yi-copy")]],
             ["span", {class: "is-hidden-mobile", i18n: "copy json"}, "Copy JSON"]
         ], {
             click: () => gobj_send_event(gobj, "EV_COPY_JSON", {}, gobj)
@@ -492,7 +494,7 @@ function build_dom(gobj)
                 "data-i18n-title": "copy the yunos shown as treedb connections",
                 "data-i18n-aria-label": "copy the yunos shown as treedb connections"
             }, [
-                ["span", {class: "icon"}, [["span", {class: "yi-link"}, ""]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-link")]],
                 ["span", {class: "is-hidden-mobile", i18n: "for treedb"}, "For TreeDB"]
             ], {
                 click: () => gobj_send_event(gobj, "EV_COPY_CONNS", {}, gobj)
@@ -509,10 +511,12 @@ function build_dom(gobj)
                  style: "gap:0.5rem; margin-left:auto; padding-left:0.5rem;"}, [
             $copy,
             $copy_conns,
-            ["button", {class: "STATNODES_REFRESH button", type: "button", i18n: "refresh",
+            ["button", {class: "STATNODES_REFRESH button", type: "button",
                         title: t("refresh"), "data-i18n-title": "refresh",
-                        "aria-label": t("refresh"), "data-i18n-aria-label": "refresh"},
-                "Refresh", {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
+                        "aria-label": t("refresh"), "data-i18n-aria-label": "refresh"}, [
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-arrows-rotate")]],
+                ["span", {class: "is-hidden-mobile", i18n: "refresh"}, "Refresh"]
+            ], {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
         ]]
     );
 
@@ -1949,9 +1953,9 @@ function render_fold(gobj)
     }
     let expand = some_folded(gobj);
     let key = expand ? "expand all" : "collapse all";
-    let $icon = $fold.querySelector("span.icon > span");
+    let $icon = $fold.querySelector("span.icon > i");
     if($icon) {
-        $icon.className = expand ? "yi-chevron-down" : "yi-chevron-right";
+        $icon.className = expand ? "yi-angles-down" : "yi-angles-up";
     }
     $fold.title = t(key);
     $fold.setAttribute("aria-label", t(key));

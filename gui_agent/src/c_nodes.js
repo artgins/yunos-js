@@ -55,7 +55,7 @@ import {t} from "i18next";
 
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
-import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {yui_toolbar, yui_toolbar_icon} from "@yuneta/gobj-ui/src/yui_toolbar.js";
 import {
     yui_table_paging,
     yui_table_filters,
@@ -360,7 +360,7 @@ function build_dom(gobj)
             "data-i18n-title": "copy the rows shown as json",
             "data-i18n-aria-label": "copy the rows shown as json"
         }, [
-            ["span", {class: "icon"}, [["span", {class: "yi-copy"}, ""]]],
+            ["span", {class: "icon"}, [yui_toolbar_icon("yi-copy")]],
             ["span", {class: "is-hidden-mobile", i18n: "copy json"}, "Copy JSON"]
         ], {
             click: () => gobj_send_event(gobj, "EV_COPY_JSON", {}, gobj)
@@ -378,10 +378,12 @@ function build_dom(gobj)
         ["div", {class: "NODES_ACTIONS yui-horizontal-toolbar-section",
                  style: "gap:0.5rem; margin-left:auto; padding-left:0.5rem;"}, [
             $copy,
-            ["button", {class: "NODES_REFRESH button", type: "button", i18n: "refresh",
+            ["button", {class: "NODES_REFRESH button", type: "button",
                         title: t("refresh"), "data-i18n-title": "refresh",
-                        "aria-label": t("refresh"), "data-i18n-aria-label": "refresh"},
-                "Refresh", {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
+                        "aria-label": t("refresh"), "data-i18n-aria-label": "refresh"}, [
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-arrows-rotate")]],
+                ["span", {class: "is-hidden-mobile", i18n: "refresh"}, "Refresh"]
+            ], {click: () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj)}]
         ]]
     ]);
     $c.appendChild(priv.$toolbar);

@@ -54,7 +54,7 @@ import i18next, {t} from "i18next";
 import {fmt_date_time} from "@yuneta/gobj-ui/src/yui_date_text.js";
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
-import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {yui_toolbar, yui_toolbar_icon} from "@yuneta/gobj-ui/src/yui_toolbar.js";
 import {
     yui_table_paging,
     yui_table_filters,
@@ -277,7 +277,7 @@ function build_dom(gobj)
         ["button", {class: "SCENARIOS_REFRESH button", type: "button",
                     title: t("refresh"), "data-i18n-title": "refresh",
                     "aria-label": t("refresh"), "data-i18n-aria-label": "refresh"}, [
-            ["span", {class: "icon"}, [["span", {class: "yi-arrows-rotate"}, ""]]],
+            ["span", {class: "icon"}, [yui_toolbar_icon("yi-arrows-rotate")]],
             ["span", {class: "is-hidden-mobile", i18n: "refresh"}, t("refresh")]
         ]]
     );

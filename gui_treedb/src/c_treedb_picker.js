@@ -62,7 +62,7 @@ import {conn_is_marked, open_error_detail} from "./conn_helpers.js";
 
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
-import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {yui_toolbar, yui_toolbar_icon} from "@yuneta/gobj-ui/src/yui_toolbar.js";
 import {
     yui_table_paging,
     yui_table_filters,
@@ -249,12 +249,14 @@ function build_ui(gobj)
 
     /*  One control for the whole tree: with a screen of connections, opening
      *  or closing them one expander at a time is the work this saves. The
-     *  icon says what the CLICK will do.  */
+     *  icon says what the CLICK will do, with the double chevron of "all of
+     *  it" (gobj-ui's icon rule): angles-down, angles-up. Up to gui_treedb
+     *  1.3.13 it was the chevron of ONE row's handle.  */
     let $fold = createElement2(
         ["button", {class: "PICKER_FOLD button", type: "button",
                     title: t("expand all"), "aria-label": t("expand all"),
                     "data-i18n-title": "expand all", "data-i18n-aria-label": "expand all"},
-            [["span", {class: "icon"}, [["span", {class: "yi-chevron-down"}, ""]]]],
+            [["span", {class: "icon"}, [yui_toolbar_icon("yi-angles-down")]]],
             {click: () => gobj_send_event(gobj, "EV_TOGGLE_FOLD", {}, gobj)}
         ]);
     priv.$fold = $fold;
@@ -268,12 +270,16 @@ function build_ui(gobj)
     priv.$placeholder = createElement2(
         ["div", {class: "PICKER_PLACEHOLDER"}, ""]);
 
+    /*  The icon of the Connections entry of the rail (yi-server), at the
+     *  toolbar's size; the label hides on a phone like the others.  */
     let $manage = createElement2(
         ["button", {class: "button PICKER_MANAGE",
                     title: t("manage connections"), "data-i18n-title": "manage connections",
                     "aria-label": t("manage connections"),
-                    "data-i18n-aria-label": "manage connections",
-                    i18n: "manage connections"}, "Manage connections"]);
+                    "data-i18n-aria-label": "manage connections"}, [
+            ["span", {class: "icon"}, [yui_toolbar_icon("yi-server")]],
+            ["span", {class: "is-hidden-mobile", i18n: "manage connections"}, "Manage connections"]
+        ]]);
     $manage.addEventListener("click", () => {
         gobj_send_event(gobj, "EV_MANAGE_CONNECTIONS", {}, gobj);
     });
@@ -847,9 +853,9 @@ function render_fold(gobj)
     }
     let expand = some_folded(gobj);
     let key = expand ? "expand all" : "collapse all";
-    let $icon = $fold.querySelector("span.icon > span");
+    let $icon = $fold.querySelector("span.icon > i");
     if($icon) {
-        $icon.className = expand ? "yi-chevron-down" : "yi-chevron-right";
+        $icon.className = expand ? "yi-angles-down" : "yi-angles-up";
     }
     $fold.title = t(key);
     $fold.setAttribute("aria-label", t(key));

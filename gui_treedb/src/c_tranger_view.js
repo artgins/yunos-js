@@ -115,7 +115,7 @@ import {
 } from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
-import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {yui_toolbar, yui_toolbar_icon} from "@yuneta/gobj-ui/src/yui_toolbar.js";
 import {epoch_to_ms, infer_period} from "@yuneta/gobj-ui/src/yui_time.js";
 
 import {keep_header_filters_named} from "./tabulator_filter_names.js";
@@ -684,7 +684,7 @@ function build_ui(gobj)
                     title: t("keys"), "aria-label": t("keys"),
                     "data-i18n-title": "keys", "data-i18n-aria-label": "keys"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-key"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-key")]],
                 ["span", {i18n: "keys"}, t("keys")]
             ]
         ]);
@@ -733,7 +733,7 @@ function build_ui(gobj)
                     "aria-label": t("rows of every key of the topic"),
                     "data-i18n-aria-label": "rows of every key of the topic"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-table"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-table")]],
                 ["span", {i18n: "rows topic"}, t("rows topic")]
             ]
         ]);
@@ -755,7 +755,7 @@ function build_ui(gobj)
                     title: t("raw json"), "aria-label": t("raw json"),
                     "data-i18n-title": "raw json", "data-i18n-aria-label": "raw json"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-code"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-code")]],
                 ["span", {class: "is-hidden-mobile", i18n: "raw json"}, t("raw json")]
             ]
         ]);
@@ -2853,7 +2853,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                     title: t("close"), "aria-label": t("close"),
                         "data-i18n-title": "close", "data-i18n-aria-label": "close"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-xmark"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-xmark")]],
                 ["span", {class: "is-hidden-mobile", i18n: "close"}, t("close")]
             ]
         ]);
@@ -2871,7 +2871,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                         title: t("options"), "aria-label": t("options"),
                         "data-i18n-title": "options", "data-i18n-aria-label": "options"},
                 [
-                    ["span", {class: "icon"}, [["i", {class: "yi-filter"}]]],
+                    ["span", {class: "icon"}, [yui_toolbar_icon("yi-filter")]],
                     ["span", {class: "is-hidden-mobile", i18n: "options"}, t("options")]
                 ]
             ]);
@@ -2892,7 +2892,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                     "data-i18n-title": "download the rows loaded in this table as csv",
                     "data-i18n-aria-label": "export"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-file-csv"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-file-csv")]],
                 ["span", {class: "is-hidden-mobile", i18n: "export"}, t("export")]
             ]
         ]);
@@ -2910,7 +2910,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                     "data-i18n-title": "copy a link to this card",
                     "data-i18n-aria-label": "share"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-link"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-link")]],
                 ["span", {class: "is-hidden-mobile", i18n: "share"}, t("share")]
             ]
         ]);
@@ -2931,7 +2931,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                     "data-i18n-title": "choose the columns to show",
                     "data-i18n-aria-label": "columns"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-columns"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-columns")]],
                 ["span", {class: "is-hidden-mobile", i18n: "columns"}, t("columns")]
             ]
         ]);
@@ -2951,7 +2951,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                         title: t("pause"), "data-i18n-title": "pause",
                         "aria-label": t("pause"), "data-i18n-aria-label": "pause"},
                 [
-                    ["span", {class: "icon"}, [["i", {class: "yi-pause"}]]],
+                    ["span", {class: "icon"}, [yui_toolbar_icon("yi-pause")]],
                     ["span", {class: "is-hidden-mobile", i18n: "pause"}, t("pause")]
                 ]
             ]);
@@ -2970,7 +2970,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                         title: t("refresh"), "aria-label": t("refresh"),
                         "data-i18n-title": "refresh", "data-i18n-aria-label": "refresh"},
                 [
-                    ["span", {class: "icon"}, [["i", {class: "yi-arrows-rotate"}]]],
+                    ["span", {class: "icon"}, [yui_toolbar_icon("yi-arrows-rotate")]],
                     ["span", {class: "is-hidden-mobile", i18n: "refresh"}, t("refresh")]
                 ]
             ]);
@@ -2984,7 +2984,7 @@ function add_card(gobj, key, mode, match_cond, restoring)
                         title: t("clear"), "data-i18n-title": "clear",
                         "aria-label": t("clear"), "data-i18n-aria-label": "clear"},
                 [
-                    ["span", {class: "icon"}, [["i", {class: "yi-broom"}]]],
+                    ["span", {class: "icon"}, [yui_toolbar_icon("yi-broom")]],
                     ["span", {class: "is-hidden-mobile", i18n: "clear"}, t("clear")]
                 ]
             ]);

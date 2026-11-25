@@ -105,7 +105,7 @@ import {
     yui_shell_confirm_danger,
 } from "@yuneta/gobj-ui/src/shell_modals.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
-import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {yui_toolbar, yui_toolbar_icon} from "@yuneta/gobj-ui/src/yui_toolbar.js";
 import {
     yui_table_paging,
     yui_table_filters,
@@ -338,15 +338,18 @@ function clear_node($n)
  *  `label_on_mobile` is false, and its name for the pointer and for a
  *  reader, all by key.
  ***************************************************************/
-function button_spec(cls, icon, key, label_on_mobile, extra_cls)
+function button_spec(cls, icon, key, label_on_mobile, extra_cls, in_toolbar)
 {
+    /*  A button of the toolbar draws its glyph at the toolbar's one size
+     *  (yui_toolbar_icon), like the toolbar of every table.  */
+    let glyph = in_toolbar ? yui_toolbar_icon(icon) : ["span", {class: icon}, ""];
     return ["button", {
         class: `${cls} button${extra_cls ? " " + extra_cls : ""}`,
         type: "button",
         title: t(key), "data-i18n-title": key,
         "aria-label": t(key), "data-i18n-aria-label": key
     }, [
-        ["span", {class: "icon"}, [["span", {class: icon}, ""]]],
+        ["span", {class: "icon"}, [glyph]],
         ["span", {class: label_on_mobile ? "" : "is-hidden-mobile", i18n: key}, t(key)]
     ]];
 }
@@ -387,22 +390,22 @@ function build_dom(gobj)
     );
     attach_clear($search, $input);
 
-    priv.$new = createElement2(button_spec("USERS_NEW", "yi-plus", "new user", true, "is-link"));
+    priv.$new = createElement2(button_spec("USERS_NEW", "yi-plus", "new user", true, "is-link", true));
     priv.$new.addEventListener("click", () => gobj_send_event(gobj,
         priv.view === "roles" ? "EV_NEW_ROLE" : "EV_NEW_USER", {}, gobj));
 
     /*  The two views of the store: a pressed button says which is shown  */
-    priv.$show_users = createElement2(button_spec("USERS_VIEW_USERS", "yi-user", "users", true));
+    priv.$show_users = createElement2(button_spec("USERS_VIEW_USERS", "yi-user", "users", true, "", true));
     priv.$show_users.addEventListener("click", () =>
         gobj_send_event(gobj, "EV_SHOW_VIEW", {view: "users"}, gobj));
-    priv.$show_roles = createElement2(button_spec("USERS_VIEW_ROLES", "yi-user-shield", "roles", true));
+    priv.$show_roles = createElement2(button_spec("USERS_VIEW_ROLES", "yi-user-shield", "roles", true, "", true));
     priv.$show_roles.addEventListener("click", () =>
         gobj_send_event(gobj, "EV_SHOW_VIEW", {view: "roles"}, gobj));
     let $views = createElement2(["div", {class: "USERS_VIEWS buttons has-addons mb-0 mr-2 " +
                                                "yui-horizontal-toolbar-section"},
         [priv.$show_users, priv.$show_roles]]);
 
-    priv.$refresh = createElement2(button_spec("USERS_REFRESH", "yi-arrows-rotate", "refresh", false));
+    priv.$refresh = createElement2(button_spec("USERS_REFRESH", "yi-arrows-rotate", "refresh", false, "", true));
     priv.$refresh.addEventListener("click", () => gobj_send_event(gobj, "EV_REFRESH", {}, gobj));
 
     priv.$heading = createElement2(

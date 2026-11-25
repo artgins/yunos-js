@@ -8,6 +8,26 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.3.14, gui_agent 1.4.14 + gobj-ui ^7.32.6 (2026-11-25)
+
+- `@yuneta/gobj-ui` 7.32.6: on a phone the paginator of every table takes one line, with the
+  icons of the period navigator for First, Prev, Next and Last. Every icon is 1em tall: `</>`,
+  the CSV file and the link were drawn smaller than the others.
+- The toolbars of the tables draw every icon at the size of the toolbars of gobj-ui
+  (`yui_toolbar_icon()`, 20px), in buttons of one height. Up to 1.3.13 the toolbar of
+  Connections mixed small buttons with 12px icons and normal ones with 16px icons, and the
+  toolbars of gui_agent drew 16px icons. Changed in Connections, the TreeDBs picker, the
+  timeranger view (its toolbar and the toolbar of each card), Nodes, the node trees (Schemas,
+  Users), Scenarios and the users of a yuno.
+- Refresh of Nodes and of the node trees has its icon, and its label hides on a phone like
+  the other buttons of the row. "Manage connections" of the picker has the icon of
+  Connections.
+- "Expand all" / "Collapse all" of the trees (the picker, Schemas, Users) draws the double
+  chevron of "all of it" (`yi-angles-down`, `yi-angles-up`), the icon rule of gobj-ui. It
+  was the chevron of one row's handle.
+- Tests green (311, 575), deployed, read on the page at 360, 390 and 1280 px: the paginator
+  on one line, every button of a toolbar 40px with a 20px icon, no console error.
+
 ## gui_treedb 1.3.13, gui_agent 1.4.13 + gobj-ui ^7.32.5 (2026-11-25)
 
 - The row count of the tables takes the plural of its number: "1 Fila", "13 Filas". New key

@@ -74,7 +74,7 @@ import {
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
 import {yui_tabulator_lang, yui_tabulator_relocalize} from "@yuneta/gobj-ui/src/yui_tabulator_i18n.js";
-import {yui_toolbar} from "@yuneta/gobj-ui/src/yui_toolbar.js";
+import {yui_toolbar, yui_toolbar_icon} from "@yuneta/gobj-ui/src/yui_toolbar.js";
 import {
     yui_table_paging,
     yui_table_filters,
@@ -273,13 +273,13 @@ function build_ui(gobj)
     let table_id = gobj_read_attr(gobj, "table_id");
 
     let $add = createElement2(
-        ["button", {class: "button is-primary is-small CONNECTIONS_ADD", id: "treedb-connections-add",
+        ["button", {class: "button is-primary CONNECTIONS_ADD", id: "treedb-connections-add",
                     title: t("add connection"),
                     "aria-label": t("add connection"),
                     "data-i18n-title": "add connection",
                     "data-i18n-aria-label": "add connection"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-plus"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-plus")]],
                 ["span", {class: "is-hidden-mobile", i18n: "add connection"}, t("add connection")]
             ]
         ]);
@@ -290,13 +290,13 @@ function build_ui(gobj)
     /*  The connection set is browser-local: without these, moving it to another
      *  browser (or another operator's machine) means retyping every row.  */
     let $export = createElement2(
-        ["button", {class: "button is-small ml-2 CONNECTIONS_EXPORT",
+        ["button", {class: "button CONNECTIONS_EXPORT",
                     title: t("download the connections as a json file"),
                     "aria-label": t("export"),
                     "data-i18n-title": "download the connections as a json file",
                     "data-i18n-aria-label": "export"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-file-code"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-file-code")]],
                 ["span", {class: "is-hidden-mobile", i18n: "export"}, t("export")]
             ]
         ]);
@@ -331,13 +331,13 @@ function build_ui(gobj)
     priv.$import_file = $file;
 
     let $import = createElement2(
-        ["button", {class: "button is-small ml-2 CONNECTIONS_IMPORT",
+        ["button", {class: "button CONNECTIONS_IMPORT",
                     title: t("add the connections of a json file"),
                     "aria-label": t("import"),
                     "data-i18n-title": "add the connections of a json file",
                     "data-i18n-aria-label": "import"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-upload"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-upload")]],
                 ["span", {class: "is-hidden-mobile", i18n: "import"}, t("import")]
             ]
         ]);
@@ -351,13 +351,13 @@ function build_ui(gobj)
      *  detour. Reads the same document as the file import — it is the same
      *  event.  */
     let $paste = createElement2(
-        ["button", {class: "button is-small ml-2 CONNECTIONS_PASTE",
+        ["button", {class: "button CONNECTIONS_PASTE",
                     title: t("add the connections on the clipboard"),
                     "aria-label": t("paste"),
                     "data-i18n-title": "add the connections on the clipboard",
                     "data-i18n-aria-label": "paste"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-paste"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-paste")]],
                 ["span", {class: "is-hidden-mobile", i18n: "paste"}, t("paste")]
             ]
         ]);
@@ -369,14 +369,14 @@ function build_ui(gobj)
      *  itself below the fold. It lives behind this toggle, folded away until
      *  asked for. Like every other control here, the click is an EVENT.  */
     let $help_btn = createElement2(
-        ["button", {class: "button is-small ml-2 CONNECTIONS_HELP_TOGGLE",
+        ["button", {class: "button ml-2 CONNECTIONS_HELP_TOGGLE",
                     "aria-expanded": "false",
                     title: t("show help"),
                     "aria-label": t("show help"),
                     "data-i18n-title": "show help",
                     "data-i18n-aria-label": "show help"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-question"}]]]
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-question")]]
             ]
         ]);
     $help_btn.addEventListener("click", () => {
@@ -443,13 +443,13 @@ function build_ui(gobj)
      *  A deliberate, rare, destructive job gets its own dialog: tick what
      *  goes, read the list, press once.  */
     let $delete_many = createElement2(
-        ["button", {class: "button CONNECTIONS_DELETE_MANY ml-1", type: "button",
+        ["button", {class: "button CONNECTIONS_DELETE_MANY", type: "button",
                     title: t("remove several connections"),
                     "aria-label": t("remove several connections"),
                     "data-i18n-title": "remove several connections",
                     "data-i18n-aria-label": "remove several connections"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-trash"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-trash")]],
                 ["span", {class: "is-hidden-mobile", i18n: "remove"}, "Remove"]
             ]
         ]);
@@ -464,13 +464,13 @@ function build_ui(gobj)
      *  the connect INTENT of every connection, so the same box that
      *  connects a selection disconnects one.  */
     let $connect_many = createElement2(
-        ["button", {class: "button CONNECTIONS_CONNECT_MANY ml-1", type: "button",
+        ["button", {class: "button CONNECTIONS_CONNECT_MANY", type: "button",
                     title: t("connect several connections"),
                     "aria-label": t("connect several connections"),
                     "data-i18n-title": "connect several connections",
                     "data-i18n-aria-label": "connect several connections"},
             [
-                ["span", {class: "icon"}, [["i", {class: "yi-plug"}]]],
+                ["span", {class: "icon"}, [yui_toolbar_icon("yi-plug")]],
                 ["span", {class: "is-hidden-mobile", i18n: "connect"}, "Connect"]
             ]
         ]);
