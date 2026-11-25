@@ -395,24 +395,11 @@ function build_dom(gobj)
     $c.appendChild(priv.$tablewrap);
 
     /*
-     *  The status line: how many records there are.
-     *
-     *  It goes BELOW the table and not as a loose number in the toolbar,
-     *  where it was: a `31` beside a search box does not say what it is
-     *  about, and with the filter on the question is precisely which of
-     *  the two numbers is being looked at.  The figure and the word go in
-     *  different nodes because only the word is translated --
-     *  `refresh_language()` reaches the one that CARRIES its key.
+     *  No status line under the table: the footer of the table counts its
+     *  rows (gobj-ui's standard table: "27 rows", "12 / 27 rows" with a
+     *  filter on). Up to gui_agent 1.4.11 a line under it said the same
+     *  ("27 Nodes").
      */
-    priv.$count = createElement2(
-        ["span", {class: "NODES_STATUS_COUNT has-text-weight-medium"}, ""]);
-    priv.$status = createElement2(
-        ["div", {class: "NODES_STATUS is-size-7 has-text-grey"}, [
-            priv.$count,
-            ["span", {class: "NODES_STATUS_LABEL", i18n: "nodes"}, "Nodes"]
-        ]]
-    );
-    $c.appendChild(priv.$status);
 
     /*  Not-connected notice (Tabulator's own placeholder covers no-nodes)  */
     priv.$notif = createElement2(
@@ -600,12 +587,7 @@ function create_table(gobj)
             table.setData(table._pendingData);
             delete table._pendingData;
         }
-        update_count(gobj);
     });
-    table.on("dataProcessed", () => update_count(gobj));
-    /*  A header filter changes the rows on screen with no event of ours;
-     *  `renderComplete` comes after the table holds the rows it kept.  */
-    table.on("renderComplete", () => update_count(gobj));
     gobj_write_attr(gobj, "tabulator", table);
 }
 
@@ -629,7 +611,6 @@ function update_table(gobj)
         }
     }
     render_state(gobj);
-    update_count(gobj);
 }
 
 /***************************************************************
@@ -656,30 +637,6 @@ function render_state(gobj)
     priv.$toolbar.style.display = connected ? "" : "none";
     priv.$tablewrap.style.display = connected ? "" : "none";
     priv.$notif.style.display = connected ? "none" : "";
-    if(priv.$status) {
-        priv.$status.style.display = connected ? "" : "none";
-    }
-}
-
-/***************************************************************
- *  Update the "<shown> / <total>" match count.
- ***************************************************************/
-function update_count(gobj)
-{
-    let priv = gobj.priv;
-    let table = gobj_read_attr(gobj, "tabulator");
-    if(!priv.$count || !table) {
-        return;
-    }
-    let shown = 0;
-    let total = 0;
-    try {
-        shown = table.getDataCount("active");
-        total = table.getDataCount();
-    } catch(e) {
-        shown = total = 0;
-    }
-    priv.$count.textContent = (shown === total) ? `${total}` : `${shown} / ${total}`;
 }
 
 /***************************************************************

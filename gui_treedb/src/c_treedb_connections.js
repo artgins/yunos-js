@@ -1391,9 +1391,11 @@ function update_count(gobj, rows)
     if(!priv.$count) {
         return;
     }
+    /*  How many are marked to browse: the footer of the table counts the
+     *  connections (gobj-ui's standard table). Up to gui_treedb 1.3.11 this
+     *  line said both.  */
     let browse = rows.filter((r) => r && r.browse).length;
-    priv.$count.textContent =
-        `${rows.length} ${t("connections")} · ${browse} ${t("to browse")}`;
+    priv.$count.textContent = `${browse} ${t("to browse")}`;
 }
 
 /***************************************************************

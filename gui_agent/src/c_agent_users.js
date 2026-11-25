@@ -453,15 +453,13 @@ function build_dom(gobj)
     );
     $c.appendChild(priv.$roleswrap);
 
-    priv.$count = createElement2(["span", {class: "USERS_STATUS_COUNT has-text-weight-medium"}, ""]);
+    /*  The status line says only what the store is doing (loading,
+     *  writing), and only while it does it: the footer of each table counts
+     *  its rows (gobj-ui's standard table). Up to gui_agent 1.4.11 the line
+     *  also said "N users", which the footer says now.  */
     priv.$state = createElement2(["span", {class: "USERS_STATUS_STATE"}, ""]);
     priv.$status = createElement2(
         ["div", {class: "USERS_STATUS is-size-7 has-text-grey is-flex", style: "gap:0.5rem;"}, [
-            ["span", {}, [
-                priv.$count,
-                priv.$count_label = createElement2(
-                    ["span", {class: "USERS_STATUS_LABEL ml-1", i18n: "users"}, t("users")])
-            ]],
             priv.$state
         ]]
     );
@@ -830,7 +828,7 @@ function render(gobj)
     priv.$input.setAttribute("data-i18n-title", search_key);
     priv.$input.setAttribute("aria-label", t(search_key));
     priv.$input.setAttribute("data-i18n-aria-label", search_key);
-    priv.$status.style.display = (connected && !no_store) ? "" : "none";
+    /*  shown below, once the state is known (only while busy)  */
     priv.$replica.style.display = (connected && priv.master === false) ? "" : "none";
 
     priv.$new.disabled = !can_write(gobj);
@@ -844,10 +842,6 @@ function render(gobj)
         ));
     }
 
-    priv.$count.textContent = `${roles_view ? priv.roles.length : priv.users.length}`;
-    let count_key = roles_view ? "roles" : "users";
-    priv.$count_label.setAttribute("data-i18n", count_key);
-    priv.$count_label.textContent = t(count_key);
     let state_key = "";
     if(state === "ST_LOADING") {
         state_key = "loading";
@@ -860,6 +854,7 @@ function render(gobj)
     } else {
         priv.$state.removeAttribute("data-i18n");
     }
+    priv.$status.style.display = (connected && !no_store && state_key) ? "" : "none";
 
     render_message(gobj);
 }

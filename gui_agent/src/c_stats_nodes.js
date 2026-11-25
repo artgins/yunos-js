@@ -540,20 +540,10 @@ function build_dom(gobj)
     $c.appendChild(priv.$tablewrap);
 
     /*
-     *  The status line: how many nodes there are.  Same decision and
-     *  same place as in the flat table (`NODES_STATUS`): below what it
-     *  counts, with the figure and the word in different nodes because
-     *  only the word is translated.
+     *  No status line under the table: the footer of the table counts its
+     *  nodes (gobj-ui's standard table counts the top rows of a tree).
+     *  Up to gui_agent 1.4.11 a line under it said the same.
      */
-    priv.$count = createElement2(
-        ["span", {class: "STATNODES_STATUS_COUNT has-text-weight-medium"}, ""]);
-    priv.$status = createElement2(
-        ["div", {class: "STATNODES_STATUS is-size-7 has-text-grey"}, [
-            priv.$count,
-            ["span", {class: "STATNODES_STATUS_LABEL", i18n: "nodes"}, "Nodes"]
-        ]]
-    );
-    $c.appendChild(priv.$status);
 
     priv.$notif = createElement2(
         ["div", {class: "STATNODES_NOTICE notification", style: "display:none;",
@@ -902,7 +892,6 @@ function create_table(gobj)
             table.setData(table._pendingData);
             delete table._pendingData;
         }
-        update_count(gobj);
     });
     gobj_write_attr(gobj, "tabulator", table);
 }
@@ -935,21 +924,6 @@ function render_state(gobj)
     priv.$toolbar.style.display = connected ? "" : "none";
     priv.$tablewrap.style.display = connected ? "" : "none";
     priv.$notif.style.display = connected ? "none" : "";
-    if(priv.$status) {
-        priv.$status.style.display = connected ? "" : "none";
-    }
-}
-
-/***************************************************************
- *  Count of nodes (top-level rows).
- ***************************************************************/
-function update_count(gobj)
-{
-    let priv = gobj.priv;
-    if(!priv.$count) {
-        return;
-    }
-    priv.$count.textContent = `${priv.nodes.length}`;
 }
 
 /***************************************************************
@@ -1339,7 +1313,6 @@ function ac_render_tree(gobj, event, kw, src)
             table._pendingData = tree;
         }
     }
-    update_count(gobj);
     return 0;
 }
 

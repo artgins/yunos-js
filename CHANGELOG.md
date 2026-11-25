@@ -8,6 +8,25 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.3.12 + gobj-ui ^7.32.4 (2026-11-25)
+
+- The head of Connections counts only the connections marked to browse, and the head of the
+  TreeDBs picker only the treedbs and the open ones. The footer of each table counts the
+  connections now, "12 / 27" with a filter on.
+- `@yuneta/gobj-ui` 7.32.4: every column of data of a treedb topic table has a filter (a
+  document, a hook and a file as their JSON text, a time as the date it shows), and the row
+  count says "12 / 27 rows" with a filter on. Tests green (311), deployed and checked on the
+  page, no console error.
+
+## gui_agent 1.4.12 + gobj-ui ^7.32.4 (2026-11-25)
+
+- No status line under the tables of Nodes and of the node trees (Schemas, Users): the footer
+  of the table counts the rows ("27 rows", "11 / 27 rows" with a filter on), and the line said
+  the same ("27 Nodes"). The status line of a users store says only what the store is doing
+  (loading, writing), and only while it does it.
+- `@yuneta/gobj-ui` 7.32.4, the same as gui_treedb's. Tests green (575), deployed on both
+  control centers and checked on the page, no console error.
+
 ## gui_treedb 1.3.11 + gobj-ui ^7.32.3 (2026-11-25)
 
 - The tables follow the table rule of gobj-ui (its README, "Conventions": *A table: a filter

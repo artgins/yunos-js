@@ -720,7 +720,9 @@ function apply_search(gobj)
 }
 
 /***************************************************************
- *  "N connections · M treedbs · K open"
+ *  "M treedbs · K open". The footer of the table counts the
+ *  connections (gobj-ui's standard table counts the top rows of a
+ *  tree); up to gui_treedb 1.3.11 this line said them too.
  ***************************************************************/
 function update_count(gobj, rows)
 {
@@ -734,8 +736,7 @@ function update_count(gobj, rows)
         treedbs += (r._children || []).length;
         open += r.open || 0;
     }
-    priv.$count.textContent =
-        `${rows.length} ${t("connections")} · ${treedbs} ${t("treedbs")} · ${open} ${t("open")}`;
+    priv.$count.textContent = `${treedbs} ${t("treedbs")} · ${open} ${t("open")}`;
 }
 
 /***************************************************************
