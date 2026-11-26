@@ -8,6 +8,14 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.3.15, gui_agent 1.4.15 + gobj-ui ^7.32.7 (2026-11-26)
+
+- `@yuneta/gobj-ui` 7.32.7: the icons of the tabs, of the side menu and of the back arrow
+  are 20px, the size of the icons of the toolbars. They were 16px, the size of their text,
+  and right under a toolbar they looked smaller (the topic tabs of the treedb editor under
+  its table toolbar). No row changes its height.
+- Tests green, deployed.
+
 ## gui_treedb 1.3.14, gui_agent 1.4.14 + gobj-ui ^7.32.6 (2026-11-25)
 
 - `@yuneta/gobj-ui` 7.32.6: on a phone the paginator of every table takes one line, with the
