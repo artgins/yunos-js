@@ -8,6 +8,17 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.4.3, gui_agent 1.5.0 + gobj-ui ^7.32.9 (2026-11-26)
+
+- `@yuneta/gobj-ui` 7.32.9: the icons of a window's title bar (the title's, minimize,
+  maximize, close) and of a dialog's header (back, close) are 20px, the size of the toolbar
+  icons. A json cell of the treedb table opens in such a window, with the json viewer's
+  20px toolbar right under its title bar. Up to 1.4.2 the title icon was 16px and the
+  window's controls were drawn at 7.5 to 9.4px. No header changes its height.
+- gui_agent is 1.5.0 and not 1.4.16: one digit per segment. It was raised before the
+  deploy round, which raises the third number blindly.
+- Tests green (311, 575), deployed.
+
 ## gui_treedb 1.4.2 (2026-11-26)
 
 - The TreeDBs picker keeps the page and the scroll when it reloads. It reloads when a
