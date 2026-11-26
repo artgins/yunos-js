@@ -532,9 +532,13 @@ function build_ui(gobj)
 function rows_from_config(gobj)
 {
     let config = gobj_find_service("treedb_config", false);
-    let links = gobj_find_service("treedb_links", false);
     let conns = config ? treedb_config_get_connections(config) : [];
 
+    /*  No `connected` here: the link state is read LIVE by the formatters
+     *  (status_dot, status, actions), so the reformat of a link going up or
+     *  down repaints it. Up to 1.4.0 the dot of the label read a copy taken
+     *  when the rows were loaded, and kept the old colour until the next
+     *  load (a visit to another menu).  */
     return conns.map(function(c) {
         let services = treedb_config_conn_services(c);
         return {
@@ -545,7 +549,6 @@ function rows_from_config(gobj)
             url:                 c.url || "",
             remote_yuno_role:    c.remote_yuno_role || "",
             remote_yuno_service: c.remote_yuno_service || "",
-            connected:           links ? treedb_links_is_connected(links, c.id) : false,
             browse:              conn_is_marked(c),
             n_services:          services.length,
             _services:           services.map((svc) => svc.service).join(" ")
@@ -797,11 +800,13 @@ function make_columns(gobj)
     function name_formatter(cell)
     {
         let d = cell.getData();
+        let links = gobj_find_service("treedb_links", false);
+        let connected = links ? treedb_links_is_connected(links, d.conn_id) : false;
         let count = d.n_services
             ? ` <span class="CONNECTIONS_SERVICES_COUNT is-size-7 has-text-grey">` +
               `· ${d.n_services} ${esc(t("services"))}</span>`
             : "";
-        return status_dot(d.connected) +
+        return status_dot(connected) +
             `<span class="CONNECTIONS_CONN has-text-weight-semibold">${esc(d.label)}</span>${count}`;
     }
 
@@ -1083,8 +1088,17 @@ function create_table(gobj)
 /***************************************************************
  *  Reload the table from the config (a scan finished, a row was
  *  added, marked or removed).
+ *
+ *  `replaceData()` and not `setData()`: it keeps the scroll and the
+ *  page where the reader left them. Up to 1.4.0 every reload went
+ *  back to the top: ticking the box of a row, or the scan that runs
+ *  when a connection opens for the first time, lost the row the
+ *  reader was looking at.
+ *
+ *  `show_id`: the row to bring into view after the reload -- the one
+ *  just added or cloned, which is the one the reader fills next.
  ***************************************************************/
-function reload_table(gobj)
+function reload_table(gobj, show_id)
 {
     let table = gobj_read_attr(gobj, "tabulator");
     if(!table) {
@@ -1092,11 +1106,33 @@ function reload_table(gobj)
     }
     let rows = rows_from_config(gobj);
 
-    Promise.resolve(table.setData(rows)).then(function() {
+    Promise.resolve(table.replaceData(rows)).then(function() {
         update_count(gobj, rows);
         paint_browse_header(gobj);
+        if(show_id) {
+            show_row(table, show_id);
+        }
     }).catch(function(err) {
         log_warning(`${GCLASS_NAME}: table mid-rebuild: ${err && err.message}`);
+    });
+}
+
+/***************************************************************
+ *  Bring a row into view: its page, then the row. A row that the
+ *  header filters hide has nothing to show, and that is the
+ *  reader's filter, not an error.
+ ***************************************************************/
+function show_row(table, row_id)
+{
+    let shown = table.getRows("active").some((row) => row.getIndex() === row_id);
+    if(!shown) {
+        return;
+    }
+    Promise.resolve(table.setPageToRow(row_id)).then(function() {
+        return table.scrollToRow(row_id, "nearest", false);
+    }).catch(function(err) {
+        log_warning(`${GCLASS_NAME}: cannot bring row '${row_id}' into view: ` +
+                    `${err && err.message}`);
     });
 }
 
@@ -1240,7 +1276,7 @@ function ac_add_conn(gobj, event, kw, src)
     };
     gobj_send_event(config, "EV_SET_CONNECTIONS",
         {connections: treedb_config_get_connections(config).concat([blank])}, gobj);
-    reload_table(gobj);
+    reload_table(gobj, blank.id);
     return 0;
 }
 
@@ -1779,7 +1815,7 @@ function ac_clone_conn(gobj, event, kw, src)
     });
     gobj_send_event(config, "EV_SET_CONNECTIONS",
         {connections: list.concat([clone])}, gobj);
-    reload_table(gobj);
+    reload_table(gobj, clone.id);
     return 0;
 }
 

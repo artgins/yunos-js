@@ -8,6 +8,21 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.4.1 (2026-11-26)
+
+- Connections: the dot in front of a label follows its connection going up and down. It read
+  a copy of the link state taken when the rows were loaded, so it kept the old colour until
+  the next load (a visit to another menu), while the Status column next to it changed. Every
+  formatter now reads the live state, and the rows carry no copy of it.
+- Connections: a reload keeps the scroll and the page (`replaceData()`). Up to 1.4.0 every
+  reload went back to the top: ticking the box of a row, or the scan that runs when a
+  connection opens for the first time. A connection added or cloned is brought into view,
+  unless a header filter hides it.
+- Read on the deployed page at 1280x600, with 18 rows scrolled to 250px and a real agent:
+  the dot went green on connect and grey on disconnect, and the scroll stayed at 250px
+  through the connect, the scan, the disconnect and a mark. An added row was in view. No
+  console error or warning. Tests green (311), deployed.
+
 ## gui_treedb 1.4.0 + gobj-ui ^7.32.8 (2026-11-26)
 
 - The Connections table takes the height that is left under its toolbar, as the TreeDBs
