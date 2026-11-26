@@ -8,6 +8,15 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.4.6, gui_agent 1.5.3 + gobj-ui ^7.32.12 (2026-11-26)
+
+- Preferences marks a theme chosen on the toolbar. With the page open, the Theme row kept
+  marking the old theme until the page was drawn again: the page followed the language
+  only, and the shell has no event for the theme. Both pages now watch `data-theme`
+  (`yui_watch_theme`) and draw themselves again on `EV_THEME`, as gobj-ui 7.32.12's own
+  page does.
+- Tests green (311, 573).
+
 ## gui_treedb 1.4.5, gui_agent 1.5.2 + gobj-ui ^7.32.11 (2026-11-26)
 
 - Preferences: the page every app has (gobj-ui 7.32.11). The first box, "Appearance", is

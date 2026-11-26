@@ -41,6 +41,7 @@ import pkg from "../package.json";
 
 import {deploy_info} from "./conf/deploy.js";
 import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_watch_theme} from "@yuneta/gobj-ui/src/yui_theme.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
 import {yui_toolbar_icon} from "@yuneta/gobj-ui/src/yui_toolbar_icon.js";
 import {
@@ -95,7 +96,9 @@ SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,          "Root HTMLElem
 SDATA_END()
 ];
 
-let PRIVATE_DATA = {};
+let PRIVATE_DATA = {
+    theme_watch: null,      /*  data-theme, as an EV_THEME  */
+};
 let __gclass__ = null;
 
 
@@ -140,6 +143,9 @@ function mt_start(gobj)
     if(shell) {
         gobj_subscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
     }
+    /*  And a theme chosen on the toolbar: the shell has no event for it,
+     *  so data-theme is watched (EV_THEME).  */
+    gobj.priv.theme_watch = yui_watch_theme(gobj);
 }
 
 /***************************************************************
@@ -150,6 +156,10 @@ function mt_stop(gobj)
     let shell = yui_shell_of(gobj);
     if(shell) {
         gobj_unsubscribe_event(shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
+    if(gobj.priv.theme_watch) {
+        gobj.priv.theme_watch.disconnect();
+        gobj.priv.theme_watch = null;
     }
 }
 
@@ -623,8 +633,9 @@ function ac_set_preference(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  The language changed somewhere else (the toolbar toggle) while
- *  this page is open: re-render, because which option is ACTIVE in
+ *  The language (EV_LANGUAGE_CHANGED) or the theme (EV_THEME) changed
+ *  somewhere else (the toolbar) while this page is open: re-render,
+ *  because which option is ACTIVE in
  *  the language and theme segments is markup, not a translatable
  *  string, so refresh_language() cannot move it.
  ***************************************************************/
@@ -734,7 +745,8 @@ function create_gclass(gclass_name)
             ["EV_SET_CONSOLE_FONT_SIZE", ac_set_console_font_size, null],
             ["EV_ADD_SHORTKEY",          ac_add_shortkey,          null],
             ["EV_REMOVE_SHORTKEY",       ac_remove_shortkey,       null],
-            ["EV_LANGUAGE_CHANGED",      ac_language_changed,      null]
+            ["EV_LANGUAGE_CHANGED",      ac_language_changed,      null],
+            ["EV_THEME",                 ac_language_changed,      null]
         ]]
     ];
 
@@ -750,7 +762,8 @@ function create_gclass(gclass_name)
         ["EV_SET_CONSOLE_FONT_SIZE", 0],
         ["EV_ADD_SHORTKEY",          0],
         ["EV_REMOVE_SHORTKEY",       0],
-        ["EV_LANGUAGE_CHANGED",      0]
+        ["EV_LANGUAGE_CHANGED",      0],
+        ["EV_THEME",                 0]
     ];
 
     __gclass__ = gclass_create(
