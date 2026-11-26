@@ -8,6 +8,15 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.4.4, gui_agent 1.5.1 + gobj-ui ^7.32.10 (2026-11-26)
+
+- `@yuneta/gobj-ui` 7.32.10: the json viewer folds its tree one level at a time. Two buttons
+  stand beside "expand loaded" and "collapse all": `+` opens the next level, and `-` folds the
+  deepest level open. From a closed document, one press of `+` shows the fields of each
+  entry, with their own containers closed. It is the json popup of a treedb cell, the raw
+  json of a treedb, and the json views of gui_agent.
+- Tests green (311, 575), deployed.
+
 ## gui_treedb 1.4.3, gui_agent 1.5.0 + gobj-ui ^7.32.9 (2026-11-26)
 
 - `@yuneta/gobj-ui` 7.32.9: the icons of a window's title bar (the title's, minimize,
