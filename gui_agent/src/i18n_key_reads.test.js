@@ -47,8 +47,6 @@ const V = await import(new URL("../scripts/validate-locales.mjs", GOBJ_UI).href)
 /*  The reads nobody follows yet: the file, the place, the value read  */
 const NOT_FOLLOWED = [
     "c_account_view.js: property `label_key`",
-    "c_account_view.js: property `label_key`",
-    "c_account_view.js: property `opt.i18n`",
     "c_account_view.js: property `sub_key`",
     "c_account_view.js: property `title_key`",
     "c_account_view.js: property `title_key`",

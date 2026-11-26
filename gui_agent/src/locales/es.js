@@ -683,8 +683,6 @@ const es = {
         "appearance":        "Apariencia",
         "theme":             "Tema",
         "language":          "Idioma",
-        "english":           "Inglés",
-        "spanish":           "Español",
         "developer":         "Desarrollador",
         "frontend view":     "Vista frontend",
         /*  gobj tree (C_YUI_GOBJ_TREE_JS, the Frontend view window)  */

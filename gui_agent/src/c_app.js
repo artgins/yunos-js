@@ -78,6 +78,7 @@ import {
 
 import {setup_frontend_view} from "@yuneta/gobj-ui/src/yui_frontend_view.js";
 import {setup_json_pad} from "@yuneta/gobj-ui/src/yui_json_pad.js";
+import {yui_preferences_setup} from "@yuneta/gobj-ui/src/yui_preferences.js";
 
 import {switch_locale, current_locale} from "./locales/locales.js";
 import {current_theme, apply_theme, toggle_theme} from "./theme.js";
@@ -141,6 +142,16 @@ let __gclass__ = null;
 function mt_create(gobj)
 {
     __app_gobj__ = gobj;
+
+    /*  The Preferences page (C_ACCOUNT_VIEW draws gobj-ui's three rows):
+     *  how this app reads and changes its theme and its language.  */
+    yui_preferences_setup({
+        current_theme:    current_theme,
+        set_theme:        app_set_theme,
+        languages:        [{value: "en", text: "English"}, {value: "es", text: "Español"}],
+        current_language: current_locale,
+        set_language:     switch_locale,
+    });
 
     /*  Re-apply any persisted developer-trace flags to the yuno NOW,
      *  before the link's C_IEVENT_CLI starts trafficking, so a refresh

@@ -8,8 +8,14 @@
  *      and nothing else. The backends themselves are not that: they are
  *      what the app browses, they are shared by every workspace and the
  *      pickers link to them, so they keep their own page
- *      (C_TREEDB_CONNECTIONS at /connections). The only choice today is
- *      the live buffer, which came from there.
+ *      (C_TREEDB_CONNECTIONS at /connections).
+ *
+ *      First the three rows every app shows -- theme, language,
+ *      navigation: the parts of gobj-ui's Preferences page, applied
+ *      through what c_app.js registered (yui_preferences_setup) -- then
+ *      the live buffer, this app's own. The page is drawn again on a
+ *      change, and when the language changes from the toolbar: which
+ *      option is marked is markup.
  *
  *      A view: builds its own `$container` for the shell to mount, and
  *      every value it shows is read from C_TREEDB_CONFIG (the service
@@ -27,10 +33,19 @@ import {
     gobj_subscribe_event,
     gobj_find_service,
     gobj_send_event,
+    gobj_unsubscribe_event,
     createElement2, refresh_language,
 } from "@yuneta/gobj-js";
 
 import {t} from "i18next";
+
+import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {
+    yui_pref_header,
+    yui_pref_box,
+    yui_pref_appearance_fields,
+    yui_pref_apply,
+} from "@yuneta/gobj-ui/src/yui_preferences.js";
 
 import {
     treedb_config_get_live_max,
@@ -55,7 +70,9 @@ SDATA(data_type_t.DTP_POINTER,  "$container",  0,  null,  "Root HTML element (mo
 SDATA_END()
 ];
 
-let PRIVATE_DATA = {};
+let PRIVATE_DATA = {
+    shell: null,
+};
 let __gclass__ = null;
 
 
@@ -82,7 +99,9 @@ function mt_create(gobj)
     }
     gobj_subscribe_event(gobj, null, {}, subscriber);
 
-    build_ui(gobj);
+    gobj_write_attr(gobj, "$container", createElement2(
+        ["div", {class: `${GCLASS_NAME} PREF_PAGE ytreedb-preferences p-4`}, []]
+    ));
 }
 
 /***************************************************************
@@ -90,6 +109,13 @@ function mt_create(gobj)
  ***************************************************************/
 function mt_start(gobj)
 {
+    let priv = gobj.priv;
+
+    priv.shell = yui_shell_of(gobj);
+    if(priv.shell) {
+        gobj_subscribe_event(priv.shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+    }
+    render(gobj);
 }
 
 /***************************************************************
@@ -97,6 +123,12 @@ function mt_start(gobj)
  ***************************************************************/
 function mt_stop(gobj)
 {
+    let priv = gobj.priv;
+
+    if(priv.shell) {
+        gobj_unsubscribe_event(priv.shell, "EV_LANGUAGE_CHANGED", {}, gobj);
+        priv.shell = null;
+    }
 }
 
 /***************************************************************
@@ -158,7 +190,7 @@ function build_live_max_field(gobj)
         $input.value = String(treedb_config_get_live_max(cfg));
     });
 
-    return ["div", {class: "PREFERENCES_LIVE"},
+    return ["div", {class: "PREF_BOX PREFERENCES_LIVE box", style: "max-width:540px;"},
         [
             ["h2", {class: "title is-5 mb-2", i18n: "live buffer"}, "Live buffer"],
             ["p", {class: "is-size-7 has-text-grey mb-3 PREFERENCES_LIVE_HELP",
@@ -178,22 +210,22 @@ function build_live_max_field(gobj)
 }
 
 /***************************************************************
- *  Build the page.
+ *  Draw the page: the three rows every app shows, then the live
+ *  buffer.
  ***************************************************************/
-function build_ui(gobj)
+function render(gobj)
 {
-    let $container = createElement2(
-        ["div", {class: `${GCLASS_NAME} ytreedb-preferences p-4`},
-            [
-                ["div", {class: "PREFERENCES_HEADER mb-3"},
-                    [["h1", {class: "title is-4 mb-0", i18n: "preferences"}, "Preferences"]]],
-                ["div", {class: "PREFERENCES_BOX box", style: "max-width:540px;"},
-                    [build_live_max_field(gobj)]]
-            ]
-        ]
-    );
-
-    gobj_write_attr(gobj, "$container", $container);
+    let $container = gobj_read_attr(gobj, "$container");
+    if(!$container) {
+        return;
+    }
+    $container.replaceChildren(createElement2(
+        ["div", {}, [
+            yui_pref_header(),
+            yui_pref_box(yui_pref_appearance_fields(gobj), "PREF_APPEARANCE"),
+            build_live_max_field(gobj)
+        ]]
+    ));
     refresh_language($container, t);
 }
 
@@ -206,6 +238,26 @@ function build_ui(gobj)
 
 
 
+
+/***************************************************************
+ *  EV_SET_THEME / EV_SET_LANGUAGE / EV_SET_NAV_MODE {value}: a
+ *  press on one of the three rows.
+ ***************************************************************/
+function ac_set_preference(gobj, event, kw, src)
+{
+    let ret = yui_pref_apply(gobj, event, kw);
+    render(gobj);
+    return ret;
+}
+
+/***************************************************************
+ *  The language changed from the toolbar while the page is open.
+ ***************************************************************/
+function ac_language_changed(gobj, event, kw, src)
+{
+    render(gobj);
+    return 0;
+}
 
 /***************************************************************
  *              FSM
@@ -234,13 +286,23 @@ function create_gclass(gclass_name)
      *          States
      *---------------------------------------------*/
     const states = [
-        ["ST_IDLE", []]
+        ["ST_IDLE", [
+            ["EV_SET_THEME",            ac_set_preference,      null],
+            ["EV_SET_LANGUAGE",         ac_set_preference,      null],
+            ["EV_SET_NAV_MODE",         ac_set_preference,      null],
+            ["EV_LANGUAGE_CHANGED",     ac_language_changed,    null]
+        ]]
     ];
 
     /*---------------------------------------------*
      *          Events
      *---------------------------------------------*/
-    const event_types = [];
+    const event_types = [
+        ["EV_SET_THEME",            0],
+        ["EV_SET_LANGUAGE",         0],
+        ["EV_SET_NAV_MODE",         0],
+        ["EV_LANGUAGE_CHANGED",     0]
+    ];
 
     __gclass__ = gclass_create(
         gclass_name,

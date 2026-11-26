@@ -49,7 +49,6 @@ const attrs_table = [
 SDATA(data_type_t.DTP_POINTER,  "subscriber",   0,                        null, "Subscriber of output events"),
 SDATA(data_type_t.DTP_STRING,   "active_node",  sdata_flag_t.SDF_PERSIST, "",      "Active node (hostname/UUID from list-agents)"),
 SDATA(data_type_t.DTP_STRING,   "display_mode", sdata_flag_t.SDF_PERSIST, "table", "Command answer display: table | form (JSON tree) | raw (text)"),
-SDATA(data_type_t.DTP_STRING,   "nav_mode",     sdata_flag_t.SDF_PERSIST, "stack", "How a node tree shows the way in: stack | back | path"),
 SDATA(data_type_t.DTP_JSON,     "selected_nodes", sdata_flag_t.SDF_PERSIST, "{}",  "Selected nodes per workspace: {workspace: [{id, host}, ...]}"),
 SDATA(data_type_t.DTP_JSON,     "active_tabs",  sdata_flag_t.SDF_PERSIST, "{}",    "Last-active node tab per workspace: {workspace: node_id}"),
 SDATA(data_type_t.DTP_JSON,     "cmd_history",  sdata_flag_t.SDF_PERSIST, "[]",    "Global console command history: [cmd,...] most-recent first (shared by all nodes)"),
@@ -250,42 +249,6 @@ function agent_config_set_monitor(gobj, patch)
             source: gobj_read_attr(gobj, "monitor_source")
         });
     }
-}
-
-/***************************************************************
- *  Navigation mode of the app's node trees (C_YUI_NODE): how the way
- *  in is shown — one strip per level ("stack", the default), a single
- *  "← parent" ("back"), or the whole trail as one breadcrumb ("path").
- *
- *  ONE choice for the app and not one per tree: the only tree today is
- *  the Schemas drill-down (yuno → treedb → topic), and it exists once
- *  per open tab. Keying the choice by tree route would ask the operator
- *  the same question again for every yuno they open.
- ***************************************************************/
-const NAV_MODES = ["stack", "back", "path"];
-
-function agent_config_get_nav_mode(gobj)
-{
-    let v = gobj_read_attr(gobj, "nav_mode");
-    if(NAV_MODES.indexOf(v) < 0) {
-        return "stack";
-    }
-    return v;
-}
-
-/***************************************************************
- *  Set the navigation mode, persist it, notify (the open Schemas
- *  tabs re-shape their live tree).
- ***************************************************************/
-function agent_config_set_nav_mode(gobj, mode)
-{
-    if(NAV_MODES.indexOf(mode) < 0) {
-        log_error(`${GCLASS_NAME}: unknown nav_mode '${mode}'`);
-        return;
-    }
-    gobj_write_attr(gobj, "nav_mode", mode);
-    gobj_save_persistent_attrs(gobj, "nav_mode");
-    gobj_publish_event(gobj, "EV_NAV_MODE_CHANGED", {nav_mode: mode});
 }
 
 /***************************************************************
@@ -562,8 +525,7 @@ function create_gclass(gclass_name)
         ["EV_ACTIVE_NODE_CHANGED",    event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
         ["EV_SELECTED_NODES_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
         ["EV_MONITOR_SCENARIO_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
-        ["EV_CC_PERMISSIONS_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS],
-        ["EV_NAV_MODE_CHANGED",       event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
+        ["EV_CC_PERMISSIONS_CHANGED", event_flag_t.EVF_OUTPUT_EVENT|event_flag_t.EVF_NO_WARN_SUBS]
     ];
 
     __gclass__ = gclass_create(
@@ -603,14 +565,11 @@ export {
     agent_config_set_active_node,
     agent_config_get_display_mode,
     agent_config_set_display_mode,
-    agent_config_get_nav_mode,
-    agent_config_set_nav_mode,
     agent_config_get_monitor,
     agent_config_set_monitor,
     MONITOR_REFRESH_CHOICES,
     MONITOR_WINDOW_CHOICES,
     MONITOR_SOURCES,
-    NAV_MODES,
     agent_config_get_selected_nodes,
     agent_config_set_selected_nodes,
     agent_config_is_node_selected,

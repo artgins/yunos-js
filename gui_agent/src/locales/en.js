@@ -675,8 +675,6 @@ const en = {
         "appearance":        "Appearance",
         "theme":             "Theme",
         "language":          "Language",
-        "english":           "English",
-        "spanish":           "Spanish",
         "developer":         "Developer",
         "frontend view":     "Frontend view",
         /*  gobj tree (C_YUI_GOBJ_TREE_JS, the Frontend view window)  */

@@ -79,10 +79,11 @@ import {
 
 import {setup_dev, dev_window_was_open} from "@yuneta/gobj-ui/src/yui_dev.js";
 import {setup_frontend_view} from "@yuneta/gobj-ui/src/yui_frontend_view.js";
+import {yui_preferences_setup} from "@yuneta/gobj-ui/src/yui_preferences.js";
 import {setup_json_pad} from "@yuneta/gobj-ui/src/yui_json_pad.js";
 
 import {switch_locale, current_locale} from "./locales/locales.js";
-import {current_theme, toggle_theme} from "./theme.js";
+import {current_theme, apply_theme, toggle_theme} from "./theme.js";
 import {mount_login} from "./login.js";
 import {deploy_info} from "./conf/deploy.js";
 import {AUTH_ERROR_I18N_KEYS} from "./c_login.js";
@@ -148,6 +149,19 @@ let __gclass__ = null;
  ***************************************************************/
 function mt_create(gobj)
 {
+    /*  The Preferences page (C_TREEDB_PREFERENCES draws gobj-ui's three
+     *  rows): how this app reads and changes its theme and its language.  */
+    yui_preferences_setup({
+        current_theme:    current_theme,
+        set_theme:        function(theme) {
+            apply_theme(theme);
+            update_theme_icon(gobj);
+        },
+        languages:        [{value: "en", text: "English"}, {value: "es", text: "Español"}],
+        current_language: current_locale,
+        set_language:     switch_locale,
+    });
+
     gobj.priv.nak_conns = {};
     gobj.priv.nak_recovered = {};
     gobj.priv.ever_connected = {};

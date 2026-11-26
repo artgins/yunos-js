@@ -8,6 +8,21 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.4.5, gui_agent 1.5.2 + gobj-ui ^7.32.11 (2026-11-26)
+
+- Preferences: the page every app has (gobj-ui 7.32.11). The first box, "Appearance", is
+  Theme, Language and Navigation, drawn with gobj-ui's parts (`yui_pref_*`) and applied
+  through what each app registers (`yui_preferences_setup`).
+  - gui_agent: the same three rows as before, now gobj-ui's, then its own (command
+    answers, the two font sizes, the shortkeys). The navigation is the shell's: the Schemas
+    tree follows it by itself, and C_AGENT_CONFIG no longer keeps `nav_mode` nor publishes
+    `EV_NAV_MODE_CHANGED`. A choice made before this release goes back to stacked strips
+    once. The local `segment()` helper and `PREF_SEGMENT_I18N_KEYS` are gone, and so are the
+    keys `english` and `spanish`: a language is named in its own words now.
+  - gui_treedb: the page had only the live buffer. It now starts with the three rows, and
+    the live buffer is a box below them.
+- Tests green (311, 575).
+
 ## gui_treedb 1.4.4, gui_agent 1.5.1 + gobj-ui ^7.32.10 (2026-11-26)
 
 - `@yuneta/gobj-ui` 7.32.10: the json viewer folds its tree one level at a time. Two buttons

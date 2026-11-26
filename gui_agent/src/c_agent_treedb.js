@@ -23,7 +23,8 @@
  *      owns everything below it in the url.  Two things follow, and both
  *      are the reason for the change: the way in is drawn by the tree
  *      (a strip of treedbs, a "<- back", or a breadcrumb — the operator
- *      chooses in Preferences, `nav_mode`), and the shape of the
+ *      chooses in Preferences, and the tree follows the shell's
+ *      navigation preference by itself), and the shape of the
  *      workspace reaches the site map by itself.
  *
  *      Discovery also answers the question the tab could not ask before:
@@ -116,7 +117,6 @@ import {
 
 import {t} from "i18next";
 
-import {yui_node_set_nav_mode} from "@yuneta/gobj-ui/src/c_yui_node.js";
 import {yui_shell_of, yui_shell_navigate} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {
     yui_shell_show_modal,
@@ -128,7 +128,6 @@ import {is_agent_yuno, cmd2agent_service, SYSTEM_TREEDB} from "./agent_helpers.j
 import {owner_apply_outcome, apply_outcome} from "./apply_outcome.js";
 import {drafts_of_saved_answer} from "@yuneta/gobj-ui/src/host_drafts.js";
 import {agent_link_command, agent_link_is_connected} from "./c_agent_link.js";
-import {agent_config_get_nav_mode} from "./c_agent_config.js";
 
 
 /***************************************************************
@@ -315,14 +314,6 @@ function mt_create(gobj)
         gobj_subscribe_event(link, "EV_ON_OPEN", {}, gobj);
         gobj_subscribe_event(link, "EV_ON_CLOSE", {}, gobj);
         gobj_subscribe_event(link, "EV_MT_COMMAND_ANSWER", {}, gobj);
-    }
-
-    /*  The operator can re-shape the tree from Preferences while this
-     *  tab is open: the choice is one attr of the config service, and
-     *  the change arrives as an event, not as a re-mount.  */
-    let config = gobj_find_service("agent_config", false);
-    if(config) {
-        gobj_subscribe_event(config, "EV_NAV_MODE_CHANGED", {}, gobj);
     }
 
     build_ui(gobj);
@@ -650,20 +641,6 @@ function schema_owners_of(data)
 function base_route(gobj)
 {
     return gobj_read_str_attr(gobj, "base_route");
-}
-
-/***************************************************************
- *  The navigation mode the operator chose in Preferences — one for
- *  the app, read from the config service (default "stack").
- ***************************************************************/
-function nav_mode(gobj)
-{
-    let config = gobj_find_service("agent_config", false);
-
-    if(!config) {
-        return "stack";
-    }
-    return agent_config_get_nav_mode(config);
 }
 
 /***************************************************************
@@ -995,7 +972,10 @@ function build_tree(gobj)
             label:      gobj_read_str_attr(gobj, "yuno_label") ||
                         gobj_read_str_attr(gobj, "yuno_id"),
             base_route: base,
-            nav_mode:   nav_mode(gobj),
+            /*  No `nav_mode`: the tree follows the reader's choice for the
+             *  app (Preferences, the shell's navigation preference), and
+             *  re-shapes itself when it changes -- no re-mount, the open
+             *  treedb stays open.  */
             /*  This strip IS a row of tabs, and a treedb has a position
              *  inside it: the topic that is open. Without this, coming
              *  back to a treedb landed on its cards and browser Back was
@@ -2259,23 +2239,6 @@ function ac_route_changed(gobj, event, kw, src)
 }
 
 /***************************************************************
- *  The navigation mode changed in Preferences: the tree is not
- *  rebuilt for it — a mode FILTERS what each node draws, so the
- *  live tree is simply told, and the open treedb stays open.
- ***************************************************************/
-function ac_nav_mode_changed(gobj, event, kw, src)
-{
-    let priv = gobj.priv;
-    let mode = (kw && kw.nav_mode) || "";
-
-    if(!priv.tree || empty_string(mode)) {
-        return 0;   /*  nothing built yet: build_tree reads the choice  */
-    }
-    yui_node_set_nav_mode(priv.tree, mode);
-    return 0;
-}
-
-/***************************************************************
  *  A treedb view of this tab WROTE a record (it sends this up: see
  *  its header). A write in `treedb_system_schema` is a schema DRAFT:
  *  from here on this tab carries a change nobody has saved, and the
@@ -3028,8 +2991,7 @@ function create_gclass(gclass_name)
     /*  The shell broadcasts to every subscriber, so this arrives in any
      *  state; the action drops what is not this tab's route.  */
     const route_events = [
-        ["EV_ROUTE_CHANGED",        ac_route_changed,     null],
-        ["EV_NAV_MODE_CHANGED",     ac_nav_mode_changed,  null]
+        ["EV_ROUTE_CHANGED",        ac_route_changed,     null]
     ];
     const states = [
         ["ST_IDLE", [
@@ -3128,7 +3090,6 @@ function create_gclass(gclass_name)
         ["EV_DRAFTS_WANTED",     0],
         ["EV_DISCOVER",          0],
         ["EV_ROUTE_CHANGED",     0],
-        ["EV_NAV_MODE_CHANGED",  0],
         ["EV_RECORD_WRITTEN",    0],
         ["EV_SCHEMA_CHECKED",    0]
     ];

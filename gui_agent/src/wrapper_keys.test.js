@@ -1,22 +1,22 @@
 /***********************************************************************
  *          wrapper_keys.test.js
  *
- *      Three helpers of the app hand a key to t() through a parameter, so
+ *      Two helpers of the app hand a key to t() through a parameter, so
  *      validate-locales reads their keys from the list each module
  *      publishes, never from the calls:
  *
- *          segment()       c_account_view.js   PREF_SEGMENT_I18N_KEYS
- *                          (the `name` of each option)
  *          mk_sort_btn()   c_agent_console.js  HISTORY_SORT_I18N_KEYS
  *                          (its 4th argument)
  *          role_input(),   c_agent_users.js    USERS_ROLE_FIELD_I18N_KEYS
  *          role_check()    (their 2nd argument)
  *
  *      What ties each list to its calls is this test: every key a call
- *      hands is in the list, and every key of the list is handed. An option
- *      of segment() without its `name` is a button named "" whose key is
- *      "undefined" (the Display mode and Navigation segments of gui_agent
- *      1.1.8).
+ *      hands is in the list, and every key of the list is handed.
+ *
+ *      The segments of the Preferences page were a third (segment(),
+ *      PREF_SEGMENT_I18N_KEYS) up to gui_agent 1.5.1. They are gobj-ui's
+ *      yui_pref_segment() now, a key function of gobj-ui's table, whose
+ *      keys validate-locales reads from the calls themselves.
  *
  *      A key is read as validate-locales reads it -- with the reader of the
  *      gobj-ui this app builds with --: a literal, a const followed to its
@@ -164,54 +164,12 @@ function keys_handed(mod, callees, index)
     return out;
 }
 
-/***************************************************************
- *  The `name` of every option written in a call of segment():
- *  {keys, unread}. Options that are not written in the call are
- *  not read, and say so.
- ***************************************************************/
-function segment_names(mod)
-{
-    let out = {keys: [], unread: []};
-    walk(mod.ast, (n, ancestors) => {
-        if(n.type === "CallExpression" && n.callee.type === "Identifier" && n.callee.name === "segment") {
-            let options = n.arguments[0];
-            if(!options || options.type !== "ArrayExpression") {
-                out.unread.push(`${mod.name}:${line_of(mod.ast, n.start)}: segment() given options ` +
-                                `that are not written in the call`);
-                return;
-            }
-            for(let opt of options.elements) {
-                let p = (opt && opt.type === "ObjectExpression")?
-                    opt.properties.find((q) => q.type === "Property" && prop_name(q) === "name") : null;
-                if(!p) {
-                    out.unread.push(`${mod.name}:${line_of(mod.ast, (opt || n).start)}: an option without a name`);
-                    continue;
-                }
-                read_keys(mod, p.value, [...ancestors, n], out);
-            }
-        } else if(n.type === "Identifier" && n.name === "segment" &&
-                !hides_no_call(n, ancestors[ancestors.length - 1])) {
-            out.unread.push(`${mod.name}:${line_of(mod.ast, n.start)}: segment used but not called by its ` +
-                            `name, so its calls are not seen`);
-        }
-    });
-    return out;
-}
-
 function sorted_set(keys)
 {
     return [...new Set(keys)].sort();
 }
 
 describe("the keys a helper hands to t() are in the list its module publishes", () => {
-    test("segment(): every option has a `name`, and it is in PREF_SEGMENT_I18N_KEYS", () => {
-        let mod = read_module("./c_account_view.js");
-        let {keys, unread} = segment_names(mod);
-        expect(keys.length).toBeGreaterThan(0);
-        expect(unread).toEqual([]);
-        expect(sorted_set(keys)).toEqual([...published(mod, "PREF_SEGMENT_I18N_KEYS")].sort());
-    });
-
     test("mk_sort_btn(): its 4th argument is in HISTORY_SORT_I18N_KEYS", () => {
         let mod = read_module("./c_agent_console.js");
         let {keys, unread} = keys_handed(mod, ["mk_sort_btn"], 3);
@@ -233,8 +191,6 @@ describe("what the reader of this test sees, on a module written for it", () => 
         'const TABLE = {busy: "from a table"};',
         'const ROWS = [["a", "from a list"]];',
         'function role_input(cls, key) {}',
-        'function segment(options) {}',
-        'const OPTIONS = [{name: "out of the call"}];',
         'function f(kw, k) {',
         '    role_input("A", "a literal");',
         '    role_input("B", TABLE.busy);',
@@ -252,8 +208,6 @@ describe("what the reader of this test sees, on a module written for it", () => 
         '    ROWS.forEach(role_input);',
         '    const handlers = {role_input};',
         '    const names = {role_input: "a property, no use of the function"};',
-        '    segment([{name: TABLE.busy}, {name: /* i18n: FIXTURE_I18N_KEYS */ k}, {text: "no name"}]);',
-        '    segment(OPTIONS);',
         '    let picked = "from a let";',
         '    if(kw.other) {',
         '        picked = "from a let, too";',
@@ -269,23 +223,14 @@ describe("what the reader of this test sees, on a module written for it", () => 
             ["a literal", "from a let", "from a let, too", "from a list", "from a table",
              "marked one", "marked two"].sort());
         expect(unread).toEqual([
-            "fixture.js:15: k (marked with OTHER_I18N_KEYS, which this module does not publish)",
-            "fixture.js:16: kw.key",
-            "fixture.js:17: role_input() without its argument 2",
+            "fixture.js:13: k (marked with OTHER_I18N_KEYS, which this module does not publish)",
+            "fixture.js:14: kw.key",
+            "fixture.js:15: role_input() without its argument 2",
+            "fixture.js:16: role_input used but not called by its name, so its calls are not seen",
+            "fixture.js:17: role_input used but not called by its name, so its calls are not seen",
             "fixture.js:18: role_input used but not called by its name, so its calls are not seen",
             "fixture.js:19: role_input used but not called by its name, so its calls are not seen",
-            "fixture.js:20: role_input used but not called by its name, so its calls are not seen",
-            "fixture.js:21: role_input used but not called by its name, so its calls are not seen",
-            "fixture.js:22: role_input used but not called by its name, so its calls are not seen"
-        ]);
-    });
-
-    test("segment(): a name through a table or a marked read is read; an option without one is said", () => {
-        let {keys, unread} = segment_names(FIXTURE);
-        expect(sorted_set(keys)).toEqual(["from a table", "marked one", "marked two"].sort());
-        expect(unread).toEqual([
-            "fixture.js:24: an option without a name",
-            "fixture.js:25: segment() given options that are not written in the call"
+            "fixture.js:20: role_input used but not called by its name, so its calls are not seen"
         ]);
     });
 });

@@ -4,9 +4,10 @@
  *      C_ACCOUNT_VIEW — the account pages, one gclass parameterised by
  *      the `view` attr and reached from the toolbar avatar menu:
  *
- *        - "preference" : the /preferences page — appearance (theme +
- *                         language), navigation shape, command-answer
- *                         display, the two font sizes
+ *        - "preference" : the /preferences page — the three rows every
+ *                         app shows (theme, language, navigation: the
+ *                         parts of gobj-ui's Preferences page), then
+ *                         command-answer display, the two font sizes
  *                         and the shortkeys manager; all apply
  *                         immediately and persist in this browser.
  *        - "about"      : product card (mark, version, tenant/plane,
@@ -32,7 +33,6 @@ import {
     gobj_subscribe_event, gobj_unsubscribe_event, gobj_find_service,
     gobj_send_event,
     createElement2,
-    refresh_language,
 } from "@yuneta/gobj-js";
 
 import {t} from "i18next";
@@ -40,12 +40,17 @@ import {t} from "i18next";
 import pkg from "../package.json";
 
 import {deploy_info} from "./conf/deploy.js";
-import {current_theme} from "./theme.js";
-import {yui_shell_of, yui_shell_language_changed} from "@yuneta/gobj-ui/src/c_yui_shell.js";
+import {yui_shell_of} from "@yuneta/gobj-ui/src/c_yui_shell.js";
 import {attach_clear} from "@yuneta/gobj-ui/src/yui_inputs.js";
-
-import {current_locale, switch_locale} from "./locales/locales.js";
-import {app_set_theme} from "./c_app.js";
+import {yui_toolbar_icon} from "@yuneta/gobj-ui/src/yui_toolbar_icon.js";
+import {
+    yui_pref_header,
+    yui_pref_box,
+    yui_pref_field,
+    yui_pref_segment,
+    yui_pref_appearance_fields,
+    yui_pref_apply,
+} from "@yuneta/gobj-ui/src/yui_preferences.js";
 import {agent_login_username, agent_login_is_logged_in} from "./c_agent_login.js";
 import {agent_link_is_connected} from "./c_agent_link.js";
 import {
@@ -63,8 +68,6 @@ import {
 } from "./c_agent_console.js";
 import {
     agent_config_get_active_node,
-    agent_config_get_nav_mode,
-    agent_config_set_nav_mode,
     agent_config_get_display_mode,
     agent_config_set_display_mode,
     agent_config_get_shortkeys,
@@ -80,14 +83,6 @@ const GCLASS_NAME = "C_ACCOUNT_VIEW";
 
 const ACCENT = "#2E7CD6";
 
-/*  The names of the preference segments: segment() hands each to t() as
- *  a variable, so they are published for validate-locales.  */
-export const PREF_SEGMENT_I18N_KEYS = [
-    "light theme", "dark theme",
-    "english", "spanish",
-    "table", "json tree", "raw text",
-    "stacked strips", "back to parent", "breadcrumb"
-];
 
 
 /***************************************************************
@@ -237,91 +232,18 @@ function page_header(title_key, title_text, sub_key, sub_text)
  ***************************************************************/
 function build_preference(gobj)
 {
-    let theme = current_theme();
-    let lang  = current_locale();
-
-    /*  A segmented button group; the active option carries is-primary.
-     *  Click handlers go in the 4th (events) slot of the createElement2
-     *  description — an `onclick` attr would be silently dropped. */
-    function segment(options, current, on_pick)
-    {
-        let btns = options.map(function(opt) {
-            let active = (opt.value === current);
-            let cls = "PREF_SEGMENT_ITEM button" + (active ? " is-primary is-selected" : "");
-            let kids = [];
-            if(opt.icon) {
-                kids.push(["span", {class: "icon"}, [["span", {class: opt.icon}, ""]]]);
-            }
-            kids.push(opt.i18n
-                ? ["span", {i18n: opt.i18n}, opt.text]
-                : ["span", {}, opt.text]);
-            return ["button", {type: "button", class: cls,
-                               title: t(/* i18n: PREF_SEGMENT_I18N_KEYS */ opt.name),
-                               "data-i18n-title": /* i18n: PREF_SEGMENT_I18N_KEYS */ opt.name,
-                               "aria-label": t(/* i18n: PREF_SEGMENT_I18N_KEYS */ opt.name),
-                               "data-i18n-aria-label": /* i18n: PREF_SEGMENT_I18N_KEYS */ opt.name},
-                kids,
-                {click: function() { on_pick(opt.value); }}];
-        });
-        return ["div", {class: "PREF_SEGMENT buttons has-addons"}, btns];
-    }
-
-    let theme_seg = segment(
-        [
-            {value: "light", i18n: "light theme", name: "light theme", text: "Light theme", icon: "yi-sun"},
-            {value: "dark",  i18n: "dark theme",  name: "dark theme",  text: "Dark theme",  icon: "yi-moon"}
-        ],
-        theme,
-        function(v) {
-            gobj_send_event(gobj, "EV_SET_THEME", {value: v}, gobj);
-        }
-    );
-
-    let lang_seg = segment(
-        [
-            /*  Each language is SHOWN in its own words, and named in the
-             *  reader's.  */
-            {value: "en", name: "english", text: "English"},
-            {value: "es", name: "spanish", text: "Español"}
-        ],
-        lang,
-        function(v) {
-            gobj_send_event(gobj, "EV_SET_LANGUAGE", {value: v}, gobj);
-        }
-    );
-
     /*  Command-answer display mode (Console), persisted on the shared
      *  C_AGENT_CONFIG service — a table when there is a schema, the JSON
      *  tree (searchable, foldable), or the literal text as it arrived.  */
     let config = gobj_find_service("agent_config", false);
     let display_mode = config ? agent_config_get_display_mode(config) : "table";
-    let display_seg = segment(
+    let display_seg = yui_pref_segment(gobj, "EV_SET_DISPLAY_MODE",
         [
-            {value: "table", i18n: "table",     name: "table",     text: "Table",     icon: "yi-table"},
-            {value: "form",  i18n: "json tree", name: "json tree", text: "JSON tree", icon: "yi-folder-tree"},
-            {value: "raw",   i18n: "raw text",  name: "raw text",  text: "Raw text",  icon: "yi-align-left"}
+            {value: "table", key: "table",     icon: "yi-table"},
+            {value: "form",  key: "json tree", icon: "yi-folder-tree"},
+            {value: "raw",   key: "raw text",  icon: "yi-align-left"}
         ],
-        display_mode,
-        function(v) {
-            gobj_send_event(gobj, "EV_SET_DISPLAY_MODE", {value: v}, gobj);
-        }
-    );
-
-    /*  How a tree of nodes shows the way in — today the Schemas
-     *  drill-down (yuno → treedb → topic). It is a shape, not a place:
-     *  the open tabs re-draw themselves on the change (they subscribe to
-     *  EV_NAV_MODE_CHANGED), nothing is re-mounted and nothing moves.  */
-    let nav_mode = config ? agent_config_get_nav_mode(config) : "stack";
-    let nav_seg = segment(
-        [
-            {value: "stack", i18n: "stacked strips", name: "stacked strips", text: "Stacked strips", icon: "yi-layer-group"},
-            {value: "back",  i18n: "back to parent", name: "back to parent", text: "Back to parent", icon: "yi-arrow-left"},
-            {value: "path",  i18n: "breadcrumb",     name: "breadcrumb",     text: "Breadcrumb",     icon: "yi-route"}
-        ],
-        nav_mode,
-        function(v) {
-            gobj_send_event(gobj, "EV_SET_NAV_MODE", {value: v}, gobj);
-        }
+        display_mode, "PREF_DISPLAY_MODE"
     );
 
     /*  Terminal font size — the shared DEFAULT for every Terminal tab
@@ -339,7 +261,7 @@ function build_preference(gobj)
             attrs.disabled = "disabled";
         }
         return ["button", attrs,
-            [["span", {class: "icon"}, [["span", {class: icon}, ""]]]],
+            [["span", {class: "icon"}, [yui_toolbar_icon(icon)]]],
             {click: on_click}];
     }
     let font_seg = ["div", {class: "PREF_FONT_SEG buttons has-addons"},
@@ -386,30 +308,18 @@ function build_preference(gobj)
         ]
     ];
 
-    function field(label_key, label_text, control)
-    {
-        return ["div", {class: "PREF_FIELD field", style: "margin-bottom:1.25rem;"},
-            [
-                ["label", {class: "PREF_LABEL label", i18n: label_key}, label_text],
-                ["div", {class: "PREF_CONTROL control"}, [control]]
-            ]
-        ];
-    }
-
+    /*  The three rows every app shows (theme, language, navigation: the
+     *  parts of gobj-ui's Preferences page), then what is this app's.  */
     return ce(
         ["div", {class: "PREF_PAGE"},
             [
-                page_header("preferences", "Preferences", "appearance", "Appearance"),
-                ["div", {class: "PREF_BOX box", style: "max-width:540px;"},
-                    [
-                        field("theme", "Theme", theme_seg),
-                        field("language", "Language", lang_seg),
-                        field("navigation", "Navigation", nav_seg),
-                        field("display mode", "Command answers", display_seg),
-                        field("terminal font size", "Terminal font size", font_seg),
-                        field("console font size", "Console font size", console_font_seg)
-                    ]
-                ],
+                yui_pref_header(),
+                yui_pref_box([
+                    ...yui_pref_appearance_fields(gobj),
+                    yui_pref_field("display mode", display_seg),
+                    yui_pref_field("terminal font size", font_seg),
+                    yui_pref_field("console font size", console_font_seg)
+                ], "PREF_APPEARANCE"),
                 build_shortkeys(gobj)
             ]
         ]
@@ -697,36 +607,19 @@ function build_about(gobj)
  *  active option in their own markup).
  *
  *  The settings are applied by whoever owns them — the theme module,
- *  i18next, the shared C_AGENT_CONFIG service — and the views that
- *  care subscribe to that service's events; this page never reaches
- *  into an open tab.
+ *  i18next, the shell (the navigation), the shared C_AGENT_CONFIG
+ *  service — and the views that care subscribe to their events; this
+ *  page never reaches into an open tab.
+ *
+ *  Theme, language and navigation are the three rows of gobj-ui's
+ *  Preferences page: yui_pref_apply() applies them through what the
+ *  app registered (yui_preferences_setup in c_app.js).
  ***************************************************************/
-function ac_set_theme(gobj, event, kw, src)
+function ac_set_preference(gobj, event, kw, src)
 {
-    app_set_theme((kw && kw.value) || "light");
+    let ret = yui_pref_apply(gobj, event, kw);
     render(gobj);
-    return 0;
-}
-
-/***************************************************************
- *  Language. The SHELL fans it out: it re-translates the document and
- *  publishes EV_LANGUAGE_CHANGED, so the views that build DOM
- *  imperatively (the Tabulator tables above all — their headers,
- *  paginator and formatters are drawn ONCE) can re-render what no
- *  data-i18n attribute can reach.
- ***************************************************************/
-function ac_set_language(gobj, event, kw, src)
-{
-    switch_locale((kw && kw.value) || "en");
-
-    let shell = yui_shell_of(gobj);
-    if(shell) {
-        yui_shell_language_changed(shell);
-    } else {
-        refresh_language(document.body, t);
-    }
-    render(gobj);
-    return 0;
+    return ret;
 }
 
 /***************************************************************
@@ -746,16 +639,6 @@ function ac_set_display_mode(gobj, event, kw, src)
     let config = gobj_find_service("agent_config", false);
     if(config) {
         agent_config_set_display_mode(config, (kw && kw.value) || "table");
-    }
-    render(gobj);
-    return 0;
-}
-
-function ac_set_nav_mode(gobj, event, kw, src)
-{
-    let config = gobj_find_service("agent_config", false);
-    if(config) {
-        agent_config_set_nav_mode(config, (kw && kw.value) || "stack");
     }
     render(gobj);
     return 0;
@@ -843,10 +726,10 @@ function create_gclass(gclass_name)
      *---------------------------------------------*/
     const states = [
         ["ST_IDLE", [
-            ["EV_SET_THEME",             ac_set_theme,             null],
-            ["EV_SET_LANGUAGE",          ac_set_language,          null],
+            ["EV_SET_THEME",             ac_set_preference,        null],
+            ["EV_SET_LANGUAGE",          ac_set_preference,        null],
             ["EV_SET_DISPLAY_MODE",      ac_set_display_mode,      null],
-            ["EV_SET_NAV_MODE",          ac_set_nav_mode,          null],
+            ["EV_SET_NAV_MODE",          ac_set_preference,        null],
             ["EV_SET_TTY_FONT_SIZE",     ac_set_tty_font_size,     null],
             ["EV_SET_CONSOLE_FONT_SIZE", ac_set_console_font_size, null],
             ["EV_ADD_SHORTKEY",          ac_add_shortkey,          null],
