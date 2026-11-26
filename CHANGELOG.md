@@ -8,6 +8,22 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.4.0 + gobj-ui ^7.32.8 (2026-11-26)
+
+- The Connections table takes the height that is left under its toolbar, as the TreeDBs
+  picker does: the view is a flex column of the height of the stage, and the table has
+  `maxHeight: 100%`. Up to 1.3.15 it was capped at 70vh, a share of the window. On a tall
+  screen it scrolled its rows with free space under it, and on a short one it pushed its
+  paginator out of sight. Read on the deployed page with 17 rows: at 1920x870 the table
+  ends 16px above the bottom of the stage and scrolls only the rows that do not fit; at
+  1920x1080 all 17 rows show with no scroll; at 1280x600 and 390x844 the paginator stays
+  on screen. No console error.
+- `@yuneta/gobj-ui` 7.32.8: `C_YUI_NAV` takes its glyph size from a module with no i18n
+  key. No visible change.
+- The version is 1.4.0 and not 1.3.16: one digit per segment (this file's CLAUDE.md).
+  The deploy round of gobj-ui raises the third number blindly, and gave 1.3.10 to 1.3.15.
+- Tests green (311), deployed.
+
 ## gui_treedb 1.3.15, gui_agent 1.4.15 + gobj-ui ^7.32.7 (2026-11-26)
 
 - `@yuneta/gobj-ui` 7.32.7: the icons of the tabs, of the side menu and of the back arrow

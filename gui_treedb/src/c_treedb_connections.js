@@ -478,8 +478,15 @@ function build_ui(gobj)
         gobj_send_event(gobj, "EV_CONNECT_MANY", {}, gobj);
     });
 
+    /*  A flex column of the height of the stage, as the picker: the
+     *  toolbar and the notes take their own height, and the table takes
+     *  what is left (`flex:1; min-height:0` around it, `maxHeight: 100%`
+     *  in Tabulator). Up to 1.3.15 the table was capped at 70vh, a share
+     *  of the WINDOW: it scrolled its rows with free space under it on a
+     *  tall screen, and pushed its paginator off a short one.  */
     let $container = createElement2(
-        ["div", {class: "C_TREEDB_CONNECTIONS ytreedb-connections p-4"},
+        ["div", {class: "C_TREEDB_CONNECTIONS ytreedb-connections p-4",
+                 style: "display:flex; flex-direction:column; height:100%;"},
             [
                 /*  ONE row that scrolls sideways when it does not fit, never
                  *  two (gobj-ui README, "Conventions" -> "A table: a filter
@@ -490,7 +497,7 @@ function build_ui(gobj)
                  *  the toolbar: it does not shrink and does not wrap. The
                  *  actions take the right with `margin-left:auto` while the
                  *  row fits.  */
-                yui_toolbar({class: "CONNECTIONS_HEADER mb-3"}, [
+                yui_toolbar({class: "CONNECTIONS_HEADER mb-3", style: "flex:none;"}, [
                     ["div", {class: "CONNECTIONS_TITLE yui-horizontal-toolbar-section mr-2"}, [
                         ["h2", {class: "title is-5 mb-0", i18n: "connections"}, "Connections"],
                         $help_btn
@@ -506,7 +513,8 @@ function build_ui(gobj)
                 $help,
                 $scan_errors,
                 $import_notice,
-                ["div", {id: table_id}, []]
+                ["div", {class: "CONNECTIONS_TABLEWRAP", style: "flex:1; min-height:0;"},
+                    [["div", {class: "CONNECTIONS_TABLE", id: table_id}, []]]]
             ]
         ]
     );
@@ -1004,7 +1012,7 @@ function create_table(gobj)
         ...yui_tabulator_lang(t),
         index:          "id",
         layout:         "fitColumns",
-        maxHeight:      "70vh",
+        maxHeight:      "100%",
         /*  The VIRTUAL renderer: every row is one line high, and virtual is
          *  what a deploy centre with hundreds of backends needs.  */
         placeholder:    t("no connections - click add connection"),
