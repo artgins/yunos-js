@@ -8,6 +8,19 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.4.2 (2026-11-26)
+
+- The TreeDBs picker keeps the page and the scroll when it reloads. It reloads when a
+  connection opens or closes, and when a treedb is ticked: the tick changes the config,
+  and the change of the config reloads the table. Up to 1.4.1 every reload went back to the
+  top of the first page, so ticking a treedb in the middle of the list lost it. The position
+  is taken before the reload and given back after the search and the open connections are
+  applied again, because both change the height of what scrolls.
+- Read on the deployed page at 1280x700, with 41 connections of 3 treedbs each, all
+  expanded: a tick on page 1 at 600px and a tick on page 2 at 300px left the same page, the
+  same scroll and the same first row in view. The one console line is Firefox's note on
+  scroll-linked positioning, which scrolling alone prints. Tests green (311), deployed.
+
 ## gui_treedb 1.4.1 (2026-11-26)
 
 - Connections: the dot in front of a label follows its connection going up and down. It read

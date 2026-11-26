@@ -653,7 +653,7 @@ function reload_table(gobj)
     let rows = build_rows(gobj);
     paint_placeholder(gobj);
 
-    /*  `setData()` RESETS the tree, and this table reloads on every tick:
+    /*  Loading the data RESETS the tree, and this table reloads on every tick:
      *  ticking a treedb would fold the connection you are ticking inside,
      *  which is the one place the answer has to stay on screen. Remember
      *  what is open and put it back.
@@ -663,6 +663,7 @@ function reload_table(gobj)
      *  folded and the search box is how you get to a treedb among hundreds.  */
     let first = !priv.loaded;
     let open = {};
+    let where = first ? null : view_position(table);
     if(!first) {
         table.getRows().forEach(function(row) {
             let d = row.getData();
@@ -676,7 +677,7 @@ function reload_table(gobj)
         }
     }
 
-    Promise.resolve(table.setData(rows)).then(function() {
+    Promise.resolve(table.replaceData(rows)).then(function() {
         apply_search(gobj);
         table.getRows().forEach(function(row) {
             let d = row.getData();
@@ -697,8 +698,50 @@ function reload_table(gobj)
         }
         render_fold(gobj);
         update_count(gobj, rows);
+        if(where) {
+            return restore_view_position(table, where);
+        }
     }).catch(function(err) {
         log_warning(`${gobj_short_name(gobj)}: table mid-rebuild: ${err && err.message}`);
+    });
+}
+
+/***************************************************************
+ *  Where the reader is in the table: the page and the scroll of
+ *  the rows.
+ *
+ *  A reload must leave the reader there. It runs when a connection
+ *  opens or closes, and when a treedb is ticked (the tick changes
+ *  the config, and the config's change reloads the table). Up to
+ *  gui_treedb 1.4.1 every reload went back to the top of the first
+ *  page: ticking a treedb in the middle of the list lost it.
+ *
+ *  `replaceData()` alone does not keep it: the search is applied
+ *  again and the open connections are expanded again after the
+ *  data is in, and both change the height of what scrolls. So the
+ *  position is taken before and given back after all of that.
+ ***************************************************************/
+function view_position(table)
+{
+    let $holder = table.element.querySelector(".tabulator-tableholder");
+    return {
+        page:   table.getPage(),
+        scroll: $holder ? $holder.scrollTop : 0
+    };
+}
+
+function restore_view_position(table, where)
+{
+    let turn = Promise.resolve();
+    let max = table.getPageMax();
+    if(where.page && max && where.page !== table.getPage()) {
+        turn = Promise.resolve(table.setPage(Math.min(where.page, max)));
+    }
+    return turn.then(function() {
+        let $holder = table.element.querySelector(".tabulator-tableholder");
+        if($holder) {
+            $holder.scrollTop = where.scroll;
+        }
     });
 }
 
