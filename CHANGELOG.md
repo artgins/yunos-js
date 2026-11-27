@@ -8,6 +8,13 @@ the JS yunos — the most active-changing layer — evolve on their own line.
 
 ## Unreleased
 
+## gui_treedb 1.4.7 + maplibre-gl ^6.20.0 (2026-11-27)
+
+- Dependencies only: maplibre-gl ^6.20.0, vite ^8.4.0, vitest ^5.1.2, i18next ^27.2.10 (`ncu`).
+  `npm audit fix` moves serialize-javascript (under @rollup/plugin-terser, build time only) to
+  7.1.4. gui_treedb mounts no map; maplibre is raised with every app that declares it.
+- Tests green (311). Deployed to artgins.ytreedb.com.
+
 ## gui_treedb 1.4.6, gui_agent 1.5.3 + gobj-ui ^7.32.12 (2026-11-26)
 
 - Preferences marks a theme chosen on the toolbar. With the page open, the Theme row kept
